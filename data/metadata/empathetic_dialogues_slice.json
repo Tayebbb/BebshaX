@@ -1,0 +1,72 @@
+{
+  "dataset_id": "empathetic_dialogues_slice",
+  "hf_repo_id": "facebook/empathetic_dialogues",
+  "pinned_revision": "d5b57ae707b0b9a384af8ed50c043c608d597ca7",
+  "files_or_patterns": [
+    "default/train/0000.parquet",
+    "default/validation/0000.parquet"
+  ],
+  "profiles": [
+    "development",
+    "evaluation",
+    "full"
+  ],
+  "download_method": "hf_hub_file",
+  "preprocessing_fn": "preprocess_empathetic_dialogues",
+  "is_required": true,
+  "estimated_raw_size_mb": 6.85,
+  "motivation": {
+    "purpose": "Emotional nuance and empathetic conversational grounding for interview simulation.",
+    "domain": "Emotion-grounded conversational dialogue",
+    "research_questions": [
+      "Can emotion-grounded dialogues improve persona responsiveness during user interviews?"
+    ]
+  },
+  "composition": {
+    "instance_type": "Empathetic multi-turn conversation with emotion label and situation description",
+    "slice_description": "Train and validation splits from official parquet release on facebook/empathetic_dialogues (24,850 conversations, ~100,000 utterances)",
+    "sample_count_estimate": 24850,
+    "sensitive_content": "Personal emotional situations described by crowdworkers; no private identifiers."
+  },
+  "collection": {
+    "source_url": "https://github.com/facebookresearch/EmpatheticDialogues",
+    "upstream_creator": "Facebook AI Research (Rashkin et al., ACL 2019)",
+    "collection_mechanism": "Crowdsourced on Amazon Mechanical Turk grounded in 32 emotion categories."
+  },
+  "preprocessing": {
+    "raw_format": "parquet",
+    "cleaning_applied": "Extract dialogue turns, emotion labels, and situation context; format into structured turn objects.",
+    "normalized_jsonl_schema": {
+      "id": "str",
+      "emotion": "str",
+      "situation": "str",
+      "utterance": "str",
+      "speaker_idx": "int"
+    }
+  },
+  "uses": {
+    "intended_uses": [
+      "Interview tone realism and empathetic response grounding (Phase 10)."
+    ],
+    "prohibited_uses": [
+      "Model training / fine-tuning (R9 violation)",
+      "Commercial redistribution without upstream license compliance",
+      "Deanonymization or PII scraping"
+    ]
+  },
+  "distribution": {
+    "license_claimed_hf": "cc-by-nc-4.0",
+    "license_verified_upstream": "CC-BY-NC-4.0 (Non-Commercial Research Only)",
+    "license_verification_url": "https://github.com/facebookresearch/EmpatheticDialogues/blob/main/LICENSE",
+    "license_verified_at": "2026-08-22",
+    "license_discrepancy": false,
+    "license_notes": "Verified against Meta AI / ParlAI GitHub repository license.",
+    "is_gated": false
+  },
+  "raw_sha256": null,
+  "processed_sha256": null,
+  "actual_raw_sha256": "b87be2fcc3db1e49a132eb1d3d03d8ab17518399e6113e6f643ebb6956cd2c81",
+  "actual_processed_sha256": "11273629096f405a97f6cbee9d8d7d37241cd887008c5d5b6e426a842a013ee8",
+  "processed_record_count": 88703,
+  "processed_size_bytes": 29842640
+}

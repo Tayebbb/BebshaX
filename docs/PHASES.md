@@ -78,7 +78,7 @@ Steps:
 
 ---
 
-## Phase 7 — Dataset pipeline ⬜  (track B)
+## Phase 7 — Dataset pipeline ✅ 2026-08-22  (track B)
 
 **Goal:** reproducible, license-checked dataset setup with profiles; no blind bulk downloads.
 **Prerequisites:** Phase 1 ✅. Independent of everything else.
