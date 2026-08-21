@@ -57,3 +57,7 @@ Before adding any dependency or vendored repo, record in the relevant doc (`docs
 ## R11 — User experience
 
 End users see ONE AI system ("Generate Persona"), never provider/model pickers. Routing internals are exposed only in the developer dashboard, clearly labeled. Demo mode must clearly indicate when a cached result is shown.
+
+## R12 — AI agents follow the contract
+
+Every AI agent/coding tool working in this repo obeys [AGENTS.md](AGENTS.md): read the docs first, implement phases only via the Phase Execution Protocol against [docs/PHASES.md](docs/PHASES.md), stay inside the paths owned by your track ([docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md)), and **update the docs in the same commit as the code** (implementation log entry + status flips + spec-listed docs). A coding task with stale docs is an unfinished task. CI enforces the test gate on every push.

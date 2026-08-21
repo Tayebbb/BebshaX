@@ -53,6 +53,14 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance — agent automation & team parallelization (2026-08-22)
+- `AGENTS.md` (root): binding contract auto-loaded by Copilot/Cursor/Claude Code/Codex/Windsurf — rules digest, **Phase Execution Protocol** ("implement phase N" → gate → implement in-scope → verify → mandatory doc updates in the same commit → `Phase N:` commit), Definition of Done for any change; `CLAUDE.md`/`GEMINI.md` pointers for tools that prefer their own filename.
+- `docs/PHASES.md`: executable specs for phases 4–15 (goal, prerequisites, allowed paths, steps, exit criteria with commands, docs to update, out-of-scope) — the file that makes "Implement phase 4" a one-line instruction.
+- `docs/TEAM_ASSIGNMENTS.md`: 3 collision-free parallel tracks — Tayeb: 4→5 (`bebshax/llm/**`), Sazid: 6→7 (`bebshax/db/**`, `data/**`, datasets), Shehab: 12-foundation (`apps/frontend/**` on mocks + API contract); convergence order for 8–15; merge rules (append-only log, contract-change sign-off).
+- `.github/workflows/ci.yml`: pytest on every push/PR (mechanical R7 enforcement regardless of which tool wrote the code); frontend job activates when `apps/frontend` exists. `.github/prompts/implement-phase.prompt.md`: `/implement-phase` shortcut for VS Code.
+- RULES.md gains **R12** (agents follow AGENTS.md; stale docs = unfinished task). PROJECT_CONTEXT roadmap marked authoritative: **15 phases** (22-phase draft superseded); doc map extended.
+- Suite 26/26 green; ci.yml YAML-validated.
+
 ### Phase 3 — freellmpool integration (2026-08-22) ✅
 - Dependency `freellmpool==0.11.4` installed (review in docs/ROUTING.md per R8); lock refreshed.
 - Adapter contract upgraded: `ProviderAdapter.complete` now returns `AdapterCompletion` (concrete serving provider/model + notes) so provenance records the real route, never "auto"; `AttemptRecord.notes` added; fake adapter + service updated.

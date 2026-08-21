@@ -50,7 +50,7 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | Datasets       | Profiles: minimal/development/evaluation/full; grounding + evaluation only | **no fine-tuning, ever**                               |
 
 ## Phase roadmap and status
-
+**15 phases total** (an earlier 22-phase draft was superseded on 2026-08-22 — this table is authoritative). Executable per-phase specs: [docs/PHASES.md](docs/PHASES.md). Who implements what, in parallel: [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md). To execute a phase, tell your AI agent: **"Implement phase N"** (protocol in [AGENTS.md](AGENTS.md)).
 | #   | Phase                                                                  | Status         |
 | --- | ---------------------------------------------------------------------- | -------------- |
 | 1   | Foundation (scaffold, config, health, tests, compose)                  | ✅ 2026-08-22  |
@@ -89,7 +89,10 @@ Detailed deliverables/exit criteria: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMEN
 | Question                                 | Document                                                                                      |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------- |
 | What is this project / current state?    | **this file**                                                                                 |
+| What must every AI agent/tool obey?      | [AGENTS.md](AGENTS.md) (auto-loaded by Copilot/Cursor/Claude Code/Codex)                      |
 | What are the engineering rules?          | [RULES.md](RULES.md)                                                                          |
+| What exactly is phase N?                 | [docs/PHASES.md](docs/PHASES.md) (executable specs)                                           |
+| Who works on what, without collisions?   | [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md)                                          |
 | How do I set up my machine?              | [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md)                                                      |
 | What's the plan / what changed?          | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) (implementation log at the bottom) |
 | Why these OSS choices / hardware limits? | [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md)                            |

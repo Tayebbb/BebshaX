@@ -4,7 +4,9 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 
 > Renamed from *SignalLens* on 2026-08-22. No other historical relationship — the project is greenfield.
 
-**Team members start here:** [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) (single source of truth) → [RULES.md](RULES.md) (binding engineering rules) → [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md) (machine setup).
+**Team members start here:** [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) (single source of truth) → [RULES.md](RULES.md) (binding engineering rules) → [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md) (machine setup) → [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md) (your track).
+
+**Working with an AI agent?** It auto-loads [AGENTS.md](AGENTS.md). To build the next milestone, just tell it: **“Implement phase N”** — specs live in [docs/PHASES.md](docs/PHASES.md).
 
 ## Repository layout
 
