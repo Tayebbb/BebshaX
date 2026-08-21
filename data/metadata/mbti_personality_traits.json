@@ -1,0 +1,67 @@
+{
+  "dataset_id": "mbti_personality_traits",
+  "hf_repo_id": "Shunian/kaggle-mbti-cleaned",
+  "pinned_revision": "5dcc41662640dbd74f9fc89fb328fd0cd666ce03",
+  "files_or_patterns": [
+    "data/test-00000-of-00001-6475b998015ce8dc.parquet"
+  ],
+  "profiles": [
+    "full"
+  ],
+  "download_method": "hf_hub_file",
+  "preprocessing_fn": "preprocess_mbti_traits",
+  "is_required": false,
+  "estimated_raw_size_mb": 4.5,
+  "motivation": {
+    "purpose": "Personality trait distributions and behavioral priors for persona simulation.",
+    "domain": "MBTI personality types and social writing samples",
+    "research_questions": [
+      "Can personality trait priors inform realistic persona behavioral constraints?"
+    ]
+  },
+  "composition": {
+    "instance_type": "MBTI type label with 50 writing sample posts",
+    "slice_description": "Test split of cleaned MBTI dataset",
+    "sample_count_estimate": 1000,
+    "sensitive_content": "Public forum posts; self-reported personality classifications."
+  },
+  "collection": {
+    "source_url": "https://www.kaggle.com/datasets/datasnaek/mbti-type",
+    "upstream_creator": "Kaggle / datasnaek (scraped from PersonalityCafe forum)",
+    "collection_mechanism": "Scraped public PersonalityCafe forum posts tagged with self-reported MBTI types."
+  },
+  "preprocessing": {
+    "raw_format": "parquet",
+    "cleaning_applied": "Clean URLs and noise; extract type classification and representative posts.",
+    "normalized_jsonl_schema": {
+      "id": "str",
+      "mbti_type": "str",
+      "posts": "list[str]"
+    }
+  },
+  "uses": {
+    "intended_uses": [
+      "Optional personality trait priors for persona engine in Phase 8."
+    ],
+    "prohibited_uses": [
+      "Model training / fine-tuning (R9 violation)",
+      "Commercial redistribution without upstream license compliance",
+      "Deanonymization or PII scraping"
+    ]
+  },
+  "distribution": {
+    "license_claimed_hf": "cc0-1.0",
+    "license_verified_upstream": "CC0-1.0 / Public Domain (Kaggle datasnaek/mbti-type)",
+    "license_verification_url": "https://www.kaggle.com/datasets/datasnaek/mbti-type",
+    "license_verified_at": "2026-08-22",
+    "license_discrepancy": false,
+    "license_notes": "Verified against original Kaggle dataset page: released under CC0: Public Domain.",
+    "is_gated": false
+  },
+  "raw_sha256": null,
+  "processed_sha256": null,
+  "actual_raw_sha256": "6c7f69d1365fff7d33ce0064a8b4407e3588c1d420d5c0b01d7b7b45930b8437",
+  "actual_processed_sha256": "2ffd28945e593a6ed524e47aaa52417e0de631235970a474bb7cc950d3e00ded",
+  "processed_record_count": 81957,
+  "processed_size_bytes": 6392646
+}

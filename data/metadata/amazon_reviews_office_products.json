@@ -1,0 +1,73 @@
+{
+  "dataset_id": "amazon_reviews_office_products",
+  "hf_repo_id": "McAuley-Lab/Amazon-Reviews-2023",
+  "pinned_revision": "2b6d039ed471f2ba5fd2acb718bf33b0a7e5598e",
+  "files_or_patterns": [
+    "raw/review_categories/Office_Products.jsonl",
+    "raw/meta_categories/meta_Office_Products.jsonl"
+  ],
+  "profiles": [
+    "development",
+    "evaluation",
+    "full"
+  ],
+  "download_method": "hf_stream_slice",
+  "preprocessing_fn": "preprocess_amazon_reviews",
+  "is_required": true,
+  "estimated_raw_size_mb": 45.0,
+  "motivation": {
+    "purpose": "Broad real-world business product feedback, user pain points, and customer satisfaction evidence.",
+    "domain": "B2B & consumer office products and workspace equipment reviews",
+    "research_questions": [
+      "Can real product reviews ground synthetic persona pain points and purchasing criteria?"
+    ]
+  },
+  "composition": {
+    "instance_type": "Product review with rating, title, text, timestamp, and product metadata",
+    "slice_description": "Office_Products category slice (first 50,000 reviews streamed; avoids bulk 571M download)",
+    "sample_count_estimate": 50000,
+    "sensitive_content": "Public user reviews; reviewer IDs anonymized."
+  },
+  "collection": {
+    "source_url": "https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023",
+    "upstream_creator": "McAuley Lab (UCSD, Hou et al., 2024)",
+    "collection_mechanism": "Scraped public Amazon review pages for academic research."
+  },
+  "preprocessing": {
+    "raw_format": "jsonl",
+    "cleaning_applied": "Join review text with metadata; anonymize user identifiers; filter short noise.",
+    "normalized_jsonl_schema": {
+      "id": "str",
+      "asin": "str",
+      "rating": "float",
+      "title": "str",
+      "text": "str",
+      "category": "str"
+    }
+  },
+  "uses": {
+    "intended_uses": [
+      "Evidence grounding and pain point extraction (Phase 8 persona engine)."
+    ],
+    "prohibited_uses": [
+      "Model training / fine-tuning (R9 violation)",
+      "Commercial redistribution without upstream license compliance",
+      "Deanonymization or PII scraping"
+    ]
+  },
+  "distribution": {
+    "license_claimed_hf": "other",
+    "license_verified_upstream": "Academic Research Non-Commercial (UCSD McAuley Lab terms)",
+    "license_verification_url": "https://github.com/hyp1251/AmazonReviews2023#license",
+    "license_verified_at": "2026-08-22",
+    "license_discrepancy": false,
+    "license_notes": "Research use only. Bulk redistribution restricted. Streamed category slice used.",
+    "is_gated": false
+  },
+  "raw_sha256": null,
+  "processed_sha256": null,
+  "actual_raw_sha256": "8e576f1915ef2cd2161bf60d02c0f09ed3e80f19603ed95d5010dc2cd42c9467",
+  "actual_processed_sha256": "733de5e714143a0dbce1c3ba6ba6630aed940d3b36c9d0f8db0f74d0d1c2934e",
+  "processed_record_count": 46050,
+  "processed_size_bytes": 23150196
+}

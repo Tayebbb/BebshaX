@@ -57,7 +57,10 @@ docker compose up -d db   # pgvector/pgvector:pg16 on localhost:5433 (native PG1
 | Run tests | `.venv\Scripts\python -m pytest apps/backend/tests -q` |
 | Run API | `.venv\Scripts\python -m uvicorn bebshax.main:app --port 8000` |
 | Keyless routing smoke test (real network) | `.venv\Scripts\python scripts/smoke_freellmpool.py` |
-| Refresh dependency lock after changing pyproject | `.venv\Scripts\pip freeze --exclude-editable > apps/backend/requirements.lock` |
+| Refresh dependency lock after changing pyproject | `.venv\Scripts\pip freeze --exclude-editable \| Out-File -Encoding utf8 apps/backend/requirements.lock` |
+| Download datasets (minimal profile) | `.venv\Scripts\python scripts/setup_datasets.py --profile minimal` |
+| Download datasets (development profile) | `.venv\Scripts\python scripts/setup_datasets.py --profile development` |
+| Verify dataset revisions & files (offline check) | `.venv\Scripts\python scripts/setup_datasets.py --verify-only` |
 
 ## Before you push
 

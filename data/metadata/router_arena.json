@@ -1,0 +1,69 @@
+{
+  "dataset_id": "router_arena",
+  "hf_repo_id": "RouteWorks/RouterArena",
+  "pinned_revision": "a4a062ce3313b56bb09c042e1bc37b61d34e3bd8",
+  "files_or_patterns": [
+    "data/sub_10-00000-of-00001.parquet"
+  ],
+  "profiles": [
+    "evaluation",
+    "full"
+  ],
+  "download_method": "hf_hub_file",
+  "preprocessing_fn": "preprocess_router_arena",
+  "is_required": true,
+  "estimated_raw_size_mb": 0.38,
+  "motivation": {
+    "purpose": "Multi-model router evaluation benchmark queries and model performance labels.",
+    "domain": "LLM routing benchmark queries across tasks",
+    "research_questions": [
+      "How does BebshaX free-pool routing compare to research router benchmarks?"
+    ]
+  },
+  "composition": {
+    "instance_type": "Benchmark prompt, task domain, model response scores, and cost estimates",
+    "slice_description": "Sub-10 evaluation split (~1,000 queries)",
+    "sample_count_estimate": 1000,
+    "sensitive_content": "General benchmark prompts."
+  },
+  "collection": {
+    "source_url": "https://huggingface.co/datasets/RouteWorks/RouterArena",
+    "upstream_creator": "Rice University (RouteWorks, 2024)",
+    "collection_mechanism": "Aggregated prompt execution logs across major proprietary and open models."
+  },
+  "preprocessing": {
+    "raw_format": "parquet",
+    "cleaning_applied": "Extract prompt, domain category, ground truth win rates per model family.",
+    "normalized_jsonl_schema": {
+      "id": "str",
+      "prompt": "str",
+      "domain": "str",
+      "model_scores": "dict"
+    }
+  },
+  "uses": {
+    "intended_uses": [
+      "Offline router evaluation experiments in Phase 11."
+    ],
+    "prohibited_uses": [
+      "Model training / fine-tuning (R9 violation)",
+      "Commercial redistribution without upstream license compliance",
+      "Deanonymization or PII scraping"
+    ]
+  },
+  "distribution": {
+    "license_claimed_hf": "apache-2.0",
+    "license_verified_upstream": "Tag-only in dataset card frontmatter (unverified upstream repo)",
+    "license_verification_url": "https://huggingface.co/datasets/RouteWorks/RouterArena/blob/a4a062ce3313b56bb09c042e1bc37b61d34e3bd8/README.md",
+    "license_verified_at": "2026-08-22",
+    "license_discrepancy": false,
+    "license_notes": "Dataset card declares Apache-2.0 in YAML metadata header.",
+    "is_gated": false
+  },
+  "raw_sha256": null,
+  "processed_sha256": null,
+  "actual_raw_sha256": "e7b4b7579e98df0b83202324357d0b91af78666ddbf1038a513d19edaf58efd5",
+  "actual_processed_sha256": "db7566555cef7791da5f6b33247f38c42e09f2c39145aab2048720bd417662c2",
+  "processed_record_count": 809,
+  "processed_size_bytes": 77664
+}

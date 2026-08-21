@@ -53,6 +53,40 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Phase 7 — Dataset pipeline (2026-08-22) ✅
+
+**Summary:** Built reproducible, license-checked, one-command dataset pipeline with profiles (`minimal` ⊂ `development` ⊂ `evaluation` ⊂ `full`). Manifest defines 10 datasets across 6 Gebru datasheet dimensions with verified upstream license URLs and immutable 40-character Git commit SHAs. Implemented `scripts/setup_datasets.py` with idempotent checksum skipping, live pre-flight commit resolution, fail-soft handling for gated/optional sets, and automatic generation of `data/DATASETS.md`.
+
+**R8 Dependency Review (huggingface_hub and fastparquet):**
+
+1. **huggingface_hub ≥0.28.0, <1.0** (Apache-2.0, official Hugging Face library, extremely active)
+   - Why: Official client for querying Hugging Face Hub metadata, enumerating repository files (`HfApi.list_repo_files`), downloading pinned-revision individual files (`hf_hub_download`), and streaming file slices (`HfFileSystem`).
+   - License: Apache-2.0 (permissive). Activity: weekly releases by Hugging Face core team.
+   - Necessity: Non-negotiable for reproducible, pinned-revision dataset retrieval and streaming slices from HF Hub.
+
+2. **fastparquet ≥2026.5.0** (Apache-2.0, numba / Python data ecosystem)
+   - Why: High-level parquet parsing for downloaded `.parquet` dataset artifacts (`cais/mmlu`, `openai/gsm8k`, `RouteWorks/RouterArena`, `ulab-ai/xRouteBench`, `facebook/empathetic_dialogues`) into normalized JSONL.
+   - Trade-off & Necessity: While `fastparquet` pulls transitive dependencies (`pandas`, `numpy`, `cramjam`), `pandas` provides structured DataFrame column manipulation, striding, filtering, and structured record exports (`df.to_dict(orient='records')`), making multi-dataset preprocessing robust and concise. All transitive dependencies carry permissive open-source licenses (BSD-3 / Apache-2.0).
+   - Alternatives considered: `pyarrow` provides a lower-level C++ binding without pandas, but `fastparquet` + `pandas` offers higher-level tabular ergonomics across diverse schema layouts.
+
+- **Decision on `datasets` library (OMITTED):** The heavy `datasets` meta-library is excluded (avoids multiprocess, dill, xxhash, and background cache managers). `huggingface_hub` + `fastparquet` alone handle retrieval, streaming, and conversion, while normalized JSONL remains the single persistent storage format.
+
+**Lock strategy:** `requirements.lock` refreshed post-install.
+
+**Findings & Deviations:**
+- Switched PersonaHub from raw 301 GB shard to the official 200k persona release (`persona.jsonl`, 21.6 MB) with systematic stride-8 sampling across all 200k records for uniform demographic and occupational diversity.
+- Switched EmpatheticDialogues from unpinned external tar archive to `refs/convert/parquet` commit `d5b57ae707b0b9a384af8ed50c043c608d597ca7` on `facebook/empathetic_dialogues`, establishing uniform commit SHA pinning across all 10 datasets.
+- Replaced niche `Subscription_Boxes` with representative `Office_Products` category from Amazon Reviews 2023.
+- LMSYS-Chat-1M: recorded right-to-request-deletion clause, unsafe content warning, and marked optional (`is_required=False`) with fail-soft behavior.
+
+**Exit Criteria Verification:**
+- Tests green: 74 passed offline in ~16s; integration test `test_pinned_revisions_resolve` passes live against Hugging Face.
+- Live `--profile minimal` completed (37.99 MB raw, 9.85 MB processed; well within < 1 GB limit).
+- Re-run confirmed strictly no-op with checksum matching.
+- `data/DATASETS.md` generated directly from manifest.
+
+---
+
 ### Phase 6 — Database (2026-08-22) ✅
 
 **R8 Dependency Review (BEBSHAX_DATABASE_URL required these four packages):**

@@ -1,0 +1,73 @@
+{
+  "dataset_id": "synthetic_persona_chat",
+  "hf_repo_id": "google/Synthetic-Persona-Chat",
+  "pinned_revision": "a520ad7f999ca7e6dfdc25fed9f5070bf6f87b42",
+  "files_or_patterns": [
+    "data/Synthetic-Persona-Chat_train.csv",
+    "data/Synthetic-Persona-Chat_test.csv"
+  ],
+  "profiles": [
+    "minimal",
+    "development",
+    "evaluation",
+    "full"
+  ],
+  "download_method": "hf_hub_file",
+  "preprocessing_fn": "preprocess_synthetic_persona_chat",
+  "is_required": true,
+  "estimated_raw_size_mb": 35.0,
+  "motivation": {
+    "purpose": "Persona-grounded multi-turn dialogue examples for interview simulation behavior.",
+    "domain": "Persona-conditioned conversational dialogues",
+    "research_questions": [
+      "How consistently can personas maintain stated constraints across multi-turn interviews?"
+    ]
+  },
+  "composition": {
+    "instance_type": "Multi-turn conversation transcript with speaker persona descriptions",
+    "slice_description": "Train and test splits from Synthetic-Persona-Chat CSVs (~10,000 dialogues)",
+    "sample_count_estimate": 10000,
+    "sensitive_content": "General casual dialogues, low toxicity."
+  },
+  "collection": {
+    "source_url": "https://huggingface.co/datasets/google/Synthetic-Persona-Chat",
+    "upstream_creator": "Google Research",
+    "collection_mechanism": "Synthetically generated paired persona dialogues using LLM prompting."
+  },
+  "preprocessing": {
+    "raw_format": "csv",
+    "cleaning_applied": "Parse persona traits and dialogue turns; format into turn sequences with speaker labels.",
+    "normalized_jsonl_schema": {
+      "id": "str",
+      "persona_1": "list[str]",
+      "persona_2": "list[str]",
+      "dialogue": "list[dict]"
+    }
+  },
+  "uses": {
+    "intended_uses": [
+      "Grounding interview turn dynamics in Phase 10.",
+      "Evaluation reference for dialogue consistency."
+    ],
+    "prohibited_uses": [
+      "Model training / fine-tuning (R9 violation)",
+      "Commercial redistribution without upstream license compliance",
+      "Deanonymization or PII scraping"
+    ]
+  },
+  "distribution": {
+    "license_claimed_hf": "cc-by-4.0",
+    "license_verified_upstream": "CC-BY-4.0 (Permissive with Attribution)",
+    "license_verification_url": "https://huggingface.co/datasets/google/Synthetic-Persona-Chat/blob/a520ad7f999ca7e6dfdc25fed9f5070bf6f87b42/README.md",
+    "license_verified_at": "2026-08-22",
+    "license_discrepancy": false,
+    "license_notes": "Standard CC-BY-4.0 license.",
+    "is_gated": false
+  },
+  "raw_sha256": "a7bb20f1c51fd18cc51b2adc942220994e302b237053110b04fce7b413c812da",
+  "processed_sha256": "f6b42b1f18bdfde255c51343e817c8012b3088e86a3f86a265e4c0f498a3748c",
+  "actual_raw_sha256": "a7bb20f1c51fd18cc51b2adc942220994e302b237053110b04fce7b413c812da",
+  "actual_processed_sha256": "f6b42b1f18bdfde255c51343e817c8012b3088e86a3f86a265e4c0f498a3748c",
+  "processed_record_count": 9906,
+  "processed_size_bytes": 4346214
+}

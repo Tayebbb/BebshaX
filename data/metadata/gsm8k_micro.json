@@ -1,0 +1,71 @@
+{
+  "dataset_id": "gsm8k_micro",
+  "hf_repo_id": "openai/gsm8k",
+  "pinned_revision": "740312add88f781978c0658806c59bc2815b9866",
+  "files_or_patterns": [
+    "main/test-00000-of-00001.parquet"
+  ],
+  "profiles": [
+    "minimal",
+    "development",
+    "evaluation",
+    "full"
+  ],
+  "download_method": "hf_hub_file",
+  "preprocessing_fn": "preprocess_gsm8k_micro",
+  "is_required": true,
+  "estimated_raw_size_mb": 0.42,
+  "motivation": {
+    "purpose": "Mathematical reasoning sanity probe for routing health and capability grading.",
+    "domain": "Grade school math multi-step reasoning",
+    "research_questions": [
+      "Can reasoning probes verify that candidate models follow step-by-step logic?"
+    ]
+  },
+  "composition": {
+    "instance_type": "Math problem with chain-of-thought solution and numeric answer",
+    "slice_description": "Micro-slice of 100 test problems",
+    "sample_count_estimate": 100,
+    "sensitive_content": "Elementary math word problems."
+  },
+  "collection": {
+    "source_url": "https://huggingface.co/datasets/openai/gsm8k",
+    "upstream_creator": "OpenAI (Cobbe et al., 2021)",
+    "collection_mechanism": "Created by human problem writers."
+  },
+  "preprocessing": {
+    "raw_format": "parquet",
+    "cleaning_applied": "Parse problem text, numeric solution, and final calculation.",
+    "normalized_jsonl_schema": {
+      "id": "str",
+      "question": "str",
+      "answer": "str",
+      "target_number": "str"
+    }
+  },
+  "uses": {
+    "intended_uses": [
+      "Reasoning capability probes for candidate route grading."
+    ],
+    "prohibited_uses": [
+      "Model training / fine-tuning (R9 violation)",
+      "Commercial redistribution without upstream license compliance",
+      "Deanonymization or PII scraping"
+    ]
+  },
+  "distribution": {
+    "license_claimed_hf": "mit",
+    "license_verified_upstream": "MIT (Permissive, verified on upstream repository)",
+    "license_verification_url": "https://github.com/openai/grade-school-math/blob/master/LICENSE",
+    "license_verified_at": "2026-08-22",
+    "license_discrepancy": false,
+    "license_notes": "Standard MIT license verified on original OpenAI repository.",
+    "is_gated": false
+  },
+  "raw_sha256": "ee7b8da9e381df27b9e3f7758a159ab2bdaa4dbaa910546cbbc47e0cb44e4f59",
+  "processed_sha256": "c2e917355a21f621264af562d5246d2f4322b37a76300beba8be074c66f5ab25",
+  "actual_raw_sha256": "ee7b8da9e381df27b9e3f7758a159ab2bdaa4dbaa910546cbbc47e0cb44e4f59",
+  "actual_processed_sha256": "c2e917355a21f621264af562d5246d2f4322b37a76300beba8be074c66f5ab25",
+  "processed_record_count": 100,
+  "processed_size_bytes": 61759
+}

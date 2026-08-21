@@ -12,6 +12,8 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "huggingface_hub>=0.28.0,<1.0.0",
+    "fastparquet>=2026.5.0",
 ]
 
 [project.optional-dependencies]
@@ -27,3 +29,7 @@ include = ["bebshax*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: requires network or a live database",
+]

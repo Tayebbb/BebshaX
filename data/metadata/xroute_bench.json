@@ -1,0 +1,69 @@
+{
+  "dataset_id": "xroute_bench",
+  "hf_repo_id": "ulab-ai/xRouteBench",
+  "pinned_revision": "ea4b6e1b29d9a734f55f0a637baf326bad6aa681",
+  "files_or_patterns": [
+    "llmrouter_generic_queries/valid.parquet"
+  ],
+  "profiles": [
+    "evaluation",
+    "full"
+  ],
+  "download_method": "hf_hub_file",
+  "preprocessing_fn": "preprocess_xroute_bench",
+  "is_required": true,
+  "estimated_raw_size_mb": 0.19,
+  "motivation": {
+    "purpose": "Zero-API-cost router evaluation via pre-recorded model executions.",
+    "domain": "Replay-based routing simulation benchmark",
+    "research_questions": [
+      "Can pre-recorded model execution traces validate router strategy trade-offs?"
+    ]
+  },
+  "composition": {
+    "instance_type": "Query, task metadata, and pre-recorded outputs from candidate models",
+    "slice_description": "Validation subset of generic router queries (~1,200 instances)",
+    "sample_count_estimate": 1200,
+    "sensitive_content": "Benchmark prompts and model outputs."
+  },
+  "collection": {
+    "source_url": "https://huggingface.co/datasets/ulab-ai/xRouteBench",
+    "upstream_creator": "UIUC ULAB (xRouteBench, 2024)",
+    "collection_mechanism": "Synthesized and collected benchmark queries with multi-model executions."
+  },
+  "preprocessing": {
+    "raw_format": "parquet",
+    "cleaning_applied": "Extract query text, task category, and model execution records.",
+    "normalized_jsonl_schema": {
+      "id": "str",
+      "query": "str",
+      "task": "str",
+      "candidates": "list[dict]"
+    }
+  },
+  "uses": {
+    "intended_uses": [
+      "Zero-cost routing strategy replay and comparison in Phase 11."
+    ],
+    "prohibited_uses": [
+      "Model training / fine-tuning (R9 violation)",
+      "Commercial redistribution without upstream license compliance",
+      "Deanonymization or PII scraping"
+    ]
+  },
+  "distribution": {
+    "license_claimed_hf": "mit",
+    "license_verified_upstream": "Tag-only in dataset card frontmatter (unverified upstream repo)",
+    "license_verification_url": "https://huggingface.co/datasets/ulab-ai/xRouteBench/blob/ea4b6e1b29d9a734f55f0a637baf326bad6aa681/README.md",
+    "license_verified_at": "2026-08-22",
+    "license_discrepancy": false,
+    "license_notes": "Dataset card declares MIT tag in YAML header.",
+    "is_gated": false
+  },
+  "raw_sha256": null,
+  "processed_sha256": null,
+  "actual_raw_sha256": "ada0e2ed19732c4ca6087d6f39f9ae3c953ea6bf239bfc3f95822388a1fb68a6",
+  "actual_processed_sha256": "a33675537a159f5bb6f5d87442989bb3e28c1545ad8e2c360ead268bba3f5c23",
+  "processed_record_count": 523,
+  "processed_size_bytes": 606359
+}

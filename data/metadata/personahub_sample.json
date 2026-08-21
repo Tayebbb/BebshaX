@@ -1,0 +1,71 @@
+{
+  "dataset_id": "personahub_sample",
+  "hf_repo_id": "proj-persona/PersonaHub",
+  "pinned_revision": "16777e34bf5cb758b925cae5d84e868ee6c2100c",
+  "files_or_patterns": [
+    "persona.jsonl"
+  ],
+  "profiles": [
+    "minimal",
+    "development",
+    "evaluation",
+    "full"
+  ],
+  "download_method": "hf_hub_file",
+  "preprocessing_fn": "preprocess_personahub",
+  "is_required": true,
+  "estimated_raw_size_mb": 21.6,
+  "motivation": {
+    "purpose": "High-diversity synthetic persona seeds for business persona generation.",
+    "domain": "Persona synthesis & role diversity",
+    "research_questions": [
+      "Can synthetic persona seeds provide rich behavioral priors for simulated user interviews?"
+    ]
+  },
+  "composition": {
+    "instance_type": "Persona profile description string",
+    "slice_description": "Systematic stride-8 sampling over all 200,000 records from persona.jsonl yielding 25,000 uniformly distributed persona seeds across occupations, demographics, and behavioral archetypes.",
+    "sample_count_estimate": 25000,
+    "sensitive_content": "Synthetic persona descriptions; may reflect demographic stereotypes present in foundation model outputs."
+  },
+  "collection": {
+    "source_url": "https://huggingface.co/datasets/proj-persona/PersonaHub",
+    "upstream_creator": "Tencent, HKUST, Tsinghua (Scaling Synthetic Data Creation with 1B Personas, arXiv:2406.20094)",
+    "collection_mechanism": "Generated synthetically by GPT-4 / Llama-3 / Qwen from web text anchors."
+  },
+  "preprocessing": {
+    "raw_format": "jsonl",
+    "cleaning_applied": "Extract persona text, normalize whitespace, apply systematic stride-8 sampling, assign deterministic UUID, validate non-empty string.",
+    "normalized_jsonl_schema": {
+      "id": "str",
+      "persona": "str",
+      "source_dataset": "str"
+    }
+  },
+  "uses": {
+    "intended_uses": [
+      "Grounding and seeding BebshaX persona generation (Phase 8).",
+      "Persona diversity baseline."
+    ],
+    "prohibited_uses": [
+      "Model training / fine-tuning (R9 violation)",
+      "Commercial redistribution without upstream license compliance",
+      "Deanonymization or PII scraping"
+    ]
+  },
+  "distribution": {
+    "license_claimed_hf": "cc-by-nc-sa-4.0",
+    "license_verified_upstream": "CC-BY-NC-SA-4.0 (Research & Non-Commercial Only)",
+    "license_verification_url": "https://huggingface.co/datasets/proj-persona/PersonaHub/blob/16777e34bf5cb758b925cae5d84e868ee6c2100c/README.md",
+    "license_verified_at": "2026-08-22",
+    "license_discrepancy": false,
+    "license_notes": "Synthetic outputs from GPT-4/Llama-3/Qwen; downstream users must also comply with foundation model service terms.",
+    "is_gated": false
+  },
+  "raw_sha256": null,
+  "processed_sha256": null,
+  "actual_raw_sha256": "d81c94ab82f5614b2fc7f335154d6cc18ea7dc3db3b3578ca0069c9251363b9f",
+  "actual_processed_sha256": "c0696d8cd0e005509a3b9e5cff73dec2b2b49e8178d5c0ea25377a5c7131d7db",
+  "processed_record_count": 25000,
+  "processed_size_bytes": 5512639
+}
