@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from bebshax.llm.adapters.base import ProviderAdapter, RouteCandidate
+from bebshax.llm.adapters.base import AdapterCompletion, ProviderAdapter, RouteCandidate
 from bebshax.llm.failures import AttemptFailed, FailureKind
 from bebshax.llm.types import LLMRequest, TokenUsage
 
@@ -31,9 +31,7 @@ class FakeAdapter(ProviderAdapter):
     async def candidates(self) -> list[RouteCandidate]:
         return list(self._order)
 
-    async def complete(
-        self, candidate: RouteCandidate, request: LLMRequest
-    ) -> tuple[str, TokenUsage]:
+    async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
         route = self._routes[(candidate.provider, candidate.model)]
         self.calls.append(f"{candidate.provider}/{candidate.model}")
         behavior = route.behaviors.pop(0) if route.behaviors else OK
@@ -42,5 +40,9 @@ class FakeAdapter(ProviderAdapter):
                 FailureKind(behavior), candidate.provider, candidate.model, "scripted failure"
             )
         prompt_chars = sum(len(m.content) for m in request.messages)
-        usage = TokenUsage(input_tokens=prompt_chars // 4, output_tokens=len(route.reply) // 4)
-        return route.reply, usage
+        return AdapterCompletion(
+            text=route.reply,
+            usage=TokenUsage(input_tokens=prompt_chars // 4, output_tokens=len(route.reply) // 4),
+            provider=candidate.provider,
+            model=candidate.model,
+        )

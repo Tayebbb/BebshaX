@@ -53,6 +53,15 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Phase 3 — freellmpool integration (2026-08-22) ✅
+- Dependency `freellmpool==0.11.4` installed (review in docs/ROUTING.md per R8); lock refreshed.
+- Adapter contract upgraded: `ProviderAdapter.complete` now returns `AdapterCompletion` (concrete serving provider/model + notes) so provenance records the real route, never "auto"; `AttemptRecord.notes` added; fake adapter + service updated.
+- `FreellmpoolAdapter` (`bebshax/llm/adapters/freellmpool_adapter.py`): one virtual route `freellmpool/auto` (window 1M — freellmpool enforces real per-model limits); full error mapping onto the failure taxonomy (its `ContextWindowExceeded` subclasses `AllProvidersExhausted` — caught first); `client_status=429` → RATE_LIMITED; empty replies → MALFORMED_RESPONSE; injectable pool for tests; `aclose()` lifecycle.
+- Boundary enforcement: `test_boundary.py` scans the package — provider SDK imports (freellmpool/ollama/litellm/openai/anthropic) allowed only under `adapters/`.
+- **Gate B decided: LiteLLM skipped** — justification + revisit trigger in docs/ROUTING.md.
+- **Live keyless smoke PASSED:** served by `llm7/codestral-latest`, zero keys, 3 internal freellmpool failover attempts captured in provenance notes; 33 s latency (keyless tiers are slow — team keys will improve this).
+- Suite: 26/26 green (9 new tests). Repo published: https://github.com/Tayebbb/BebshaX (public) + team docs PROJECT_CONTEXT.md / RULES.md / docs/TEAM_SETUP.md.
+
 ### Phase 2 — LLM abstraction (2026-08-22) ✅
 - `bebshax.llm` package: `TaskType` (16 task types — callers declare their task; no LLM classifies), `ChatMessage`/`LLMRequest`/`LLMResult`, `ProvenanceRecord`+`AttemptRecord` (all §14 fields: provider, model, routing path, attempt no., latency, tokens, failure/fallback reasons, final model).
 - Failure taxonomy: 13 `FailureKind`s, each with an explicit `FailurePolicy` (retry-same-once / try-next / cooldown). **Quality is deliberately NOT a failure kind** — enforced by `test_low_quality_is_not_an_infrastructure_failure`. `INTERNAL_ERROR` surfaces immediately instead of burning candidates.

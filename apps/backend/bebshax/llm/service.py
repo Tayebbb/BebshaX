@@ -102,7 +102,7 @@ class SingleAdapterLLMService(LLMService):
                 provenance.attempts.append(record)
                 t0 = time.perf_counter()
                 try:
-                    text, usage = await self._adapter.complete(cand, request)
+                    completion = await self._adapter.complete(cand, request)
                 except AttemptFailed as failure:
                     record.latency_ms = (time.perf_counter() - t0) * 1000
                     record.failure_kind = failure.kind
@@ -118,16 +118,19 @@ class SingleAdapterLLMService(LLMService):
                     break
                 record.latency_ms = (time.perf_counter() - t0) * 1000
                 record.success = True
+                record.provider = completion.provider  # concrete serving route
+                record.model = completion.model
+                record.notes = list(completion.notes)
                 provenance.success = True
-                provenance.served_by_provider = cand.provider
-                provenance.served_by_model = cand.model
-                provenance.input_tokens = usage.input_tokens
-                provenance.output_tokens = usage.output_tokens
+                provenance.served_by_provider = completion.provider
+                provenance.served_by_model = completion.model
+                provenance.input_tokens = completion.usage.input_tokens
+                provenance.output_tokens = completion.usage.output_tokens
                 return LLMResult(
-                    text=text,
-                    provider=cand.provider,
-                    model=cand.model,
-                    usage=usage,
+                    text=completion.text,
+                    provider=completion.provider,
+                    model=completion.model,
+                    usage=completion.usage,
                     provenance=provenance,
                 )
 

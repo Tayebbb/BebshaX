@@ -26,6 +26,7 @@ class AttemptRecord(BaseModel):
     failure_kind: FailureKind | None = None
     failure_detail: str | None = None
     fallback_reason: str | None = None  # why the router moved past this attempt
+    notes: list[str] = Field(default_factory=list)  # adapter-internal detail (e.g. inner failovers)
 
 
 class ProvenanceRecord(BaseModel):

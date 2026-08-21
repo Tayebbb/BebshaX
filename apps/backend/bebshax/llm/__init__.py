@@ -14,12 +14,14 @@ from bebshax.llm.failures import (
     FailurePolicy,
     LLMError,
 )
+from bebshax.llm.adapters.base import AdapterCompletion
 from bebshax.llm.provenance import AttemptRecord, ProvenanceRecord
 from bebshax.llm.service import LLMService, SingleAdapterLLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, LLMResult, TaskType, TokenUsage
 
 __all__ = [
     "FAILURE_POLICIES",
+    "AdapterCompletion",
     "AllCandidatesFailed",
     "AttemptFailed",
     "AttemptRecord",
