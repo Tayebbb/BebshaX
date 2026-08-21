@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Node / frontend
+node_modules/
+apps/frontend/dist/
+
+# Environment & secrets — never commit real keys
+.env
+.env.*
+!.env.example
+
+# Datasets: raw/processed are reproducible via scripts; metadata is tracked
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db

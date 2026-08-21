@@ -1,0 +1,23 @@
+# Native PG16 on this machine lacks pgvector, so the app DB runs here on 5433.
+name: bebshax
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: bebshax-db
+    environment:
+      POSTGRES_USER: bebshax
+      POSTGRES_PASSWORD: bebshax
+      POSTGRES_DB: bebshax
+    ports:
+      - "5433:5432"
+    volumes:
+      - bebshax_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bebshax -d bebshax"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  bebshax_pgdata:
