@@ -1,0 +1,62 @@
+"""Core request/response types for the LLM abstraction. Provider-agnostic."""
+
+from __future__ import annotations
+
+import uuid
+from enum import StrEnum
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from bebshax.llm.provenance import ProvenanceRecord
+
+
+class TaskType(StrEnum):
+    """The application always knows its task — no LLM is used to classify these."""
+
+    PERSONA_GENERATION = "PERSONA_GENERATION"
+    PERSONA_REFINEMENT = "PERSONA_REFINEMENT"
+    PERSONA_VALIDATION = "PERSONA_VALIDATION"
+    PERSONA_INTERVIEW = "PERSONA_INTERVIEW"
+    PERSONA_RESPONSE = "PERSONA_RESPONSE"
+    EVIDENCE_EXTRACTION = "EVIDENCE_EXTRACTION"
+    EVIDENCE_CLASSIFICATION = "EVIDENCE_CLASSIFICATION"
+    MEMORY_RETRIEVAL = "MEMORY_RETRIEVAL"
+    MEMORY_SUMMARIZATION = "MEMORY_SUMMARIZATION"
+    CONTRADICTION_CHECK = "CONTRADICTION_CHECK"
+    CRITIC = "CRITIC"
+    REPORT_GENERATION = "REPORT_GENERATION"
+    STRUCTURED_OUTPUT = "STRUCTURED_OUTPUT"
+    BROWSER_AGENT = "BROWSER_AGENT"
+    TOOL_CALLING = "TOOL_CALLING"
+    EMERGENCY_FALLBACK = "EMERGENCY_FALLBACK"
+
+
+class ChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str
+
+
+class TokenUsage(BaseModel):
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+class LLMRequest(BaseModel):
+    request_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    task: TaskType
+    messages: list[ChatMessage]
+    json_mode: bool = False
+    tools_required: bool = False
+    max_output_tokens: int | None = None
+    temperature: float | None = None
+    persona_id: str | None = None
+    conversation_id: str | None = None
+
+
+class LLMResult(BaseModel):
+    text: str
+    provider: str
+    model: str
+    usage: TokenUsage = Field(default_factory=TokenUsage)
+    provenance: ProvenanceRecord

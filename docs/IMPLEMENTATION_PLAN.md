@@ -53,6 +53,15 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Phase 2 — LLM abstraction (2026-08-22) ✅
+- `bebshax.llm` package: `TaskType` (16 task types — callers declare their task; no LLM classifies), `ChatMessage`/`LLMRequest`/`LLMResult`, `ProvenanceRecord`+`AttemptRecord` (all §14 fields: provider, model, routing path, attempt no., latency, tokens, failure/fallback reasons, final model).
+- Failure taxonomy: 13 `FailureKind`s, each with an explicit `FailurePolicy` (retry-same-once / try-next / cooldown). **Quality is deliberately NOT a failure kind** — enforced by `test_low_quality_is_not_an_infrastructure_failure`. `INTERNAL_ERROR` surfaces immediately instead of burning candidates.
+- Adapter boundary: `ProviderAdapter` + `RouteCandidate` in `bebshax/llm/adapters/` — the only package allowed to import provider SDKs. `FakeAdapter` provides scriptable failure injection for tests/chaos.
+- `SingleAdapterLLMService`: reference implementation — pre-flight capability + context-window eligibility (ineligible routes are never called; oversized requests raise `ContextWindowExceeded`, never truncate), policy-driven fallback, provenance hook (`on_provenance`) firing on success and failure (Phase-6 DB attachment point).
+- Token estimation: chars/4 heuristic + expected output, marked for replacement by the Phase-5 estimator.
+- Tests: 14 new (taxonomy, 429→timeout→success chain, same-route retry, all-fail provenance, internal-error surfacing, context skip/explicit-fail, JSON/tool capability filtering, provenance completeness on success + failure). Suite: 17/17 green.
+- No new dependencies.
+
 ### Phase 1 — Foundation (2026-08-22) ✅
 - Repo initialized; scaffold: `apps/backend` (package `bebshax`), `data/{raw,processed,metadata}`, `docker-compose.yml`, `.env.example`, `.gitignore`, `README.md`.
 - Config: pydantic-settings with `BEBSHAX_` prefix. Provider keys deliberately NOT modeled in `Settings` — freellmpool reads standard env vars directly, keeping the provider list configuration-driven (owner decision #10).
