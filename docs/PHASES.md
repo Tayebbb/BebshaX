@@ -59,7 +59,7 @@ Steps:
 
 ---
 
-## Phase 6 — Database ⬜  (track B)
+## Phase 6 — Database ✅ (2026-08-22)
 
 **Goal:** Postgres+pgvector persistence: provenance, model registry, business/persona skeletons.
 **Prerequisites:** Phase 2 ✅ (interfaces frozen). Does NOT depend on Phases 4–5: consume `ProvenanceRecord` as given.

@@ -45,6 +45,9 @@ Copy-Item .env.example .env   # then edit
 
 ```powershell
 docker compose up -d db   # pgvector/pgvector:pg16 on localhost:5433 (native PG16 keeps 5432)
+
+# After database is running (Phase 6 completed):
+.venv\Scripts\python -m alembic upgrade head   # Apply all schema migrations
 ```
 
 ## Everyday commands

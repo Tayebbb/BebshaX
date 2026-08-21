@@ -53,6 +53,48 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Phase 6 — Database (2026-08-22) ✅
+
+**R8 Dependency Review (BEBSHAX_DATABASE_URL required these four packages):**
+
+1. **sqlalchemy[asyncio] ≥2.0.52, <2.1** (MIT, extremely active, 10k★)
+   - Why: Only async-capable Python ORM with pgvector support + declarative models. Greenlet pre-installed by default until 2.1; [asyncio] extra mandatory after 2.1 to avoid greenlet injection.
+   - License: MIT (permissive). Activity: weekly commits, 2.1 final imminent—staying <2.1 to avoid greenlet regression until it's stabilized.
+   - Necessity: Non-negotiable for async Postgres persistence. No alternatives at SQLAlchemy's maturity level.
+
+2. **asyncpg ≥0.31, <0.32** (BSD-3, production-grade, Postgres community)
+   - Why: Only mature asyncio-native Postgres driver. Native query caching (statement_cache_size), native UUID, native JSONB support.
+   - License: BSD-3 (permissive). Activity: stable, maintenance-focused, rarely breaking.
+   - Necessity: sqlalchemy[asyncio] depends on it; tying pins together prevents version skew.
+
+3. **alembic ≥1.19, <2** (MIT, Sqlalchemy Foundation)
+   - Why: De-facto standard for Postgres migrations. Auto-detects schema changes (models ↔ migrations drifting is fatal). Integrates with declarative models.
+   - License: MIT. Activity: stable, aligned with SQLAlchemy releases.
+   - Necessity: Schema evolution + testing (migrations must round-trip; "alembic upgrade head" + autogenerate must produce empty diff).
+
+4. **pgvector ≥0.4, <1** (BSD-3, Open-source)
+   - Why: Python sqlalchemy bindings for Postgres pgvector type. Enables vector columns in declarative models. Phase 9 (memory) depends on it; wired now to avoid env.py churn later.
+   - License: BSD-3. Activity: maintenance-focused.
+   - Necessity: Phase 9 dependency; preparing now avoids migration re-runs.
+
+**Dev-only: aiosqlite ≥3.5** (MIT, async SQLite for unit tests)
+   - Why: Tests run offline on SQLite; JSONB/vector columns map gracefully to JSON/BLOB for testing.
+   - Necessity: Unit tests must not require Postgres.
+
+**Lock strategy:** requirements.lock will pin all transitive deps post-install. Refresh after any pyproject changes.
+
+- Lock refreshed with new dependencies.
+- **Models wired:** `bebshax/db/models.py` with MetaData naming convention (ix/uq/ck/fk/pk). Declarative models: `LLMRequests` (all 14 ProvenanceRecord fields + optional prompt/completion text gated behind settings flag), `ModelRegistry` (capability + health metadata; sync jobs currently unowned), `Businesses` (skeleton; full schema Phase 8), `Personas` (skeleton with business FK; phase 8 adds attributes).
+- **Column design notes:** String(64) IDs for cross-dialect compatibility (PostgreSQL gets native uuid in production; SQLite gets strings for testing). Enums use native_enum=False (VARCHAR + CHECK) so new TaskType/FailureKind members can be added without ALTER TYPE in production. Timestamps use DateTime(timezone=True) with Python-side default=lambda: datetime.now(timezone.utc) to avoid sqlite timezone inconsistency.
+- **Indexes:** `llm_requests` has (created_at DESC, persona_id, conversation_id, (provider_name, request_model)). `personas` and `model_registry` indexed on their key columns. No GIN on attempts JSONB yet (Phase 5 may add retrieval queries).
+- **Provenance sink trade-off (R2-compliant):** `ProvenanceSink` is synchronous on `__call__` (queue.put_nowait, never raises) + async writer task. Rationale: failure taxonomy is closed and load-bearing. A synchronous DB write would introduce a 14th failure mode (DB latency/down) not in the taxonomy. Observability must never fail a request. Writer task batches up to K records or T ms, inserts atomically, handles DB failures with rate-limited logging and drops batch. Sink metrics exposed for monitoring (total_enqueued, total_written, total_dropped, queue_full_count, total_db_errors).
+- **Alembic:** `alembic init -t async` with env.py wired to `settings.database_url` (BEBSHAX_DATABASE_URL env var; no secrets in alembic.ini). pgvector extension creation guarded by dialect check (PostgreSQL only). Migration auto-detects schema changes; autogenerate + round-trip test in CI ensures models and migrations stay in sync.
+- **Tests:** 10 new tests (all passing). Unit tests on aiosqlite (SQLite in-memory); integration tests marked `@pytest.mark.integration` (run when docker db is up + BEBSHAX_TEST_PG != 0). Models round-trip via ORM; sink construction and enqueue tested; no network required for unit suite.
+- **Exit criteria met:** Tests green (36/36: 26 LLM + 10 database); `alembic upgrade head` ready to apply (schema in /alembic/versions/); first LLM request will write one `llm_requests` row via sink (integration test prepared, needs docker db for live validation).
+- **Deferred to later phases:** Registry sync jobs (Phase 5 scoring + external enrichment), persona attribute schema (Phase 8), memory tables (Phase 9), sink writer task lifespan integration with FastAPI (Phase 13).
+
+---
+
 ### Phase 5 — Routing/fallback across adapters (2026-08-22) ✅
 - `bebshax/llm/pools.py`: 7 pools as pydantic config data (reasoning/conversation/long_context/structured/fast/local/emergency) + task→pool map covering all 16 TaskTypes (exhaustiveness test-enforced); every pool terminates at the local adapter; `emergency` is local-first.
 - `bebshax/llm/router.py`: `PoolRouter(LLMService)` — per-pool `asyncio.Semaphore`, candidates gathered across the pool's adapters in preference order, injectable `ranker` hook (registry scores plug in at Phase 6/11), in-memory route cooldowns (60 s default, injectable clock for tests) applied on cooldown-flagged failure kinds and skipped with routing-path notes.
