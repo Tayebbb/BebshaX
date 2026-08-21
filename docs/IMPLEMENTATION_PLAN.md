@@ -53,6 +53,13 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Phase 4 — Ollama integration (2026-08-22) ✅
+- `OllamaAdapter` (`bebshax/llm/adapters/ollama_adapter.py`): plain httpx, **native `/api/chat`** instead of the spec'd OpenAI-compat endpoint — recorded deviation: only the native API accepts `options.num_ctx`, without which Ollama silently truncates long prompts (R2 violation). Adapter pins `num_ctx` per request (generous chars/3 estimate) and raises `CONTEXT_WINDOW_EXCEEDED` rather than truncate; candidates live from `/api/tags` + `/api/show` (windows capped 16k for 4 GB VRAM), smallest-first ordering; full error mapping; 60 s candidate cache; no new dependencies.
+- `scripts/benchmark_ollama.py` (Ollama's exact ns timings; timeouts recorded as results, not crashes) + `scripts/smoke_ollama.py`.
+- **Findings (the benchmark did its job):** `qwen3.5:latest` (6.6 GB) is **unusable under real workload** — repeated HTTP 500 / `llama runner terminated` with <2 GB free RAM (VS Code 3 GB + Edge 1.7 GB + WSL 0.6 GB on a 15.7 GB machine); Ollama's own error: *"model requires more system memory (1.8 GiB) than is available (1.6 GiB)"* — even 2–2.5 GB models needed `wsl --shutdown` (owner-approved) to load. Adopted: **`llama3.2:3b` primary** (2.0 GB, 25.2 tok/s median, 59.8 warm), **`qwen3:4b` secondary** (2.5 GB, 22.4 tok/s, 217 ms warm TTFT). Results in `data/metadata/ollama_benchmark.json`.
+- Live smoke PASSED: served by `ollama/llama3.2:3b`, provenance notes carry `num_ctx`.
+- Suite: **37/37 green** (11 new mock-transport tests). Next: Phase 5 (routing/fallback across adapters).
+
 ### Maintenance — agent automation & team parallelization (2026-08-22)
 - `AGENTS.md` (root): binding contract auto-loaded by Copilot/Cursor/Claude Code/Codex/Windsurf — rules digest, **Phase Execution Protocol** ("implement phase N" → gate → implement in-scope → verify → mandatory doc updates in the same commit → `Phase N:` commit), Definition of Done for any change; `CLAUDE.md`/`GEMINI.md` pointers for tools that prefer their own filename.
 - `docs/PHASES.md`: executable specs for phases 4–15 (goal, prerequisites, allowed paths, steps, exit criteria with commands, docs to update, out-of-scope) — the file that makes "Implement phase 4" a one-line instruction.

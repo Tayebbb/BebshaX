@@ -1,0 +1,74 @@
+{
+  "results": {
+    "qwen3.5:latest": {
+      "model": "qwen3.5:latest",
+      "status": "error",
+      "error": "HTTPStatusError: Server error '500 Internal Server Error' for url 'http://localhost:11434/api/chat'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500",
+      "runs_completed": 0,
+      "samples": [],
+      "size_gb": 6.59
+    },
+    "qwen3:4b": {
+      "model": "qwen3:4b",
+      "status": "ok",
+      "runs": 3,
+      "first_load_ms": 13635.2,
+      "tokens_per_sec_median": 22.41,
+      "ttft_ms_median": 217.2,
+      "total_ms_median": 2370.1,
+      "samples": [
+        {
+          "tokens_per_sec": 22.04245579041078,
+          "ttft_ms": 13727.4484,
+          "total_ms": 16125.1141,
+          "output_tokens": 48
+        },
+        {
+          "tokens_per_sec": 22.407379795844495,
+          "ttft_ms": 188.0836,
+          "total_ms": 2370.0659,
+          "output_tokens": 48
+        },
+        {
+          "tokens_per_sec": 24.37948744464015,
+          "ttft_ms": 217.1591,
+          "total_ms": 2228.46,
+          "output_tokens": 48
+        }
+      ],
+      "size_gb": 2.5
+    },
+    "llama3.2:3b": {
+      "model": "llama3.2:3b",
+      "status": "ok",
+      "runs": 3,
+      "first_load_ms": 9749.1,
+      "tokens_per_sec_median": 25.17,
+      "ttft_ms_median": 2755.8,
+      "total_ms_median": 3234.6,
+      "samples": [
+        {
+          "tokens_per_sec": 26.817056720756668,
+          "ttft_ms": 9807.9692,
+          "total_ms": 10159.4107,
+          "output_tokens": 9
+        },
+        {
+          "tokens_per_sec": 25.173670354702608,
+          "ttft_ms": 263.6196,
+          "total_ms": 635.3264,
+          "output_tokens": 9
+        },
+        {
+          "tokens_per_sec": 19.471348559639445,
+          "ttft_ms": 2755.751,
+          "total_ms": 3234.5631,
+          "output_tokens": 9
+        }
+      ],
+      "size_gb": 2.02
+    }
+  },
+  "base_url": "http://localhost:11434",
+  "updated_at": "2026-08-21T20:10:08.838575+00:00"
+}

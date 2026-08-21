@@ -21,7 +21,7 @@ Backend skeleton, `BEBSHAX_*` config, health endpoint, pytest, pgvector compose 
 
 ---
 
-## Phase 4 — Ollama integration ⬜  (track A)
+## Phase 4 — Ollama integration ✅ (2026-08-22, track A)
 
 **Goal:** local Ollama becomes a working reliability-fallback backend behind the adapter boundary.
 **Prerequisites:** Phase 3 ✅. Ollama installed locally (skip live steps gracefully if the daemon is down — unit tests must not need it).
