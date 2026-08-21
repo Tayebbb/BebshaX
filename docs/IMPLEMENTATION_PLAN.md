@@ -53,6 +53,14 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Phase 5 — Routing/fallback across adapters (2026-08-22) ✅
+- `bebshax/llm/pools.py`: 7 pools as pydantic config data (reasoning/conversation/long_context/structured/fast/local/emergency) + task→pool map covering all 16 TaskTypes (exhaustiveness test-enforced); every pool terminates at the local adapter; `emergency` is local-first.
+- `bebshax/llm/router.py`: `PoolRouter(LLMService)` — per-pool `asyncio.Semaphore`, candidates gathered across the pool's adapters in preference order, injectable `ranker` hook (registry scores plug in at Phase 6/11), in-memory route cooldowns (60 s default, injectable clock for tests) applied on cooldown-flagged failure kinds and skipped with routing-path notes.
+- `bebshax/llm/estimator.py`: deterministic chars/3.5 + 4 tokens/message + expected output (over-estimates by design — mis-sizing can only pick a roomier model, never truncate). `service.py` refactored: shared `filter_eligible` + `attempt_candidates` machinery now backs both `SingleAdapterLLMService` (kept for tests/smokes) and `PoolRouter`.
+- `adapters/factory.py` (inside adapters/ so R1 boundary scan stays strict — module names containing provider strings may not be imported elsewhere); `create_app` lifespan wires `app.state.llm_router = PoolRouter(build_default_adapters())` and closes adapters on shutdown; `ProviderAdapter.aclose()` default added.
+- Chaos tests: remote exhausted → local serves (brief TEST 6); 20 concurrent requests peak ≤3 under `max_concurrency=3` (brief TEST 7, instrumented adapter); 429 → cooldown skip → recovery after expiry (fake clock); whole-pool failure carries pool in provenance; unknown adapter names fail fast at init.
+- Suite: **51/51 green** (14 new). No new dependencies. Next: Phase 6 (database, Sazid) / Phase 8 unblocked once 6 lands.
+
 ### Phase 4 — Ollama integration (2026-08-22) ✅
 - `OllamaAdapter` (`bebshax/llm/adapters/ollama_adapter.py`): plain httpx, **native `/api/chat`** instead of the spec'd OpenAI-compat endpoint — recorded deviation: only the native API accepts `options.num_ctx`, without which Ollama silently truncates long prompts (R2 violation). Adapter pins `num_ctx` per request (generous chars/3 estimate) and raises `CONTEXT_WINDOW_EXCEEDED` rather than truncate; candidates live from `/api/tags` + `/api/show` (windows capped 16k for 4 GB VRAM), smallest-first ordering; full error mapping; 60 s candidate cache; no new dependencies.
 - `scripts/benchmark_ollama.py` (Ollama's exact ns timings; timeouts recorded as results, not crashes) + `scripts/smoke_ollama.py`.

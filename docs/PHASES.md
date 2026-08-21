@@ -40,7 +40,7 @@ Steps:
 
 ---
 
-## Phase 5 — Routing / fallback across adapters ⬜  (track A)
+## Phase 5 — Routing / fallback across adapters ✅ (2026-08-22, track A)
 
 **Goal:** replace `SingleAdapterLLMService` as the production entry point with a task→pool router spanning freellmpool + Ollama.
 **Prerequisites:** Phase 4 ✅.

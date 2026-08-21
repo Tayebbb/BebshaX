@@ -37,3 +37,7 @@ class ProviderAdapter(ABC):
     @abstractmethod
     async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
         """Return a completion or raise AttemptFailed with a classified kind."""
+
+    async def aclose(self) -> None:
+        """Release adapter resources; default no-op."""
+        return None

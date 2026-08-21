@@ -57,7 +57,7 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | 2   | LLM abstraction (LLMService, task types, failure taxonomy, provenance) | ✅ 2026-08-22  |
 | 3   | freellmpool integration (adapter, keyless smoke, Gate B)               | ✅ 2026-08-22 |
 | 4   | Ollama integration (benchmark qwen3.5 first)                           | ✅ 2026-08-22  |
-| 5   | Routing/fallback (pools, ranking, context budget, concurrency)         | ⬜             |
+| 5   | Routing/fallback (pools, ranking, context budget, concurrency)         | ✅ 2026-08-22  |
 | 6   | Database (Alembic; model_registry, llm_requests, personas)             | ⬜             |
 | 7   | Dataset pipeline (profiles, one-command reproducible)                  | ⬜             |
 | 8   | Persona engine                                                         | ⬜             |

@@ -2,22 +2,46 @@
 
 How an LLM request travels through BebshaX, and why the routing dependencies were chosen.
 
-## Request path (current, Phase 3)
+## Request path (current, Phase 5)
 
 ```
 caller (persona engine, API, ...)
-  → LLMService.complete(LLMRequest{task, messages, constraints})     [bebshax/llm/service.py]
-      pre-flight: capability filter + context-window estimate         (ineligible routes NEVER called)
-      per-failure-kind fallback (FAILURE_POLICIES)                    [bebshax/llm/failures.py]
-      full ProvenanceRecord on success AND failure                    [bebshax/llm/provenance.py]
+  → PoolRouter.complete(LLMRequest{task, ...})                       [bebshax/llm/router.py]
+      task → pool (config map, all 16 task types)                    [bebshax/llm/pools.py]
+      per-pool asyncio.Semaphore (concurrency limits)
+      candidates gathered from the pool's adapters in preference order
+      pre-flight: cooldown check + capability filter + token estimate [bebshax/llm/estimator.py]
+          (ineligible routes NEVER called; nothing fits → ContextWindowExceeded)
+      per-failure-kind fallback (FAILURE_POLICIES) + route cooldowns  [bebshax/llm/failures.py]
+      full ProvenanceRecord incl. pool, on success AND failure        [bebshax/llm/provenance.py]
   → ProviderAdapter (boundary — RULES.md R1)                          [bebshax/llm/adapters/]
       FreellmpoolAdapter → freellmpool AsyncPool.achat()
-          virtual route "freellmpool/auto"; freellmpool does provider-level
-          failover / quota tracking / circuit breaking internally;
-          the Reply's concrete provider/model is written back into provenance
-      OllamaAdapter (Phase 4) → local reliability fallback
-  → Phase 5 replaces the single-adapter loop with task→pool routing across adapters.
+          virtual route "freellmpool/auto"; provider-level failover /
+          quotas / circuit breaking happen inside freellmpool;
+          the Reply's concrete provider/model lands in provenance
+      OllamaAdapter → local reliability fallback (native /api/chat)
 ```
+
+Wired in `create_app` lifespan: `app.state.llm_router = PoolRouter(build_default_adapters())`.
+`SingleAdapterLLMService` remains for tests and smoke scripts.
+
+## Pools and task mapping (Phase 5)
+
+| Pool | Adapter order | Concurrency | Tasks |
+|---|---|---|---|
+| `reasoning` | freellmpool → ollama | 2 | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC |
+| `conversation` | freellmpool → ollama | 5 | PERSONA_INTERVIEW, PERSONA_RESPONSE |
+| `structured` | freellmpool → ollama | 3 | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING |
+| `fast` | freellmpool → ollama | 5 | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION |
+| `long_context` | freellmpool → ollama | 2 | REPORT_GENERATION |
+| `local` | ollama | 2 | (reserved for explicit local-only calls) |
+| `emergency` | **ollama → freellmpool** (local-first) | 2 | EMERGENCY_FALLBACK |
+
+- Every pool terminates at the local adapter (chaos-tested: remote exhausted → Ollama serves).
+- **Ranking:** pool/adapter order today; `PoolRouter(ranker=...)` is the hook where Phase-6 registry scores (quality/latency/health) and Phase-11 strategy experiments plug in.
+- **Cooldowns:** failure kinds with `cooldown_route=True` (429, quota, 5xx, auth, provider/model unavailable) put `(provider, model)` on a 60 s in-memory cooldown; cooling routes are skipped with a routing-path note and return automatically. DB-backed state is Phase 6.
+- **Token estimator:** deterministic chars/3.5 + 4 tokens/message overhead + expected output — deliberately over-estimates so mis-sizing can only pick a roomier model, never truncate.
+- Tool-requiring tasks map to `structured` but no adapter advertises tool support yet → they fail explicitly (`AllCandidatesFailed`) until tool plumbing lands (honest by design).
 
 ## Failure classification
 
