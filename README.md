@@ -19,7 +19,7 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 | `scripts/` | Setup, dataset, and evaluation tooling |
 | `docs/` | [AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md) · [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) |
 
-## Quickstart (state: Phases 1–3 ✅ — parallel block 4/6/12 in progress)
+## Quickstart (state: Phases 1–7, 11, 12 ✅ complete)
 
 ```powershell
 # Backend
@@ -33,6 +33,12 @@ python -m venv .venv
 
 # Database (pgvector; the native PG16 install lacks the extension, so Docker on port 5433)
 docker compose up -d db   # used from Phase 6 onward
+
+# Run the Frontend
+cd apps/frontend
+npm install
+npm run dev
+# → http://localhost:5173
 ```
 
 Configuration is environment-driven (`BEBSHAX_*` variables; see [.env.example](.env.example)). Provider API keys are **optional** — add whatever legitimate free-tier keys the team has; keyless providers work with none.
@@ -51,11 +57,11 @@ Everything below is enforced by [AGENTS.md](AGENTS.md), [RULES.md](RULES.md), te
 
 ## 2. Your lane (no overlap, no waiting on each other)
 
-| Who | Do now | You own (nobody else touches) |
-|---|---|---|
-| **Tayeb** | Phase 4, then 5 | `apps/backend/bebshax/llm/**`, `docs/ROUTING.md` |
-| **Sazid** | Phase 6, then 7 | `apps/backend/bebshax/db/**`, `alembic/`, `data/**`, dataset scripts |
-| **Shehab** | Phase 12-foundation | `apps/frontend/**`, `docs/API_CONTRACT.md` |
+| Who | Track | Completed Phases | Up Next | You own (nobody else touches) |
+|---|---|---|---|---|
+| **Tayeb** | A — LLM infra | 1, 2, 3, 4, 5 ✅ | Phase 8 (Persona engine), Phase 10 | `apps/backend/bebshax/llm/**`, `docs/ROUTING.md` |
+| **Sazid** | B — Data layer | 6, 7 ✅ | Phase 9 (Memory engine) | `apps/backend/bebshax/db/**`, `alembic/`, `data/**`, dataset scripts |
+| **Shehab** | C — Frontend & Eval | 11, 12-foundation ✅ | Phase 12 (live wiring) | `apps/frontend/**`, `apps/backend/bebshax/evaluation/**`, `docs/API_CONTRACT.md`, `docs/EVALUATION.md` |
 
 Stay inside your paths. Need to change something outside them → PR + ping the owner. Full matrix and the convergence order for phases 8–15: [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md).
 

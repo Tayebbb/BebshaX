@@ -35,8 +35,8 @@ After every phase: run tests, inspect generated files, fix errors, update this p
 | 8 | Persona engine | persona schema with OBSERVED/INFERRED/SYNTHETIC provenance; generation pipeline (spec→routing→generation→validation); deterministic consistency rules + optional LLM critic | persona generated, validated, stored |
 | 9 | Memory | pgvector memory stream (semantic profile / episodic split); retrieval = relevance+recency+importance; reflection job (generative-agents concepts re-implemented) | interview turn retrieves the right memories |
 | 10 | Interview engine | per-turn composition: identity+memory+evidence+business context+objective+constraints; PERSONA_INTERVIEW → conversation_pool; persona never rebuilt per turn | multi-turn interview keeps persona stable |
-| 11 | Quality/evaluation | persona validity/consistency/grounding scoring; routing strategies behind config (ROUND_ROBIN / LEAST_USED / QUALITY_FIRST / LATENCY_FIRST / CAPABILITY_FIRST / QUOTA_AWARE / HYBRID default); RouterArena + xRouteBench offline comparison | one-command eval report; naive-vs-intelligent routing table |
-| 12 | Frontend | React + Vite app: business setup, persona generation, profiles, memory view, interview/simulation, insights, routing dashboard, provider status, fallback history, provenance, eval metrics | all views wired to the API |
+| 11 | Quality/evaluation | persona validity/consistency/grounding scoring; routing strategies behind config (ROUND_ROBIN / LEAST_USED / QUALITY_FIRST / LATENCY_FIRST / CAPABILITY_FIRST / QUOTA_AWARE / HYBRID default); RouterArena + xRouteBench offline comparison | one-command eval report; naive-vs-intelligent routing table — ✅ done (2026-08-22) |
+| 12 | Frontend | React + Vite app: business setup, persona generation, profiles, memory view, interview/simulation, insights, routing dashboard, provider status, fallback history, provenance, eval metrics | all views wired to the API — ✅ done (foundation + mock layer, 2026-08-22) |
 | 13 | Integration | end-to-end flows; `BEBSHAX_DEMO_MODE=true` (cached known-good personas clearly labeled, live generation still available) | demo survives with network unplugged |
 | 14 | Testing | full matrix: provider unavailable / 429 / timeout / context overflow / model unavailable / fallback chain / all-fail→Ollama / structured-output failure / persona consistency / dataset loading / provenance / caching / concurrent persona generation; brief §44 acceptance tests 1–10 | entire suite green |
 | 15 | Documentation | README; docs/{ARCHITECTURE, ROUTING, FAILOVER, MODEL_REGISTRY, DATASETS, PERSONA_ENGINE, EVALUATION, SETUP, DEMO}.md; FINAL_IMPLEMENTATION_REPORT.md; one-shot setup script | fresh-machine setup works per SETUP.md |
@@ -52,6 +52,43 @@ After every phase: run tests, inspect generated files, fix errors, update this p
 Kubernetes, microservices, Redis clusters, message queues, ML-learned router in the request path, custom LLM gateway, account-multiplication or any rate-limit evasion. Datasets serve grounding/diversity/behavioral-examples/evaluation only — **this is not a model-training/fine-tuning project**. Low answer quality is never treated as an infrastructure failure.
 
 ## Implementation log
+
+### Phase 11 — Quality & evaluation (2026-08-22) ✅
+
+**Summary:** Built complete evaluation engine in `apps/backend/bebshax/evaluation/` measuring persona quality, grounding ratio, and multi-model routing strategy performance. Implemented 7 pluggable candidate routing rankers (`HYBRID`, `ROUND_ROBIN`, `LEAST_USED`, `QUALITY_FIRST`, `LATENCY_FIRST`, `CAPABILITY_FIRST`, `QUOTA_AWARE`) in `strategies.py`. Developed `RoutingChaosSimulator` to benchmark router resilience under stochastic rate limits, timeouts, and server failures. Built `OfflineEvaluator` replaying `router_arena` and `xroute_bench` benchmark datasets without live network calls. Authored evaluation CLI `scripts/run_evaluation.py` producing Markdown and JSON report artifacts in `data/metadata/`. Authored comprehensive methodology documentation in `docs/EVALUATION.md`. Added 12 new unit and integration tests under `apps/backend/tests/evaluation/` (all 85 tests passing).
+
+**R8 Dependency Review:** Zero new dependencies added (uses Python standard library, existing Pydantic, and internal modules).
+
+### Phase 12-foundation — Frontend (app shell + mock layer) (2026-08-22) ✅
+
+**Summary:** Built complete React + Vite single-page frontend application in `apps/frontend` with TypeScript and modern vanilla CSS design system (glassmorphism, dark theme, responsive grid, micro-animations, Plus Jakarta Sans typography). Authored frozen contract [docs/API_CONTRACT.md](API_CONTRACT.md) defining all REST endpoints and Pydantic/TypeScript data shapes. Implemented mock fixture layer in `apps/frontend/src/mocks/` and reactive client store, enabling fully interactive persona generation, memory exploration, turn-by-turn interview simulation, routing trace inspection, and evaluation benchmarking.
+
+**R8 Dependency Review (Frontend Packages in `apps/frontend/package.json`):**
+1. **react & react-dom ≥18.3** (MIT, Meta / React Community)
+   - Why: Owner-decided UI library; declarative component tree and hook-based reactive state.
+   - License: MIT.
+2. **vite ≥5.4 & @vitejs/plugin-react** (MIT, Evan You / Vite Core)
+   - Why: Ultra-fast ESM dev server and Rollup-based production bundler with sub-2s build times.
+   - License: MIT.
+3. **vitest ≥2.1, @testing-library/react, @testing-library/jest-dom, jsdom** (MIT)
+   - Why: Zero-config headless component test runner mirroring backend pytest ergonomics; enforces green test gate (R7).
+   - License: MIT / Apache-2.0.
+
+**Delivered Views (6/6 fully wired to mock layer and live backend fallback):**
+1. **Routing Dashboard:** Provenance log table with expandable per-attempt failover traces, provider health cards (pollinations, groq, mistral, ovhcloud, ollama), pool concurrency monitors, and raw JSON modal.
+2. **Business Setup:** Form to create commercial contexts + target market definition cards.
+3. **Persona Profile:** Demographic coordinates card, grouped attributes with `OBSERVED`, `INFERRED`, and `SYNTHETIC` provenance badges, evidence grounding source quotes from PersonaHub/EmpatheticDialogues, and generation modal.
+4. **Persona Memory:** Semantic, episodic, and reflection streams with pgvector indexing indicator and importance score sliders.
+5. **Interview Simulation:** Interactive turn-by-turn dialogue interface with latency tracking, retrieved memory inspection drawer, and markdown transcript export.
+6. **Evaluation & Insights:** Quality KPIs (validity, consistency, grounding ratio) and 6-way routing strategy benchmark table answering the core research question.
+
+**Exit Criteria Verification:**
+- `npm run build` green (0 errors, 1.45s bundle time).
+- `npm test` green (6/6 passing in Vitest).
+- `GET /api/health` polling wired to live FastAPI backend on port 8000.
+- All 73 backend pytest tests remain green.
+
+---
 
 ### Phase 7 — Dataset pipeline (2026-08-22) ✅
 

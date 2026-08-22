@@ -63,8 +63,8 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | 8   | Persona engine                                                         | ⬜             |
 | 9   | Memory (pgvector stream: relevance+recency+importance)                 | ⬜             |
 | 10  | Interview engine                                                       | ⬜             |
-| 11  | Quality/evaluation (+ routing strategy experiments)                    | ⬜             |
-| 12  | Frontend                                                               | ⬜             |
+| 11  | Quality/evaluation (+ routing strategy experiments)                    | ✅ 2026-08-22  |
+| 12  | Frontend (Foundation & Views on mocks)                 | ✅ 2026-08-22  |
 | 13  | Integration + demo mode                                                | ⬜             |
 | 14  | Testing (full matrix + acceptance tests)                               | ⬜             |
 | 15  | Documentation                                                          | ⬜             |

@@ -47,15 +47,28 @@ Copy-Item .env.example .env   # then edit
 docker compose up -d db   # pgvector/pgvector:pg16 on localhost:5433 (native PG16 keeps 5432)
 
 # After database is running (Phase 6 completed):
-.venv\Scripts\python -m alembic upgrade head   # Apply all schema migrations
+.venv\Scripts\python -m alembic -c apps/backend/alembic.ini upgrade head   # Apply all schema migrations
+```
+
+## Frontend (Phase 12+)
+
+```powershell
+cd apps/frontend
+npm install
+npm run dev        # Runs dev server on http://localhost:5173
+npm test           # Runs Vitest component & API tests
+npm run build      # Verifies TypeScript & builds production bundle
 ```
 
 ## Everyday commands
 
 | Do | Command |
 |---|---|
-| Run tests | `.venv\Scripts\python -m pytest apps/backend/tests -q` |
+| Run backend tests | `.venv\Scripts\python -m pytest apps/backend/tests -q` |
+| Run frontend tests | `cd apps/frontend; npm test` |
 | Run API | `.venv\Scripts\python -m uvicorn bebshax.main:app --port 8000` |
+| Run Frontend Dev Server | `cd apps/frontend; npm run dev` |
+| Build Frontend | `cd apps/frontend; npm run build` |
 | Keyless routing smoke test (real network) | `.venv\Scripts\python scripts/smoke_freellmpool.py` |
 | Refresh dependency lock after changing pyproject | `.venv\Scripts\pip freeze --exclude-editable \| Out-File -Encoding utf8 apps/backend/requirements.lock` |
 | Download datasets (minimal profile) | `.venv\Scripts\python scripts/setup_datasets.py --profile minimal` |

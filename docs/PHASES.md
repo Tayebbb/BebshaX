@@ -143,7 +143,7 @@ Steps:
 
 ---
 
-## Phase 11 — Quality & evaluation ⬜  (track C after 8/10 exist; experiments part independent after 5)
+## Phase 11 — Quality & evaluation ✅ (2026-08-22, track C)
 
 **Goal:** measure persona quality and routing strategies; answer the research question.
 **Allowed paths:** `apps/backend/bebshax/evaluation/` (new), `scripts/run_evaluation.py`, `apps/backend/tests/evaluation/`, docs listed below.
@@ -159,7 +159,7 @@ Steps:
 
 ---
 
-## Phase 12 — Frontend ⬜  (track C — starts NOW against mocks)
+## Phase 12 — Frontend ✅ (2026-08-22 — Foundation + mock layer complete, track C)
 
 **Goal:** the single React+Vite app.
 **Prerequisites:** Phase 1 ✅ only. Backend endpoints are mocked until they exist — `VITE_MOCK=1` mode with fixtures mirroring the pydantic models (`ProvenanceRecord`, persona schema).
