@@ -1,5 +1,5 @@
 # BebshaX — Deep Documentation Study
-**Date:** 2026-08-22 | **Status:** Phases 1–3 ✅ Complete | **Current state:** API running, database healthy
+**Date:** 2026-08-22 | **Status:** Phases 1–7, 11, 12 ✅ Complete | **Current state:** Backend & Frontend running, evaluation engine & benchmarks active
 
 ---
 
@@ -30,8 +30,8 @@
 | **Backend** | Python 3.12 + FastAPI, async | freellmpool is Python; best ML ecosystem |
 | **Routing engine** | freellmpool (MIT) as a library | 24 free providers, 222 routes, keyless start, failover/quotas/circuits built in |
 | **Database** | PG16 + pgvector on **port 5433** (Docker) | Native PG16 lacks pgvector; this Docker image has it |
-| **Local fallback** | Ollama with `qwen3.5:latest` (6.6 GB) | 4 GB VRAM ceiling — no 70B fantasies |
-| **Frontend** | React + Vite | Single-page app (Phase 12, not started yet) |
+| **Local fallback** | Ollama with `llama3.2:3b` / `qwen3:4b` | 4 GB VRAM ceiling — no 70B fantasies |
+| **Frontend** | React + Vite | Single-page app (Phase 12 ✅ Complete with mock and live API modes) |
 | **Datasets** | Profiles: minimal/dev/eval/full; grounding + eval only | **NO fine-tuning, ever** |
 
 ---
@@ -106,31 +106,31 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 
 **Three independent tracks**, each owning disjoint paths:
 
-### 3.1 Current Block (Phases 4–7, any order, no waiting)
+### 3.1 Initial Parallel Block (Phases 4–7, 11, 12-foundation)
 
-| Teammate | Track | Phases | Owns | Status |
+| Teammate | Track | Completed Phases | Owns | Status |
 |---|---|---|---|---|
-| **Tayeb** | A — LLM infra | 4→5 | `bebshax/llm/**`, `scripts/benchmark_ollama.py`, `docs/ROUTING.md` | Ready for Phase 4 |
-| **Sazid** | B — Data layer | 6→7 | `bebshax/db/**`, `alembic/`, `data/**`, `scripts/setup_datasets.py` | Ready for Phase 6 |
-| **Shehab** | C — Frontend | 12-foundation | `apps/frontend/**`, `docs/API_CONTRACT.md` | Ready for Phase 12 |
+| **Tayeb** | A — LLM infra | 4, 5 ✅ | `bebshax/llm/**`, `scripts/benchmark_ollama.py`, `docs/ROUTING.md` | Phases 4 & 5 Complete; Ready for Phase 8 |
+| **Sazid** | B — Data layer | 6, 7 ✅ | `bebshax/db/**`, `alembic/`, `data/**`, `scripts/setup_datasets.py` | Phases 6 & 7 Complete; Ready for Phase 9 |
+| **Shehab** | C — Frontend & Eval | 11, 12-foundation ✅ | `apps/frontend/**`, `apps/backend/bebshax/evaluation/**`, `docs/API_CONTRACT.md`, `docs/EVALUATION.md` | Phases 11 & 12-foundation Complete |
 
-**Why they don't collide:**
-- A works against frozen `LLMService` + Ollama's API (no DB)
-- B consumes frozen `ProvenanceRecord` for database + pulls external datasets
-- C builds React views on mock data; only needs `/api/health` from backend
+**Why they didn't collide:**
+- A worked against frozen `LLMService` + Ollama's API (no DB)
+- B consumed frozen `ProvenanceRecord` for database + pulled external datasets
+- C built React views on mock data + authored independent evaluation suite
 
-### 3.2 After The Block (Phases 8–15)
+### 3.2 Convergence (Phases 8–15)
 
-| Phase | Owner | Needs | Starts |
-|---|---|---|---|
-| 8 — Persona engine | Tayeb | 5, 6 (7 for evidence) | Once 5+6 land |
-| 9 — Memory | Sazid | 6, 8 (persona IDs) | Once 6+8 land |
-| 10 — Interview | Tayeb | 8 (uses 9 when ready) | Once 8 lands |
-| 11 — Quality/eval | Shehab | 8, 10 (starts routing half after 5) | After 5 |
-| 12 — Frontend live | Shehab | 8/10/11 endpoints | Endpoints land |
-| 13 — Integration | All three | 10, 12 | All converge |
-| 14 — Testing | All | 13 | Harden after 13 |
-| 15 — Docs | All | 14 | Assemble final report |
+| Phase | Owner | Status | Needs | Starts |
+|---|---|---|---|---|
+| 8 — Persona engine | Tayeb | ⬜ Ready to start | 5, 6 (7 for evidence) | Unblocked (5, 6, 7 landed) |
+| 9 — Memory | Sazid | ⬜ Ready to start | 6, 8 (persona IDs) | Once 8 lands |
+| 10 — Interview | Tayeb | ⬜ | 8 (uses 9 when ready) | Once 8 lands |
+| 11 — Quality/eval | Shehab | ✅ Complete (2026-08-22) | 5, 7 | Completed |
+| 12 — Frontend live | Shehab | ✅ Foundation + mock views (live wiring follows 8/10/11) | 8/10/11 endpoints | Ready for live endpoints |
+| 13 — Integration | All three | ⬜ | 10, 12 | All converge |
+| 14 — Testing | All | ⬜ | 13 | Harden after 13 |
+| 15 — Docs | All | ⬜ | 14 | Assemble final report |
 
 ---
 

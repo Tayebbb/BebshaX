@@ -143,7 +143,7 @@ Steps:
 
 ---
 
-## Phase 11 — Quality & evaluation ⬜  (track C after 8/10 exist; experiments part independent after 5)
+## Phase 11 — Quality & evaluation ✅ (2026-08-22, track C)
 
 **Goal:** measure persona quality and routing strategies; answer the research question.
 **Allowed paths:** `apps/backend/bebshax/evaluation/` (new), `scripts/run_evaluation.py`, `apps/backend/tests/evaluation/`, docs listed below.
