@@ -159,7 +159,7 @@ Steps:
 
 ---
 
-## Phase 12 — Frontend ⬜  (track C — starts NOW against mocks)
+## Phase 12 — Frontend ✅ (2026-08-22 — Foundation + mock layer complete, track C)
 
 **Goal:** the single React+Vite app.
 **Prerequisites:** Phase 1 ✅ only. Backend endpoints are mocked until they exist — `VITE_MOCK=1` mode with fixtures mirroring the pydantic models (`ProvenanceRecord`, persona schema).

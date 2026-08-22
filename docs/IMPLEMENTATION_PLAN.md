@@ -53,6 +53,37 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Phase 12-foundation — Frontend (app shell + mock layer) (2026-08-22) ✅
+
+**Summary:** Built complete React + Vite single-page frontend application in `apps/frontend` with TypeScript and modern vanilla CSS design system (glassmorphism, dark theme, responsive grid, micro-animations, Plus Jakarta Sans typography). Authored frozen contract [docs/API_CONTRACT.md](API_CONTRACT.md) defining all REST endpoints and Pydantic/TypeScript data shapes. Implemented mock fixture layer in `apps/frontend/src/mocks/` and reactive client store, enabling fully interactive persona generation, memory exploration, turn-by-turn interview simulation, routing trace inspection, and evaluation benchmarking.
+
+**R8 Dependency Review (Frontend Packages in `apps/frontend/package.json`):**
+1. **react & react-dom ≥18.3** (MIT, Meta / React Community)
+   - Why: Owner-decided UI library; declarative component tree and hook-based reactive state.
+   - License: MIT.
+2. **vite ≥5.4 & @vitejs/plugin-react** (MIT, Evan You / Vite Core)
+   - Why: Ultra-fast ESM dev server and Rollup-based production bundler with sub-2s build times.
+   - License: MIT.
+3. **vitest ≥2.1, @testing-library/react, @testing-library/jest-dom, jsdom** (MIT)
+   - Why: Zero-config headless component test runner mirroring backend pytest ergonomics; enforces green test gate (R7).
+   - License: MIT / Apache-2.0.
+
+**Delivered Views (6/6 fully wired to mock layer and live backend fallback):**
+1. **Routing Dashboard:** Provenance log table with expandable per-attempt failover traces, provider health cards (pollinations, groq, mistral, ovhcloud, ollama), pool concurrency monitors, and raw JSON modal.
+2. **Business Setup:** Form to create commercial contexts + target market definition cards.
+3. **Persona Profile:** Demographic coordinates card, grouped attributes with `OBSERVED`, `INFERRED`, and `SYNTHETIC` provenance badges, evidence grounding source quotes from PersonaHub/EmpatheticDialogues, and generation modal.
+4. **Persona Memory:** Semantic, episodic, and reflection streams with pgvector indexing indicator and importance score sliders.
+5. **Interview Simulation:** Interactive turn-by-turn dialogue interface with latency tracking, retrieved memory inspection drawer, and markdown transcript export.
+6. **Evaluation & Insights:** Quality KPIs (validity, consistency, grounding ratio) and 6-way routing strategy benchmark table answering the core research question.
+
+**Exit Criteria Verification:**
+- `npm run build` green (0 errors, 1.45s bundle time).
+- `npm test` green (6/6 passing in Vitest).
+- `GET /api/health` polling wired to live FastAPI backend on port 8000.
+- All 73 backend pytest tests remain green.
+
+---
+
 ### Phase 7 — Dataset pipeline (2026-08-22) ✅
 
 **Summary:** Built reproducible, license-checked, one-command dataset pipeline with profiles (`minimal` ⊂ `development` ⊂ `evaluation` ⊂ `full`). Manifest defines 10 datasets across 6 Gebru datasheet dimensions with verified upstream license URLs and immutable 40-character Git commit SHAs. Implemented `scripts/setup_datasets.py` with idempotent checksum skipping, live pre-flight commit resolution, fail-soft handling for gated/optional sets, and automatic generation of `data/DATASETS.md`.
