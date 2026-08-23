@@ -1,11 +1,13 @@
 import React from 'react';
 import { ArrowRight, ShieldCheck, CheckCircle2, Sparkles } from 'lucide-react';
+import { useNavigation } from '../../context/NavigationContext';
 
 interface FinalCTAProps {
   onOpenApp?: () => void;
 }
 
 export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
+  const { navigate } = useNavigation();
   return (
     <section
       style={{
@@ -64,53 +66,60 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(37, 99, 235, 0.1)',
-              border: '1px solid rgba(37, 99, 235, 0.25)',
+              background: 'rgba(37, 99, 235, 0.08)',
+              border: '1px solid rgba(37, 99, 235, 0.2)',
               color: '#2563EB',
               fontSize: '0.78rem',
               fontWeight: 800,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
-              marginBottom: '24px',
+              marginBottom: '20px',
             }}
           >
             <Sparkles size={14} color="#2563EB" />
-            <span>Ready for Continuous Intelligence?</span>
+            <span>Ready to Elevate Your Intelligence?</span>
           </div>
 
+          {/* Heading */}
           <h2
             style={{
-              fontSize: 'clamp(2.2rem, 4.5vw, 3.6rem)',
+              fontSize: 'clamp(2rem, 4vw, 3.2rem)',
               fontWeight: 800,
-              letterSpacing: '-0.035em',
-              lineHeight: 1.15,
-              marginBottom: '20px',
               color: '#0F172A',
+              letterSpacing: '-0.03em',
+              marginBottom: '16px',
+              maxWidth: '700px',
+              lineHeight: 1.15,
             }}
           >
-            Start turning your data into{' '}
+            Start making{' '}
             <span
               className="text-gradient-blue"
               style={{
                 fontStyle: 'italic',
+                fontWeight: 900,
               }}
             >
-              decisions today.
-            </span>
+              better business decisions
+            </span>{' '}
+            today.
           </h2>
 
+          {/* Subtitle */}
           <p
             style={{
-              fontSize: '1.1rem',
+              fontSize: 'clamp(1rem, 1.6vw, 1.15rem)',
               color: '#475569',
-              maxWidth: '640px',
+              maxWidth: '560px',
               lineHeight: 1.6,
               marginBottom: '36px',
+              fontWeight: 500,
             }}
           >
-            Connect your systems in minutes. Experience unified operational telemetry, autonomous root-cause diagnosis, and prioritized action playbooks.
+            Join forward-thinking enterprise leaders transforming disparate data into actionable operational clarity in minutes.
           </p>
 
+          {/* CTA Buttons */}
           <div
             style={{
               display: 'flex',
@@ -121,8 +130,8 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
               marginBottom: '36px',
             }}
           >
-            <a
-              href="#demo"
+            <button
+              onClick={() => navigate('/auth/signup')}
               className="primary-hero-btn"
               style={{
                 padding: '16px 36px',
@@ -132,12 +141,13 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '10px',
-                textDecoration: 'none',
+                cursor: 'pointer',
+                border: 'none',
               }}
             >
               <span>Get Started Free</span>
               <ArrowRight size={18} color="#FFFFFF" />
-            </a>
+            </button>
 
             <button
               onClick={onOpenApp}

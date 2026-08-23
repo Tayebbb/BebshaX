@@ -68,21 +68,15 @@ export const AnimatedBackground: React.FC = () => {
         position: 'fixed',
         top: 0,
         left: 0,
+        right: 0,
+        bottom: 0,
         width: '100vw',
         height: '100vh',
         zIndex: 0,
         pointerEvents: 'none',
+        overflow: 'hidden',
+        background: 'linear-gradient(180deg, #E0F2FE 0%, #BAE6FD 30%, #7DD3FC 100%)',
       }}
-    >
-      {/* Subtle light ambient overlay for crisp glass contrast */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 40%, rgba(240, 249, 255, 0.25) 100%)',
-          pointerEvents: 'none',
-        }}
-      />
-    </div>
+    />
   );
 };

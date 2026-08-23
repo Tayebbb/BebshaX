@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, Play, Check } from 'lucide-react';
 import { HeroDashboardPreview } from './HeroDashboardPreview';
+import { useNavigation } from '../../context/NavigationContext';
 
 interface HeroProps {
   onOpenApp?: () => void;
@@ -8,6 +9,7 @@ interface HeroProps {
 }
 
 export const Hero: React.FC<HeroProps> = () => {
+  const { navigate } = useNavigation();
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -126,7 +128,7 @@ export const Hero: React.FC<HeroProps> = () => {
           }}
         >
           <button
-            onClick={() => scrollToSection('demo')}
+            onClick={() => navigate('/auth/signup')}
             className="primary-hero-btn"
             style={{
               padding: '14px 30px',

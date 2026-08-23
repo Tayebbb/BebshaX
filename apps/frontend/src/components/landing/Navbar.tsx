@@ -14,6 +14,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigation } from '../../context/NavigationContext';
 
 interface NavbarProps {
   onOpenApp?: () => void;
@@ -22,6 +23,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
   const { user, isAuthenticated, logout } = useAuth();
+  const { navigate } = useNavigation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [solutionsDropdownOpen, setSolutionsDropdownOpen] = useState(false);
@@ -476,7 +478,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             /* Guest Auth Buttons */
             <>
               <button
-                onClick={() => onOpenAuth?.('signin')}
+                onClick={() => (onOpenAuth ? onOpenAuth('signin') : navigate('/auth/signin'))}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -495,7 +497,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
               </button>
 
               <button
-                onClick={() => onOpenAuth?.('signup-options')}
+                onClick={() => (onOpenAuth ? onOpenAuth('signup-options') : navigate('/auth/signup'))}
                 style={{
                   padding: '9px 18px',
                   fontSize: '0.875rem',
@@ -649,7 +651,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  onOpenAuth?.('signin');
+                  if (onOpenAuth) onOpenAuth('signin');
+                  else navigate('/auth/signin');
                 }}
                 className="secondary-btn"
                 style={{
@@ -667,7 +670,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  onOpenAuth?.('signup-options');
+                  if (onOpenAuth) onOpenAuth('signup-options');
+                  else navigate('/auth/signup');
                 }}
                 style={{
                   padding: '12px',
