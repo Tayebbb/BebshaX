@@ -18,9 +18,10 @@ import { Footer } from './Footer';
 
 interface LandingPageProps {
   onOpenApp: () => void;
+  onOpenAuth?: (view?: 'signin' | 'signup-options' | 'signup-email') => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onOpenApp }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onOpenApp, onOpenAuth }) => {
   return (
     <div
       style={{
@@ -35,7 +36,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenApp }) => {
       <AnimatedBackground />
 
       {/* Navigation */}
-      <Navbar onOpenApp={onOpenApp} />
+      <Navbar onOpenApp={onOpenApp} onOpenAuth={onOpenAuth} />
 
       {/* Main Content Sections */}
       <main style={{ position: 'relative', zIndex: 1 }}>

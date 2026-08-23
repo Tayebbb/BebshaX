@@ -1,0 +1,176 @@
+"""Integration tests for all REST API endpoints (Phase 13)."""
+
+import pytest
+from starlette.testclient import TestClient
+from sqlalchemy.ext.asyncio import create_async_engine
+
+import bebshax.interview.orm  # noqa: F401
+import bebshax.memory.orm  # noqa: F401
+import bebshax.persona.orm  # noqa: F401
+from bebshax.config import get_settings
+from bebshax.db.models import Base
+from bebshax.interview.engine import InterviewEngine
+from bebshax.llm.adapters.base import RouteCandidate
+from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
+from bebshax.llm.router import PoolRouter
+from bebshax.main import create_app
+from bebshax.persona.evidence import EvidenceStore
+from bebshax.persona.generation import PersonaEngine
+
+
+_VALID_PERSONA_JSON = """
+{
+  "name": "Alex Mercer",
+  "age": 31,
+  "occupation": "Delivery Courier",
+  "location": "Austin, TX",
+  "income_range": "$40k - $50k",
+  "education": "High School",
+  "description": "Hardworking driver managing variable shift income.",
+  "goals": [{"value": "Predictable weekly budget", "provenance": "SYNTHETIC", "evidence_ids": []}, {"value": "Save for maintenance", "provenance": "SYNTHETIC", "evidence_ids": []}],
+  "pain_points": [{"value": "Overdraft fees", "provenance": "SYNTHETIC", "evidence_ids": []}, {"value": "High fuel costs", "provenance": "SYNTHETIC", "evidence_ids": []}],
+  "needs": [{"value": "Instant payout tracking", "provenance": "SYNTHETIC", "evidence_ids": []}],
+  "motivations": [{"value": "Financial security", "provenance": "SYNTHETIC", "evidence_ids": []}],
+  "behaviors": [{"value": "Uses 3 apps", "provenance": "SYNTHETIC", "evidence_ids": []}],
+  "technology_usage": [{"value": "Mobile-only", "provenance": "SYNTHETIC", "evidence_ids": []}],
+  "purchase_behavior": [{"value": "Price-conscious", "provenance": "SYNTHETIC", "evidence_ids": []}],
+  "personality_traits": [{"value": "Resourceful", "provenance": "SYNTHETIC", "evidence_ids": []}]
+}
+"""
+
+
+@pytest.fixture
+async def api_test_app(tmp_path, monkeypatch):
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'test_api_int.db'}"
+    monkeypatch.setenv("BEBSHAX_DATABASE_URL", db_url)
+    get_settings.cache_clear()
+
+    engine = create_async_engine(db_url)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    await engine.dispose()
+
+    cand = RouteCandidate(provider="pollinations", model="deepseek-r1")
+    fake_route = FakeRoute(
+        candidate=cand,
+        replies=[
+            _VALID_PERSONA_JSON,
+            "Speaking as Alex: That automated savings tool sounds great!",
+            "Speaking as Alex: Another reply.",
+        ],
+    )
+    adapter = FakeAdapter(routes=[fake_route])
+    adapters = {"freellmpool": adapter, "ollama": adapter, "pollinations": adapter}
+
+    app = create_app()
+    with TestClient(app) as client:
+        llm_router = PoolRouter(adapters, on_provenance=app.state.provenance_sink)
+        app.state.llm_adapters = adapters
+        app.state.llm_router = llm_router
+        app.state.persona_engine = PersonaEngine(llm_router, EvidenceStore())
+        app.state.interview_engine = InterviewEngine(
+            llm_router, app.state.db_sessionmaker, memory=app.state.memory_service
+        )
+        yield client
+    get_settings.cache_clear()
+
+
+async def test_routes_status_and_provenance(api_test_app: TestClient):
+    # Test routes status
+    status_resp = api_test_app.get("/api/routes/status")
+    assert status_resp.status_code == 200
+    data = status_resp.json()
+    assert "providers" in data
+    assert "pools" in data
+    assert len(data["providers"]) >= 1
+
+    # Test provenance list
+    prov_resp = api_test_app.get("/api/provenance?limit=10")
+    assert prov_resp.status_code == 200
+    pdata = prov_resp.json()
+    assert "items" in pdata
+    assert "total" in pdata
+
+
+async def test_evaluation_metrics_endpoint(api_test_app: TestClient):
+    res = api_test_app.get("/api/evaluation/metrics")
+    assert res.status_code == 200
+    metrics = res.json()
+    assert "overall_health" in metrics
+    assert "routing_strategies" in metrics
+    assert len(metrics["routing_strategies"]) == 4
+
+
+async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
+    # 1. Create Business
+    b_res = api_test_app.post(
+        "/api/businesses",
+        json={
+            "name": "SwiftCourier App",
+            "description": "Instant gig earnings management",
+            "industry": "Gig Economy",
+            "target_market": "Couriers",
+        },
+    )
+    assert b_res.status_code == 201
+    biz = b_res.json()
+    biz_id = biz["id"]
+
+    # 2. List Businesses
+    blist_res = api_test_app.get("/api/businesses")
+    assert blist_res.status_code == 200
+    assert any(b["id"] == biz_id for b in blist_res.json())
+
+    # 3. Generate Persona
+    p_gen = api_test_app.post(
+        f"/api/businesses/{biz_id}/personas",
+        json={
+            "audience_segment": "High-mileage courier",
+            "generation_hints": ["Prioritize vehicle maintenance costs"],
+        },
+    )
+    assert p_gen.status_code == 201
+    persona = p_gen.json()
+    persona_id = persona["id"]
+    assert persona["name"] == "Alex Mercer"
+
+    # 4. List Personas
+    plist_res = api_test_app.get("/api/personas")
+    assert plist_res.status_code == 200
+    assert len(plist_res.json()) >= 1
+
+    # 5. Get Single Persona
+    p_get = api_test_app.get(f"/api/personas/{persona_id}")
+    assert p_get.status_code == 200
+    assert p_get.json()["id"] == persona_id
+
+    # 6. Check Persona Memories
+    mem_res = api_test_app.get(f"/api/personas/{persona_id}/memories")
+    assert mem_res.status_code == 200
+    memories = mem_res.json()
+    assert isinstance(memories, list)
+
+    # 7. Start Conversation
+    c_res = api_test_app.post(
+        "/api/conversations",
+        json={"persona_id": persona_id, "objective": "Test new savings feature"},
+    )
+    assert c_res.status_code == 201
+    conv_id = c_res.json()["id"]
+
+    # 8. Post message
+    msg_res = api_test_app.post(
+        f"/api/conversations/{conv_id}/messages",
+        json={"content": "Would you use an automated 5% buffer deduction?"},
+    )
+    assert msg_res.status_code == 200
+    msg_data = msg_res.json()
+    assert "Alex" in msg_data["reply"]
+    assert msg_data["user_message"]["content"] == "Would you use an automated 5% buffer deduction?"
+    assert "Alex" in msg_data["persona_reply"]["content"]
+
+    # 9. Get transcript
+    tr_res = api_test_app.get(f"/api/conversations/{conv_id}")
+    assert tr_res.status_code == 200
+    turns = tr_res.json()["turns"]
+    assert len(turns) == 2

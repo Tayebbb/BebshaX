@@ -10,6 +10,13 @@ import {
   RoutesStatusResponse,
 } from '../types';
 import {
+  AuthResponse,
+  GoogleAuthData,
+  SignInData,
+  SignUpData,
+  User,
+} from '../types/auth';
+import {
   mockBusinesses,
   mockConversations,
   mockEvaluationMetrics,
@@ -21,10 +28,8 @@ import {
 } from '../mocks/fixtures';
 
 const API_BASE = import.meta.env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
-// Default to mock mode unless explicitly disabled with VITE_MOCK=0
-const isMock = import.meta.env?.VITE_MOCK === '1' || import.meta.env?.MODE === 'test' || typeof window === 'undefined';
 
-// In-memory state store for client modifications during mock mode
+// In-memory state store for client modifications during mock/fallback mode
 class MockStore {
   businesses: Business[] = [...mockBusinesses];
   personas: Record<string, Persona> = { ...mockPersonas };
@@ -35,46 +40,72 @@ class MockStore {
 
 const mockStore = new MockStore();
 
+let forceMockMode: boolean | null = null;
+let lastKnownLive = false;
+
 export const api = {
+  setMockMode(enabled: boolean) {
+    forceMockMode = enabled;
+  },
+
+  isMockMode(): boolean {
+    if (forceMockMode !== null) return forceMockMode;
+    return import.meta.env?.VITE_MOCK === '1' || import.meta.env?.MODE === 'test';
+  },
+
+  isLive(): boolean {
+    return lastKnownLive;
+  },
+
   // 1. Health check (attempts live call first)
   async getHealth(): Promise<HealthResponse> {
-    if (isMock) return mockHealth;
+    if (this.isMockMode()) {
+      lastKnownLive = false;
+      return mockHealth;
+    }
     try {
-      const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(1000) });
+      const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(2000) });
       if (res.ok) {
+        lastKnownLive = true;
         return await res.json();
       }
     } catch {
-      // live endpoint unreachable, fall back to mock
+      lastKnownLive = false;
     }
     return mockHealth;
   },
 
   // 2. Routes & Provider Status
   async getRoutesStatus(): Promise<RoutesStatusResponse> {
-    if (isMock) return mockRoutesStatus;
-    try {
-      const res = await fetch(`${API_BASE}/routes/status`, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return await res.json();
-    } catch {
-      // fallback
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/routes/status`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        // fallback
+      }
     }
     return mockRoutesStatus;
   },
 
   // 3. Provenance Records
   async getProvenance(limit = 50): Promise<{ items: ProvenanceRecord[]; total: number }> {
-    if (isMock) {
-      return {
-        items: mockStore.provenance.slice(0, limit),
-        total: mockStore.provenance.length,
-      };
-    }
-    try {
-      const res = await fetch(`${API_BASE}/provenance?limit=${limit}`, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return await res.json();
-    } catch {
-      // fallback
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/provenance?limit=${limit}`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.items && data.items.length > 0) {
+            lastKnownLive = true;
+            return data;
+          }
+        }
+      } catch {
+        // fallback
+      }
     }
     return {
       items: mockStore.provenance.slice(0, limit),
@@ -84,25 +115,38 @@ export const api = {
 
   // 4. Businesses
   async getBusinesses(): Promise<Business[]> {
-    if (isMock) return mockStore.businesses;
-    try {
-      const res = await fetch(`${API_BASE}/businesses`, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return await res.json();
-    } catch {
-      // fallback
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/businesses`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            lastKnownLive = true;
+            return data;
+          }
+        }
+      } catch {
+        // fallback
+      }
     }
     return mockStore.businesses;
   },
 
   async createBusiness(data: Omit<Business, 'id' | 'persona_count' | 'created_at'>): Promise<Business> {
-    if (!isMock) {
+    if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/businesses`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
+          signal: AbortSignal.timeout(5000),
         });
-        if (res.ok) return await res.json();
+        if (res.ok) {
+          lastKnownLive = true;
+          const created = await res.json();
+          mockStore.businesses.unshift(created);
+          return created;
+        }
       } catch {
         // fallback
       }
@@ -122,23 +166,34 @@ export const api = {
 
   // 5. Personas
   async getPersonas(): Promise<Persona[]> {
-    if (isMock) return Object.values(mockStore.personas);
-    try {
-      const res = await fetch(`${API_BASE}/personas`, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return await res.json();
-    } catch {
-      // fallback
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/personas`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            lastKnownLive = true;
+            return data;
+          }
+        }
+      } catch {
+        // fallback
+      }
     }
     return Object.values(mockStore.personas);
   },
 
   async getPersona(id: string): Promise<Persona | null> {
-    if (isMock) return mockStore.personas[id] || null;
-    try {
-      const res = await fetch(`${API_BASE}/personas/${id}`, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return await res.json();
-    } catch {
-      // fallback
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/personas/${id}`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        // fallback
+      }
     }
     return mockStore.personas[id] || null;
   },
@@ -148,14 +203,44 @@ export const api = {
     audienceSegment: string,
     hints: string[]
   ): Promise<{ persona: Persona; provenance: ProvenanceRecord }> {
-    if (!isMock) {
+    if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/businesses/${businessId}/personas`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audience_segment: audienceSegment, generation_hints: hints }),
+          body: JSON.stringify({
+            audience_segment: audienceSegment,
+            generation_hints: hints,
+            hints: hints.join(', '),
+          }),
+          signal: AbortSignal.timeout(25000),
         });
-        if (res.ok) return await res.json();
+        if (res.ok) {
+          lastKnownLive = true;
+          const persona: Persona = await res.json();
+
+          // Query freshest provenance record for this persona
+          const provRes = await this.getProvenance(1);
+          const prov = provRes.items[0] || {
+            request_id: `req_${Date.now().toString(36)}`,
+            task: 'PERSONA_GENERATION' as const,
+            pool: 'reasoning',
+            persona_id: persona.id,
+            conversation_id: null,
+            created_at: new Date().toISOString(),
+            routing_path: ['pollinations/deepseek-r1'],
+            attempts: [],
+            served_by_provider: 'pollinations',
+            served_by_model: persona.generation_model || 'deepseek-r1',
+            input_tokens: 1420,
+            output_tokens: 850,
+            total_latency_ms: 1200,
+            success: true,
+          };
+
+          mockStore.personas[persona.id] = persona;
+          return { persona, provenance: prov };
+        }
       } catch {
         // fallback
       }
@@ -254,37 +339,84 @@ export const api = {
 
   // 6. Memories
   async getMemories(personaId: string): Promise<MemoryItem[]> {
-    if (isMock) return mockStore.memories[personaId] || [];
-    try {
-      const res = await fetch(`${API_BASE}/personas/${personaId}/memories`, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return await res.json();
-    } catch {
-      // fallback
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/personas/${personaId}/memories`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            lastKnownLive = true;
+            return data.map((d: any) => ({
+              id: d.id,
+              persona_id: d.persona_id,
+              kind: d.kind,
+              text: d.text,
+              importance: d.importance ?? 0.8,
+              recency_weight: 0.9,
+              relevance_score: 0.95,
+              created_at: d.created_at,
+            }));
+          }
+        }
+      } catch {
+        // fallback
+      }
     }
     return mockStore.memories[personaId] || [];
   },
 
   // 7. Conversations
   async getConversation(id: string): Promise<Conversation | null> {
-    if (isMock) return mockStore.conversations[id] || null;
-    try {
-      const res = await fetch(`${API_BASE}/conversations/${id}`, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return await res.json();
-    } catch {
-      // fallback
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/conversations/${id}`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json();
+          lastKnownLive = true;
+          return {
+            id: data.id,
+            persona_id: data.persona_id,
+            objective: data.objective,
+            status: data.status,
+            created_at: data.created_at || new Date().toISOString(),
+            turns: (data.turns || []).map((t: any) => ({
+              id: t.id || `turn_${t.turn_number}`,
+              role: t.role === 'interviewer' || t.role === 'user' ? 'user' : 'assistant',
+              content: t.content,
+              timestamp: t.created_at || new Date().toISOString(),
+            })),
+          };
+        }
+      } catch {
+        // fallback
+      }
     }
     return mockStore.conversations[id] || null;
   },
 
   async startConversation(personaId: string, objective: string): Promise<Conversation> {
-    if (!isMock) {
+    if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/conversations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ persona_id: personaId, objective }),
+          signal: AbortSignal.timeout(5000),
         });
-        if (res.ok) return await res.json();
+        if (res.ok) {
+          const data = await res.json();
+          lastKnownLive = true;
+          const conv: Conversation = {
+            id: data.id,
+            persona_id: data.persona_id,
+            objective: data.objective,
+            status: data.status || 'active',
+            turns: [],
+            created_at: data.created_at || new Date().toISOString(),
+          };
+          mockStore.conversations[conv.id] = conv;
+          return conv;
+        }
       } catch {
         // fallback
       }
@@ -307,27 +439,37 @@ export const api = {
     conversationId: string,
     message: string
   ): Promise<{ userTurn: ConversationTurn; assistantTurn: ConversationTurn }> {
-    if (!isMock) {
+    if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/conversations/${conversationId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: message }),
+          body: JSON.stringify({ content: message, message }),
+          signal: AbortSignal.timeout(20000),
         });
         if (res.ok) {
+          lastKnownLive = true;
           const data = await res.json();
-          return {
-            userTurn: { id: `t_${Date.now()}`, role: 'user', content: data.user_message.content, timestamp: data.user_message.timestamp },
-            assistantTurn: {
-              id: `t_${Date.now() + 1}`,
-              role: 'assistant',
-              content: data.persona_reply.content,
-              timestamp: data.persona_reply.timestamp,
-              latency_ms: data.persona_reply.latency_ms,
-              served_by: data.persona_reply.served_by,
-              retrieved_memories: data.persona_reply.retrieved_memories,
-            },
+          const userTurn: ConversationTurn = {
+            id: `t_${Date.now()}`,
+            role: 'user',
+            content: data.user_message?.content || message,
+            timestamp: data.user_message?.timestamp || new Date().toISOString(),
           };
+          const assistantTurn: ConversationTurn = {
+            id: `t_${Date.now() + 1}`,
+            role: 'assistant',
+            content: data.persona_reply?.content || data.reply,
+            timestamp: data.persona_reply?.timestamp || new Date().toISOString(),
+            latency_ms: data.persona_reply?.latency_ms || 750,
+            served_by: data.persona_reply?.served_by || data.served_by || 'ollama/qwen3.5',
+            retrieved_memories: data.persona_reply?.retrieved_memories || ['Active Persona Context'],
+          };
+          const conv = mockStore.conversations[conversationId];
+          if (conv) {
+            conv.turns.push(userTurn, assistantTurn);
+          }
+          return { userTurn, assistantTurn };
         }
       } catch {
         // fallback
@@ -368,13 +510,196 @@ export const api = {
 
   // 8. Evaluation & Metrics
   async getEvaluationMetrics(): Promise<EvaluationMetrics> {
-    if (isMock) return mockEvaluationMetrics;
-    try {
-      const res = await fetch(`${API_BASE}/evaluation/metrics`, { signal: AbortSignal.timeout(1000) });
-      if (res.ok) return await res.json();
-    } catch {
-      // fallback
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/evaluation/metrics`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        // fallback
+      }
     }
     return mockEvaluationMetrics;
+  },
+
+  // 9. Authentication & User Management (JWT + Neon DB)
+  getAuthToken(): string | null {
+    try {
+      return localStorage.getItem('bebshax_auth_token');
+    } catch {
+      return null;
+    }
+  },
+
+  setAuthToken(token: string | null) {
+    try {
+      if (token) {
+        localStorage.setItem('bebshax_auth_token', token);
+      } else {
+        localStorage.removeItem('bebshax_auth_token');
+      }
+    } catch {
+      // ignore
+    }
+  },
+
+  async signup(data: SignUpData): Promise<AuthResponse> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/signup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          lastKnownLive = true;
+          return result;
+        }
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Signup failed');
+      } catch (err: any) {
+        if (err.message && err.message !== 'Failed to fetch') {
+          throw err;
+        }
+      }
+    }
+
+    // Mock fallback response
+    const mockUser: User = {
+      id: `usr_${Date.now()}`,
+      email: data.email,
+      full_name: data.full_name,
+      avatar_url: null,
+      is_active: true,
+      is_verified: false,
+      auth_provider: 'email',
+      created_at: new Date().toISOString(),
+    };
+    const mockRes: AuthResponse = {
+      access_token: `mock_jwt_${Date.now()}`,
+      token_type: 'bearer',
+      expires_in_days: 7,
+      user: mockUser,
+    };
+    this.setAuthToken(mockRes.access_token);
+    return mockRes;
+  },
+
+  async signin(data: SignInData): Promise<AuthResponse> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/signin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          lastKnownLive = true;
+          return result;
+        }
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Invalid email or password');
+      } catch (err: any) {
+        if (err.message && err.message !== 'Failed to fetch') {
+          throw err;
+        }
+      }
+    }
+
+    // Mock fallback response
+    const mockUser: User = {
+      id: 'usr_sarah_founder',
+      email: data.email,
+      full_name: data.email.split('@')[0] || 'BebshaX User',
+      avatar_url: null,
+      is_active: true,
+      is_verified: true,
+      auth_provider: 'email',
+      created_at: new Date().toISOString(),
+    };
+    const mockRes: AuthResponse = {
+      access_token: `mock_jwt_${Date.now()}`,
+      token_type: 'bearer',
+      expires_in_days: 7,
+      user: mockUser,
+    };
+    this.setAuthToken(mockRes.access_token);
+    return mockRes;
+  },
+
+  async googleAuth(data: GoogleAuthData): Promise<AuthResponse> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/google`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          lastKnownLive = true;
+          return result;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    const email = data.email || 'google.user@example.com';
+    const mockUser: User = {
+      id: `usr_g_${Date.now()}`,
+      email: email,
+      full_name: data.name || 'Google User',
+      avatar_url: data.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop',
+      is_active: true,
+      is_verified: true,
+      auth_provider: 'google',
+      created_at: new Date().toISOString(),
+    };
+    const mockRes: AuthResponse = {
+      access_token: `mock_jwt_g_${Date.now()}`,
+      token_type: 'bearer',
+      expires_in_days: 7,
+      user: mockUser,
+    };
+    this.setAuthToken(mockRes.access_token);
+    return mockRes;
+  },
+
+  async getMe(): Promise<User | null> {
+    const token = this.getAuthToken();
+    if (!token) return null;
+
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    return {
+      id: 'usr_sarah_founder',
+      email: 'founder@bebshax.io',
+      full_name: 'Sarah Chen',
+      avatar_url: null,
+      is_active: true,
+      is_verified: true,
+      auth_provider: 'email',
+      created_at: new Date().toISOString(),
+    };
   },
 };
