@@ -1,16 +1,3 @@
-
 # Architecture Decisions
 
-Append-only. Agents: respect these decisions — do not propose alternatives to a
-recorded decision; propose a _new_ superseding entry instead.
-
-Format:
-
-```
-## D-NNN: <short title> (YYYY-MM-DD)
-Decision: <what was decided>
-Reason: <why>
-Status: active | superseded by D-MMM
-```
-
----
+Recorded decisions live in the **"Key decisions record" table of [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md)** (D1–D8 and onward). Do not relitigate a recorded decision — propose a new superseding entry there instead.
