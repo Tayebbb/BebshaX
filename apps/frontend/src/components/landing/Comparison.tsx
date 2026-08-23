@@ -37,6 +37,7 @@ export const Comparison: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
+        background: '#000000',
       }}
     >
       <div
@@ -49,18 +50,18 @@ export const Comparison: React.FC = () => {
         {/* Section Header */}
         <div style={{ textAlign: 'center', maxWidth: '720px', margin: '0 auto 64px auto' }}>
           <div
-            className="glass-panel"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(37, 99, 235, 0.08)',
-              border: '1px solid rgba(37, 99, 235, 0.2)',
-              color: '#2563EB',
-              fontSize: '0.78rem',
-              fontWeight: 800,
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: 'none',
+              outline: 'none',
+              color: '#FFFFFF',
+              fontSize: '0.75rem',
+              fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               marginBottom: '16px',
@@ -75,7 +76,7 @@ export const Comparison: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#0F172A',
+              color: '#FFFFFF',
             }}
           >
             Why high-growth teams{' '}
@@ -84,49 +85,45 @@ export const Comparison: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#475569', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
             Compare legacy business intelligence approaches against BebshaX’s unified intelligence engine.
           </p>
         </div>
 
-        {/* Table Container in Translucent Glass */}
+        {/* Table Container (No outer border/outline) */}
         <div
-          className="glass-panel"
+          className="clean-card"
           style={{
-            borderRadius: '24px',
-            background: 'rgba(255, 255, 255, 0.72)',
-            backdropFilter: 'blur(28px)',
-            WebkitBackdropFilter: 'blur(28px)',
-            border: '1px solid rgba(255, 255, 255, 0.85)',
-            boxShadow: 'var(--shadow-md)',
+            borderRadius: '20px',
+            background: '#09090C',
+            border: 'none',
+            outline: 'none',
             overflow: 'hidden',
           }}
         >
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid rgba(15, 23, 42, 0.08)' }}>
-                  <th style={{ padding: '24px', fontSize: '0.9rem', color: '#64748B', fontWeight: 700, width: '28%' }}>
+                <tr>
+                  <th style={{ padding: '20px 24px', fontSize: '0.84rem', color: '#8E8E93', fontWeight: 600, width: '28%' }}>
                     Capability
                   </th>
                   <th
                     style={{
-                      padding: '24px',
-                      fontSize: '1.05rem',
-                      color: '#0F172A',
+                      padding: '20px 24px',
+                      fontSize: '0.95rem',
+                      color: '#FFFFFF',
                       fontWeight: 800,
-                      background: 'rgba(37, 99, 235, 0.06)',
+                      background: 'rgba(255, 255, 255, 0.04)',
                       width: '38%',
-                      borderLeft: '1px solid rgba(37, 99, 235, 0.15)',
-                      borderRight: '1px solid rgba(37, 99, 235, 0.15)',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Sparkles size={18} color="#2563EB" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Sparkles size={16} color="#F6C878" />
                       <span>BebshaX Intelligence</span>
                     </div>
                   </th>
-                  <th style={{ padding: '24px', fontSize: '0.9rem', color: '#64748B', fontWeight: 600, width: '34%' }}>
+                  <th style={{ padding: '20px 24px', fontSize: '0.84rem', color: '#8E8E93', fontWeight: 500, width: '34%' }}>
                     Legacy Dashboards & Spreadsheets
                   </th>
                 </tr>
@@ -136,33 +133,31 @@ export const Comparison: React.FC = () => {
                   <tr
                     key={i}
                     style={{
-                      borderBottom: i === criteria.length - 1 ? 'none' : '1px solid rgba(15, 23, 42, 0.06)',
+                      background: i % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.015)',
                     }}
                   >
-                    <td style={{ padding: '20px 24px', fontWeight: 700, color: '#0F172A', fontSize: '0.92rem' }}>
+                    <td style={{ padding: '18px 24px', fontWeight: 600, color: '#FFFFFF', fontSize: '0.88rem' }}>
                       {c.feature}
                     </td>
                     <td
                       style={{
-                        padding: '20px 24px',
-                        background: 'rgba(37, 99, 235, 0.04)',
-                        borderLeft: '1px solid rgba(37, 99, 235, 0.15)',
-                        borderRight: '1px solid rgba(37, 99, 235, 0.15)',
+                        padding: '18px 24px',
+                        background: 'rgba(255, 255, 255, 0.03)',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(37, 99, 235, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <Check size={14} color="#2563EB" strokeWidth={2.5} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: 'none' }}>
+                          <Check size={12} color="#000000" strokeWidth={3} />
                         </div>
-                        <span style={{ fontSize: '0.88rem', color: '#0F172A', fontWeight: 600 }}>{c.bebshax}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#FFFFFF', fontWeight: 600 }}>{c.bebshax}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '20px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(15, 23, 42, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <X size={14} color="#64748B" />
+                    <td style={{ padding: '18px 24px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: 'none' }}>
+                          <X size={12} color="#71717A" />
                         </div>
-                        <span style={{ fontSize: '0.88rem', color: '#64748B' }}>{c.traditional}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#71717A' }}>{c.traditional}</span>
                       </div>
                     </td>
                   </tr>

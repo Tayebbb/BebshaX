@@ -4,8 +4,10 @@ import {
   Sparkles,
   ArrowRight,
 } from 'lucide-react';
+import { useNavigation } from '../../context/NavigationContext';
 
 export const InteractiveDemo: React.FC = () => {
+  const { navigate } = useNavigation();
   const [mrr, setMrr] = useState<number>(120);
   const [churnRate, setChurnRate] = useState<number>(3.5);
   const [expansionRate, setExpansionRate] = useState<number>(15);
@@ -21,6 +23,7 @@ export const InteractiveDemo: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
+        background: '#000000',
       }}
     >
       <div
@@ -33,18 +36,18 @@ export const InteractiveDemo: React.FC = () => {
         {/* Section Header */}
         <div style={{ textAlign: 'center', maxWidth: '720px', margin: '0 auto 56px auto' }}>
           <div
-            className="glass-panel"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(37, 99, 235, 0.08)',
-              border: '1px solid rgba(37, 99, 235, 0.2)',
-              color: '#2563EB',
-              fontSize: '0.78rem',
-              fontWeight: 800,
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: 'none',
+              outline: 'none',
+              color: '#FFFFFF',
+              fontSize: '0.75rem',
+              fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               marginBottom: '16px',
@@ -59,7 +62,7 @@ export const InteractiveDemo: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#0F172A',
+              color: '#FFFFFF',
             }}
           >
             Simulate your business outcomes{' '}
@@ -68,22 +71,20 @@ export const InteractiveDemo: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#475569', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
             Adjust your scale parameters below to see how BebshaX detects hidden expansion potential and protects revenue.
           </p>
         </div>
 
-        {/* Interactive Sandbox Simulator Card in Translucent White Glass */}
+        {/* Interactive Simulator Card (No outline) */}
         <div
-          className="glass-panel"
+          className="clean-card"
           style={{
-            borderRadius: '28px',
-            background: 'rgba(255, 255, 255, 0.78)',
-            backdropFilter: 'blur(30px)',
-            WebkitBackdropFilter: 'blur(30px)',
-            border: '1px solid rgba(255, 255, 255, 0.9)',
+            borderRadius: '24px',
+            background: '#09090C',
+            border: 'none',
+            outline: 'none',
             padding: '40px',
-            boxShadow: 'var(--shadow-lg)',
           }}
         >
           <div
@@ -97,8 +98,8 @@ export const InteractiveDemo: React.FC = () => {
             {/* Left Controls Column */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
-                <Sliders size={20} color="#2563EB" />
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F172A' }}>
+                <Sliders size={18} color="#FFFFFF" />
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
                   Business Parameters
                 </h3>
               </div>
@@ -107,10 +108,10 @@ export const InteractiveDemo: React.FC = () => {
                 {/* MRR Slider */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#475569' }}>
+                    <span style={{ fontSize: '0.84rem', fontWeight: 500, color: '#8E8E93' }}>
                       Current Monthly Revenue (MRR)
                     </span>
-                    <strong style={{ fontSize: '1rem', color: '#0F172A' }}>
+                    <strong style={{ fontSize: '0.95rem', color: '#FFFFFF' }}>
                       ${mrr}k /mo
                     </strong>
                   </div>
@@ -121,9 +122,9 @@ export const InteractiveDemo: React.FC = () => {
                     step="10"
                     value={mrr}
                     onChange={(e) => setMrr(Number(e.target.value))}
-                    style={{ width: '100%', accentColor: '#2563EB', cursor: 'pointer' }}
+                    style={{ width: '100%', accentColor: '#FFFFFF', cursor: 'pointer', border: 'none', outline: 'none' }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#64748B', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#52525B', marginTop: '4px' }}>
                     <span>$20k</span>
                     <span>$500k</span>
                   </div>
@@ -132,10 +133,10 @@ export const InteractiveDemo: React.FC = () => {
                 {/* Churn Rate Slider */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#475569' }}>
+                    <span style={{ fontSize: '0.84rem', fontWeight: 500, color: '#8E8E93' }}>
                       Estimated Monthly Churn
                     </span>
-                    <strong style={{ fontSize: '1rem', color: '#DC2626' }}>
+                    <strong style={{ fontSize: '0.95rem', color: '#EF4444' }}>
                       {churnRate}%
                     </strong>
                   </div>
@@ -146,9 +147,9 @@ export const InteractiveDemo: React.FC = () => {
                     step="0.5"
                     value={churnRate}
                     onChange={(e) => setChurnRate(Number(e.target.value))}
-                    style={{ width: '100%', accentColor: '#DC2626', cursor: 'pointer' }}
+                    style={{ width: '100%', accentColor: '#EF4444', cursor: 'pointer', border: 'none', outline: 'none' }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#64748B', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#52525B', marginTop: '4px' }}>
                     <span>1.0%</span>
                     <span>10.0%</span>
                   </div>
@@ -157,10 +158,10 @@ export const InteractiveDemo: React.FC = () => {
                 {/* Expansion Opportunity Slider */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#475569' }}>
+                    <span style={{ fontSize: '0.84rem', fontWeight: 500, color: '#8E8E93' }}>
                       Expansion Target Opportunity
                     </span>
-                    <strong style={{ fontSize: '1rem', color: '#2563EB' }}>
+                    <strong style={{ fontSize: '0.95rem', color: '#F6C878' }}>
                       +{expansionRate}%
                     </strong>
                   </div>
@@ -171,9 +172,9 @@ export const InteractiveDemo: React.FC = () => {
                     step="1"
                     value={expansionRate}
                     onChange={(e) => setExpansionRate(Number(e.target.value))}
-                    style={{ width: '100%', accentColor: '#2563EB', cursor: 'pointer' }}
+                    style={{ width: '100%', accentColor: '#F6C878', cursor: 'pointer', border: 'none', outline: 'none' }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#64748B', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#52525B', marginTop: '4px' }}>
                     <span>5%</span>
                     <span>40%</span>
                   </div>
@@ -181,69 +182,70 @@ export const InteractiveDemo: React.FC = () => {
               </div>
             </div>
 
-            {/* Right Projected Impact Panel */}
+            {/* Right Projected Impact Panel (No outline) */}
             <div
-              className="glass-card"
               style={{
-                borderRadius: '24px',
-                background: 'rgba(255, 255, 255, 0.88)',
-                border: '1.5px solid rgba(37, 99, 235, 0.35)',
-                padding: '32px',
-                boxShadow: '0 20px 45px rgba(37, 99, 235, 0.12)',
+                borderRadius: '18px',
+                background: '#040406',
+                border: 'none',
+                outline: 'none',
+                padding: '28px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                <Sparkles size={18} color="#2563EB" />
-                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
+                <Sparkles size={16} color="#F6C878" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Projected Annual Value Unlock
                 </span>
               </div>
 
               <div
                 style={{
-                  fontSize: 'clamp(2.4rem, 4vw, 3.2rem)',
+                  fontSize: 'clamp(2.2rem, 3.8vw, 3rem)',
                   fontWeight: 800,
                   letterSpacing: '-0.03em',
-                  color: '#0F172A',
-                  marginBottom: '12px',
+                  color: '#FFFFFF',
+                  marginBottom: '10px',
                 }}
               >
-                +${totalGain.toLocaleString()} <span style={{ fontSize: '1rem', color: '#64748B' }}>/yr</span>
+                +${totalGain.toLocaleString()} <span style={{ fontSize: '0.9rem', color: '#71717A', fontWeight: 500 }}>/yr</span>
               </div>
 
-              <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: '1.5', marginBottom: '24px' }}>
+              <p style={{ fontSize: '0.84rem', color: '#8E8E93', lineHeight: '1.5', marginBottom: '22px' }}>
                 Estimated revenue improvement combining automated retention triggers and proactive account expansion suggestions.
               </p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '28px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', background: 'rgba(37, 99, 235, 0.06)' }}>
-                  <span style={{ fontSize: '0.82rem', color: '#475569' }}>Annual Expansion ARR:</span>
-                  <strong style={{ fontSize: '0.88rem', color: '#2563EB' }}>+${calculatedExpansion.toLocaleString()}</strong>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.03)', border: 'none' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#8E8E93' }}>Annual Expansion ARR:</span>
+                  <strong style={{ fontSize: '0.84rem', color: '#F6C878' }}>+${calculatedExpansion.toLocaleString()}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.08)' }}>
-                  <span style={{ fontSize: '0.82rem', color: '#475569' }}>Retained At-Risk Revenue:</span>
-                  <strong style={{ fontSize: '0.88rem', color: '#10B981' }}>+${savedFromChurn.toLocaleString()}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', border: 'none' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#8E8E93' }}>Retained At-Risk Revenue:</span>
+                  <strong style={{ fontSize: '0.84rem', color: '#10B981' }}>+${savedFromChurn.toLocaleString()}</strong>
                 </div>
               </div>
 
               <button
+                onClick={() => navigate('/auth/signup')}
                 className="primary-hero-btn"
                 style={{
                   width: '100%',
-                  padding: '14px',
-                  borderRadius: '12px',
+                  padding: '12px',
+                  borderRadius: '9999px',
                   border: 'none',
-                  fontSize: '0.95rem',
+                  outline: 'none',
+                  fontSize: '0.9rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px',
+                  gap: '6px',
                 }}
               >
                 <span>Unlock Full Growth Model</span>
-                <ArrowRight size={16} color="#FFFFFF" />
+                <ArrowRight size={15} color="#000000" />
               </button>
             </div>
           </div>

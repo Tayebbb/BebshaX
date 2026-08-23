@@ -7,15 +7,15 @@ describe('BebshaX Premium Landing Page', () => {
     render(<App />);
 
     expect(
-      screen.getByText(/Turn business data into/i)
+      screen.getByText(/Simulate every decision\./i)
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText(/better decisions\./i)
+      screen.getByText(/Scale with certainty\./i)
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText(/The Smarter Way to Run Your Business/i)
+      screen.getByText(/Autonomous Decision Intelligence/i)
     ).toBeInTheDocument();
   });
 
@@ -48,7 +48,7 @@ describe('BebshaX Premium Landing Page', () => {
     ).toBeInTheDocument();
   });
 
-  it('allows opening and closing the authentication modal', () => {
+  it('allows navigating to dedicated auth page and returning', () => {
     render(<App />);
 
     const signInButtons = screen.getAllByRole('button', { name: /Sign In/i });
@@ -59,8 +59,8 @@ describe('BebshaX Premium Landing Page', () => {
       screen.getByRole('heading', { name: /Welcome back/i })
     ).toBeInTheDocument();
 
-    const closeBtn = screen.getByRole('button', { name: /Close/i });
-    fireEvent.click(closeBtn);
+    const backBtn = screen.getByRole('button', { name: /Back to BebshaX/i });
+    fireEvent.click(backBtn);
 
     expect(
       screen.queryByRole('heading', { name: /Welcome back/i })

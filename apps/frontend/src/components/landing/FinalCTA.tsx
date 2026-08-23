@@ -1,189 +1,188 @@
-import React from 'react';
-import { ArrowRight, ShieldCheck, CheckCircle2, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { useNavigation } from '../../context/NavigationContext';
 
 interface FinalCTAProps {
   onOpenApp?: () => void;
 }
 
-export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
+export const FinalCTA: React.FC<FinalCTAProps> = () => {
+  const { navigate } = useNavigation();
+  const [email, setEmail] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigate('/auth/signup');
+  };
+
   return (
     <section
       style={{
         position: 'relative',
-        padding: '100px 0 120px 0',
+        padding: '80px 0 100px 0',
         zIndex: 1,
+        background: '#000000',
       }}
     >
       <div
         style={{
-          maxWidth: '1120px',
+          maxWidth: '1240px',
           margin: '0 auto',
           padding: '0 24px',
-          position: 'relative',
         }}
       >
-        {/* Subtle background blue glow */}
+        {/* Main Banner Card (No outline / border) */}
         <div
+          className="clean-card"
           style={{
-            position: 'absolute',
-            top: '10%',
-            left: '15%',
-            right: '15%',
-            bottom: '10%',
-            background: 'radial-gradient(ellipse at center, rgba(37, 99, 235, 0.2) 0%, rgba(96, 165, 250, 0.08) 60%, transparent 80%)',
-            filter: 'blur(50px)',
-            pointerEvents: 'none',
-            zIndex: 0,
-          }}
-        />
-
-        {/* Floating CTA Glass Box */}
-        <div
-          className="glass-panel"
-          style={{
+            borderRadius: '24px',
+            background: '#09090C',
+            border: 'none',
+            outline: 'none',
+            padding: '56px 48px',
+            overflow: 'hidden',
             position: 'relative',
-            zIndex: 1,
-            borderRadius: '32px',
-            background: 'rgba(255, 255, 255, 0.78)',
-            backdropFilter: 'blur(32px)',
-            WebkitBackdropFilter: 'blur(32px)',
-            border: '1.5px solid rgba(255, 255, 255, 0.95)',
-            padding: '64px 40px',
-            textAlign: 'center',
-            boxShadow: '0 30px 80px rgba(15, 23, 42, 0.12), 0 0 1px rgba(15, 23, 42, 0.15)',
-            display: 'flex',
-            flexDirection: 'column',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gap: '40px',
             alignItems: 'center',
           }}
         >
-          {/* Eyebrow Badge */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 16px',
-              borderRadius: '9999px',
-              background: 'rgba(37, 99, 235, 0.1)',
-              border: '1px solid rgba(37, 99, 235, 0.25)',
-              color: '#2563EB',
-              fontSize: '0.78rem',
-              fontWeight: 800,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: '24px',
-            }}
-          >
-            <Sparkles size={14} color="#2563EB" />
-            <span>Ready for Continuous Intelligence?</span>
+          {/* Left Column: Heading + Email Input */}
+          <div style={{ maxWidth: '540px', zIndex: 1 }}>
+            <p
+              style={{
+                fontSize: 'clamp(1.1rem, 2vw, 1.35rem)',
+                color: '#8E8E93',
+                marginBottom: '8px',
+                fontWeight: 500,
+              }}
+            >
+              Stretched thin by fragmented data?
+            </p>
+
+            <h2
+              style={{
+                fontSize: 'clamp(2.2rem, 4vw, 3.4rem)',
+                fontWeight: 800,
+                color: '#FFFFFF',
+                letterSpacing: '-0.035em',
+                lineHeight: 1.1,
+                marginBottom: '36px',
+              }}
+            >
+              Get started today.
+            </h2>
+
+            {/* Email Signup Form Box (No harsh borders) */}
+            <form
+              onSubmit={handleSubmit}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                background: '#121218',
+                border: 'none',
+                outline: 'none',
+                borderRadius: '9999px',
+                padding: '6px 6px 6px 20px',
+                maxWidth: '440px',
+              }}
+            >
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email address"
+                style={{
+                  flex: 1,
+                  background: 'none',
+                  border: 'none',
+                  outline: 'none',
+                  color: '#FFFFFF',
+                  fontSize: '0.9rem',
+                  fontFamily: 'inherit',
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: '9999px',
+                  background: '#FFFFFF',
+                  color: '#000000',
+                  border: 'none',
+                  outline: 'none',
+                  fontSize: '0.86rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  transition: 'background 0.2s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#E4E4E7')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
+              >
+                <span>Try Free</span>
+                <ArrowRight size={14} color="#000000" />
+              </button>
+            </form>
           </div>
 
-          <h2
-            style={{
-              fontSize: 'clamp(2.2rem, 4.5vw, 3.6rem)',
-              fontWeight: 800,
-              letterSpacing: '-0.035em',
-              lineHeight: 1.15,
-              marginBottom: '20px',
-              color: '#0F172A',
-            }}
-          >
-            Start turning your data into{' '}
-            <span
-              className="text-gradient-blue"
-              style={{
-                fontStyle: 'italic',
-              }}
-            >
-              decisions today.
-            </span>
-          </h2>
-
-          <p
-            style={{
-              fontSize: '1.1rem',
-              color: '#475569',
-              maxWidth: '640px',
-              lineHeight: 1.6,
-              marginBottom: '36px',
-            }}
-          >
-            Connect your systems in minutes. Experience unified operational telemetry, autonomous root-cause diagnosis, and prioritized action playbooks.
-          </p>
-
+          {/* Right Column: Isometric Geometric Art with Emerald/Gold Backlight */}
           <div
             style={{
+              position: 'relative',
+              height: '240px',
               display: 'flex',
-              flexWrap: 'wrap',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '16px',
-              marginBottom: '36px',
             }}
           >
-            <a
-              href="#demo"
-              className="primary-hero-btn"
+            {/* Glowing Emerald Backlight */}
+            <div
               style={{
-                padding: '16px 36px',
-                fontSize: '1.05rem',
-                fontWeight: 700,
-                borderRadius: '14px',
-                display: 'inline-flex',
+                position: 'absolute',
+                width: '180px',
+                height: '180px',
+                background: 'radial-gradient(circle, rgba(16, 185, 129, 0.4) 0%, rgba(246, 200, 120, 0.2) 50%, transparent 70%)',
+                filter: 'blur(40px)',
+                zIndex: 0,
+              }}
+            />
+
+            {/* Futuristic Layered Monolith Block Illustration */}
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                width: '180px',
+                height: '180px',
+                display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                textDecoration: 'none',
+                justifyContent: 'center',
               }}
             >
-              <span>Get Started Free</span>
-              <ArrowRight size={18} color="#FFFFFF" />
-            </a>
+              <svg viewBox="0 0 200 200" width="180" height="180" fill="none">
+                {/* Isometric Cube Node 1 */}
+                <polygon
+                  points="100,25 165,60 100,95 35,60"
+                  fill="#181820"
+                />
+                <polygon
+                  points="35,60 100,95 100,140 35,105"
+                  fill="#0D0D12"
+                />
+                <polygon
+                  points="100,95 165,60 165,105 100,140"
+                  fill="#121218"
+                />
 
-            <button
-              onClick={onOpenApp}
-              className="secondary-hero-btn"
-              style={{
-                padding: '16px 28px',
-                fontSize: '1.05rem',
-                fontWeight: 600,
-                borderRadius: '14px',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
-            >
-              <ShieldCheck size={18} color="#2563EB" />
-              <span>Open Platform Console</span>
-            </button>
-          </div>
-
-          {/* Guarantee Badges */}
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '24px',
-              fontSize: '0.82rem',
-              color: '#0F172A',
-              fontWeight: 600,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CheckCircle2 size={15} color="#2563EB" />
-              <span>14-day full access trial</span>
-            </div>
-            <span style={{ color: 'rgba(15, 23, 42, 0.2)' }}>•</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CheckCircle2 size={15} color="#2563EB" />
-              <span>No credit card required</span>
-            </div>
-            <span style={{ color: 'rgba(15, 23, 42, 0.2)' }}>•</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CheckCircle2 size={15} color="#2563EB" />
-              <span>SOC2 compliant & encrypted</span>
+                {/* Center Glowing Core */}
+                <circle cx="100" cy="60" r="14" fill="#F6C878" filter="drop-shadow(0 0 8px #F6C878)" />
+                <path d="M96 55 L104 60 L96 65" stroke="#000000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </div>
           </div>
         </div>
