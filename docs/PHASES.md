@@ -113,7 +113,7 @@ Steps:
 
 ---
 
-## Phase 9 — Memory ⬜  (track B after Phase 6; consumes Phase 8 persona ids)
+## Phase 9 — Memory ✅ (2026-08-23, implemented by Tayeb — owner-approved takeover from track B)
 
 **Goal:** persistent persona memory: pgvector stream with relevance+recency+importance retrieval and reflection.
 **Allowed paths:** `apps/backend/bebshax/memory/` (new), alembic revision (memory tables + vector column/index), `apps/backend/tests/memory/`, docs listed below.

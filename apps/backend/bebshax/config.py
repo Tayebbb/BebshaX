@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # Consumed from Phase 6 (database); docker-compose pgvector service on 5433.
     database_url: str = "postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax"
 
+    # Phase 9: memory embedding backend — "local" (deterministic hash, offline)
+    # or "freellmpool" (requires embedding_model pin; see docs/PERSONA_ENGINE.md)
+    embedding_backend: str = "local"
+    embedding_model: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

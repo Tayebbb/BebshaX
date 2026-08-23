@@ -10,8 +10,12 @@ from bebshax.api.personas import router as personas_router
 from bebshax.config import get_settings
 from bebshax.db.engine import create_async_sessionmaker, create_engine
 from bebshax.db.sink import ProvenanceSink
-from bebshax.llm.adapters.factory import build_default_adapters
+from bebshax.llm.adapters.factory import (
+    build_default_adapters,
+    build_embedding_backend,
+)
 from bebshax.llm.router import PoolRouter
+from bebshax.memory.service import MemoryService
 from bebshax.persona.evidence import EvidenceStore
 from bebshax.persona.generation import PersonaEngine
 
@@ -31,6 +35,11 @@ async def _lifespan(app: FastAPI):
     app.state.db_sessionmaker = sessionmaker_
     app.state.provenance_sink = sink
     app.state.persona_engine = PersonaEngine(llm_router, EvidenceStore())
+    app.state.memory_service = MemoryService(
+        sessionmaker_,
+        build_embedding_backend(settings.embedding_backend, settings.embedding_model),
+        llm=llm_router,
+    )
     yield
     await sink.stop()
     for adapter in adapters.values():

@@ -24,7 +24,7 @@ To do your next task, open your AI tool in this repo and say: **"Implement phase
 | Phase | Owner | Needs merged |
 |---|---|---|
 | 8 — Persona engine | Tayeb | 5, 6 (7 for evidence) |
-| 9 — Memory | Sazid | 6, 8 (persona ids) |
+| 9 — Memory | ~~Sazid~~ → Tayeb (owner-approved takeover, done 2026-08-23) | 6, 8 (persona ids) |
 | 10 — Interview engine | Tayeb | 8 (uses 9 when ready) |
 | 11 — Quality/evaluation | Shehab | ✅ Complete (2026-08-22) |
 | 12 — Frontend | Shehab | ✅ Foundation + mock views complete (2026-08-22; live wiring follows 8/10/11 endpoints) |

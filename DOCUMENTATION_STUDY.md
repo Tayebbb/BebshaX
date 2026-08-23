@@ -124,7 +124,7 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 | Phase | Owner | Status | Needs | Starts |
 |---|---|---|---|---|
 | 8 — Persona engine | Tayeb | ✅ done 2026-08-23 | 5, 6 (7 for evidence) | Delivered (see implementation log) |
-| 9 — Memory | Sazid | ⬜ Ready to start | 6, 8 (persona IDs) | Once 8 lands |
+| 9 — Memory | ~~Sazid~~ Tayeb | ✅ done 2026-08-23 | 6, 8 (persona IDs) | Delivered (owner-approved takeover) |
 | 10 — Interview | Tayeb | ⬜ | 8 (uses 9 when ready) | Once 8 lands |
 | 11 — Quality/eval | Shehab | ✅ Complete (2026-08-22) | 5, 7 | Completed |
 | 12 — Frontend live | Shehab | ✅ Foundation + mock views (live wiring follows 8/10/11) | 8/10/11 endpoints | Ready for live endpoints |

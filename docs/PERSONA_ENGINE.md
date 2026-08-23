@@ -56,6 +56,16 @@ Extend by adding table entries + a test, not code branches.
 - Evidence blocks in prompts are id-tagged and truncated — whole prompt stays ~2–3k tokens, fitting every pool member including the 16k local models.
 - Semantic (pgvector) retrieval replaces the lexical scorer in Phase 9 without changing the engine (EvidenceStore is the seam).
 
+## Memory (Phase 9)
+
+Persistent persona memory: a pgvector stream implementing the generative-agents retrieval concept on our stack.
+
+- **Kinds:** `episodic` (raw observations, written per interview turn from Phase 10), `semantic`, `reflection` (distilled insights).
+- **Retrieval score:** `0.60·cosine + 0.25·recency + 0.15·importance`, recency = exponential decay with a 48 h half-life (weights injectable on `MemoryService`). Retrieval touches `last_accessed`; scoring runs in Python (identical on sqlite unit paths and Postgres), with an HNSW cosine index on the pg side for future SQL-side pre-filtering.
+- **Embeddings & the space-consistency rule** (documented deviation from the spec): cosine is only meaningful within ONE embedding space, but freellmpool's embed failover can serve different models per call. Therefore: the **default backend is a deterministic local hash embedding** (`local-hash-384` — offline, free, stable forever; lexical-strength semantics), and the **freellmpool backend requires a pinned model** (`BEBSHAX_EMBEDDING_BACKEND=freellmpool` + `BEBSHAX_EMBEDDING_MODEL=…`). Every row stores its `embedding_space` tag and retrieval filters to the query's space — vectors from different spaces are never compared.
+- **Reflection:** ≥8 episodic memories → latest batch summarized via `MEMORY_SUMMARIZATION` (fast pool) into ≤3 first-person `reflection` items at importance 0.8. Best-effort: unparseable output logs and skips — reflection can never break a conversation.
+- Verified live on pgvector: 20 memories → expected top-k ordering; reflection stored and retrievable (`pytest -m integration apps/backend/tests/memory/test_pg_integration.py`).
+
 ## REST API (`bebshax/api/personas.py`)
 
 | Endpoint | Purpose | Errors |
