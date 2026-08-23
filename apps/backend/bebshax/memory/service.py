@@ -196,3 +196,25 @@ class MemoryService:
                     )
                 )
         return stored
+
+    async def list_for_persona(
+        self, persona_id: str, kind: str | None = None, limit: int = 50
+    ) -> list[MemoryRecord]:
+        async with self._sessionmaker() as session:
+            query = select(MemoryItems).where(MemoryItems.persona_id == persona_id)
+            if kind:
+                query = query.where(MemoryItems.kind == kind)
+            query = query.order_by(MemoryItems.created_at.desc()).limit(limit)
+            rows = list((await session.execute(query)).scalars().all())
+
+        return [
+            MemoryRecord(
+                id=row.id,
+                persona_id=row.persona_id,
+                kind=row.kind,
+                text=row.text,
+                importance=row.importance,
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]

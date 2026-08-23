@@ -14,6 +14,7 @@ from pgvector.sqlalchemy import Vector
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from bebshax.config import get_settings
+from bebshax.db.engine import normalize_async_database_url
 from bebshax.db.models import Base
 import bebshax.persona.orm  # noqa: F401 — registers Phase-8 persona tables on Base.metadata
 import bebshax.memory.orm  # noqa: F401 — registers Phase-9 memory_items on Base.metadata
@@ -78,9 +79,10 @@ async def run_async_migrations() -> None:
 
     """
     settings = get_settings()
+    db_url = normalize_async_database_url(settings.database_url)
 
     connectable = create_async_engine(
-        settings.database_url,
+        db_url,
         poolclass=pool.NullPool,
     )
 
