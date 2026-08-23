@@ -1,0 +1,69 @@
+import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import App from '../src/App';
+
+describe('BebshaX Premium Landing Page', () => {
+  it('renders core hero storytelling and headline', () => {
+    render(<App />);
+
+    expect(
+      screen.getByText(/Turn business data into/i)
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText(/better decisions\./i)
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText(/The Smarter Way to Run Your Business/i)
+    ).toBeInTheDocument();
+  });
+
+  it('renders all key landing sections and metrics', () => {
+    render(<App />);
+
+    // Trust metrics
+    expect(screen.getByText(/Businesses Analyzed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Data Visibility/i)).toBeInTheDocument();
+    expect(screen.getByText(/Faster Decision Making/i)).toBeInTheDocument();
+
+    // Problem section
+    expect(
+      screen.getByText(/Your business already has the data\./i)
+    ).toBeInTheDocument();
+
+    // How it works
+    expect(
+      screen.getByText(/From scattered data to/i)
+    ).toBeInTheDocument();
+
+    // Product showcase
+    expect(
+      screen.getByText(/Everything important\./i)
+    ).toBeInTheDocument();
+
+    // FAQ section
+    expect(
+      screen.getByText(/Everything you need to know\./i)
+    ).toBeInTheDocument();
+  });
+
+  it('allows opening and closing the live platform console modal', () => {
+    render(<App />);
+
+    const openButtons = screen.getAllByRole('button', { name: /Platform App/i });
+    expect(openButtons.length).toBeGreaterThan(0);
+    fireEvent.click(openButtons[0]);
+
+    expect(
+      screen.getByRole('heading', { name: /BebshaX Platform Console/i })
+    ).toBeInTheDocument();
+
+    const closeBtn = screen.getByRole('button', { name: /Back to Website/i });
+    fireEvent.click(closeBtn);
+
+    expect(
+      screen.queryByRole('heading', { name: /BebshaX Platform Console/i })
+    ).not.toBeInTheDocument();
+  });
+});

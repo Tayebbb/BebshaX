@@ -6,7 +6,7 @@ describe('App Minimal Shell', () => {
   it('renders BebshaX app title and health info', async () => {
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: /BebshaX/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: /BebshaX/i })).toBeInTheDocument();
     expect(screen.getByText(/Synthetic Persona Research Platform/i)).toBeInTheDocument();
 
     await waitFor(() => {
