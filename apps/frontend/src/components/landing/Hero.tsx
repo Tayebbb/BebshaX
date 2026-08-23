@@ -1,6 +1,4 @@
 import React from 'react';
-import { ArrowRight, Play, Check } from 'lucide-react';
-import { HeroDashboardPreview } from './HeroDashboardPreview';
 import { useNavigation } from '../../context/NavigationContext';
 
 interface HeroProps {
@@ -10,191 +8,218 @@ interface HeroProps {
 
 export const Hero: React.FC<HeroProps> = () => {
   const { navigate } = useNavigation();
-  const scrollToSection = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
 
   return (
     <section
       style={{
         position: 'relative',
-        paddingTop: '148px',
-        paddingBottom: '80px',
+        height: '100vh',
+        minHeight: '760px',
+        maxHeight: '1080px',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        textAlign: 'center',
+        paddingTop: '110px',
+        paddingBottom: '48px',
+        paddingLeft: '24px',
+        paddingRight: '24px',
+        boxSizing: 'border-box',
         overflow: 'hidden',
+        zIndex: 1,
       }}
     >
+      {/* Top Badges Container */}
       <div
         style={{
-          maxWidth: '1240px',
-          margin: '0 auto',
-          padding: '0 24px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          textAlign: 'center',
-          position: 'relative',
-          zIndex: 1,
+          gap: '14px',
         }}
       >
-        {/* Eyebrow Badge in Translucent Glass */}
+        {/* Subtle Category Bracket Badge */}
         <div
-          className="glass-panel"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
-            padding: '6px 16px',
-            borderRadius: '9999px',
-            background: 'rgba(255, 255, 255, 0.65)',
-            border: '1px solid rgba(255, 255, 255, 0.85)',
-            boxShadow: '0 4px 15px rgba(15, 23, 42, 0.06)',
-            marginBottom: '24px',
+            fontSize: '0.8rem',
+            color: '#8E8E93',
+            letterSpacing: '0.04em',
           }}
         >
-          <div
-            style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              background: '#2563EB',
-              boxShadow: '0 0 8px #2563EB',
-            }}
-          />
-          <span
-            style={{
-              fontSize: '0.78rem',
-              fontWeight: 800,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: '#2563EB',
-            }}
-          >
-            The Smarter Way to Run Your Business
-          </span>
-          <span style={{ color: 'rgba(15, 23, 42, 0.2)' }}>|</span>
-          <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 600 }}>
-            Next-Gen Business Intelligence
-          </span>
+          <span style={{ color: '#F6C878', opacity: 0.6 }}>[</span>
+          <span>Next-Gen <strong style={{ color: '#FFFFFF', fontWeight: 700 }}>Autonomous Decision Intelligence</strong></span>
+          <span style={{ color: '#F6C878', opacity: 0.6 }}>]</span>
         </div>
 
-        {/* Main Headline */}
-        <h1
+        {/* Personas Simulated Pill */}
+        <div
           style={{
-            fontSize: 'clamp(2.5rem, 5.5vw, 4.4rem)',
-            fontWeight: 800,
-            lineHeight: 1.12,
-            letterSpacing: '-0.035em',
-            maxWidth: '940px',
-            marginBottom: '24px',
-            color: '#0F172A',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 20px',
+            borderRadius: '9999px',
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: 'none',
+            fontSize: '0.78rem',
+            color: '#A1A1AA',
           }}
         >
-          Turn business data into{' '}
+          <span>Customer Personas Simulated on BebshaX — <strong style={{ color: '#FFFFFF' }}>48,907</strong></span>
+          <span style={{ fontStyle: 'italic', color: '#F6C878' }}>and counting</span>
+        </div>
+      </div>
+
+      {/* Center Main Hero Typography & Glow Button */}
+      <div
+        style={{
+          maxWidth: '880px',
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          padding: '20px 0',
+        }}
+      >
+        {/* Main Punchy Title */}
+        <h1
+          style={{
+            fontSize: 'clamp(2.8rem, 5.8vw, 4.8rem)',
+            fontWeight: 800,
+            lineHeight: 1.12,
+            letterSpacing: '-0.04em',
+            marginBottom: '22px',
+            color: '#FFFFFF',
+          }}
+        >
+          Simulate every decision.
           <span
-            className="text-gradient-blue"
             style={{
+              display: 'block',
               fontStyle: 'italic',
               fontWeight: 800,
+              color: '#FFFFFF',
+              marginTop: '4px',
             }}
           >
-            better decisions.
+            Scale with certainty.
           </span>
         </h1>
 
-        {/* Supporting Paragraph */}
+        {/* Subtitle */}
         <p
           style={{
-            fontSize: 'clamp(1.05rem, 1.8vw, 1.25rem)',
-            color: '#475569',
-            maxWidth: '650px',
+            fontSize: 'clamp(0.95rem, 1.5vw, 1.15rem)',
+            color: '#A1A1AA',
+            maxWidth: '680px',
             lineHeight: 1.6,
             marginBottom: '36px',
-            fontWeight: 500,
+            fontWeight: 400,
           }}
         >
-          BebshaX brings your business data, insights, and operational workflows together so you can understand exactly what is happening, act faster, and scale with verifiable confidence.
+          Autonomous persona intelligence and cohort simulation grounded in real customer telemetry. Stress-test pricing, messaging, and feature adoption before spending capital.
         </p>
 
-        {/* Call to Action Button Group */}
-        <div
+        {/* Single Glowing Gold Pill Button */}
+        <button
+          onClick={() => navigate('/auth/signup')}
           style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '16px',
-            marginBottom: '32px',
+            padding: '13px 32px',
+            fontSize: '0.96rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            borderRadius: '9999px',
+            background: '#F6C878',
+            color: '#1A1305',
+            border: 'none',
+            outline: 'none',
+            boxShadow: '0 0 35px rgba(246, 200, 120, 0.45)',
+            transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#E5B45F';
+            e.currentTarget.style.boxShadow = '0 0 50px rgba(246, 200, 120, 0.65)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#F6C878';
+            e.currentTarget.style.boxShadow = '0 0 35px rgba(246, 200, 120, 0.45)';
+            e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
-          <button
-            onClick={() => navigate('/auth/signup')}
-            className="primary-hero-btn"
+          Simulate your first cohort free
+        </button>
+      </div>
+
+      {/* Bottom 3 Stats Row in the Hero Fold */}
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '1080px',
+          margin: '0 auto',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '24px',
+          alignItems: 'flex-end',
+        }}
+      >
+        {/* Stat 1 */}
+        <div>
+          <div
             style={{
-              padding: '14px 30px',
-              fontSize: '1rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
+              fontSize: 'clamp(2rem, 3.5vw, 2.8rem)',
+              fontWeight: 800,
+              color: '#F6C878',
+              letterSpacing: '-0.03em',
+              marginBottom: '6px',
             }}
           >
-            <span>Get Started</span>
-            <ArrowRight size={18} color="#FFFFFF" />
-          </button>
-
-          <button
-            onClick={() => scrollToSection('how-it-works')}
-            className="secondary-hero-btn"
-            style={{
-              padding: '14px 26px',
-              fontSize: '1rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <Play size={16} fill="#2563EB" color="#2563EB" />
-            <span>See How It Works</span>
-          </button>
-        </div>
-
-        {/* Trust Badges Bar */}
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '24px',
-            fontSize: '0.82rem',
-            color: '#0F172A',
-            fontWeight: 600,
-            marginBottom: '56px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Check size={16} color="#2563EB" strokeWidth={2.5} />
-            <span>No credit card required</span>
+            98.4%
           </div>
-          <span style={{ color: 'rgba(15, 23, 42, 0.2)' }}>•</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Check size={16} color="#2563EB" strokeWidth={2.5} />
-            <span>14-day free intelligence trial</span>
-          </div>
-          <span style={{ color: 'rgba(15, 23, 42, 0.2)' }}>•</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Check size={16} color="#2563EB" strokeWidth={2.5} />
-            <span>Enterprise-grade data encryption</span>
+          <div style={{ fontSize: '0.82rem', color: '#8E8E93', lineHeight: '1.4' }}>
+            Behavioral fidelity — <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>grounded across 48k+ events</strong>
           </div>
         </div>
 
-        {/* Product Visualization Preview with gentle floating animation */}
-        <div className="floating-dashboard" style={{ width: '100%' }}>
-          <HeroDashboardPreview />
+        {/* Stat 2 */}
+        <div>
+          <div
+            style={{
+              fontSize: 'clamp(2rem, 3.5vw, 2.8rem)',
+              fontWeight: 800,
+              color: '#F6C878',
+              letterSpacing: '-0.03em',
+              marginBottom: '6px',
+            }}
+          >
+            &lt; 15 <span style={{ fontSize: '0.7em', color: '#FFFFFF', fontWeight: 700 }}>sec</span>
+          </div>
+          <div style={{ fontSize: '0.82rem', color: '#8E8E93', lineHeight: '1.4' }}>
+            From hypothesis to <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>actionable decision report</strong>
+          </div>
+        </div>
+
+        {/* Stat 3 */}
+        <div>
+          <div
+            style={{
+              fontSize: 'clamp(2rem, 3.5vw, 2.8rem)',
+              fontWeight: 800,
+              color: '#F6C878',
+              letterSpacing: '-0.03em',
+              marginBottom: '6px',
+            }}
+          >
+            3.8×
+          </div>
+          <div style={{ fontSize: '0.82rem', color: '#8E8E93', lineHeight: '1.4' }}>
+            Faster conviction on <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>product & pricing bets</strong>
+          </div>
         </div>
       </div>
     </section>

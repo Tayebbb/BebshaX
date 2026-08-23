@@ -7,15 +7,15 @@ describe('BebshaX Premium Landing Page', () => {
     render(<App />);
 
     expect(
-      screen.getByText(/Turn business data into/i)
+      screen.getByText(/Simulate every decision\./i)
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText(/better decisions\./i)
+      screen.getByText(/Scale with certainty\./i)
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText(/The Smarter Way to Run Your Business/i)
+      screen.getByText(/Autonomous Decision Intelligence/i)
     ).toBeInTheDocument();
   });
 

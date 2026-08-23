@@ -44,6 +44,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setSolutionsDropdownOpen(false);
       }
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+        setUserDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -62,37 +65,34 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
     <header
       style={{
         position: 'fixed',
-        top: '16px',
+        top: 0,
         left: 0,
         right: 0,
         zIndex: 50,
+        height: '68px',
         display: 'flex',
-        justifyContent: 'center',
-        padding: '0 16px',
+        alignItems: 'center',
+        background: scrolled
+          ? 'rgba(0, 0, 0, 0.9)'
+          : 'transparent',
+        backdropFilter: scrolled ? 'blur(16px)' : 'none',
+        WebkitBackdropFilter: scrolled ? 'blur(16px)' : 'none',
+        border: 'none',
+        transition: 'all 0.25s ease',
       }}
     >
       <div
-        className="glass-panel"
         style={{
           width: '100%',
           maxWidth: '1240px',
-          height: '68px',
-          borderRadius: '20px',
-          padding: '0 24px',
+          margin: '0 auto',
+          padding: '0 32px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: scrolled
-            ? 'rgba(255, 255, 255, 0.82)'
-            : 'rgba(255, 255, 255, 0.65)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          border: '1px solid rgba(255, 255, 255, 0.85)',
-          boxShadow: '0 10px 35px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04)',
-          transition: 'all 0.3s ease',
         }}
       >
-        {/* Brand Logo */}
+        {/* Brand Wordmark & Icon */}
         <a
           href="#"
           onClick={(e) => {
@@ -104,67 +104,52 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             alignItems: 'center',
             gap: '10px',
             textDecoration: 'none',
-            color: '#0F172A',
+            color: '#FFFFFF',
+            border: 'none',
           }}
         >
           <div
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+              width: '30px',
+              height: '30px',
+              borderRadius: '8px',
+              background: '#FFFFFF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
-              position: 'relative',
+              border: 'none',
             }}
           >
-            <Activity size={20} color="#FFFFFF" strokeWidth={2.5} />
-            <div
-              style={{
-                position: 'absolute',
-                top: '-2px',
-                right: '-2px',
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                background: '#60A5FA',
-                boxShadow: '0 0 6px #60A5FA',
-              }}
-            />
+            <Activity size={17} color="#000000" strokeWidth={2.5} />
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#0F172A' }}>
-                Bebsha<span style={{ color: '#2563EB' }}>X</span>
-              </span>
-              <span
-                style={{
-                  fontSize: '0.65rem',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  padding: '2px 6px',
-                  borderRadius: '9999px',
-                  background: 'rgba(37, 99, 235, 0.1)',
-                  color: '#2563EB',
-                  border: '1px solid rgba(37, 99, 235, 0.25)',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                PRO
-              </span>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#FFFFFF' }}>
+              Bebsha<span style={{ color: '#F6C878' }}>X</span>
+            </span>
+            <span
+              style={{
+                fontSize: '0.62rem',
+                fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: '9999px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: '#A1A1AA',
+                border: 'none',
+                letterSpacing: '0.05em',
+              }}
+            >
+              PRO
+            </span>
           </div>
         </a>
 
-        {/* Center Desktop Navigation */}
+        {/* Center Minimal Navigation */}
         <nav
           className="desktop-nav"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '32px',
+            gap: '28px',
             position: 'relative',
           }}
         >
@@ -185,12 +170,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
-                color: solutionsDropdownOpen ? '#2563EB' : '#0F172A',
+                color: solutionsDropdownOpen ? '#FFFFFF' : 'var(--text-secondary)',
               }}
             >
               <span>Solutions</span>
               <ChevronDown
-                size={14}
+                size={13}
                 style={{
                   transform: solutionsDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                   transition: 'transform 0.2s ease',
@@ -202,35 +187,32 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             {solutionsDropdownOpen && (
               <div
                 onMouseLeave={() => setSolutionsDropdownOpen(false)}
-                className="glass-panel"
                 style={{
                   position: 'absolute',
                   top: '40px',
                   left: '-120px',
-                  width: '540px',
-                  background: 'rgba(255, 255, 255, 0.92)',
-                  backdropFilter: 'blur(28px)',
-                  WebkitBackdropFilter: 'blur(28px)',
-                  border: '1px solid rgba(255, 255, 255, 0.95)',
-                  borderRadius: '20px',
-                  padding: '24px',
-                  boxShadow: '0 20px 50px rgba(15, 23, 42, 0.12), 0 0 1px rgba(15, 23, 42, 0.15)',
+                  width: '520px',
+                  background: '#0D0D11',
+                  border: 'none',
+                  borderRadius: '16px',
+                  padding: '20px',
+                  boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85)',
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
-                  gap: '24px',
+                  gap: '20px',
                   zIndex: 60,
                 }}
               >
                 {/* Column 1: Industries */}
                 <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '14px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
                     INDUSTRIES
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
-                      { title: 'SaaS & Cloud', desc: 'Predictive cohort & churn intelligence', icon: <Layers size={14} color="#2563EB" /> },
-                      { title: 'Agencies & Consultancies', desc: 'Evidence-grounded strategy deliverables', icon: <Briefcase size={14} color="#2563EB" /> },
-                      { title: 'Commerce & Retail', desc: 'Basket size & checkout optimization', icon: <Building2 size={14} color="#2563EB" /> },
+                      { title: 'SaaS & Cloud', desc: 'Predictive cohort & churn intelligence', icon: <Layers size={14} color="#F6C878" /> },
+                      { title: 'Agencies & Consultancies', desc: 'Evidence-grounded strategy deliverables', icon: <Briefcase size={14} color="#F6C878" /> },
+                      { title: 'Commerce & Retail', desc: 'Basket size & checkout optimization', icon: <Building2 size={14} color="#F6C878" /> },
                     ].map((item, i) => (
                       <div
                         key={i}
@@ -239,28 +221,26 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                           display: 'flex',
                           alignItems: 'flex-start',
                           gap: '10px',
-                          padding: '10px',
-                          borderRadius: '10px',
+                          padding: '8px 10px',
+                          borderRadius: '8px',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          background: 'rgba(37, 99, 235, 0.03)',
-                          border: '1px solid rgba(37, 99, 235, 0.08)',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          border: 'none',
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)';
-                          e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.25)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(37, 99, 235, 0.03)';
-                          e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.08)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
                         }}
                       >
-                        <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)' }}>
+                        <div style={{ padding: '6px', borderRadius: '6px', background: 'rgba(246, 200, 120, 0.12)', border: 'none' }}>
                           {item.icon}
                         </div>
                         <div>
-                          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#0F172A' }}>{item.title}</div>
-                          <div style={{ fontSize: '0.72rem', color: '#64748B' }}>{item.desc}</div>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#FFFFFF' }}>{item.title}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#8E8E93' }}>{item.desc}</div>
                         </div>
                       </div>
                     ))}
@@ -269,14 +249,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
 
                 {/* Column 2: Use Cases */}
                 <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '14px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
                     USE CASES
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
-                      { title: 'Discover & Map', desc: 'Map hidden operational friction & bottlenecks', icon: <Search size={14} color="#2563EB" /> },
-                      { title: 'Validate & Simulate', desc: 'Test business bets before spending', icon: <Lightbulb size={14} color="#2563EB" /> },
-                      { title: 'Automate Playbooks', desc: 'Execute multi-step tactical workflows', icon: <Zap size={14} color="#2563EB" /> },
+                      { title: 'Discover & Map', desc: 'Map hidden operational friction & bottlenecks', icon: <Search size={14} color="#3B82F6" /> },
+                      { title: 'Validate & Simulate', desc: 'Test business bets before spending', icon: <Lightbulb size={14} color="#3B82F6" /> },
+                      { title: 'Automate Playbooks', desc: 'Execute multi-step tactical workflows', icon: <Zap size={14} color="#3B82F6" /> },
                     ].map((item, i) => (
                       <div
                         key={i}
@@ -285,28 +265,26 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                           display: 'flex',
                           alignItems: 'flex-start',
                           gap: '10px',
-                          padding: '10px',
-                          borderRadius: '10px',
+                          padding: '8px 10px',
+                          borderRadius: '8px',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          background: 'rgba(37, 99, 235, 0.03)',
-                          border: '1px solid rgba(37, 99, 235, 0.08)',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          border: 'none',
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)';
-                          e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.25)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(37, 99, 235, 0.03)';
-                          e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.08)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
                         }}
                       >
-                        <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(37, 99, 235, 0.1)' }}>
+                        <div style={{ padding: '6px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)', border: 'none' }}>
                           {item.icon}
                         </div>
                         <div>
-                          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#0F172A' }}>{item.title}</div>
-                          <div style={{ fontSize: '0.72rem', color: '#64748B' }}>{item.desc}</div>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#FFFFFF' }}>{item.title}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#8E8E93' }}>{item.desc}</div>
                         </div>
                       </div>
                     ))}
@@ -342,13 +320,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
           </button>
         </nav>
 
-        {/* Right CTA Group */}
+        {/* Right Action CTA Group */}
         <div
           className="desktop-cta"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
+            gap: '14px',
           }}
         >
           {isAuthenticated && user ? (
@@ -360,59 +338,58 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  padding: '6px 14px 6px 8px',
+                  padding: '5px 12px 5px 6px',
                   borderRadius: '9999px',
-                  background: 'rgba(37, 99, 235, 0.08)',
-                  border: '1px solid rgba(37, 99, 235, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: 'none',
                   cursor: 'pointer',
-                  color: '#0F172A',
-                  fontSize: '0.85rem',
+                  color: '#FFFFFF',
+                  fontSize: '0.84rem',
                   fontWeight: 600,
                 }}
               >
                 <div
                   style={{
-                    width: '26px',
-                    height: '26px',
+                    width: '24px',
+                    height: '24px',
                     borderRadius: '50%',
-                    background: '#2563EB',
-                    color: '#FFFFFF',
+                    background: '#FFFFFF',
+                    color: '#000000',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    border: 'none',
                   }}
                 >
                   {user.full_name ? user.full_name.charAt(0).toUpperCase() : 'U'}
                 </div>
                 <span>{user.full_name.split(' ')[0]}</span>
-                <ChevronDown size={14} color="#64748B" />
+                <ChevronDown size={13} color="#8E8E93" />
               </button>
 
               {/* User Dropdown */}
               {userDropdownOpen && (
                 <div
-                  className="glass-panel"
                   style={{
                     position: 'absolute',
-                    top: '42px',
+                    top: '40px',
                     right: 0,
-                    width: '230px',
-                    background: 'rgba(255, 255, 255, 0.96)',
-                    backdropFilter: 'blur(20px)',
-                    borderRadius: '16px',
-                    padding: '14px',
-                    boxShadow: '0 10px 30px rgba(15, 23, 42, 0.12)',
+                    width: '220px',
+                    background: '#0D0D11',
+                    borderRadius: '14px',
+                    padding: '12px',
+                    boxShadow: '0 15px 40px rgba(0, 0, 0, 0.7)',
                     zIndex: 70,
-                    border: '1px solid rgba(15, 23, 42, 0.08)',
+                    border: 'none',
                   }}
                 >
-                  <div style={{ paddingBottom: '10px', borderBottom: '1px solid #F1F5F9', marginBottom: '8px' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0F172A' }}>
+                  <div style={{ paddingBottom: '10px', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#FFFFFF' }}>
                       {user.full_name}
                     </div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#8E8E93', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {user.email}
                     </div>
                   </div>
@@ -433,14 +410,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                       gap: '8px',
                       fontSize: '0.82rem',
                       fontWeight: 600,
-                      color: '#0F172A',
+                      color: '#FFFFFF',
                       cursor: 'pointer',
                       textAlign: 'left',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#F1F5F9')}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                   >
-                    <Activity size={15} color="#2563EB" />
+                    <Activity size={14} color="#F6C878" />
                     <span>Launch Console</span>
                   </button>
 
@@ -460,15 +437,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                       gap: '8px',
                       fontSize: '0.82rem',
                       fontWeight: 600,
-                      color: '#DC2626',
+                      color: '#EF4444',
                       cursor: 'pointer',
                       textAlign: 'left',
                       marginTop: '4px',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)')}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                   >
-                    <LogOut size={15} color="#DC2626" />
+                    <LogOut size={14} color="#EF4444" />
                     <span>Sign Out</span>
                   </button>
                 </div>
@@ -482,16 +459,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                 style={{
                   background: 'none',
                   border: 'none',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  color: '#0F172A',
+                  fontSize: '0.86rem',
+                  fontWeight: 500,
+                  color: '#A1A1AA',
                   cursor: 'pointer',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  transition: 'background 0.2s ease',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  transition: 'color 0.2s ease',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(15, 23, 42, 0.04)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#FFFFFF')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = '#A1A1AA')}
               >
                 Sign In
               </button>
@@ -499,25 +476,24 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
               <button
                 onClick={() => (onOpenAuth ? onOpenAuth('signup-options') : navigate('/auth/signup'))}
                 style={{
-                  padding: '9px 18px',
-                  fontSize: '0.875rem',
+                  padding: '8px 16px',
+                  fontSize: '0.86rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  borderRadius: '10px',
-                  background: '#F6C878',
-                  color: '#2B2516',
+                  gap: '6px',
+                  borderRadius: '9999px',
+                  background: '#FFFFFF',
+                  color: '#000000',
                   border: 'none',
-                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
                   transition: 'all 0.2s ease',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#E5B45F')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = '#F6C878')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#E4E4E7')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
               >
                 <span>Try Free</span>
-                <ArrowRight size={15} color="#2B2516" />
+                <ArrowRight size={14} color="#000000" />
               </button>
             </>
           )}
@@ -530,36 +506,32 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
           style={{
             background: 'none',
             border: 'none',
-            color: '#0F172A',
+            color: '#FFFFFF',
             cursor: 'pointer',
             padding: '8px',
             display: 'none',
           }}
           aria-label="Toggle navigation"
         >
-          {mobileMenuOpen ? <X size={24} color="#2563EB" /> : <Menu size={24} color="#0F172A" />}
+          {mobileMenuOpen ? <X size={22} color="#FFFFFF" /> : <Menu size={22} color="#FFFFFF" />}
         </button>
       </div>
 
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div
-          className="glass-panel"
           style={{
             position: 'absolute',
-            top: '76px',
-            left: '16px',
-            right: '16px',
-            background: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(28px)',
-            WebkitBackdropFilter: 'blur(28px)',
-            border: '1px solid rgba(255, 255, 255, 0.9)',
-            borderRadius: '20px',
-            padding: '24px',
+            top: '68px',
+            left: 0,
+            right: 0,
+            background: '#070709',
+            border: 'none',
+            padding: '24px 32px',
             display: 'flex',
             flexDirection: 'column',
             gap: '16px',
-            boxShadow: '0 20px 40px rgba(15, 23, 42, 0.12)',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.9)',
             zIndex: 60,
           }}
         >
@@ -600,7 +572,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             FAQ
           </button>
 
-          <div style={{ height: '1px', background: 'rgba(15, 23, 42, 0.08)', margin: '8px 0' }} />
+          <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)', margin: '8px 0' }} />
 
           {isAuthenticated && user ? (
             <>
@@ -618,9 +590,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
+                  border: 'none',
                 }}
               >
-                <Activity size={16} color="#2563EB" />
+                <Activity size={16} color="#F6C878" />
                 <span>Launch Console</span>
               </button>
               <button
@@ -632,9 +605,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   padding: '12px',
                   fontWeight: 600,
                   border: 'none',
-                  borderRadius: '10px',
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  color: '#DC2626',
+                  borderRadius: '9999px',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  color: '#EF4444',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -642,7 +615,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   gap: '8px',
                 }}
               >
-                <LogOut size={16} color="#DC2626" />
+                <LogOut size={16} color="#EF4444" />
                 <span>Sign Out</span>
               </button>
             </>
@@ -663,6 +636,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
+                  border: 'none',
                 }}
               >
                 <span>Sign In</span>
@@ -677,19 +651,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   padding: '12px',
                   fontWeight: 700,
                   border: 'none',
-                  borderRadius: '10px',
-                  background: '#F6C878',
-                  color: '#2B2516',
+                  borderRadius: '9999px',
+                  background: '#FFFFFF',
+                  color: '#000000',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
                 }}
               >
                 <span>Try Free</span>
-                <ArrowRight size={16} color="#2B2516" />
+                <ArrowRight size={16} color="#000000" />
               </button>
             </>
           )}

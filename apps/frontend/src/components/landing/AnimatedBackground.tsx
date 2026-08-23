@@ -3,30 +3,85 @@ import React, { useEffect, useRef } from 'react';
 declare global {
   interface Window {
     VANTA?: {
-      WAVES: (options: Record<string, unknown>) => { destroy: () => void };
+      TOPOLOGY: (options: Record<string, unknown>) => {
+        destroy: () => void;
+        onMouseMove?: (e: { clientX: number; clientY: number }) => void;
+        p5?: { loop?: () => void; redraw?: () => void };
+      };
+      WAVES?: (options: Record<string, unknown>) => { destroy: () => void };
     };
-    THREE?: unknown;
+    p5?: unknown;
   }
 }
 
 export const AnimatedBackground: React.FC = () => {
   const vantaRef = useRef<HTMLDivElement | null>(null);
-  const vantaEffectRef = useRef<{ destroy: () => void } | null>(null);
+  const vantaEffectRef = useRef<{
+    destroy: () => void;
+    onMouseMove?: (e: { clientX: number; clientY: number }) => void;
+    p5?: { loop?: () => void; redraw?: () => void };
+  } | null>(null);
 
   useEffect(() => {
     let checkCount = 0;
     const maxChecks = 30;
+    let animFrameId: number;
+    let time = 0;
+    let userMouseX = typeof window !== 'undefined' ? window.innerWidth / 2 : 500;
+    let userMouseY = typeof window !== 'undefined' ? window.innerHeight / 2 : 400;
+    let hasUserMoved = false;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      userMouseX = e.clientX;
+      userMouseY = e.clientY;
+      hasUserMoved = true;
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove, { passive: true });
+
+    const startContinuousMotionLoop = () => {
+      const step = () => {
+        time += 0.02;
+
+        if (vantaEffectRef.current) {
+          const effect = vantaEffectRef.current;
+
+          // Compute smooth organic Lissajous curves so the mesh never stops evolving
+          const winW = window.innerWidth || 1200;
+          const winH = window.innerHeight || 800;
+
+          const waveX = (Math.sin(time * 0.75) * 0.45 + 0.5) * winW;
+          const waveY = (Math.cos(time * 0.55) * 0.45 + 0.5) * winH;
+
+          // Harmoniously blend ambient organic drift with user mouse position
+          const targetX = hasUserMoved ? userMouseX * 0.65 + waveX * 0.35 : waveX;
+          const targetY = hasUserMoved ? userMouseY * 0.65 + waveY * 0.35 : waveY;
+
+          if (typeof effect.onMouseMove === 'function') {
+            try {
+              effect.onMouseMove({ clientX: targetX, clientY: targetY });
+            } catch {
+              // Ignore if internal canvas is busy
+            }
+          }
+        }
+
+        animFrameId = requestAnimationFrame(step);
+      };
+
+      animFrameId = requestAnimationFrame(step);
+    };
 
     const initVanta = () => {
       if (!vantaRef.current) return;
 
-      if (window.VANTA && typeof window.VANTA.WAVES === 'function') {
+      if (window.VANTA && typeof window.VANTA.TOPOLOGY === 'function') {
         try {
           if (vantaEffectRef.current) {
             vantaEffectRef.current.destroy();
           }
 
-          vantaEffectRef.current = window.VANTA.WAVES({
+          vantaEffectRef.current = window.VANTA.TOPOLOGY({
             el: vantaRef.current,
             mouseControls: true,
             touchControls: true,
@@ -35,14 +90,18 @@ export const AnimatedBackground: React.FC = () => {
             minWidth: 200.0,
             scale: 1.0,
             scaleMobile: 1.0,
-            color: 0x34658e,
-            shininess: 30.0,
-            waveHeight: 15.0,
-            waveSpeed: 1.0,
-            zoom: 1.0,
+            color: 0xf6c878,
+            backgroundColor: 0x050507,
           });
+
+          // Ensure p5 rendering loop stays unpaused
+          if (vantaEffectRef.current?.p5?.loop) {
+            vantaEffectRef.current.p5.loop();
+          }
+
+          startContinuousMotionLoop();
         } catch (e) {
-          console.warn('Vanta initialization deferred:', e);
+          console.warn('Vanta Topology initialization deferred:', e);
         }
       } else if (checkCount < maxChecks) {
         checkCount++;
@@ -53,6 +112,10 @@ export const AnimatedBackground: React.FC = () => {
     initVanta();
 
     return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+      }
       if (vantaEffectRef.current && typeof vantaEffectRef.current.destroy === 'function') {
         vantaEffectRef.current.destroy();
         vantaEffectRef.current = null;
@@ -62,21 +125,43 @@ export const AnimatedBackground: React.FC = () => {
 
   return (
     <div
-      ref={vantaRef}
-      id="vanta-waves-bg"
       style={{
-        position: 'fixed',
+        position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        bottom: 0,
-        width: '100vw',
         height: '100vh',
+        minHeight: '760px',
+        maxHeight: '1080px',
         zIndex: 0,
         pointerEvents: 'none',
         overflow: 'hidden',
-        background: 'linear-gradient(180deg, #E0F2FE 0%, #BAE6FD 30%, #7DD3FC 100%)',
+        background: '#050507',
       }}
-    />
+    >
+      {/* Vanta Topology Canvas */}
+      <div
+        ref={vantaRef}
+        id="vanta-topology-bg"
+        style={{
+          width: '100%',
+          height: '100%',
+          opacity: 0.92,
+        }}
+      />
+
+      {/* Smooth bottom transition fade to solid black */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '240px',
+          background: 'linear-gradient(to bottom, rgba(5, 5, 7, 0) 0%, rgba(0, 0, 0, 0.7) 60%, #000000 100%)',
+          pointerEvents: 'none',
+        }}
+      />
+    </div>
   );
 };

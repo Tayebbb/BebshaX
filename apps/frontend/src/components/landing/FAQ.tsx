@@ -38,6 +38,7 @@ export const FAQ: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
+        background: '#000000',
       }}
     >
       <div
@@ -50,18 +51,18 @@ export const FAQ: React.FC = () => {
         {/* Section Header */}
         <div style={{ textAlign: 'center', marginBottom: '56px' }}>
           <div
-            className="glass-panel"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(37, 99, 235, 0.08)',
-              border: '1px solid rgba(37, 99, 235, 0.2)',
-              color: '#2563EB',
-              fontSize: '0.78rem',
-              fontWeight: 800,
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: 'none',
+              outline: 'none',
+              color: '#FFFFFF',
+              fontSize: '0.75rem',
+              fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               marginBottom: '16px',
@@ -76,7 +77,7 @@ export const FAQ: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#0F172A',
+              color: '#FFFFFF',
             }}
           >
             Everything you need to know.{' '}
@@ -85,77 +86,73 @@ export const FAQ: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#475569', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
             Have more questions? Reach out to our technical team anytime.
           </p>
         </div>
 
-        {/* Accordion List in Translucent Glass */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {/* Accordion List (No outlines) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {faqs.map((faq, idx) => {
             const isOpen = openIndex === idx;
             return (
               <div
                 key={idx}
-                className="glass-card"
+                className="clean-card"
                 style={{
-                  borderRadius: '18px',
-                  background: isOpen
-                    ? 'rgba(255, 255, 255, 0.88)'
-                    : 'rgba(255, 255, 255, 0.60)',
-                  border: isOpen
-                    ? '1.5px solid rgba(37, 99, 235, 0.4)'
-                    : '1px solid rgba(255, 255, 255, 0.8)',
-                  boxShadow: isOpen ? '0 10px 25px rgba(37, 99, 235, 0.08)' : 'var(--shadow-sm)',
+                  borderRadius: '16px',
+                  background: isOpen ? '#101017' : '#08080C',
+                  border: 'none',
+                  outline: 'none',
                   overflow: 'hidden',
-                  transition: 'all 0.25s ease',
+                  transition: 'all 0.2s ease',
                 }}
               >
                 <button
                   onClick={() => toggle(idx)}
                   style={{
                     width: '100%',
-                    padding: '22px 24px',
+                    padding: '20px 24px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     background: 'none',
                     border: 'none',
+                    outline: 'none',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    color: '#0F172A',
-                    fontSize: '1.05rem',
-                    fontWeight: 700,
+                    color: '#FFFFFF',
+                    fontSize: '1rem',
+                    fontWeight: 600,
                   }}
                 >
                   <span style={{ paddingRight: '16px' }}>{faq.q}</span>
                   <div
                     style={{
-                      width: '28px',
-                      height: '28px',
+                      width: '26px',
+                      height: '26px',
                       borderRadius: '50%',
-                      background: isOpen ? 'rgba(37, 99, 235, 0.12)' : 'rgba(15, 23, 42, 0.05)',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       flexShrink: 0,
                       transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.25s ease',
+                      transition: 'transform 0.2s ease',
                     }}
                   >
-                    <ChevronDown size={16} color={isOpen ? '#2563EB' : '#64748B'} />
+                    <ChevronDown size={14} color="#A1A1AA" />
                   </div>
                 </button>
 
                 {isOpen && (
                   <div
                     style={{
-                      padding: '0 24px 24px 24px',
-                      fontSize: '0.92rem',
-                      color: '#475569',
-                      lineHeight: '1.65',
-                      borderTop: '1px solid rgba(15, 23, 42, 0.06)',
-                      paddingTop: '16px',
+                      padding: '0 24px 20px 24px',
+                      fontSize: '0.88rem',
+                      color: '#8E8E93',
+                      lineHeight: '1.6',
                     }}
                   >
                     {faq.a}

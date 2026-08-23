@@ -18,7 +18,7 @@ export const HowItWorks: React.FC = () => {
       subtitle: 'Seamless ingestion in under 3 minutes',
       description:
         'Connect your existing tools—Stripe, HubSpot, PostgreSQL, Shopify, Google Analytics, and custom APIs—without complex data engineering pipelines.',
-      icon: <Link2 size={24} color="#2563EB" />,
+      icon: <Link2 size={22} color="#FFFFFF" />,
       features: ['Pre-built SaaS & DB connectors', 'Encrypted TLS 1.3 transfer', 'Automatic schema mapping'],
     },
     {
@@ -27,7 +27,7 @@ export const HowItWorks: React.FC = () => {
       subtitle: 'Autonomous intelligence & root cause analysis',
       description:
         'BebshaX continuously monitors data streams, connects related signals, spots emerging opportunities, and diagnoses why key metrics are changing.',
-      icon: <BrainCircuit size={24} color="#2563EB" />,
+      icon: <BrainCircuit size={22} color="#F6C878" />,
       features: ['Real-time anomaly detection', 'Evidence-grounded explanations', 'Multi-channel attribution'],
     },
     {
@@ -36,7 +36,7 @@ export const HowItWorks: React.FC = () => {
       subtitle: 'Prioritized playbooks with measured impact',
       description:
         'Get clear, step-by-step playbooks for your team. Deploy automated workflows, run targeted campaigns, or adjust pricing based on verified evidence.',
-      icon: <Rocket size={24} color="#2563EB" />,
+      icon: <Rocket size={22} color="#FFFFFF" />,
       features: ['Ready-to-deploy action playbooks', 'Simulated outcome forecasts', 'Live ROI & velocity tracking'],
     },
   ];
@@ -48,6 +48,7 @@ export const HowItWorks: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
+        background: '#000000',
       }}
     >
       <div
@@ -60,18 +61,18 @@ export const HowItWorks: React.FC = () => {
         {/* Section Header */}
         <div style={{ textAlign: 'center', maxWidth: '720px', margin: '0 auto 64px auto' }}>
           <div
-            className="glass-panel"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(37, 99, 235, 0.08)',
-              border: '1px solid rgba(37, 99, 235, 0.2)',
-              color: '#2563EB',
-              fontSize: '0.78rem',
-              fontWeight: 800,
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: 'none',
+              outline: 'none',
+              color: '#FFFFFF',
+              fontSize: '0.75rem',
+              fontWeight: 700,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               marginBottom: '16px',
@@ -86,7 +87,7 @@ export const HowItWorks: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#0F172A',
+              color: '#FFFFFF',
             }}
           >
             From scattered data to{' '}
@@ -95,18 +96,18 @@ export const HowItWorks: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#475569', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
             BebshaX bridges the gap between raw data collection and strategic execution in three simple steps.
           </p>
         </div>
 
-        {/* Steps Interactive Selector */}
+        {/* Steps Grid (No outlines) */}
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-            gap: '24px',
-            marginBottom: '48px',
+            gap: '20px',
+            marginBottom: '40px',
           }}
         >
           {steps.map((step, idx) => {
@@ -116,18 +117,14 @@ export const HowItWorks: React.FC = () => {
               <div
                 key={idx}
                 onClick={() => setActiveStep(stepNum)}
-                className="glass-card"
+                className="clean-card"
                 style={{
                   padding: '32px 28px',
-                  borderRadius: '22px',
+                  borderRadius: '18px',
                   cursor: 'pointer',
-                  background: isActive
-                    ? 'rgba(255, 255, 255, 0.88)'
-                    : 'rgba(255, 255, 255, 0.60)',
-                  border: isActive
-                    ? '2px solid #2563EB'
-                    : '1px solid rgba(255, 255, 255, 0.75)',
-                  boxShadow: isActive ? '0 15px 35px rgba(37, 99, 235, 0.15)' : 'var(--shadow-sm)',
+                  background: isActive ? '#121218' : '#09090C',
+                  border: 'none',
+                  outline: 'none',
                   position: 'relative',
                   overflow: 'hidden',
                 }}
@@ -136,11 +133,11 @@ export const HowItWorks: React.FC = () => {
                 <div
                   style={{
                     position: 'absolute',
-                    top: '16px',
-                    right: '20px',
-                    fontSize: '2.6rem',
+                    top: '14px',
+                    right: '18px',
+                    fontSize: '2.2rem',
                     fontWeight: 900,
-                    color: isActive ? 'rgba(37, 99, 235, 0.15)' : 'rgba(15, 23, 42, 0.05)',
+                    color: isActive ? 'rgba(246, 200, 120, 0.15)' : 'rgba(255, 255, 255, 0.03)',
                     userSelect: 'none',
                   }}
                 >
@@ -149,11 +146,12 @@ export const HowItWorks: React.FC = () => {
 
                 <div
                   style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '14px',
-                    background: isActive ? 'rgba(37, 99, 235, 0.15)' : 'rgba(37, 99, 235, 0.08)',
-                    border: '1px solid rgba(37, 99, 235, 0.25)',
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: 'none',
+                    outline: 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -163,20 +161,20 @@ export const HowItWorks: React.FC = () => {
                   {step.icon}
                 </div>
 
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FFFFFF', marginBottom: '4px' }}>
                   {step.title}
                 </h3>
-                <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#2563EB', marginBottom: '14px' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#F6C878', marginBottom: '14px' }}>
                   {step.subtitle}
                 </div>
-                <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: '1.6', marginBottom: '20px' }}>
+                <p style={{ fontSize: '0.85rem', color: '#8E8E93', lineHeight: '1.6', marginBottom: '20px' }}>
                   {step.description}
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {step.features.map((f, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#0F172A', fontWeight: 500 }}>
-                      <CheckCircle2 size={15} color="#2563EB" />
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#D4D4D8', fontWeight: 500 }}>
+                      <CheckCircle2 size={14} color="#F6C878" />
                       <span>{f}</span>
                     </div>
                   ))}
@@ -186,31 +184,29 @@ export const HowItWorks: React.FC = () => {
           })}
         </div>
 
-        {/* Step Deep-Dive Showcase Box */}
+        {/* Step Deep-Dive Showcase Box (No outline) */}
         <div
-          className="glass-panel"
+          className="clean-card"
           style={{
-            padding: '36px',
-            borderRadius: '24px',
-            background: 'rgba(255, 255, 255, 0.8)',
-            backdropFilter: 'blur(28px)',
-            WebkitBackdropFilter: 'blur(28px)',
-            border: '1px solid rgba(255, 255, 255, 0.9)',
-            boxShadow: 'var(--shadow-md)',
+            padding: '32px 36px',
+            borderRadius: '20px',
+            background: '#09090C',
+            border: 'none',
+            outline: 'none',
           }}
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '20px' }}>
             <div style={{ maxWidth: '620px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                <Sparkles size={16} color="#2563EB" />
-                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <Sparkles size={14} color="#F6C878" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Step {steps[activeStep - 1].num} in Action
                 </span>
               </div>
-              <h4 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>
+              <h4 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#FFFFFF', marginBottom: '8px' }}>
                 {steps[activeStep - 1].title}
               </h4>
-              <p style={{ fontSize: '0.92rem', color: '#475569', lineHeight: '1.6' }}>
+              <p style={{ fontSize: '0.88rem', color: '#8E8E93', lineHeight: '1.6' }}>
                 {steps[activeStep - 1].description}
               </p>
             </div>
@@ -220,17 +216,19 @@ export const HowItWorks: React.FC = () => {
                 onClick={() => setActiveStep(activeStep === 3 ? 1 : activeStep + 1)}
                 className="primary-hero-btn"
                 style={{
-                  padding: '12px 24px',
-                  borderRadius: '12px',
+                  padding: '10px 22px',
+                  borderRadius: '9999px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  fontSize: '0.9rem',
+                  fontSize: '0.88rem',
+                  border: 'none',
+                  outline: 'none',
                 }}
               >
                 <span>Next Step</span>
-                <ArrowRight size={16} color="#FFFFFF" />
+                <ArrowRight size={15} color="#000000" />
               </button>
             </div>
           </div>

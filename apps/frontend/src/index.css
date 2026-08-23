@@ -1,166 +1,211 @@
-/* BebshaX Premium White + Blue Glassmorphism Design System */
+/* ==========================================================================
+   BebshaX Ultra-Clean Minimalist Dark Design System (No Outlines / Borders)
+   ========================================================================== */
 
 :root {
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* Core Color Palette: Pure Obsidian & High-Craft Dark */
+  --bg-pure: #000000;
+  --bg-primary: #000000;
+  --bg-secondary: #08080A;
+  --bg-card: #0A0A0E;
+  --bg-card-hover: #121217;
+  --bg-glass: rgba(12, 12, 16, 0.85);
 
-  /* Color Palette - White / Translucent / Blue Glassmorphism */
-  --bg-primary: #FFFFFF;
-  --bg-glass-light: rgba(255, 255, 255, 0.45);
-  --bg-glass-medium: rgba(255, 255, 255, 0.62);
-  --bg-glass-strong: rgba(255, 255, 255, 0.78);
-  --bg-glass-card: rgba(255, 255, 255, 0.68);
-  --bg-glass-hover: rgba(255, 255, 255, 0.85);
+  /* Borders & Dividers - Set to none / transparent for ultra-clean look */
+  --border-subtle: transparent;
+  --border-medium: transparent;
+  --border-hover: transparent;
+  --border-gold: transparent;
 
-  /* Borders */
-  --border-glass-light: rgba(255, 255, 255, 0.55);
-  --border-glass-strong: rgba(255, 255, 255, 0.85);
-  --border-subtle: rgba(15, 23, 42, 0.08);
-  --border-focus: rgba(37, 99, 235, 0.4);
+  /* Typography Palette */
+  --text-main: #FFFFFF;
+  --text-primary: #F4F4F5;
+  --text-secondary: #8E8E93;
+  --text-muted: #5E5E66;
 
-  /* Typography Colors */
-  --text-main: #0F172A;
-  --text-secondary: #475569;
-  --text-muted: #64748B;
-  --text-dim: #94A3B8;
-
-  /* Brand Accents - Vibrant Modern Blues */
-  --accent-blue-primary: #2563EB;
-  --accent-blue-hover: #1D4ED8;
-  --accent-blue-bright: #3B82F6;
-  --accent-blue-sky: #60A5FA;
-  --accent-blue-light: #DBEAFE;
-  --accent-blue-subtle: rgba(37, 99, 235, 0.08);
-
+  /* Accent Tones */
+  --accent-gold-primary: #F6C878;
+  --accent-gold-hover: #E5B45F;
+  --accent-blue-primary: #3B82F6;
+  --accent-blue-glow: rgba(59, 130, 246, 0.25);
   --accent-emerald: #10B981;
   --accent-rose: #EF4444;
 
-  /* Provenance Badges */
-  --prov-observed-bg: rgba(37, 99, 235, 0.1);
-  --prov-observed-text: #2563EB;
-  --prov-observed-border: rgba(37, 99, 235, 0.25);
+  /* Typography Fonts */
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
-  --prov-inferred-bg: rgba(59, 130, 246, 0.1);
-  --prov-inferred-text: #1D4ED8;
-  --prov-inferred-border: rgba(59, 130, 246, 0.25);
+  /* Elevation Shadows */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-glow: none;
+}
 
-  --prov-synthetic-bg: rgba(96, 165, 250, 0.15);
-  --prov-synthetic-text: #2563EB;
-  --prov-synthetic-border: rgba(96, 165, 250, 0.3);
-
-  /* Shadows */
-  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
-  --shadow-lg: 0 20px 50px rgba(15, 23, 42, 0.10), 0 12px 20px -8px rgba(15, 23, 42, 0.05);
-  --shadow-dashboard: 0 30px 80px rgba(15, 23, 42, 0.14), 0 0 1px rgba(15, 23, 42, 0.12);
-  --glow-blue: 0 0 25px rgba(37, 99, 235, 0.28);
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  outline: none;
 }
 
 html {
   scroll-behavior: smooth;
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+  color-scheme: dark;
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: transparent;
-  color: var(--text-main);
+  background-color: var(--bg-pure);
+  color: var(--text-primary);
   min-height: 100vh;
-  overflow-x: hidden;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
-/* Typography */
+/* Typography Utility Classes */
 h1, h2, h3, h4, h5, h6 {
-  font-weight: 700;
-  letter-spacing: -0.025em;
   color: var(--text-main);
+  letter-spacing: -0.03em;
+  font-weight: 700;
 }
 
-.mono {
-  font-family: var(--font-mono);
-}
-
-/* Glassmorphism System Classes */
-.glass-panel {
-  background: var(--bg-glass-medium);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-glass-light);
-  border-radius: 18px;
-  box-shadow: var(--shadow-md);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.glass-panel:hover {
-  background: var(--bg-glass-hover);
-  border-color: rgba(255, 255, 255, 0.9);
-  box-shadow: var(--shadow-lg);
-}
-
-.glass-card {
-  background: var(--bg-glass-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  border-radius: 16px;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.25s ease;
-}
-
-.glass-card:hover {
-  background: rgba(255, 255, 255, 0.85);
-  border-color: rgba(37, 99, 235, 0.3);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-3px);
-}
-
-/* High-Contrast Blue Gradient Text */
-.text-gradient-blue {
-  background: linear-gradient(135deg, #1E40AF 0%, #2563EB 50%, #3B82F6 100%);
+.text-gradient-gold {
+  background: linear-gradient(135deg, #FFFFFF 20%, #F6C878 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-clip: text;
-  color: #2563EB;
-  display: inline-block;
+}
+
+.text-gradient-blue {
+  background: linear-gradient(135deg, #FFFFFF 30%, #93C5FD 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .text-gradient-red {
-  background: linear-gradient(135deg, #DC2626 0%, #EF4444 100%);
+  background: linear-gradient(135deg, #FCA5A5 0%, #EF4444 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-clip: text;
-  color: #DC2626;
-  display: inline-block;
 }
 
-/* Navigation Buttons */
+/* Minimalist Dark Cards without Outlines */
+.clean-card {
+  background: var(--bg-card);
+  border: none !important;
+  outline: none !important;
+  border-radius: 18px;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.clean-card:hover {
+  background: var(--bg-card-hover);
+}
+
+/* Legacy aliases */
+.glass-panel {
+  background: var(--bg-card);
+  border: none !important;
+  outline: none !important;
+  border-radius: 20px;
+}
+
+.glass-card {
+  background: var(--bg-card);
+  border: none !important;
+  outline: none !important;
+  border-radius: 16px;
+  transition: background 0.2s ease;
+}
+
+.glass-card:hover {
+  background: var(--bg-card-hover);
+}
+
+/* Buttons */
+.primary-hero-btn {
+  background: #FFFFFF;
+  color: #000000;
+  border: none !important;
+  outline: none !important;
+  border-radius: 9999px;
+  font-weight: 700;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.primary-hero-btn:hover {
+  background: #E4E4E7;
+  transform: translateY(-1px);
+}
+
+.gold-btn {
+  background: var(--accent-gold-primary);
+  color: #1A1305;
+  border: none !important;
+  outline: none !important;
+  border-radius: 9999px;
+  font-weight: 700;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gold-btn:hover {
+  background: var(--accent-gold-hover);
+  transform: translateY(-1px);
+}
+
+.secondary-hero-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border: none !important;
+  outline: none !important;
+  border-radius: 9999px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.secondary-hero-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.secondary-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  border: none !important;
+  outline: none !important;
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+
+.secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Nav Link Button */
 .nav-link-btn {
   background: none;
-  border: none;
-  color: #0F172A;
+  border: none !important;
+  outline: none !important;
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--text-secondary);
   cursor: pointer;
-  padding: 6px 0;
+  padding: 6px 10px;
+  border-radius: 6px;
   transition: color 0.2s ease;
 }
 
 .nav-link-btn:hover {
-  color: #2563EB;
+  color: #FFFFFF;
 }
 
 .mobile-nav-btn {
   background: none;
-  border: none;
-  color: #0F172A;
-  font-size: 1rem;
+  border: none !important;
+  outline: none !important;
+  color: var(--text-primary);
+  font-size: 1.05rem;
   font-weight: 600;
   text-align: left;
   padding: 8px 0;
@@ -168,88 +213,24 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .mobile-nav-btn:hover {
-  color: #2563EB;
+  color: var(--accent-gold-primary);
 }
 
-/* Consistent Button System */
-.primary-gradient-btn, .primary-hero-btn {
-  background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important;
-  color: #FFFFFF !important;
-  font-weight: 700 !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.35) !important;
-  transition: all 0.2s ease;
-  border-radius: 12px;
+/* Footer Wordmark */
+.footer-wordmark {
+  font-size: clamp(3.5rem, 9vw, 8rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: rgba(255, 255, 255, 0.03);
+  text-transform: uppercase;
 }
 
-.primary-gradient-btn:hover, .primary-hero-btn:hover {
-  background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%) !important;
-  box-shadow: 0 8px 25px rgba(37, 99, 235, 0.45) !important;
-  transform: translateY(-2px);
-}
-
-.secondary-hero-btn, .secondary-btn {
-  background: rgba(255, 255, 255, 0.55) !important;
-  border: 1px solid rgba(255, 255, 255, 0.75) !important;
-  color: #0F172A !important;
-  font-weight: 600 !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  box-shadow: var(--shadow-sm) !important;
-  transition: all 0.2s ease;
-  border-radius: 12px;
-}
-
-.secondary-hero-btn:hover, .secondary-btn:hover {
-  background: rgba(255, 255, 255, 0.85) !important;
-  border-color: rgba(37, 99, 235, 0.4) !important;
-  color: #2563EB !important;
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md) !important;
-}
-
-/* Floating Dashboard Gentle Animation */
-@keyframes floatSlow {
-  0%, 100% {
-    transform: translateY(0px);
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+  .desktop-nav {
+    display: none !important;
   }
-  50% {
-    transform: translateY(-6px);
-  }
-}
-
-.floating-dashboard {
-  animation: floatSlow 7s ease-in-out infinite;
-}
-
-/* Animations */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes pulseGlow {
-  0%, 100% { opacity: 0.9; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.1); }
-}
-
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--accent-emerald);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
-  display: inline-block;
-  animation: pulseGlow 2s infinite ease-in-out;
-}
-
-/* Responsive Navigation Queries */
-@media (max-width: 860px) {
-  .desktop-nav, .desktop-cta {
+  .desktop-cta {
     display: none !important;
   }
   .mobile-toggle {
@@ -257,41 +238,18 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* Custom Clean Scrollbars */
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.4);
+  background: #000000;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(37, 99, 235, 0.25);
+  background: #222226;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(37, 99, 235, 0.5);
+  background: #33333A;
 }
-
-/* Large Decorative Brand Wordmark - Crisp, High-Contrast, Visible Display */
-.footer-wordmark {
-  font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
-  font-size: clamp(3.2rem, 10.5vw, 8.8rem);
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 0.95;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.45) 0%, rgba(37, 99, 235, 0.35) 60%, rgba(37, 99, 235, 0.15) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  color: #0F172A;
-  user-select: none;
-  pointer-events: none;
-  display: block;
-  width: 100%;
-  text-align: center;
-  margin: 0 auto;
-  white-space: nowrap;
-  transition: all 0.3s ease;
-}
-
