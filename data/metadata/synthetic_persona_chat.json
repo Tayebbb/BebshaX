@@ -25,8 +25,8 @@
   },
   "composition": {
     "instance_type": "Multi-turn conversation transcript with speaker persona descriptions",
-    "slice_description": "Train and test splits from Synthetic-Persona-Chat CSVs (~10,000 dialogues)",
-    "sample_count_estimate": 10000,
+    "slice_description": "Train and test splits from Synthetic-Persona-Chat CSVs (9,906 total multi-turn dialogues across train and test partitions)",
+    "sample_count_estimate": 9906,
     "sensitive_content": "General casual dialogues, low toxicity."
   },
   "collection": {

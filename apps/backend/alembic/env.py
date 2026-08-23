@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from bebshax.config import get_settings
 from bebshax.db.models import Base
+import bebshax.persona.orm  # noqa: F401 — registers Phase-8 persona tables on Base.metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

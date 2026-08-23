@@ -26,8 +26,8 @@
   },
   "composition": {
     "instance_type": "Multiple-choice question with 4 options and ground truth answer",
-    "slice_description": "Micro-slice across three target domains: management, marketing, and professional psychology (~700 questions)",
-    "sample_count_estimate": 700,
+    "slice_description": "Micro-slice across three target test domains: management (111 questions), marketing (346 questions), and professional psychology (492 questions) yielding 949 total benchmark questions",
+    "sample_count_estimate": 949,
     "sensitive_content": "Academic exam questions."
   },
   "collection": {

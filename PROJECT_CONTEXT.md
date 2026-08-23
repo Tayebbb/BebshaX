@@ -60,7 +60,7 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | 5   | Routing/fallback (pools, ranking, context budget, concurrency)         | ✅ 2026-08-22  |
 | 6   | Database (Alembic; model_registry, llm_requests, personas)             | ✅ 2026-08-22 |
 | 7   | Dataset pipeline (profiles, one-command reproducible)                  | ✅ 2026-08-22  |
-| 8   | Persona engine                                                         | ⬜             |
+| 8   | Persona engine                                                         | ✅ 2026-08-23  |
 | 9   | Memory (pgvector stream: relevance+recency+importance)                 | ⬜             |
 | 10  | Interview engine                                                       | ⬜             |
 | 11  | Quality/evaluation (+ routing strategy experiments)                    | ✅ 2026-08-22  |

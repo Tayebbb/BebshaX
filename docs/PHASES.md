@@ -97,7 +97,7 @@ Steps:
 
 ---
 
-## Phase 8 — Persona engine ⬜  (track A after Phase 5; needs 6 for storage, 7 for evidence seeds)
+## Phase 8 — Persona engine ✅ (2026-08-23, track A)
 
 **Goal:** generate validated, evidence-grounded, stored personas.
 **Allowed paths:** `apps/backend/bebshax/persona/` (new), `apps/backend/bebshax/api/personas.py`, `apps/backend/tests/persona/`, alembic revision for persona attribute/evidence tables, docs listed below.
