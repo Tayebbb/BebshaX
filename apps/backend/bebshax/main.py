@@ -6,10 +6,12 @@ from fastapi import FastAPI
 
 from bebshax import __version__
 from bebshax.api.health import router as health_router
+from bebshax.api.interviews import router as interviews_router
 from bebshax.api.personas import router as personas_router
 from bebshax.config import get_settings
 from bebshax.db.engine import create_async_sessionmaker, create_engine
 from bebshax.db.sink import ProvenanceSink
+from bebshax.interview.engine import InterviewEngine
 from bebshax.llm.adapters.factory import (
     build_default_adapters,
     build_embedding_backend,
@@ -40,6 +42,9 @@ async def _lifespan(app: FastAPI):
         build_embedding_backend(settings.embedding_backend, settings.embedding_model),
         llm=llm_router,
     )
+    app.state.interview_engine = InterviewEngine(
+        llm_router, sessionmaker_, memory=app.state.memory_service
+    )
     yield
     await sink.stop()
     for adapter in adapters.values():
@@ -52,6 +57,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=_lifespan)
     app.include_router(health_router, prefix="/api")
     app.include_router(personas_router, prefix="/api")
+    app.include_router(interviews_router, prefix="/api")
     return app
 
 

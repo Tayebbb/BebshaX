@@ -1,4 +1,5 @@
 # BebshaX — Deep Documentation Study
+
 **Date:** 2026-08-22 | **Status:** Phases 1–7, 11, 12 ✅ Complete | **Current state:** Backend & Frontend running, evaluation engine & benchmarks active
 
 ---
@@ -14,9 +15,11 @@
 ## 1. What This Project Does
 
 ### 1.1 The Research Question
+
 > Can intelligent multi-model routing aggregate free LLM capacity while preserving synthetic persona quality and user experience?
 
 ### 1.2 Non-Negotiable Principles
+
 1. **Quality never silently degrades** — no truncating persona context to fit a weaker model, no swapping identity, no hidden fallbacks.
 2. **Low answer quality is NOT an infrastructure failure** — it belongs to the evaluation layer (Phase 11), never to fallback logic.
 3. **Legitimate free-tier use only** — no fake accounts, no rate-limit evasion, no leaked keys. Teammates add their own legitimate keys.
@@ -25,14 +28,14 @@
 
 ### 1.3 The Tech Stack (Decided — Not Negotiable)
 
-| Layer | Choice | Why |
-|---|---|---|
-| **Backend** | Python 3.12 + FastAPI, async | freellmpool is Python; best ML ecosystem |
-| **Routing engine** | freellmpool (MIT) as a library | 24 free providers, 222 routes, keyless start, failover/quotas/circuits built in |
-| **Database** | PG16 + pgvector on **port 5433** (Docker) | Native PG16 lacks pgvector; this Docker image has it |
-| **Local fallback** | Ollama with `llama3.2:3b` / `qwen3:4b` | 4 GB VRAM ceiling — no 70B fantasies |
-| **Frontend** | React + Vite | Single-page app (Phase 12 ✅ Complete with mock and live API modes) |
-| **Datasets** | Profiles: minimal/dev/eval/full; grounding + eval only | **NO fine-tuning, ever** |
+| Layer              | Choice                                                 | Why                                                                             |
+| ------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| **Backend**        | Python 3.12 + FastAPI, async                           | freellmpool is Python; best ML ecosystem                                        |
+| **Routing engine** | freellmpool (MIT) as a library                         | 24 free providers, 222 routes, keyless start, failover/quotas/circuits built in |
+| **Database**       | PG16 + pgvector on **port 5433** (Docker)              | Native PG16 lacks pgvector; this Docker image has it                            |
+| **Local fallback** | Ollama with `llama3.2:3b` / `qwen3:4b`                 | 4 GB VRAM ceiling — no 70B fantasies                                            |
+| **Frontend**       | React + Vite                                           | Single-page app (Phase 12 ✅ Complete with mock and live API modes)             |
+| **Datasets**       | Profiles: minimal/dev/eval/full; grounding + eval only | **NO fine-tuning, ever**                                                        |
 
 ---
 
@@ -51,7 +54,7 @@ LLMService.complete(LLMRequest{task, messages, constraints})
   ↓
 ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
   ├─ FreellmpoolAdapter → freellmpool AsyncPool.achat()
-  │    • Virtual route "freellmpool/auto" 
+  │    • Virtual route "freellmpool/auto"
   │    • freellmpool does provider-level failover internally
   │    • Concrete provider/model recorded in provenance
   └─ OllamaAdapter (Phase 4) → local reliability fallback
@@ -64,17 +67,14 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 1. **`LLMService` interface** — entry point for all LLM calls
    - Takes explicit `TaskType` (no LLM classification)
    - Returns `LLMResult` + full `ProvenanceRecord`
-   
 2. **`ProvenanceRecord`** — all 14 fields required:
    - Provider, model, routing path, attempt #, latency, token counts
    - Failure/fallback reasons, final serving model
    - Used by Phase 6 database, Phase 11 evaluation
-   
 3. **`TaskType`** — 16 fixed task types (declared by caller):
    - `PERSONA_GENERATION`, `PERSONA_INTERVIEW`, `PERSONA_RESPONSE`
    - `MEMORY_*`, `EVIDENCE_*`, `STRUCTURED_OUTPUT`, `CONTRADICTION_CHECK`, etc.
    - No new types without enum + tests in one commit
-   
 4. **`ProviderAdapter` base class** — the only place provider SDKs live
    - `candidates()` → list of `RouteCandidate`s per adapter
    - `complete()` → `AdapterCompletion` with real provider/model
@@ -86,19 +86,19 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 
 **13 `FailureKind`s**, each with explicit `FailurePolicy`:
 
-| Failure | Policy | Why |
-|---|---|---|
-| `RATE_LIMITED` (429) | Retry once, advance + cooldown | Infrastructure issue |
-| `TIMEOUT` | Advance to next | Transient network |
-| `CONNECTION` | Retry once, then advance | Network hiccup |
-| `SERVER_ERROR` (5xx) | Advance + cooldown | Provider problem |
-| `MODEL_UNAVAILABLE` | Advance + cooldown | Model gone |
-| `AUTH_INVALID` | Advance + cooldown | Key dead |
-| `CONTEXT_WINDOW_EXCEEDED` | Advance to larger model | **Never truncate** |
-| `MALFORMED_RESPONSE` | Retry once, then advance | Transient parsing |
-| `INTERNAL_ERROR` | **Surface immediately** | Our bug — don't hide it |
-| — | — | — |
-| `LOW_QUALITY` | **NOT IN THIS LIST** | Quality → Phase 11 evaluation, never fallback |
+| Failure                   | Policy                         | Why                                           |
+| ------------------------- | ------------------------------ | --------------------------------------------- |
+| `RATE_LIMITED` (429)      | Retry once, advance + cooldown | Infrastructure issue                          |
+| `TIMEOUT`                 | Advance to next                | Transient network                             |
+| `CONNECTION`              | Retry once, then advance       | Network hiccup                                |
+| `SERVER_ERROR` (5xx)      | Advance + cooldown             | Provider problem                              |
+| `MODEL_UNAVAILABLE`       | Advance + cooldown             | Model gone                                    |
+| `AUTH_INVALID`            | Advance + cooldown             | Key dead                                      |
+| `CONTEXT_WINDOW_EXCEEDED` | Advance to larger model        | **Never truncate**                            |
+| `MALFORMED_RESPONSE`      | Retry once, then advance       | Transient parsing                             |
+| `INTERNAL_ERROR`          | **Surface immediately**        | Our bug — don't hide it                       |
+| —                         | —                              | —                                             |
+| `LOW_QUALITY`             | **NOT IN THIS LIST**           | Quality → Phase 11 evaluation, never fallback |
 
 ---
 
@@ -108,29 +108,30 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 
 ### 3.1 Initial Parallel Block (Phases 4–7, 11, 12-foundation)
 
-| Teammate | Track | Completed Phases | Owns | Status |
-|---|---|---|---|---|
-| **Tayeb** | A — LLM infra | 4, 5 ✅ | `bebshax/llm/**`, `scripts/benchmark_ollama.py`, `docs/ROUTING.md` | Phases 4 & 5 Complete; Ready for Phase 8 |
-| **Sazid** | B — Data layer | 6, 7 ✅ | `bebshax/db/**`, `alembic/`, `data/**`, `scripts/setup_datasets.py` | Phases 6 & 7 Complete; Ready for Phase 9 |
-| **Shehab** | C — Frontend & Eval | 11, 12-foundation ✅ | `apps/frontend/**`, `apps/backend/bebshax/evaluation/**`, `docs/API_CONTRACT.md`, `docs/EVALUATION.md` | Phases 11 & 12-foundation Complete |
+| Teammate   | Track               | Completed Phases     | Owns                                                                                                   | Status                                   |
+| ---------- | ------------------- | -------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| **Tayeb**  | A — LLM infra       | 4, 5 ✅              | `bebshax/llm/**`, `scripts/benchmark_ollama.py`, `docs/ROUTING.md`                                     | Phases 4 & 5 Complete; Ready for Phase 8 |
+| **Sazid**  | B — Data layer      | 6, 7 ✅              | `bebshax/db/**`, `alembic/`, `data/**`, `scripts/setup_datasets.py`                                    | Phases 6 & 7 Complete; Ready for Phase 9 |
+| **Shehab** | C — Frontend & Eval | 11, 12-foundation ✅ | `apps/frontend/**`, `apps/backend/bebshax/evaluation/**`, `docs/API_CONTRACT.md`, `docs/EVALUATION.md` | Phases 11 & 12-foundation Complete       |
 
 **Why they didn't collide:**
+
 - A worked against frozen `LLMService` + Ollama's API (no DB)
 - B consumed frozen `ProvenanceRecord` for database + pulled external datasets
 - C built React views on mock data + authored independent evaluation suite
 
 ### 3.2 Convergence (Phases 8–15)
 
-| Phase | Owner | Status | Needs | Starts |
-|---|---|---|---|---|
-| 8 — Persona engine | Tayeb | ✅ done 2026-08-23 | 5, 6 (7 for evidence) | Delivered (see implementation log) |
-| 9 — Memory | ~~Sazid~~ Tayeb | ✅ done 2026-08-23 | 6, 8 (persona IDs) | Delivered (owner-approved takeover) |
-| 10 — Interview | Tayeb | ⬜ | 8 (uses 9 when ready) | Once 8 lands |
-| 11 — Quality/eval | Shehab | ✅ Complete (2026-08-22) | 5, 7 | Completed |
-| 12 — Frontend live | Shehab | ✅ Foundation + mock views (live wiring follows 8/10/11) | 8/10/11 endpoints | Ready for live endpoints |
-| 13 — Integration | All three | ⬜ | 10, 12 | All converge |
-| 14 — Testing | All | ⬜ | 13 | Harden after 13 |
-| 15 — Docs | All | ⬜ | 14 | Assemble final report |
+| Phase              | Owner           | Status                                                   | Needs                 | Starts                              |
+| ------------------ | --------------- | -------------------------------------------------------- | --------------------- | ----------------------------------- |
+| 8 — Persona engine | Tayeb           | ✅ done 2026-08-23                                       | 5, 6 (7 for evidence) | Delivered (see implementation log)  |
+| 9 — Memory         | ~~Sazid~~ Tayeb | ✅ done 2026-08-23                                       | 6, 8 (persona IDs)    | Delivered (owner-approved takeover) |
+| 10 — Interview     | Tayeb           | ✅ done 2026-08-23                                       | 8 (uses 9 when ready) | Delivered                           |
+| 11 — Quality/eval  | Shehab          | ✅ Complete (2026-08-22)                                 | 5, 7                  | Completed                           |
+| 12 — Frontend live | Shehab          | ✅ Foundation + mock views (live wiring follows 8/10/11) | 8/10/11 endpoints     | Ready for live endpoints            |
+| 13 — Integration   | All three       | ⬜                                                       | 10, 12                | All converge                        |
+| 14 — Testing       | All             | ⬜                                                       | 13                    | Harden after 13                     |
+| 15 — Docs          | All             | ⬜                                                       | 14                    | Assemble final report               |
 
 ---
 
@@ -155,6 +156,7 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 ## 5. Current State: Phases 1–3 (✅ Done)
 
 ### Phase 1 — Foundation (2026-08-22)
+
 - Repo initialized; scaffold: `apps/backend`, `data/`, `docker-compose.yml`, `.env.example`
 - Config: pydantic-settings with `BEBSHAX_*` prefix
 - Health endpoint: `GET /api/health` → 200 OK
@@ -162,12 +164,14 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 - Tests: 3/3 green
 
 ### Phase 2 — LLM Abstraction (2026-08-22)
+
 - `bebshax.llm` package: `LLMService`, `TaskType`, failure taxonomy, `ProvenanceRecord`
 - `ProviderAdapter` boundary + `FakeAdapter` for tests
 - `SingleAdapterLLMService` reference impl (will be replaced by `PoolRouter` in Phase 5)
 - Tests: 17/17 green
 
 ### Phase 3 — freellmpool Integration (2026-08-22)
+
 - Dependency: `freellmpool==0.11.4` (MIT, active, single-maintainer risk mitigated by adapter boundary)
 - `FreellmpoolAdapter`: error mapping, concrete-route provenance, keyless smoke test passed
 - **Gate B decided:** LiteLLM skipped — all needed providers covered by freellmpool + Ollama
@@ -182,6 +186,7 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 **Goal:** Local Ollama becomes a working reliability-fallback backend.
 
 **Key deliverables:**
+
 1. Benchmark script: detect Ollama daemon, measure qwen3.5 perf (time-to-first-token, tokens/sec, latency), recommend a ≤4B fast model
 2. `OllamaAdapter`: use httpx directly (no new SDK), map errors, return `AdapterCompletion` with real token counts
 3. Unit tests with stubbed httpx (no network); `scripts/smoke_ollama.py` for real calls
@@ -193,73 +198,85 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 
 ## 7. Key Documents & Their Purpose
 
-| Document | Purpose | Updated |
-|---|---|---|
-| [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | Single source of truth: what we're building, decided stack, phase roadmap, architecture diagram | By phase owner after each phase |
-| [RULES.md](RULES.md) | **Binding engineering rules R1–R12** that every AI agent/contributor must obey | Only on new rule discovery |
-| [AGENTS.md](AGENTS.md) | Contract auto-loaded by Copilot/Cursor/Claude Code — the Phase Execution Protocol, Definition of Done, hard rules digest | Auto-updated with this doc |
-| [docs/PHASES.md](docs/PHASES.md) | Executable spec for phases 4–15: goal, prerequisites, allowed paths, steps, exit criteria with commands, docs to update | After each phase |
-| [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md) | Who owns which paths, merge rules, contract-change sign-off requirements | After new team members |
-| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | **Append-only log** of what was built, findings, new dependencies + R8 reviews | After every phase + maintenance |
-| [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md) | OSS evaluation (13 routing repos audited), hardware facts (4 GB VRAM ceiling), host environment audit | Once at start |
-| [docs/ROUTING.md](docs/ROUTING.md) | How requests flow through the system, freellmpool dependency review, error mapping, provider config, verification commands | After Phases 3, 4, 5 |
-| [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md) | Clone→venv→pip→tests in 5 min. Configuration, database setup, everyday commands, pre-push checklist | Link from README |
-| [README.md](README.md) | Public entry point: what BebshaX is, quickstart, "how we work" summary, repository layout, AI agent instruction | Link to team docs |
+| Document                                                           | Purpose                                                                                                                    | Updated                         |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)                           | Single source of truth: what we're building, decided stack, phase roadmap, architecture diagram                            | By phase owner after each phase |
+| [RULES.md](RULES.md)                                               | **Binding engineering rules R1–R12** that every AI agent/contributor must obey                                             | Only on new rule discovery      |
+| [AGENTS.md](AGENTS.md)                                             | Contract auto-loaded by Copilot/Cursor/Claude Code — the Phase Execution Protocol, Definition of Done, hard rules digest   | Auto-updated with this doc      |
+| [docs/PHASES.md](docs/PHASES.md)                                   | Executable spec for phases 4–15: goal, prerequisites, allowed paths, steps, exit criteria with commands, docs to update    | After each phase                |
+| [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md)               | Who owns which paths, merge rules, contract-change sign-off requirements                                                   | After new team members          |
+| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)         | **Append-only log** of what was built, findings, new dependencies + R8 reviews                                             | After every phase + maintenance |
+| [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md) | OSS evaluation (13 routing repos audited), hardware facts (4 GB VRAM ceiling), host environment audit                      | Once at start                   |
+| [docs/ROUTING.md](docs/ROUTING.md)                                 | How requests flow through the system, freellmpool dependency review, error mapping, provider config, verification commands | After Phases 3, 4, 5            |
+| [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md)                           | Clone→venv→pip→tests in 5 min. Configuration, database setup, everyday commands, pre-push checklist                        | Link from README                |
+| [README.md](README.md)                                             | Public entry point: what BebshaX is, quickstart, "how we work" summary, repository layout, AI agent instruction            | Link to team docs               |
 
 ---
 
 ## 8. Important Engineering Rules (R1–R12)
 
 ### R1 — Adapter Boundary
+
 **Only code inside `apps/backend/bebshax/llm/adapters/` may import `freellmpool`, Ollama clients, or any provider SDK.** Everything else calls `LLMService`. Test-enforced.
 
 ### R2 — Quality is Sacred
+
 - Never truncate/drop/compress persona identity/memory/evidence to fit a smaller model.
 - If nothing fits → raise `ContextWindowExceeded`. Explicit failure beats silent degradation.
 - **Low answer quality is NOT a `FailureKind`** — never trigger fallback for it.
 
 ### R3 — Every LLM Call is Governed
+
 - Goes through `LLMService.complete(LLMRequest)` with explicit `TaskType`.
 - Produces complete `ProvenanceRecord`: provider, model, routing path, attempts, latency, tokens, failure/fallback reasons.
 
 ### R4 — Secrets & Keys
+
 - Keys live in `.env` (gitignored) only. Never in code, config, commits, logs, screenshots.
 - Mask keys in output (`gsk_****`). If a key leaks: rotate immediately, tell team.
 
 ### R5 — Legitimate Free-Tier Use
+
 - No duplicate accounts, no rate-limit evasion, no scraped APIs, no shared personal keys.
 - Each teammate configures their own legitimately-obtained keys via `.env`.
 
 ### R6 — Failure Taxonomy is Closed
+
 - New failure kinds need enum + `FailurePolicy` + tests in one PR.
 - `INTERNAL_ERROR` (our bugs) must surface immediately, never burn fallback candidates.
 
 ### R7 — Tests Gate Everything
+
 - `python -m pytest apps/backend/tests -q` must be green before every commit.
 - New behavior ⇒ new tests in the same commit.
 - Chaos paths use `FakeAdapter` — never against real providers.
 
 ### R8 — Dependencies Need Written Review
+
 - Before adding any dependency, record: why needed, what replaces, license, maintenance, necessity.
 - Goes in the implementation log before installing.
 
 ### R9 — Datasets
+
 - Only through `scripts/setup_datasets.py` with profiles (minimal/dev/eval/full).
 - Every dataset in `data/DATASETS.md`: source, license, size, purpose, download+preprocessing, required/optional.
 - **NO model training/fine-tuning.**
 
 ### R10 — Working Style
+
 - Incremental phases; don't start phase N while N-1 is red.
 - After each phase: tests → fix → update `docs/IMPLEMENTATION_PLAN.md` → commit.
 - Commit format: `Phase N: <what>` or `fix:/docs:/chore: <what>`.
 - `main` stays green and demoable.
 
 ### R11 — User Experience
+
 - End users see ONE AI system ("Generate Persona"), never provider/model pickers.
 - Routing internals exposed only in the developer dashboard, clearly labeled.
 - Demo mode must clearly indicate when cached results are shown.
 
 ### R12 — AI Agents Follow The Contract
+
 - Every agent/tool obeys [AGENTS.md](AGENTS.md).
 - A task with stale docs is an **unfinished task** — update docs in the same commit as code.
 - CI enforces the test gate on every push.
@@ -268,14 +285,15 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 
 ## 9. The Host Machine's Hardware Constraints
 
-| Resource | Value | Implication |
-|---|---|---|
-| **CPU** | Intel i5-12500H (12c/16t) | Fine for API serving + preprocessing |
-| **RAM** | 15.7 GB total | Must leave ≥6 GB for OS+services → ~9 GB app ceiling |
-| **GPU** | RTX 3050 Laptop, **4 GB VRAM** | Only ~3–4B Q4 models fit fully in VRAM; 7–8B Q4 runs with CPU offload |
-| **Disk** | 195 GB free | Plenty for datasets + a few models |
+| Resource | Value                          | Implication                                                           |
+| -------- | ------------------------------ | --------------------------------------------------------------------- |
+| **CPU**  | Intel i5-12500H (12c/16t)      | Fine for API serving + preprocessing                                  |
+| **RAM**  | 15.7 GB total                  | Must leave ≥6 GB for OS+services → ~9 GB app ceiling                  |
+| **GPU**  | RTX 3050 Laptop, **4 GB VRAM** | Only ~3–4B Q4 models fit fully in VRAM; 7–8B Q4 runs with CPU offload |
+| **Disk** | 195 GB free                    | Plenty for datasets + a few models                                    |
 
 **Local Model Policy:**
+
 - Fast local fallback: a ~3–4B instruct model (fully GPU-resident, low latency)
 - Quality local fallback: `qwen3.5:latest` (6.6 GB, partial CPU offload — works, slower)
 - **A 70B model is impossible. Do not configure one.**
@@ -285,12 +303,14 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 ## 10. The Free Provider Ecosystem (via freellmpool)
 
 **freellmpool catalogs:**
+
 - **~24 free providers** with **222 live routes**
 - **407 models** available keyless or with team's own keys
 - **Keyless providers:** Pollinations, OVHcloud, Kilo, LLM7
 - **With keys:** Groq, Google AI Studio, NVIDIA NIM, Mistral, Cerebras, OpenRouter, Cohere, GitHub Models, Cloudflare, HF router, etc.
 
 **Legitimate signup (no credit card required):**
+
 - Groq: `console.groq.com/keys`
 - Google AI Studio: `aistudio.google.com/apikey`
 - NVIDIA NIM: `build.nvidia.com`
@@ -307,6 +327,7 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 ### For a Team Member (Read Once)
 
 1. **Clone + setup (5 min):**
+
    ```powershell
    git clone https://github.com/Tayebbb/BebshaX.git
    cd BebshaX
@@ -345,42 +366,49 @@ ProviderAdapter [BOUNDARY — only code allowed to import provider SDKs]
 
 ## 12. Project Status Dashboard
 
-| Item | Status | Notes |
-|---|---|---|
-| **Backend running** | ✅ | FastAPI on port 8000, `/api/health` returns 200 |
-| **Database running** | ✅ | pgvector on Docker port 5433, healthy |
-| **Tests** | ✅ 26/26 green | No known issues |
-| **Phases 1–3** | ✅ Complete | Foundation, LLM abstraction, freellmpool integration |
-| **Phase 4 ready** | ✅ | Ollama benchmark + adapter spec written in Phase spec |
-| **Parallel block (4/6/12)** | ⬜ Ready to start | Tayeb (4→5), Sazid (6→7), Shehab (12-foundation) |
-| **Dependencies locked** | ✅ | requirements.lock synced |
-| **CI passing** | ✅ | `.github/workflows/ci.yml` runs pytest on every push |
-| **Secrets in repo** | ✅ None | `.env` gitignored, keys in `.env.example` only |
+| Item                        | Status            | Notes                                                 |
+| --------------------------- | ----------------- | ----------------------------------------------------- |
+| **Backend running**         | ✅                | FastAPI on port 8000, `/api/health` returns 200       |
+| **Database running**        | ✅                | pgvector on Docker port 5433, healthy                 |
+| **Tests**                   | ✅ 26/26 green    | No known issues                                       |
+| **Phases 1–3**              | ✅ Complete       | Foundation, LLM abstraction, freellmpool integration  |
+| **Phase 4 ready**           | ✅                | Ollama benchmark + adapter spec written in Phase spec |
+| **Parallel block (4/6/12)** | ⬜ Ready to start | Tayeb (4→5), Sazid (6→7), Shehab (12-foundation)      |
+| **Dependencies locked**     | ✅                | requirements.lock synced                              |
+| **CI passing**              | ✅                | `.github/workflows/ci.yml` runs pytest on every push  |
+| **Secrets in repo**         | ✅ None           | `.env` gitignored, keys in `.env.example` only        |
 
 ---
 
 ## 13. Key Insights from the Docs
 
 ### The Core Innovation: Adapter Boundary
+
 The **adapter boundary** at `bebshax/llm/adapters/` is the architectural keystone:
+
 - **Isolates** provider SDK complexity (freellmpool, Ollama, future providers)
 - **Enforces** via tests that nothing outside imports them
 - **Allows** swapping routing engines without touching application code
 - **Example:** if freellmpool ever dies, a new `NovaRouter` adapter is a drop-in replacement
 
 ### Quality ≠ Infrastructure Failure
+
 **Critical mindset shift:** Low answer quality is NOT an infrastructure problem. Falling back won't help. Quality belongs to the evaluation layer (Phase 11), which will measure and improve it offline.
 
 ### Explicit > Silent
+
 Rather than truncate context or hide failures, **raise `ContextWindowExceeded`** and let the caller decide. Transparency + explicitness = trustworthiness.
 
 ### Greenfield Freedom
+
 No legacy code to preserve. This is a fresh build, which means every architectural decision can be optimized for the routing requirement instead of retrofitting one onto existing code.
 
 ### Keyless Start
+
 Even with zero API keys, the system works (Pollinations, OVHcloud, Kilo, LLM7). This lowers the barrier to entry and demonstrates the routing is doing real work.
 
 ### The 4 GB VRAM Ceiling
+
 The local fallback strategy is shaped entirely by this hardware constraint. A 70B model is not an option. The team thoughtfully chose `qwen3.5` as a quality local model that runs with partial CPU offload, and Phase 4 will benchmark and pick a faster ≤4B model to pair with it.
 
 ---
@@ -410,12 +438,14 @@ Code changes without updating the implementation log, status tables, or phase sp
 ## 15. Next Steps
 
 1. **Verify the system is running:**
+
    ```powershell
    # Backend: GET http://localhost:8000/api/health
    # Database: docker ps | grep bebshax-db (should be "healthy")
    ```
 
 2. **Run the test suite:**
+
    ```powershell
    .venv\Scripts\python -m pytest apps/backend/tests -q
    ```

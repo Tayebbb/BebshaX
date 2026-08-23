@@ -19,7 +19,7 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 | `scripts/` | Setup, dataset, and evaluation tooling |
 | `docs/` | [AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md) · [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) |
 
-## Quickstart (state: Phases 1–7, 11, 12 ✅ complete)
+## Quickstart (state: Phases 1–11 ✅ — remaining: 12-completion (live wiring), 13 integration/demo, 14 testing, 15 docs)
 
 ```powershell
 # Backend

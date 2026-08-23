@@ -50,24 +50,25 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | Datasets       | Profiles: minimal/development/evaluation/full; grounding + evaluation only | **no fine-tuning, ever**                               |
 
 ## Phase roadmap and status
+
 **15 phases total** (an earlier 22-phase draft was superseded on 2026-08-22 — this table is authoritative). Executable per-phase specs: [docs/PHASES.md](docs/PHASES.md). Who implements what, in parallel: [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md). To execute a phase, tell your AI agent: **"Implement phase N"** (protocol in [AGENTS.md](AGENTS.md)).
-| #   | Phase                                                                  | Status         |
+| # | Phase | Status |
 | --- | ---------------------------------------------------------------------- | -------------- |
-| 1   | Foundation (scaffold, config, health, tests, compose)                  | ✅ 2026-08-22  |
-| 2   | LLM abstraction (LLMService, task types, failure taxonomy, provenance) | ✅ 2026-08-22  |
-| 3   | freellmpool integration (adapter, keyless smoke, Gate B)               | ✅ 2026-08-22 |
-| 4   | Ollama integration (benchmark qwen3.5 first)                           | ✅ 2026-08-22  |
-| 5   | Routing/fallback (pools, ranking, context budget, concurrency)         | ✅ 2026-08-22  |
-| 6   | Database (Alembic; model_registry, llm_requests, personas)             | ✅ 2026-08-22 |
-| 7   | Dataset pipeline (profiles, one-command reproducible)                  | ✅ 2026-08-22  |
-| 8   | Persona engine                                                         | ✅ 2026-08-23  |
-| 9   | Memory (pgvector stream: relevance+recency+importance)                 | ✅ 2026-08-23  |
-| 10  | Interview engine                                                       | ⬜             |
-| 11  | Quality/evaluation (+ routing strategy experiments)                    | ✅ 2026-08-22  |
-| 12  | Frontend (Foundation & Views on mocks)                 | ✅ 2026-08-22  |
-| 13  | Integration + demo mode                                                | ⬜             |
-| 14  | Testing (full matrix + acceptance tests)                               | ⬜             |
-| 15  | Documentation                                                          | ⬜             |
+| 1 | Foundation (scaffold, config, health, tests, compose) | ✅ 2026-08-22 |
+| 2 | LLM abstraction (LLMService, task types, failure taxonomy, provenance) | ✅ 2026-08-22 |
+| 3 | freellmpool integration (adapter, keyless smoke, Gate B) | ✅ 2026-08-22 |
+| 4 | Ollama integration (benchmark qwen3.5 first) | ✅ 2026-08-22 |
+| 5 | Routing/fallback (pools, ranking, context budget, concurrency) | ✅ 2026-08-22 |
+| 6 | Database (Alembic; model_registry, llm_requests, personas) | ✅ 2026-08-22 |
+| 7 | Dataset pipeline (profiles, one-command reproducible) | ✅ 2026-08-22 |
+| 8 | Persona engine | ✅ 2026-08-23 |
+| 9 | Memory (pgvector stream: relevance+recency+importance) | ✅ 2026-08-23 |
+| 10 | Interview engine | ✅ 2026-08-23 |
+| 11 | Quality/evaluation (+ routing strategy experiments) | ✅ 2026-08-22 |
+| 12 | Frontend (Foundation & Views on mocks) | ✅ 2026-08-22 |
+| 13 | Integration + demo mode | ⬜ |
+| 14 | Testing (full matrix + acceptance tests) | ⬜ |
+| 15 | Documentation | ⬜ |
 
 Detailed deliverables/exit criteria: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md). Environment/ecosystem audit: [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md).
 

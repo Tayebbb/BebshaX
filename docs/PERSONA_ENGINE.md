@@ -26,12 +26,12 @@ business (name + description)
 
 Every attribute carries `OBSERVED | INFERRED | SYNTHETIC` (`bebshax/persona/schema.py::coerce_provenance`):
 
-| Model claims | We store |
-|---|---|
-| OBSERVED + valid evidence id (one actually shown in the prompt) | OBSERVED with the citation |
-| OBSERVED + fabricated/unknown id | **INFERRED, citation stripped** |
-| INFERRED | INFERRED |
-| anything else / garbage label | SYNTHETIC |
+| Model claims                                                    | We store                        |
+| --------------------------------------------------------------- | ------------------------------- |
+| OBSERVED + valid evidence id (one actually shown in the prompt) | OBSERVED with the citation      |
+| OBSERVED + fabricated/unknown id                                | **INFERRED, citation stripped** |
+| INFERRED                                                        | INFERRED                        |
+| anything else / garbage label                                   | SYNTHETIC                       |
 
 Downgrades only — a claim can never be upgraded past what its citations prove. With zero evidence available, the prompt explicitly forbids OBSERVED. Live verification (2026-08-23): real generation produced 3 OBSERVED (verified citations) + 13 INFERRED.
 
@@ -66,14 +66,23 @@ Persistent persona memory: a pgvector stream implementing the generative-agents 
 - **Reflection:** ≥8 episodic memories → latest batch summarized via `MEMORY_SUMMARIZATION` (fast pool) into ≤3 first-person `reflection` items at importance 0.8. Best-effort: unparseable output logs and skips — reflection can never break a conversation.
 - Verified live on pgvector: 20 memories → expected top-k ordering; reflection stored and retrievable (`pytest -m integration apps/backend/tests/memory/test_pg_integration.py`).
 
+## Interviews (Phase 10)
+
+Multi-turn interviews with a **stable identity** — the persona is composed per turn, never regenerated.
+
+- **Per-turn composition** (`bebshax/interview/engine.py`): system = immutable identity card (`build_identity_card`, byte-identical every turn) + in-character constraints + business context + objective + top-k retrieved memories (Phase 9) + evidence themes; history = ALL prior turns; then the new interviewer message. If nothing fits, the router raises `ContextWindowExceeded` — identity/evidence are never truncated (R2). Memories legitimately evolve between turns; the identity never does.
+- **Routing:** `PERSONA_INTERVIEW` → conversation pool. Each exchange is written back as an episodic observation memory (importance 0.4); `MemoryService.reflect()` distills them after conversations.
+- **REST:** `POST /api/personas/{id}/conversations` · `POST /api/conversations/{id}/messages` → `{reply, turn_number, served_by}` · `GET /api/conversations/{id}` (transcript). 404/413/503 mappings as elsewhere.
+- **Live verification (2026-08-23):** 5-turn interview of a freshly generated persona served by FOUR different providers mid-conversation (kilo/llm7/ovh) — name, age, and occupation stayed consistent (`scripts/smoke_interview.py`). Observed free-tier quality artifact (a reasoning model leaking its thinking) is a Phase-11 evaluation concern, not an infrastructure failure — by design.
+
 ## REST API (`bebshax/api/personas.py`)
 
-| Endpoint | Purpose | Errors |
-|---|---|---|
-| `POST /api/businesses` | create business | — |
-| `GET /api/businesses` | list | — |
-| `POST /api/businesses/{id}/personas` | generate + store one persona | 404 unknown business · 422 generation failed (violations listed) · 413 context · 503 no route |
-| `GET /api/personas/{id}` | full profile incl. attributes, evidence, warnings | 404 |
+| Endpoint                             | Purpose                                           | Errors                                                                                        |
+| ------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `POST /api/businesses`               | create business                                   | —                                                                                             |
+| `GET /api/businesses`                | list                                              | —                                                                                             |
+| `POST /api/businesses/{id}/personas` | generate + store one persona                      | 404 unknown business · 422 generation failed (violations listed) · 413 context · 503 no route |
+| `GET /api/personas/{id}`             | full profile incl. attributes, evidence, warnings | 404                                                                                           |
 
 App wiring (`main.py` lifespan) now also connects **Sazid's `ProvenanceSink` to the PoolRouter** — every LLM request lands in `llm_requests` (fail-soft; DB issues never fail a request).
 

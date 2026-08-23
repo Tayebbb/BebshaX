@@ -23,23 +23,23 @@ Business understanding, persona generation, persona consistency, persona memory,
 
 After every phase: run tests, inspect generated files, fix errors, update this plan's Implementation log, record decisions. Do not start a phase while the previous is red.
 
-| # | Phase | Key deliverables | Exit criteria |
-|---|---|---|---|
-| 1 | Foundation | git init; skeleton (`apps/backend`, `data/`, `docs/`, `docker-compose.yml`); `BEBSHAX_*` config via pydantic-settings; health endpoint; pytest harness; `requirements.lock` | tests green; live `GET /api/health` — ✅ done |
-| 2 | LLM abstraction | `bebshax.llm`: `LLMService` interface; 16 task types (§8 of brief); failure taxonomy (retryable infra vs terminal vs quality — quality excluded from fallback); provenance record model (§14 fields); fake in-memory adapter for tests | app code compiles against the interface only; unit tests pass with fake adapter |
-| 3 | freellmpool integration | dependency review recorded (why/license/activity); `FreellmpoolAdapter` (sole importer of freellmpool); providers from env; keyless smoke test; Gate B (LiteLLM adopt/skip) written in docs/ROUTING.md | one real completion with zero keys; grep proves no freellmpool import outside adapters |
-| 4 | Ollama integration | inspect + benchmark installed `qwen3.5`; pick ≤4 GB-VRAM fast model from measured results; `OllamaAdapter`; local model profiles from detected RAM/VRAM | all-remote-disabled request served locally |
-| 5 | Routing/fallback | pools (reasoning/conversation/long_context/structured/tool/fast/fallback/local); task→pool map in config; candidate ranking (capability+quality+availability+quota+history); per-failure-type policies; pre-flight token budget; `ContextWindowExceeded` (never truncate); per-pool concurrency semaphores | chaos-sim: A(429)→B(timeout)→C ok; oversized context skips small models or fails explicitly |
-| 6 | Database | pgvector container up; SQLAlchemy async + Alembic; tables: `model_registry`, `llm_requests` (full provenance), `businesses`/`personas` skeletons | migrations apply; every LLM request writes a provenance row |
-| 7 | Dataset pipeline | profiles **minimal / development / evaluation / full**; `scripts/setup_datasets.py` (idempotent, checksummed, license-verified, streaming subsets); `data/DATASETS.md` (source URL, license, size, purpose, download+preprocessing method, required/optional per dataset) | one documented command reproduces setup; re-run = no-op; NO fine-tuning anywhere |
-| 8 | Persona engine | persona schema with OBSERVED/INFERRED/SYNTHETIC provenance; generation pipeline (spec→routing→generation→validation); deterministic consistency rules + optional LLM critic | persona generated, validated, stored |
-| 9 | Memory | pgvector memory stream (semantic profile / episodic split); retrieval = relevance+recency+importance; reflection job (generative-agents concepts re-implemented) | interview turn retrieves the right memories |
-| 10 | Interview engine | per-turn composition: identity+memory+evidence+business context+objective+constraints; PERSONA_INTERVIEW → conversation_pool; persona never rebuilt per turn | multi-turn interview keeps persona stable |
-| 11 | Quality/evaluation | persona validity/consistency/grounding scoring; routing strategies behind config (ROUND_ROBIN / LEAST_USED / QUALITY_FIRST / LATENCY_FIRST / CAPABILITY_FIRST / QUOTA_AWARE / HYBRID default); RouterArena + xRouteBench offline comparison | one-command eval report; naive-vs-intelligent routing table — ✅ done (2026-08-22) |
-| 12 | Frontend | React + Vite app: business setup, persona generation, profiles, memory view, interview/simulation, insights, routing dashboard, provider status, fallback history, provenance, eval metrics | all views wired to the API — ✅ done (foundation + mock layer, 2026-08-22) |
-| 13 | Integration | end-to-end flows; `BEBSHAX_DEMO_MODE=true` (cached known-good personas clearly labeled, live generation still available) | demo survives with network unplugged |
-| 14 | Testing | full matrix: provider unavailable / 429 / timeout / context overflow / model unavailable / fallback chain / all-fail→Ollama / structured-output failure / persona consistency / dataset loading / provenance / caching / concurrent persona generation; brief §44 acceptance tests 1–10 | entire suite green |
-| 15 | Documentation | README; docs/{ARCHITECTURE, ROUTING, FAILOVER, MODEL_REGISTRY, DATASETS, PERSONA_ENGINE, EVALUATION, SETUP, DEMO}.md; FINAL_IMPLEMENTATION_REPORT.md; one-shot setup script | fresh-machine setup works per SETUP.md |
+| #   | Phase                   | Key deliverables                                                                                                                                                                                                                                                                                           | Exit criteria                                                                               |
+| --- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 1   | Foundation              | git init; skeleton (`apps/backend`, `data/`, `docs/`, `docker-compose.yml`); `BEBSHAX_*` config via pydantic-settings; health endpoint; pytest harness; `requirements.lock`                                                                                                                                | tests green; live `GET /api/health` — ✅ done                                               |
+| 2   | LLM abstraction         | `bebshax.llm`: `LLMService` interface; 16 task types (§8 of brief); failure taxonomy (retryable infra vs terminal vs quality — quality excluded from fallback); provenance record model (§14 fields); fake in-memory adapter for tests                                                                     | app code compiles against the interface only; unit tests pass with fake adapter             |
+| 3   | freellmpool integration | dependency review recorded (why/license/activity); `FreellmpoolAdapter` (sole importer of freellmpool); providers from env; keyless smoke test; Gate B (LiteLLM adopt/skip) written in docs/ROUTING.md                                                                                                     | one real completion with zero keys; grep proves no freellmpool import outside adapters      |
+| 4   | Ollama integration      | inspect + benchmark installed `qwen3.5`; pick ≤4 GB-VRAM fast model from measured results; `OllamaAdapter`; local model profiles from detected RAM/VRAM                                                                                                                                                    | all-remote-disabled request served locally                                                  |
+| 5   | Routing/fallback        | pools (reasoning/conversation/long_context/structured/tool/fast/fallback/local); task→pool map in config; candidate ranking (capability+quality+availability+quota+history); per-failure-type policies; pre-flight token budget; `ContextWindowExceeded` (never truncate); per-pool concurrency semaphores | chaos-sim: A(429)→B(timeout)→C ok; oversized context skips small models or fails explicitly |
+| 6   | Database                | pgvector container up; SQLAlchemy async + Alembic; tables: `model_registry`, `llm_requests` (full provenance), `businesses`/`personas` skeletons                                                                                                                                                           | migrations apply; every LLM request writes a provenance row                                 |
+| 7   | Dataset pipeline        | profiles **minimal / development / evaluation / full**; `scripts/setup_datasets.py` (idempotent, checksummed, license-verified, streaming subsets); `data/DATASETS.md` (source URL, license, size, purpose, download+preprocessing method, required/optional per dataset)                                  | one documented command reproduces setup; re-run = no-op; NO fine-tuning anywhere            |
+| 8   | Persona engine          | persona schema with OBSERVED/INFERRED/SYNTHETIC provenance; generation pipeline (spec→routing→generation→validation); deterministic consistency rules + optional LLM critic                                                                                                                                | persona generated, validated, stored                                                        |
+| 9   | Memory                  | pgvector memory stream (semantic profile / episodic split); retrieval = relevance+recency+importance; reflection job (generative-agents concepts re-implemented)                                                                                                                                           | interview turn retrieves the right memories                                                 |
+| 10  | Interview engine        | per-turn composition: identity+memory+evidence+business context+objective+constraints; PERSONA_INTERVIEW → conversation_pool; persona never rebuilt per turn                                                                                                                                               | multi-turn interview keeps persona stable                                                   |
+| 11  | Quality/evaluation      | persona validity/consistency/grounding scoring; routing strategies behind config (ROUND_ROBIN / LEAST_USED / QUALITY_FIRST / LATENCY_FIRST / CAPABILITY_FIRST / QUOTA_AWARE / HYBRID default); RouterArena + xRouteBench offline comparison                                                                | one-command eval report; naive-vs-intelligent routing table — ✅ done (2026-08-22)          |
+| 12  | Frontend                | React + Vite app: business setup, persona generation, profiles, memory view, interview/simulation, insights, routing dashboard, provider status, fallback history, provenance, eval metrics                                                                                                                | all views wired to the API — ✅ done (foundation + mock layer, 2026-08-22)                  |
+| 13  | Integration             | end-to-end flows; `BEBSHAX_DEMO_MODE=true` (cached known-good personas clearly labeled, live generation still available)                                                                                                                                                                                   | demo survives with network unplugged                                                        |
+| 14  | Testing                 | full matrix: provider unavailable / 429 / timeout / context overflow / model unavailable / fallback chain / all-fail→Ollama / structured-output failure / persona consistency / dataset loading / provenance / caching / concurrent persona generation; brief §44 acceptance tests 1–10                    | entire suite green                                                                          |
+| 15  | Documentation           | README; docs/{ARCHITECTURE, ROUTING, FAILOVER, MODEL_REGISTRY, DATASETS, PERSONA_ENGINE, EVALUATION, SETUP, DEMO}.md; FINAL_IMPLEMENTATION_REPORT.md; one-shot setup script                                                                                                                                | fresh-machine setup works per SETUP.md                                                      |
 
 ## Decision gates
 
@@ -53,7 +53,15 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Phase 10 — Interview engine (2026-08-23) ✅
+- `bebshax/interview/`: `Conversations`/`ConversationTurns` ORM (migration `c1a7b8e42f55`), `InterviewEngine` — per-turn composition: immutable `build_identity_card` (test asserts byte-identical presence in every turn's system message) + constraints + business context + objective + Phase-9 memory retrieval (k=4) + evidence themes + FULL history; oversized → router's `ContextWindowExceeded`, never truncation. Each exchange written back as an episodic memory (0.4).
+- REST: start conversation / post message (`{reply, turn_number, served_by}`) / transcript; wired in lifespan (`app.state.interview_engine` consuming `memory_service`).
+- Tests: 9 new (identity card fields/determinism, composition roles+history ordering, multi-turn stability, memory write-back, 404 paths, HTTP flow). Fix applied during dev: original stability assertion compared whole system messages — wrong invariant, memories legitimately evolve; corrected to identity-card immutability. Renamed `tests/interview/test_api.py`→`test_interview_api.py` (pytest basename collision with persona's).
+- **Live 5-turn exit criterion PASSED**: fresh persona "Nabil Chowdhury" (25, Marketing Executive) interviewed across FOUR providers mid-conversation (kilo→llm7→ovh→kilo→llm7) — name/age/occupation all consistent. Finding: one free reasoning model leaked its thinking process in a reply — recorded as a Phase-11 quality-evaluation concern, correctly NOT an infra failure.
+- Suite: **135/135 unit green**; migration applied to live pg. Backend feature-complete for the demo path (personas → memory → interviews).
+
 ### Phase 9 — Memory (2026-08-23) ✅ (owner-approved takeover: Sazid → Tayeb)
+
 - `bebshax/memory/`: `MemoryItems` ORM (pgvector `Vector(384)` on postgres / JSON on sqlite; migration `b9d4e5f60a17` incl. HNSW cosine index), `scoring.py` (0.60·cosine + 0.25·recency(48 h half-life) + 0.15·importance — injectable weights), `MemoryService` (remember / retrieve with `last_accessed` touch / reflect via MEMORY_SUMMARIZATION → ≤3 reflection items @0.8 importance, best-effort parse).
 - Embeddings (`bebshax/llm/adapters/embeddings.py`, R1-compliant): **documented deviation** — freellmpool's embed failover serves varying models per call, which would mix incomparable vector spaces; default backend is therefore the deterministic `HashEmbedding` (`local-hash-384`, offline/free/stable), with `FreellmpoolEmbedding` available behind `BEBSHAX_EMBEDDING_BACKEND=freellmpool` + a REQUIRED pinned model (sync `Pool.embed` bridged via thread+lock — no async embed exists in 0.11.4). Every row carries `embedding_space`; retrieval filters to the query's space so cross-space cosine never happens.
 - Wiring: `app.state.memory_service` in the lifespan; settings gained `embedding_backend`/`embedding_model`; alembic env registers the new ORM.
@@ -61,6 +69,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - Phase 10 consumption point: `MemoryService.retrieve` for turn context, `remember` for per-turn observations, `reflect` after conversations.
 
 ### Phase 8 — Persona engine (2026-08-23) ✅
+
 - `bebshax/persona/`: schema (`GeneratedPersona` LLM contract + `PersonaProfile` + `coerce_provenance` — provenance enforced in CODE: fabricated evidence citations stripped → INFERRED, junk labels → SYNTHETIC, downgrades only), `EvidenceStore` (idf-weighted lexical retrieval over Phase-7 processed JSONL; lazy, ≤30k records/dataset, 500-char texts, zero new deps — pgvector replaces the scorer in Phase 9), table-driven `check_consistency` (age/occupation, income/luxury, location/timezone), `PersonaEngine` (single PERSONA_REFINEMENT budget for schema/consistency content failures → explicit `PersonaGenerationFailed`; optional CRITIC pass → warnings), persistence (additive ORM: persona_details/persona_attributes/persona_evidence — Sazid's models untouched; migration `a8f3c2d91e04`).
 - Research applied: PersonaHub persona-driven synthesis methodology (arXiv:2406.20094) — deterministic diversity seed per attempt, used for perspective only, never copied.
 - REST: POST/GET businesses, POST /businesses/{id}/personas, GET /personas/{id} (422 with violations / 413 / 503 mapping). `main.py` lifespan now wires DB sessionmaker + **ProvenanceSink into PoolRouter** (every LLM request persists to `llm_requests`, fail-soft) + persona engine. Additive `FakeAdapter.replies`/`requests` for scripted-JSON tests (own-track path).
@@ -79,6 +88,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 **Summary:** Built complete React + Vite single-page frontend application in `apps/frontend` with TypeScript and modern vanilla CSS design system (glassmorphism, dark theme, responsive grid, micro-animations, Plus Jakarta Sans typography). Authored frozen contract [docs/API_CONTRACT.md](API_CONTRACT.md) defining all REST endpoints and Pydantic/TypeScript data shapes. Implemented mock fixture layer in `apps/frontend/src/mocks/` and reactive client store, enabling fully interactive persona generation, memory exploration, turn-by-turn interview simulation, routing trace inspection, and evaluation benchmarking.
 
 **R8 Dependency Review (Frontend Packages in `apps/frontend/package.json`):**
+
 1. **react & react-dom ≥18.3** (MIT, Meta / React Community)
    - Why: Owner-decided UI library; declarative component tree and hook-based reactive state.
    - License: MIT.
@@ -90,6 +100,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
    - License: MIT / Apache-2.0.
 
 **Delivered Views (6/6 fully wired to mock layer and live backend fallback):**
+
 1. **Routing Dashboard:** Provenance log table with expandable per-attempt failover traces, provider health cards (pollinations, groq, mistral, ovhcloud, ollama), pool concurrency monitors, and raw JSON modal.
 2. **Business Setup:** Form to create commercial contexts + target market definition cards.
 3. **Persona Profile:** Demographic coordinates card, grouped attributes with `OBSERVED`, `INFERRED`, and `SYNTHETIC` provenance badges, evidence grounding source quotes from PersonaHub/EmpatheticDialogues, and generation modal.
@@ -98,6 +109,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 6. **Evaluation & Insights:** Quality KPIs (validity, consistency, grounding ratio) and 6-way routing strategy benchmark table answering the core research question.
 
 **Exit Criteria Verification:**
+
 - `npm run build` green (0 errors, 1.45s bundle time).
 - `npm test` green (6/6 passing in Vitest).
 - `GET /api/health` polling wired to live FastAPI backend on port 8000.
@@ -126,12 +138,14 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 **Lock strategy:** `requirements.lock` refreshed post-install.
 
 **Findings & Deviations:**
+
 - Switched PersonaHub from raw 301 GB shard to the official 200k persona release (`persona.jsonl`, 21.6 MB) with systematic stride-8 sampling across all 200k records for uniform demographic and occupational diversity.
 - Switched EmpatheticDialogues from unpinned external tar archive to `refs/convert/parquet` commit `d5b57ae707b0b9a384af8ed50c043c608d597ca7` on `facebook/empathetic_dialogues`, establishing uniform commit SHA pinning across all 10 datasets.
 - Replaced niche `Subscription_Boxes` with representative `Office_Products` category from Amazon Reviews 2023.
 - LMSYS-Chat-1M: recorded right-to-request-deletion clause, unsafe content warning, and marked optional (`is_required=False`) with fail-soft behavior.
 
 **Exit Criteria Verification:**
+
 - Tests green: 74 passed offline in ~16s; integration test `test_pinned_revisions_resolve` passes live against Hugging Face.
 - Live `--profile minimal` completed (37.99 MB raw, 9.85 MB processed; well within < 1 GB limit).
 - Re-run confirmed strictly no-op with checksum matching.
@@ -164,8 +178,9 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
    - Necessity: Phase 9 dependency; preparing now avoids migration re-runs.
 
 **Dev-only: aiosqlite ≥3.5** (MIT, async SQLite for unit tests)
-   - Why: Tests run offline on SQLite; JSONB/vector columns map gracefully to JSON/BLOB for testing.
-   - Necessity: Unit tests must not require Postgres.
+
+- Why: Tests run offline on SQLite; JSONB/vector columns map gracefully to JSON/BLOB for testing.
+- Necessity: Unit tests must not require Postgres.
 
 **Lock strategy:** requirements.lock will pin all transitive deps post-install. Refresh after any pyproject changes.
 
@@ -182,6 +197,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 ---
 
 ### Phase 5 — Routing/fallback across adapters (2026-08-22) ✅
+
 - `bebshax/llm/pools.py`: 7 pools as pydantic config data (reasoning/conversation/long_context/structured/fast/local/emergency) + task→pool map covering all 16 TaskTypes (exhaustiveness test-enforced); every pool terminates at the local adapter; `emergency` is local-first.
 - `bebshax/llm/router.py`: `PoolRouter(LLMService)` — per-pool `asyncio.Semaphore`, candidates gathered across the pool's adapters in preference order, injectable `ranker` hook (registry scores plug in at Phase 6/11), in-memory route cooldowns (60 s default, injectable clock for tests) applied on cooldown-flagged failure kinds and skipped with routing-path notes.
 - `bebshax/llm/estimator.py`: deterministic chars/3.5 + 4 tokens/message + expected output (over-estimates by design — mis-sizing can only pick a roomier model, never truncate). `service.py` refactored: shared `filter_eligible` + `attempt_candidates` machinery now backs both `SingleAdapterLLMService` (kept for tests/smokes) and `PoolRouter`.
@@ -190,13 +206,15 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - Suite: **51/51 green** (14 new). No new dependencies. Next: Phase 6 (database, Sazid) / Phase 8 unblocked once 6 lands.
 
 ### Phase 4 — Ollama integration (2026-08-22) ✅
+
 - `OllamaAdapter` (`bebshax/llm/adapters/ollama_adapter.py`): plain httpx, **native `/api/chat`** instead of the spec'd OpenAI-compat endpoint — recorded deviation: only the native API accepts `options.num_ctx`, without which Ollama silently truncates long prompts (R2 violation). Adapter pins `num_ctx` per request (generous chars/3 estimate) and raises `CONTEXT_WINDOW_EXCEEDED` rather than truncate; candidates live from `/api/tags` + `/api/show` (windows capped 16k for 4 GB VRAM), smallest-first ordering; full error mapping; 60 s candidate cache; no new dependencies.
 - `scripts/benchmark_ollama.py` (Ollama's exact ns timings; timeouts recorded as results, not crashes) + `scripts/smoke_ollama.py`.
-- **Findings (the benchmark did its job):** `qwen3.5:latest` (6.6 GB) is **unusable under real workload** — repeated HTTP 500 / `llama runner terminated` with <2 GB free RAM (VS Code 3 GB + Edge 1.7 GB + WSL 0.6 GB on a 15.7 GB machine); Ollama's own error: *"model requires more system memory (1.8 GiB) than is available (1.6 GiB)"* — even 2–2.5 GB models needed `wsl --shutdown` (owner-approved) to load. Adopted: **`llama3.2:3b` primary** (2.0 GB, 25.2 tok/s median, 59.8 warm), **`qwen3:4b` secondary** (2.5 GB, 22.4 tok/s, 217 ms warm TTFT). Results in `data/metadata/ollama_benchmark.json`.
+- **Findings (the benchmark did its job):** `qwen3.5:latest` (6.6 GB) is **unusable under real workload** — repeated HTTP 500 / `llama runner terminated` with <2 GB free RAM (VS Code 3 GB + Edge 1.7 GB + WSL 0.6 GB on a 15.7 GB machine); Ollama's own error: _"model requires more system memory (1.8 GiB) than is available (1.6 GiB)"_ — even 2–2.5 GB models needed `wsl --shutdown` (owner-approved) to load. Adopted: **`llama3.2:3b` primary** (2.0 GB, 25.2 tok/s median, 59.8 warm), **`qwen3:4b` secondary** (2.5 GB, 22.4 tok/s, 217 ms warm TTFT). Results in `data/metadata/ollama_benchmark.json`.
 - Live smoke PASSED: served by `ollama/llama3.2:3b`, provenance notes carry `num_ctx`.
 - Suite: **37/37 green** (11 new mock-transport tests). Next: Phase 5 (routing/fallback across adapters).
 
 ### Maintenance — agent automation & team parallelization (2026-08-22)
+
 - `AGENTS.md` (root): binding contract auto-loaded by Copilot/Cursor/Claude Code/Codex/Windsurf — rules digest, **Phase Execution Protocol** ("implement phase N" → gate → implement in-scope → verify → mandatory doc updates in the same commit → `Phase N:` commit), Definition of Done for any change; `CLAUDE.md`/`GEMINI.md` pointers for tools that prefer their own filename.
 - `docs/PHASES.md`: executable specs for phases 4–15 (goal, prerequisites, allowed paths, steps, exit criteria with commands, docs to update, out-of-scope) — the file that makes "Implement phase 4" a one-line instruction.
 - `docs/TEAM_ASSIGNMENTS.md`: 3 collision-free parallel tracks — Tayeb: 4→5 (`bebshax/llm/**`), Sazid: 6→7 (`bebshax/db/**`, `data/**`, datasets), Shehab: 12-foundation (`apps/frontend/**` on mocks + API contract); convergence order for 8–15; merge rules (append-only log, contract-change sign-off).
@@ -205,6 +223,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - Suite 26/26 green; ci.yml YAML-validated.
 
 ### Phase 3 — freellmpool integration (2026-08-22) ✅
+
 - Dependency `freellmpool==0.11.4` installed (review in docs/ROUTING.md per R8); lock refreshed.
 - Adapter contract upgraded: `ProviderAdapter.complete` now returns `AdapterCompletion` (concrete serving provider/model + notes) so provenance records the real route, never "auto"; `AttemptRecord.notes` added; fake adapter + service updated.
 - `FreellmpoolAdapter` (`bebshax/llm/adapters/freellmpool_adapter.py`): one virtual route `freellmpool/auto` (window 1M — freellmpool enforces real per-model limits); full error mapping onto the failure taxonomy (its `ContextWindowExceeded` subclasses `AllProvidersExhausted` — caught first); `client_status=429` → RATE_LIMITED; empty replies → MALFORMED_RESPONSE; injectable pool for tests; `aclose()` lifecycle.
@@ -214,6 +233,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - Suite: 26/26 green (9 new tests). Repo published: https://github.com/Tayebbb/BebshaX (public) + team docs PROJECT_CONTEXT.md / RULES.md / docs/TEAM_SETUP.md.
 
 ### Phase 2 — LLM abstraction (2026-08-22) ✅
+
 - `bebshax.llm` package: `TaskType` (16 task types — callers declare their task; no LLM classifies), `ChatMessage`/`LLMRequest`/`LLMResult`, `ProvenanceRecord`+`AttemptRecord` (all §14 fields: provider, model, routing path, attempt no., latency, tokens, failure/fallback reasons, final model).
 - Failure taxonomy: 13 `FailureKind`s, each with an explicit `FailurePolicy` (retry-same-once / try-next / cooldown). **Quality is deliberately NOT a failure kind** — enforced by `test_low_quality_is_not_an_infrastructure_failure`. `INTERNAL_ERROR` surfaces immediately instead of burning candidates.
 - Adapter boundary: `ProviderAdapter` + `RouteCandidate` in `bebshax/llm/adapters/` — the only package allowed to import provider SDKs. `FakeAdapter` provides scriptable failure injection for tests/chaos.
@@ -223,6 +243,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - No new dependencies.
 
 ### Phase 1 — Foundation (2026-08-22) ✅
+
 - Repo initialized; scaffold: `apps/backend` (package `bebshax`), `data/{raw,processed,metadata}`, `docker-compose.yml`, `.env.example`, `.gitignore`, `README.md`.
 - Config: pydantic-settings with `BEBSHAX_` prefix. Provider keys deliberately NOT modeled in `Settings` — freellmpool reads standard env vars directly, keeping the provider list configuration-driven (owner decision #10).
 - Dependencies added (all permissive-licensed, actively maintained, minimal set): `fastapi`, `uvicorn[standard]`, `pydantic`, `pydantic-settings`; dev-only: `pytest`, `pytest-asyncio`, `httpx`. Exact versions snapshotted in `apps/backend/requirements.lock`.
