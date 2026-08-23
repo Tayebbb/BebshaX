@@ -53,6 +53,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance — .github config repair + full sync sweep (2026-08-23)
+- Found via sync sweep: a generator run had added `.github/workflows/ecc-verify.yml` (invalid YAML — failed at parse on EVERY push) and `.github/copilot-instructions.md` conflicting with AGENTS.md (wrong commands: `pip install -r requirements.txt`), plus placeholder-riddled foundation/decisions/conventions/security files. Fix: removed the duplicate workflow (ci.yml is the verification gate); copilot-instructions now points at AGENTS.md + a verified command table; foundation/decisions point at PROJECT_CONTEXT.md (single source of truth); conventions/security instruction files filled with real project rules. Kept the sane generated python/typescript/testing instruction files.
+- Sweep results: unit 135/135 · integration 3/3 (live pg) · frontend build + 8/8 tests · alembic current == head (`c1a7b8e42f55`) · local Ollama tier serving · live 5-turn interview passed · CI green with the broken workflow gone · working tree clean, origin synced.
+
 ### Phase 10 — Interview engine (2026-08-23) ✅
 - `bebshax/interview/`: `Conversations`/`ConversationTurns` ORM (migration `c1a7b8e42f55`), `InterviewEngine` — per-turn composition: immutable `build_identity_card` (test asserts byte-identical presence in every turn's system message) + constraints + business context + objective + Phase-9 memory retrieval (k=4) + evidence themes + FULL history; oversized → router's `ContextWindowExceeded`, never truncation. Each exchange written back as an episodic memory (0.4).
 - REST: start conversation / post message (`{reply, turn_number, served_by}`) / transcript; wired in lifespan (`app.state.interview_engine` consuming `memory_service`).
