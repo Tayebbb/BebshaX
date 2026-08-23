@@ -3,10 +3,16 @@ import { api } from './services/api';
 import { HealthResponse } from './types';
 import { LandingPage } from './components/landing/LandingPage';
 import { AppModal } from './components/app/AppModal';
+import { AuthModal } from './components/auth/AuthModal';
+import { AuthProvider } from './context/AuthContext';
 
-export const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [isAppModalOpen, setIsAppModalOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authInitialView, setAuthInitialView] = useState<
+    'signin' | 'signup-options' | 'signup-email'
+  >('signin');
 
   useEffect(() => {
     const fetchHealth = async () => {
@@ -19,6 +25,18 @@ export const App: React.FC = () => {
     };
     fetchHealth();
   }, []);
+
+  const handleOpenAuth = (
+    view: 'signin' | 'signup-options' | 'signup-email' = 'signin'
+  ) => {
+    setAuthInitialView(view);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleOpenApp = () => {
+    // If not authenticated, open sign in modal or allow demo exploration
+    setIsAppModalOpen(true);
+  };
 
   return (
     <>
@@ -42,14 +60,36 @@ export const App: React.FC = () => {
       </div>
 
       {/* Main SaaS Luxury Obsidian & Champagne Gold Landing Page */}
-      <LandingPage onOpenApp={() => setIsAppModalOpen(true)} />
+      <LandingPage
+        onOpenApp={handleOpenApp}
+        onOpenAuth={handleOpenAuth}
+      />
 
       {/* Live App Platform Console Modal */}
       <AppModal
         isOpen={isAppModalOpen}
         onClose={() => setIsAppModalOpen(false)}
       />
+
+      {/* Warm Minimal Authentication Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialView={authInitialView}
+        onSuccess={() => {
+          setIsAuthModalOpen(false);
+          setIsAppModalOpen(true);
+        }}
+      />
     </>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 };
 

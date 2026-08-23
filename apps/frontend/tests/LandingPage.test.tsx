@@ -48,22 +48,22 @@ describe('BebshaX Premium Landing Page', () => {
     ).toBeInTheDocument();
   });
 
-  it('allows opening and closing the live platform console modal', () => {
+  it('allows opening and closing the authentication modal', () => {
     render(<App />);
 
-    const openButtons = screen.getAllByRole('button', { name: /Platform App/i });
-    expect(openButtons.length).toBeGreaterThan(0);
-    fireEvent.click(openButtons[0]);
+    const signInButtons = screen.getAllByRole('button', { name: /Sign In/i });
+    expect(signInButtons.length).toBeGreaterThan(0);
+    fireEvent.click(signInButtons[0]);
 
     expect(
-      screen.getByRole('heading', { name: /BebshaX Platform Console/i })
+      screen.getByRole('heading', { name: /Welcome back/i })
     ).toBeInTheDocument();
 
-    const closeBtn = screen.getByRole('button', { name: /Back to Website/i });
+    const closeBtn = screen.getByRole('button', { name: /Close/i });
     fireEvent.click(closeBtn);
 
     expect(
-      screen.queryByRole('heading', { name: /BebshaX Platform Console/i })
+      screen.queryByRole('heading', { name: /Welcome back/i })
     ).not.toBeInTheDocument();
   });
 });

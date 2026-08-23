@@ -4,7 +4,6 @@ import {
   X,
   ArrowRight,
   Activity,
-  ShieldCheck,
   ChevronDown,
   Building2,
   Briefcase,
@@ -12,17 +11,23 @@ import {
   Lightbulb,
   Zap,
   Layers,
+  LogOut,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 interface NavbarProps {
   onOpenApp?: () => void;
+  onOpenAuth?: (view?: 'signin' | 'signup-options' | 'signup-email') => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenApp }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
+  const { user, isAuthenticated, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [solutionsDropdownOpen, setSolutionsDropdownOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const userDropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -344,40 +349,176 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp }) => {
             gap: '12px',
           }}
         >
-          <button
-            onClick={onOpenApp}
-            className="secondary-btn"
-            style={{
-              padding: '8px 16px',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <ShieldCheck size={16} color="#2563EB" />
-            <span>Platform App</span>
-          </button>
+          {isAuthenticated && user ? (
+            /* Logged-In User Profile Pill */
+            <div style={{ position: 'relative' }} ref={userDropdownRef}>
+              <button
+                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 14px 6px 8px',
+                  borderRadius: '9999px',
+                  background: 'rgba(37, 99, 235, 0.08)',
+                  border: '1px solid rgba(37, 99, 235, 0.2)',
+                  cursor: 'pointer',
+                  color: '#0F172A',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                }}
+              >
+                <div
+                  style={{
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '50%',
+                    background: '#2563EB',
+                    color: '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                  }}
+                >
+                  {user.full_name ? user.full_name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <span>{user.full_name.split(' ')[0]}</span>
+                <ChevronDown size={14} color="#64748B" />
+              </button>
 
-          <button
-            onClick={() => scrollToSection('demo')}
-            className="primary-gradient-btn"
-            style={{
-              padding: '9px 20px',
-              fontSize: '0.875rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              border: 'none',
-            }}
-          >
-            <span>Get Started</span>
-            <ArrowRight size={15} color="#FFFFFF" />
-          </button>
+              {/* User Dropdown */}
+              {userDropdownOpen && (
+                <div
+                  className="glass-panel"
+                  style={{
+                    position: 'absolute',
+                    top: '42px',
+                    right: 0,
+                    width: '230px',
+                    background: 'rgba(255, 255, 255, 0.96)',
+                    backdropFilter: 'blur(20px)',
+                    borderRadius: '16px',
+                    padding: '14px',
+                    boxShadow: '0 10px 30px rgba(15, 23, 42, 0.12)',
+                    zIndex: 70,
+                    border: '1px solid rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  <div style={{ paddingBottom: '10px', borderBottom: '1px solid #F1F5F9', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0F172A' }}>
+                      {user.full_name}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {user.email}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      onOpenApp?.();
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      background: 'none',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      color: '#0F172A',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#F1F5F9')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                  >
+                    <Activity size={15} color="#2563EB" />
+                    <span>Launch Console</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      logout();
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      background: 'none',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      color: '#DC2626',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      marginTop: '4px',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                  >
+                    <LogOut size={15} color="#DC2626" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Guest Auth Buttons */
+            <>
+              <button
+                onClick={() => onOpenAuth?.('signin')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#0F172A',
+                  cursor: 'pointer',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  transition: 'background 0.2s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(15, 23, 42, 0.04)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              >
+                Sign In
+              </button>
+
+              <button
+                onClick={() => onOpenAuth?.('signup-options')}
+                style={{
+                  padding: '9px 18px',
+                  fontSize: '0.875rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  borderRadius: '10px',
+                  background: '#F6C878',
+                  color: '#2B2516',
+                  border: 'none',
+                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#E5B45F')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#F6C878')}
+              >
+                <span>Try Free</span>
+                <ArrowRight size={15} color="#2B2516" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Mobile Hamburger Toggle */}
@@ -459,42 +600,95 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp }) => {
 
           <div style={{ height: '1px', background: 'rgba(15, 23, 42, 0.08)', margin: '8px 0' }} />
 
-          <button
-            onClick={() => {
-              setMobileMenuOpen(false);
-              onOpenApp?.();
-            }}
-            className="secondary-btn"
-            style={{
-              padding: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-            }}
-          >
-            <ShieldCheck size={16} color="#2563EB" />
-            <span>Platform Dashboard</span>
-          </button>
-          <button
-            onClick={() => scrollToSection('demo')}
-            className="primary-gradient-btn"
-            style={{
-              padding: '12px',
-              fontWeight: 700,
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-            }}
-          >
-            <span>Get Started</span>
-            <ArrowRight size={16} color="#FFFFFF" />
-          </button>
+          {isAuthenticated && user ? (
+            <>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenApp?.();
+                }}
+                className="secondary-btn"
+                style={{
+                  padding: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+              >
+                <Activity size={16} color="#2563EB" />
+                <span>Launch Console</span>
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  logout();
+                }}
+                style={{
+                  padding: '12px',
+                  fontWeight: 600,
+                  border: 'none',
+                  borderRadius: '10px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  color: '#DC2626',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+              >
+                <LogOut size={16} color="#DC2626" />
+                <span>Sign Out</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenAuth?.('signin');
+                }}
+                className="secondary-btn"
+                style={{
+                  padding: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+              >
+                <span>Sign In</span>
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenAuth?.('signup-options');
+                }}
+                style={{
+                  padding: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  borderRadius: '10px',
+                  background: '#F6C878',
+                  color: '#2B2516',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
+                }}
+              >
+                <span>Try Free</span>
+                <ArrowRight size={16} color="#2B2516" />
+              </button>
+            </>
+          )}
         </div>
       )}
     </header>

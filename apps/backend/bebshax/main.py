@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from bebshax import __version__
+from bebshax.api.auth import auth_router
 from bebshax.api.evaluation import router as evaluation_router
 from bebshax.api.health import router as health_router
 from bebshax.api.interviews import router as interviews_router
@@ -77,6 +78,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health_router, prefix="/api")
+    app.include_router(auth_router)
     app.include_router(routes_router, prefix="/api")
     app.include_router(personas_router, prefix="/api")
     app.include_router(interviews_router, prefix="/api")

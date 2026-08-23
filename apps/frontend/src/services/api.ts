@@ -10,6 +10,13 @@ import {
   RoutesStatusResponse,
 } from '../types';
 import {
+  AuthResponse,
+  GoogleAuthData,
+  SignInData,
+  SignUpData,
+  User,
+} from '../types/auth';
+import {
   mockBusinesses,
   mockConversations,
   mockEvaluationMetrics,
@@ -515,5 +522,184 @@ export const api = {
       }
     }
     return mockEvaluationMetrics;
+  },
+
+  // 9. Authentication & User Management (JWT + Neon DB)
+  getAuthToken(): string | null {
+    try {
+      return localStorage.getItem('bebshax_auth_token');
+    } catch {
+      return null;
+    }
+  },
+
+  setAuthToken(token: string | null) {
+    try {
+      if (token) {
+        localStorage.setItem('bebshax_auth_token', token);
+      } else {
+        localStorage.removeItem('bebshax_auth_token');
+      }
+    } catch {
+      // ignore
+    }
+  },
+
+  async signup(data: SignUpData): Promise<AuthResponse> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/signup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          lastKnownLive = true;
+          return result;
+        }
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Signup failed');
+      } catch (err: any) {
+        if (err.message && err.message !== 'Failed to fetch') {
+          throw err;
+        }
+      }
+    }
+
+    // Mock fallback response
+    const mockUser: User = {
+      id: `usr_${Date.now()}`,
+      email: data.email,
+      full_name: data.full_name,
+      avatar_url: null,
+      is_active: true,
+      is_verified: false,
+      auth_provider: 'email',
+      created_at: new Date().toISOString(),
+    };
+    const mockRes: AuthResponse = {
+      access_token: `mock_jwt_${Date.now()}`,
+      token_type: 'bearer',
+      expires_in_days: 7,
+      user: mockUser,
+    };
+    this.setAuthToken(mockRes.access_token);
+    return mockRes;
+  },
+
+  async signin(data: SignInData): Promise<AuthResponse> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/signin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          lastKnownLive = true;
+          return result;
+        }
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Invalid email or password');
+      } catch (err: any) {
+        if (err.message && err.message !== 'Failed to fetch') {
+          throw err;
+        }
+      }
+    }
+
+    // Mock fallback response
+    const mockUser: User = {
+      id: 'usr_sarah_founder',
+      email: data.email,
+      full_name: data.email.split('@')[0] || 'BebshaX User',
+      avatar_url: null,
+      is_active: true,
+      is_verified: true,
+      auth_provider: 'email',
+      created_at: new Date().toISOString(),
+    };
+    const mockRes: AuthResponse = {
+      access_token: `mock_jwt_${Date.now()}`,
+      token_type: 'bearer',
+      expires_in_days: 7,
+      user: mockUser,
+    };
+    this.setAuthToken(mockRes.access_token);
+    return mockRes;
+  },
+
+  async googleAuth(data: GoogleAuthData): Promise<AuthResponse> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/google`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          lastKnownLive = true;
+          return result;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    const email = data.email || 'google.user@example.com';
+    const mockUser: User = {
+      id: `usr_g_${Date.now()}`,
+      email: email,
+      full_name: data.name || 'Google User',
+      avatar_url: data.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop',
+      is_active: true,
+      is_verified: true,
+      auth_provider: 'google',
+      created_at: new Date().toISOString(),
+    };
+    const mockRes: AuthResponse = {
+      access_token: `mock_jwt_g_${Date.now()}`,
+      token_type: 'bearer',
+      expires_in_days: 7,
+      user: mockUser,
+    };
+    this.setAuthToken(mockRes.access_token);
+    return mockRes;
+  },
+
+  async getMe(): Promise<User | null> {
+    const token = this.getAuthToken();
+    if (!token) return null;
+
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    return {
+      id: 'usr_sarah_founder',
+      email: 'founder@bebshax.io',
+      full_name: 'Sarah Chen',
+      avatar_url: null,
+      is_active: true,
+      is_verified: true,
+      auth_provider: 'email',
+      created_at: new Date().toISOString(),
+    };
   },
 };
