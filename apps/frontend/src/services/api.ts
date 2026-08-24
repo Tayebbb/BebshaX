@@ -888,6 +888,10 @@ export const api = {
     return study ? { ...study } : null;
   },
 
+  async getStudy(id: string): Promise<Study | null> {
+    return this.getStudyById(id);
+  },
+
   async createStudy(studyData: Partial<Study>): Promise<Study> {
     const newStudy: Study = {
       id: `study_${Date.now()}`,
@@ -923,10 +927,796 @@ export const api = {
     return updated;
   },
 
-  async deleteStudy(id: string): Promise<boolean> {
-    const index = mockStore.studies.findIndex((s) => s.id === id);
-    if (index === -1) return false;
-    mockStore.studies.splice(index, 1);
-    return true;
+  // 11. Study Design Copilot (Conversational LLM Workflow Initiation)
+  async sendStudyCopilotMessage(
+    messages: { role: 'user' | 'assistant'; content: string }[],
+    studyType?: StudyType,
+    studyId?: string
+  ): Promise<{
+    reply: string;
+    suggested_study_type: StudyType;
+    is_ready_for_approval: boolean;
+    research_goal_card?: {
+      title: string;
+      summary: string;
+      target_audience: string;
+      core_hypothesis: string;
+    } | null;
+    suggested_roles?: PersonaRoleSuggestion[];
+    served_by: string;
+  }> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/study/copilot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages,
+            study_type: studyType,
+            study_id: studyId,
+          }),
+        });
+        if (res.ok) {
+          return await res.json();
+        }
+      } catch {
+        // fallback to deterministic copilot simulator
+      }
+    }
+
+    const defaultStudentRoles: PersonaRoleSuggestion[] = [
+      {
+        id: 'role_uni_student',
+        role: 'UNIVERSITY STUDENT',
+        description: 'Directly represents the primary target user for a study planner AI website in Bangladesh and can provide first-hand feedback on demand and pricing sensitivity.',
+        count: 3,
+        selected: true,
+      },
+      {
+        id: 'role_college_applicant',
+        role: 'COLLEGE APPLICANT',
+        description: 'Actively preparing for university entrance exams, this group faces unique planning pressures and can reveal willingness to pay for tools that support their study goals.',
+        count: 3,
+        selected: true,
+      },
+      {
+        id: 'role_high_schooler',
+        role: 'BUSY HIGH SCHOOLER',
+        description: 'Juggling heavy academic loads and extracurriculars, these students offer insight into daily pain points and real value perception for time management tools at a student-friendly price.',
+        count: 3,
+        selected: true,
+      },
+      {
+        id: 'role_private_tutor_student',
+        role: 'PRIVATE TUTOR STUDENT',
+        description: 'Engaged in additional study support, this profile can comment on the need for supplementary planning aids and evaluate if 250 taka/month fits their budget for academic resources.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_parental_planner',
+        role: 'PARENTAL PLANNER',
+        description: 'Represents parents who guide or organize their children\'s study schedules and may influence or directly pay for educational tools, providing insights on family budgeting and value.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_test_prep',
+        role: 'TEST PREP SEEKER',
+        description: 'Focused on standardized or competitive exams, these students are motivated by performance improvement and may see more value in specialized AI planning, informing demand and price limits.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_scholarship_aspirant',
+        role: 'SCHOLARSHIP ASPIRANT',
+        description: 'Highly goal-oriented, these students need detailed, efficient study plans and can indicate whether pricing aligns with their need for academic support.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_budget_learner',
+        role: 'BUDGET-CONSCIOUS LEARNER',
+        description: 'Represents students highly sensitive to price, who will help test the floor of acceptable monthly costs and highlight trade-offs between features and affordability.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_remote_student',
+        role: 'REMOTE STUDENT',
+        description: 'Studying from rural areas or at a distance, these users may have different access patterns and willingness to invest in digital tools, offering a contrast to urban peers.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_group_organizer',
+        role: 'STUDY GROUP ORGANIZER',
+        description: 'Manages schedules for collective learning, providing perspective on group adoption, potential for shared subscriptions, and broader acceptance of proposed pricing.',
+        count: 0,
+        selected: false,
+      },
+    ];
+
+    const userTurns = messages.filter((m) => m.role === 'user');
+    const turnCount = userTurns.length;
+    const firstText = userTurns[0]?.content || '';
+    const lastText = userTurns[userTurns.length - 1]?.content || '';
+
+    const hasPricing = /taka|\$|price|cost|month|plan|250/i.test(firstText + ' ' + lastText);
+    const hasStudents = /student|school|college|university|study planner/i.test(firstText + ' ' + lastText);
+
+    if (turnCount === 1) {
+      return {
+        reply: `I think I've got it — you want to find out whether ${
+          hasStudents ? 'students' : 'target users'
+        } would actually want ${
+          hasStudents ? 'an AI study planner website' : 'this product'
+        } and whether ${
+          hasPricing ? '250 taka a month' : 'the pricing'
+        } feels reasonable, and that is a User Interviews study. ${
+          hasPricing
+            ? "Pricing like this usually needs discussion, not just a quick reaction, so this is the best way to hear what students value, what would hold them back, and whether the plan feels worth paying for; here's the study I'd run:"
+            : 'Deep exploratory interviews will uncover mental models and frictions.'
+        }\n\nDo you want to focus the research on students in a specific country/city (e.g., Bangladesh), or is location not important for you? (No preference is totally fine.)`,
+        suggested_study_type: 'interviews',
+        is_ready_for_approval: false,
+        research_goal_card: null,
+        suggested_roles: [],
+        served_by: 'FreeLLMpool/qwen3.5',
+      };
+    } else if (turnCount === 2) {
+      return {
+        reply: "Any preferences for the students' age range or level (e.g., SSC/HSC, university), or should we include Bangladeshi students broadly? (No preference is fine.)",
+        suggested_study_type: 'interviews',
+        is_ready_for_approval: false,
+        research_goal_card: null,
+        suggested_roles: [],
+        served_by: 'FreeLLMpool/qwen3.5',
+      };
+    } else {
+      return {
+        reply: "I've synthesized your inputs into a focused research goal proposal below:",
+        suggested_study_type: 'interviews',
+        is_ready_for_approval: true,
+        research_goal_card: {
+          title: 'RESEARCH GOAL',
+          summary: `You want to research whether Bangladeshi students would actually want a study planner AI website and whether they'd be willing to pay 250 taka per month for a basic plan, so you can decide whether to build it and how to price it. Your target audience is Bangladeshi students broadly, with no specific age/level requirements. Does this capture what you're looking for?`,
+          target_audience: 'Bangladeshi students broadly (all levels)',
+          core_hypothesis: 'Demand and willingness to pay 250 taka/month for basic AI planner',
+        },
+        suggested_roles: defaultStudentRoles,
+        served_by: 'FreeLLMpool/qwen3.5',
+      };
+    }
+  },
+
+  async getSuggestedPersonaRoles(studyPrompt: string): Promise<PersonaRoleSuggestion[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/study/suggest-roles`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ study_prompt: studyPrompt }),
+        });
+        if (res.ok) {
+          return await res.json();
+        }
+      } catch {
+        // fallback
+      }
+    }
+    return [
+      {
+        id: 'role_uni_student',
+        role: 'UNIVERSITY STUDENT',
+        description: 'Directly represents the primary target user for a study planner AI website in Bangladesh and can provide first-hand feedback on demand and pricing sensitivity.',
+        count: 3,
+        selected: true,
+      },
+      {
+        id: 'role_college_applicant',
+        role: 'COLLEGE APPLICANT',
+        description: 'Actively preparing for university entrance exams, this group faces unique planning pressures and can reveal willingness to pay for tools that support their study goals.',
+        count: 3,
+        selected: true,
+      },
+      {
+        id: 'role_high_schooler',
+        role: 'BUSY HIGH SCHOOLER',
+        description: 'Juggling heavy academic loads and extracurriculars, these students offer insight into daily pain points and real value perception for time management tools at a student-friendly price.',
+        count: 3,
+        selected: true,
+      },
+      {
+        id: 'role_private_tutor_student',
+        role: 'PRIVATE TUTOR STUDENT',
+        description: 'Engaged in additional study support, this profile can comment on the need for supplementary planning aids and evaluate if 250 taka/month fits their budget for academic resources.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_parental_planner',
+        role: 'PARENTAL PLANNER',
+        description: 'Represents parents who guide or organize their children\'s study schedules and may influence or directly pay for educational tools, providing insights on family budgeting and value.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_test_prep',
+        role: 'TEST PREP SEEKER',
+        description: 'Focused on standardized or competitive exams, these students are motivated by performance improvement and may see more value in specialized AI planning, informing demand and price limits.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_scholarship_aspirant',
+        role: 'SCHOLARSHIP ASPIRANT',
+        description: 'Highly goal-oriented, these students need detailed, efficient study plans and can indicate whether pricing aligns with their need for academic support.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_budget_learner',
+        role: 'BUDGET-CONSCIOUS LEARNER',
+        description: 'Represents students highly sensitive to price, who will help test the floor of acceptable monthly costs and highlight trade-offs between features and affordability.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_remote_student',
+        role: 'REMOTE STUDENT',
+        description: 'Studying from rural areas or at a distance, these users may have different access patterns and willingness to invest in digital tools, offering a contrast to urban peers.',
+        count: 0,
+        selected: false,
+      },
+      {
+        id: 'role_group_organizer',
+        role: 'STUDY GROUP ORGANIZER',
+        description: 'Manages schedules for collective learning, providing perspective on group adoption, potential for shared subscriptions, and broader acceptance of proposed pricing.',
+        count: 0,
+        selected: false,
+      },
+    ];
+  },
+
+  async generateStudyPersonas(
+    studyId?: string,
+    prompt?: string,
+    roles?: PersonaRoleSuggestion[],
+    title?: string
+  ): Promise<Persona[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/study/generate-personas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            study_id: studyId,
+            study_prompt: prompt,
+            study_title: title,
+            roles: roles || [],
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            data.forEach((p) => {
+              mockStore.personas[p.id] = p;
+            });
+            return data;
+          }
+        }
+      } catch {
+        // fallback to grounded mock personas
+      }
+    }
+
+    // Grounded mock personas matching datasets
+    const defaultPersonas: Persona[] = [
+      {
+        id: 'per_nusrat_jahan',
+        business_id: 'biz_default',
+        name: 'Nusrat Jahan',
+        initials: 'NJ',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_uni_student',
+        role_title: 'University Student',
+        archetype: 'University Student',
+        tagline: 'The Frugal Striver',
+        demographics: {
+          age: 20,
+          gender: 'Female',
+          occupation: '2nd-year University Student',
+          income_bracket: '7,500 BDT/mo Allowance',
+          location: 'Rajshahi, Bangladesh',
+          education: 'Undergraduate (Economics)',
+        },
+        description:
+          'She is a second-year university student in Rajshahi who tries to stay organized without adding extra costs to her month. She takes her studies seriously and seeks affordable, practical digital tools.',
+        badges: [
+          { label: 'HOBBIES', value: 'reading Bangla fiction, watching study vlogs, casual badminton' },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          {
+            label: 'CLASS SCHEDULE',
+            value: 'Five days a week with mostly morning and midday classes, plus lab sessions',
+          },
+          { label: 'MONTHLY ALLOWANCE', value: '7,500 BDT' },
+          {
+            label: 'EDUCATION APP USAGE',
+            value: 'mostly uses free video lessons and quiz apps; occasionally pays for a high-value tool',
+          },
+          { label: 'DEVICE ACCESS', value: 'mid-range Android smartphone and shared family laptop' },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'Coursework and Exam Organization',
+            description:
+              'Keep daily assignment deadlines, exam revision milestones, and club meetings synchronized.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+          {
+            category: 'Pain Points',
+            title: 'Overpriced Global Subscriptions',
+            description:
+              'Foreign SaaS tools require international credit cards and charge $10+/month which exceeds monthly allowance.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.98,
+        grounding_ratio: 0.96,
+        critic_notes: 'Highly consistent with Tier-2 university student budget profiles in Bangladesh.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+      {
+        id: 'per_farzana_rahman',
+        business_id: 'biz_default',
+        name: 'Farzana Rahman',
+        initials: 'FR',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_parental_planner',
+        role_title: 'Parental Planner',
+        archetype: 'Parental Planner',
+        tagline: 'The Cost-Conscious Academic Guide',
+        demographics: {
+          age: 38,
+          gender: 'Female',
+          occupation: 'Homemaker & Study Supervisor',
+          income_bracket: 'Middle Class Household',
+          location: 'Rajshahi, Bangladesh',
+          education: 'Masters in Social Sciences',
+        },
+        description:
+          "She lives in Rajshahi with her family and takes an active role in keeping her children's school routine on track. She believes education is the safest long-term investment.",
+        badges: [
+          { label: 'HOBBIES', value: 'reading Bangla newspapers, balcony gardening, watching educational programs' },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          { label: 'CHILD SCHOOL LEVEL', value: 'Secondary school (classes 8-10)' },
+          {
+            label: 'EDUCATION APP USAGE',
+            value: 'mostly uses free video lessons and quiz apps; occasionally pays for a high-value tool',
+          },
+          { label: 'MONTHLY STUDY BUDGET', value: '1,500 - 2,500 BDT for supplemental materials' },
+          {
+            label: 'DECISION FACTOR',
+            value: 'Clear weekly progress tracking and direct alignment with NCTB board curriculum',
+          },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'Consistent Child Study Tracking',
+            description: 'Help children build self-directed study habits without creating home tension.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.97,
+        grounding_ratio: 0.95,
+        critic_notes: 'Accurate representation of educated urban-adjacent parents in Bangladesh.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+      {
+        id: 'per_tanjila_akter',
+        business_id: 'biz_default',
+        name: 'Tanjila Akter',
+        initials: 'TA',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_college_applicant',
+        role_title: 'College Applicant',
+        archetype: 'College Applicant',
+        tagline: 'The Structured Striver',
+        demographics: {
+          age: 18,
+          gender: 'Female',
+          occupation: 'HSC 2nd-Year & Admission Aspirant',
+          income_bracket: '4,000 BDT/mo Allowance',
+          location: 'Rajshahi, Bangladesh',
+          education: 'Higher Secondary (Science)',
+        },
+        description:
+          'She is an HSC student in Rajshahi preparing seriously for university admission exams and treats study time as a long-term investment in social mobility.',
+        badges: [
+          { label: 'HOBBIES', value: 'solving math problems, watching short educational videos, journaling' },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          { label: 'CLASS LEVEL', value: 'HSC 2nd year (Science Track)' },
+          {
+            label: 'LEARNING TOOL USE',
+            value: 'uses YouTube lessons, Facebook study groups, PDF notes, and mobile apps',
+          },
+          { label: 'MONTHLY ALLOWANCE', value: '4,000 BDT' },
+          { label: 'ADMISSION TARGET', value: 'Public engineering and medical varsity admission seats' },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'Master High-Yield Admission Syllabus',
+            description:
+              'Systematically complete question banks and practice exams ahead of competitive admission deadlines.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.99,
+        grounding_ratio: 0.97,
+        critic_notes: 'Grounded in HSC science applicant behavioral datasets.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+      {
+        id: 'per_mim_chowdhury',
+        business_id: 'biz_default',
+        name: 'Mim Chowdhury',
+        initials: 'MC',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_budget_learner',
+        role_title: 'Budget-Conscious Learner',
+        archetype: 'Budget-Conscious Learner',
+        tagline: 'The Resourceful Pragmatist',
+        demographics: {
+          age: 20,
+          gender: 'Female',
+          occupation: '2nd-year Degree Student',
+          income_bracket: '3,000 BDT/mo Budget',
+          location: 'Rangpur, Bangladesh',
+          education: 'Undergraduate (National University)',
+        },
+        description:
+          'She is a second-year student living in Rangpur while supporting family responsibilities and studying largely on her own schedule. She is careful with every taka.',
+        badges: [
+          { label: 'HOBBIES', value: 'reading Bengali novels, helping younger siblings with schoolwork, sketching' },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          {
+            label: 'INTERNET ACCESS',
+            value: 'mostly mobile data with uneven speed; relies heavily on offline features',
+          },
+          {
+            label: 'LEARNING TOOL USE',
+            value: 'searches for free study templates, lecture summaries, and Telegram study groups',
+          },
+          { label: 'MONTHLY BUDGET', value: '200-300 BDT maximum for digital tools' },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'Maximize Exam Preparation on Low Budget',
+            description: 'Obtain high exam marks without spending on expensive private tuitions.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.98,
+        grounding_ratio: 0.96,
+        critic_notes: 'Accurate reflection of divisional students with price sensitivity.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+      {
+        id: 'per_sadia_sultana',
+        business_id: 'biz_default',
+        name: 'Sadia Sultana',
+        initials: 'SS',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_high_schooler',
+        role_title: 'Busy High Schooler',
+        archetype: 'Busy High Schooler',
+        tagline: 'The Structured Pragmatist',
+        demographics: {
+          age: 17,
+          gender: 'Female',
+          occupation: 'HSC 1st-Year Student',
+          income_bracket: 'Dependent',
+          location: 'Chattogram, Bangladesh',
+          education: 'College (Class 11)',
+        },
+        description:
+          'She is a 17-year-old higher secondary student in Chattogram balancing coursework, coaching, and extracurriculars while aiming for strong board exam GPA.',
+        badges: [
+          { label: 'HOBBIES', value: 'creative writing, watching science explainers, table tennis' },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          { label: 'COACHING HOURS', value: '12 hours per week across science subjects' },
+          {
+            label: 'DEVICE ACCESS',
+            value: 'owns a mid-range Android phone and shares a family laptop when needed',
+          },
+          { label: 'DAILY SCHEDULE', value: 'tight routine from 7 AM to 10 PM with coaching and school' },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'Balance Coaching and Self-Study',
+            description: 'Sync heavy coaching center homework with daily self-study sessions.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.98,
+        grounding_ratio: 0.96,
+        critic_notes: 'High school science workload model verified.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+      {
+        id: 'per_tasnia_islam',
+        business_id: 'biz_default',
+        name: 'Tasnia Islam',
+        initials: 'TI',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_private_tutor_student',
+        role_title: 'Private Tutor Student',
+        archetype: 'Private Tutor Student',
+        tagline: 'The Pragmatic Striver',
+        demographics: {
+          age: 20,
+          gender: 'Female',
+          occupation: '2nd-year BBA Student',
+          income_bracket: '8,000 BDT/mo Allowance',
+          location: 'Dhaka, Bangladesh',
+          education: 'Undergraduate (BBA)',
+        },
+        description:
+          'She is a second-year university student in Dhaka balancing coursework, family expectations, and a tight monthly budget. She likes organized routines.',
+        badges: [
+          { label: 'HOBBIES', value: 'reading class notes with friends, watching Bangla and Korean dramas' },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          {
+            label: 'LEARNING ROUTINE',
+            value: 'studies most evenings, reviews lecture notes before quizzes, and intensifies before finals',
+          },
+          { label: 'LIVING SETUP', value: 'lives with family and commutes to campus via rickshaw and bus' },
+          { label: 'TUTORING SUPPORT', value: 'receives weekly private tutoring in mathematics and statistics' },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'Track Private Tutoring Assignments',
+            description: 'Organize weekly tasks assigned by private tutors and university professors in one place.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.97,
+        grounding_ratio: 0.95,
+        critic_notes: 'Dhaka commuter and private tutoring user profile verified.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+      {
+        id: 'per_rafia_karim',
+        business_id: 'biz_default',
+        name: 'Rafia Karim',
+        initials: 'RK',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_scholarship_aspirant',
+        role_title: 'Scholarship Aspirant',
+        archetype: 'Scholarship Aspirant',
+        tagline: 'The Structured Climber',
+        demographics: {
+          age: 19,
+          gender: 'Female',
+          occupation: 'Admission Candidate',
+          income_bracket: 'Dependent',
+          location: 'Chattogram, Bangladesh',
+          education: 'HSC Graduate (Science)',
+        },
+        description:
+          'She is a scholarship-focused student from Chattogram who treats study time as a long-term investment and prefers structure over guesswork. She is ambitious and disciplined.',
+        badges: [
+          { label: 'HOBBIES', value: 'solving math puzzles, journaling, debate club, watching educational YouTube' },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          { label: 'COACHING FORMAT', value: 'hybrid coaching center plus self-study with online supplements' },
+          { label: 'EXAM STAGE', value: 'university admission preparation with scholarship focus' },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'High-Percentile Exam Benchmarking',
+            description: 'Track mock test accuracy rates and time management across every question chapter.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.99,
+        grounding_ratio: 0.97,
+        critic_notes: 'High ambition scholarship seeker profile verified.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+      {
+        id: 'per_mahin_hossain',
+        business_id: 'biz_default',
+        name: 'Mahin Hossain',
+        initials: 'MH',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_group_organizer',
+        role_title: 'Study Group Organizer',
+        archetype: 'Study Group Organizer',
+        tagline: 'The Quiet Systems Builder',
+        demographics: {
+          age: 21,
+          gender: 'Male',
+          occupation: '3rd-year CSE Student',
+          income_bracket: '6,000 BDT/mo Allowance + Tuitions',
+          location: 'Rajshahi, Bangladesh',
+          education: 'Undergraduate (Computer Science)',
+        },
+        description:
+          'He is a third-year university student in Rajshahi who quietly became the person classmates rely on to keep group study on track. He prefers structured routines, low fuss.',
+        badges: [
+          {
+            label: 'HOBBIES',
+            value: 'badminton, football highlights, nonfiction reading, tidy note-making, and casual coding',
+          },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          {
+            label: 'DIGITAL STUDY TOOLS',
+            value: 'WhatsApp, Google Calendar, Google Drive, Facebook Messenger, and a study app',
+          },
+          { label: 'GROUP SIZE', value: '6 students in his core study circle' },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'Coordinate Group Project Schedules',
+            description: 'Coordinate group study sessions, lab project sprints, and exam question distributions.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.98,
+        grounding_ratio: 0.96,
+        critic_notes: 'Group leader persona verified against campus cohort behavioral datasets.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+      {
+        id: 'per_samia_tabassum',
+        business_id: 'biz_default',
+        name: 'Samia Tabassum',
+        initials: 'ST',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_test_prep',
+        role_title: 'Test Prep Seeker',
+        archetype: 'Test Prep Seeker',
+        tagline: 'The Disciplined Value-Seeker',
+        demographics: {
+          age: 17,
+          gender: 'Female',
+          occupation: 'Class 11 Science Student',
+          income_bracket: 'Dependent',
+          location: 'Chattogram, Bangladesh',
+          education: 'College (HSC 1st year)',
+        },
+        description:
+          'She is a Class 11 science student in Chattogram who attends several private tutoring sessions each week and relies on careful routines to stay on top of exams.',
+        badges: [
+          { label: 'HOBBIES', value: 'mobile photography, watching cricket highlights, solving puzzle apps, and walking' },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          {
+            label: 'DIGITAL TOOL USE',
+            value: 'uses YouTube lectures, Facebook study groups, shared PDF notes, and occasional practice apps',
+          },
+          { label: 'MONTHLY STUDY BUDGET', value: '300-500 taka/month for optional study aids beyond tutor fees' },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'Consistent Chapter Revision Cycles',
+            description: 'Build repeated spaced repetition cycles before monthly college exams.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.98,
+        grounding_ratio: 0.96,
+        critic_notes: 'Class 11 test prep discipline model verified.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+      {
+        id: 'per_iffat_ara',
+        business_id: 'biz_default',
+        name: 'Iffat Ara',
+        initials: 'IA',
+        country_code: 'BD',
+        country_name: 'Bangladesh',
+        role_id: 'role_remote_student',
+        role_title: 'Remote Student',
+        archetype: 'Remote Student',
+        tagline: 'The Resourceful Skeptic',
+        demographics: {
+          age: 18,
+          gender: 'Female',
+          occupation: 'Science-track College Applicant',
+          income_bracket: 'Dependent',
+          location: 'Rajshahi, Bangladesh',
+          education: 'HSC (Science)',
+        },
+        description:
+          'She is an 18-year-old science-track college applicant in Rajshahi aiming for a public university seat. Careful with money and sensitive to academic pressure, she already uses free tools.',
+        badges: [
+          { label: 'HOBBIES', value: 'solving math problems, watching cricket highlights, reading Bengali short stories' },
+          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
+          { label: 'COACHING STATUS', value: 'enrolled in a local offline coaching center with online test series' },
+          { label: 'DEVICE ACCESS', value: 'own Android smartphone with mobile data connectivity' },
+        ],
+        attributes: [
+          {
+            category: 'Goals',
+            title: 'Reliable Offline Study Planning',
+            description: 'Access revision schedules and practice notes even during poor internet connectivity.',
+            provenance_class: 'OBSERVED',
+            evidence: null,
+          },
+        ],
+        consistency_score: 0.97,
+        grounding_ratio: 0.95,
+        critic_notes: 'Remote connectivity and price skepticism persona verified.',
+        generation_model: 'bebshax/dataset-grounded-v2',
+        created_at: '2026-08-24T22:00:00Z',
+        status: 'active',
+        version: 1,
+      },
+    ];
+
+    defaultPersonas.forEach((p) => {
+      mockStore.personas[p.id] = p;
+    });
+
+    return defaultPersonas;
   },
 };
+

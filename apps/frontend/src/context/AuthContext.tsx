@@ -26,12 +26,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const initAuth = async () => {
+      // Check query params for token if redirected from OAuth callback
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlToken = urlParams.get('token') || urlParams.get('access_token');
+        if (urlToken) {
+          api.setAuthToken(urlToken);
+        }
+      }
       const storedToken = api.getAuthToken();
       try {
         const profile = await api.getMe();
         if (profile) {
           setUser(profile);
-          if (storedToken) setToken(storedToken);
+          const activeToken = api.getAuthToken();
+          if (activeToken) setToken(activeToken);
         } else if (!storedToken) {
           setUser(null);
           setToken(null);

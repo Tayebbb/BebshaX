@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
 import { OtpInput } from './OtpInput';
+import { BebshaXLogo } from '../common/BebshaXLogo';
 
 interface AuthPageProps {
   initialMode?: 'signin' | 'signup' | 'signup-email' | 'forgot-password' | 'verify-otp' | 'reset-password-otp';
@@ -326,43 +327,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
       </button>
 
       {/* Brand Header */}
-      <div
-        onClick={() => navigate('/')}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          marginBottom: '24px',
-          cursor: 'pointer',
-        }}
-      >
-        {/* Geometric Star Logo Node */}
-        <div
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#080909',
-            fontWeight: 800,
-            fontSize: '1.1rem',
-          }}
-        >
-          B
-        </div>
-        <span
-          style={{
-            fontSize: '1.85rem',
-            fontWeight: 700,
-            letterSpacing: '-0.03em',
-            color: '#FFFFFF',
-          }}
-        >
-          BebshaX
-        </span>
+      <div style={{ marginBottom: '24px' }}>
+        <BebshaXLogo
+          size={36}
+          textSize="1.85rem"
+          onClick={() => navigate('/')}
+        />
       </div>
 
       {/* Centered Floating White Card */}

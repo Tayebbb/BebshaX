@@ -10,6 +10,7 @@ import { api } from '../src/services/api';
 describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
   beforeEach(() => {
     api.setMockMode(true);
+    window.history.pushState({}, '', '/create-study');
   });
 
   const renderDashboard = () => {
@@ -97,8 +98,31 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Design your user interviews')).toBeInTheDocument();
-      expect(screen.getByText('Demand Validation')).toBeInTheDocument();
-      expect(screen.getByText('Messaging & Positioning')).toBeInTheDocument();
+      expect(screen.getByText('Test pricing sensitivity')).toBeInTheDocument();
+    });
+  });
+
+  it('renders research workflow directly when deep-linking to /research/tj6FY3cXDO8oxpuxeAMb/step1', async () => {
+    window.history.pushState({}, '', '/research/tj6FY3cXDO8oxpuxeAMb/step1');
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Design your user interviews')).toBeInTheDocument();
+      expect(screen.getByText('Context')).toBeInTheDocument();
+      expect(screen.getByText('Personas')).toBeInTheDocument();
+      expect(screen.getByText('Script')).toBeInTheDocument();
+      expect(screen.getByText('Interviews')).toBeInTheDocument();
+      expect(screen.getByText('Report')).toBeInTheDocument();
+    });
+  });
+
+  it('renders persona library directly when deep-linking to /persona-library', async () => {
+    window.history.pushState({}, '', '/persona-library');
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /^Persona Library$/i })).toBeInTheDocument();
+      expect(screen.getByText('Sarah Chen')).toBeInTheDocument();
     });
   });
 });

@@ -122,8 +122,9 @@ export const neonAuth = {
     };
   },
 
-  async signInWithGoogle(): Promise<void> {
+  async signInWithGoogle(callbackURL?: string): Promise<void> {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
+    const targetCallbackUrl = callbackURL || `${origin}/app`;
     const res = await fetch(`${NEON_AUTH_URL}/sign-in/social`, {
       method: 'POST',
       headers: {
@@ -133,7 +134,7 @@ export const neonAuth = {
       credentials: 'include',
       body: JSON.stringify({
         provider: 'google',
-        callbackURL: origin,
+        callbackURL: targetCallbackUrl,
       }),
     });
 

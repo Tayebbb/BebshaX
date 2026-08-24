@@ -23,6 +23,7 @@ import { StudyWorkflowView } from './views/StudyWorkflowView';
 import { OrganisationView } from './views/OrganisationView';
 import { StudyType, Study } from '../../types';
 import { api } from '../../services/api';
+import { BebshaXLogo } from '../common/BebshaXLogo';
 
 export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'organisation' | 'study-workflow';
 
@@ -30,26 +31,65 @@ interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
 }
 
+const parseDashboardPath = (path: string): {
+  tab: DashboardTab;
+  studyId?: string;
+  step?: number;
+} => {
+  if (path.startsWith('/persona-library') || path.startsWith('/personas')) {
+    return { tab: 'personas' };
+  }
+  if (path.startsWith('/organisation') || path.startsWith('/organization') || path.startsWith('/settings')) {
+    return { tab: 'organisation' };
+  }
+  if (path.startsWith('/dashboard')) {
+    return { tab: 'dashboard' };
+  }
+  if (path.startsWith('/create-study') || path.startsWith('/new-study') || path === '/app') {
+    return { tab: 'new-study' };
+  }
+  if (path.startsWith('/research') || path.startsWith('/study')) {
+    const parts = path.split('/').filter(Boolean);
+    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    let step = 1;
+    if (parts[2] && parts[2].startsWith('step')) {
+      const parsed = parseInt(parts[2].replace('step', ''), 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= 5) {
+        step = parsed;
+      }
+    }
+    return { tab: 'study-workflow', studyId, step };
+  }
+  return { tab: 'new-study' };
+};
+
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingPage }) => {
   const { user, logout } = useAuth();
   const { currentPath, navigate } = useNavigation();
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
-    if (currentPath.includes('/personas')) return 'personas';
-    if (currentPath.includes('/organisation')) return 'organisation';
-    if (currentPath.includes('/new-study')) return 'new-study';
-    if (currentPath.includes('/study')) return 'study-workflow';
-    return 'new-study';
-  });
+  const initialParsed = parseDashboardPath(currentPath);
+  const [activeTab, setActiveTab] = useState<DashboardTab>(initialParsed.tab);
+  const [activeStudyId, setActiveStudyId] = useState<string | undefined>(initialParsed.studyId);
+  const [activeStep, setActiveStep] = useState<number>(initialParsed.step || 1);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isRecentStudiesOpen, setIsRecentStudiesOpen] = useState(true);
   const [recentStudies, setRecentStudies] = useState<Study[]>([]);
-  const [activeStudyId, setActiveStudyId] = useState<string | undefined>(undefined);
   const [initialWorkflowType, setInitialWorkflowType] = useState<StudyType>('interviews');
   const [initialWorkflowPrompt, setInitialWorkflowPrompt] = useState<string | undefined>(undefined);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showAssistantModal, setShowAssistantModal] = useState(false);
+
+  useEffect(() => {
+    const parsed = parseDashboardPath(currentPath);
+    setActiveTab(parsed.tab);
+    if (parsed.studyId) {
+      setActiveStudyId(parsed.studyId);
+    }
+    if (parsed.step) {
+      setActiveStep(parsed.step);
+    }
+  }, [currentPath]);
 
   useEffect(() => {
     const loadRecent = async () => {
@@ -73,16 +113,32 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
   const displayName = user?.full_name?.split(' ')[0]?.toUpperCase() || 'SAIDUL';
 
+  const handleTabClick = (tab: DashboardTab) => {
+    if (tab === 'new-study') navigate('/create-study');
+    else if (tab === 'dashboard') navigate('/dashboard');
+    else if (tab === 'personas') navigate('/persona-library');
+    else if (tab === 'organisation') navigate('/organisation');
+    else if (tab === 'study-workflow') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
+  };
+
   const handleStartStudy = (type: StudyType, prompt?: string) => {
     setInitialWorkflowType(type);
     setInitialWorkflowPrompt(prompt);
-    setActiveStudyId(undefined);
-    setActiveTab('study-workflow');
+    const newId = 'tj6FY3cXDO8oxpuxeAMb';
+    setActiveStudyId(newId);
+    setActiveStep(1);
+    navigate(`/research/${newId}/step1`);
   };
 
   const handleOpenStudy = (studyId: string) => {
     setActiveStudyId(studyId);
-    setActiveTab('study-workflow');
+    setActiveStep(1);
+    navigate(`/research/${studyId}/step1`);
+  };
+
+  const handleStepChange = (step: number) => {
+    setActiveStep(step);
+    navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step${step}`);
   };
 
   const navItems = [
@@ -150,43 +206,18 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               padding: isSidebarCollapsed ? '0' : '0 4px',
             }}
           >
-            {!isSidebarCollapsed && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  cursor: 'pointer',
-                }}
-                onClick={() => setActiveTab('new-study')}
-              >
-                <div
-                  style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '6px',
-                    background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#080909',
-                    fontWeight: 800,
-                    fontSize: '0.85rem',
-                  }}
-                >
-                  B
-                </div>
-                <span
-                  style={{
-                    fontSize: '1.15rem',
-                    fontWeight: 700,
-                    letterSpacing: '-0.02em',
-                    color: '#FFFFFF',
-                  }}
-                >
-                  BebshaX
-                </span>
-              </div>
+            {!isSidebarCollapsed ? (
+              <BebshaXLogo
+                size={26}
+                textSize="1.15rem"
+                onClick={() => navigate('/create-study')}
+              />
+            ) : (
+              <BebshaXLogo
+                size={26}
+                showText={false}
+                onClick={() => navigate('/create-study')}
+              />
             )}
 
             {/* Collapse toggle icon */}
@@ -218,12 +249,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    if (item.id === 'study-workflow') {
-                      setActiveStudyId(undefined);
-                    }
-                  }}
+                  onClick={() => handleTabClick(item.id)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -556,7 +582,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
         {activeTab === 'dashboard' && (
           <StudiesDashboardView
-            onCreateStudy={() => setActiveTab('new-study')}
+            onCreateStudy={() => navigate('/create-study')}
             onOpenStudy={handleOpenStudy}
           />
         )}
@@ -564,8 +590,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         {activeTab === 'personas' && (
           <PersonaLibraryView
             onStartInterviewWithPersona={(pId) => {
-              setActiveStudyId(undefined);
-              setActiveTab('study-workflow');
+              handleStartStudy('interviews', `Interview with persona ${pId}`);
             }}
           />
         )}
@@ -575,9 +600,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         {activeTab === 'study-workflow' && (
           <StudyWorkflowView
             studyId={activeStudyId}
+            initialStep={activeStep}
             initialType={initialWorkflowType}
             initialPrompt={initialWorkflowPrompt}
-            onExit={() => setActiveTab('dashboard')}
+            onStepChange={handleStepChange}
+            onExit={() => navigate('/dashboard')}
           />
         )}
       </main>

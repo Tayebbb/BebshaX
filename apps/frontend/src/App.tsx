@@ -68,9 +68,15 @@ const AppContent: React.FC = () => {
   const isAppRoute =
     currentPath.startsWith('/app') ||
     currentPath.startsWith('/dashboard') ||
+    currentPath.startsWith('/create-study') ||
     currentPath.startsWith('/new-study') ||
+    currentPath.startsWith('/persona-library') ||
     currentPath.startsWith('/personas') ||
-    currentPath.startsWith('/organisation');
+    currentPath.startsWith('/research') ||
+    currentPath.startsWith('/study') ||
+    currentPath.startsWith('/organisation') ||
+    currentPath.startsWith('/organization') ||
+    currentPath.startsWith('/settings');
 
   if (isAppRoute) {
     return (

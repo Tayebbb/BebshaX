@@ -134,13 +134,17 @@ export const Footer: React.FC = () => {
             }}
           >
             <svg width="100" height="100" viewBox="0 0 100 100" fill="none" stroke="#FFFFFF" strokeWidth="2.5">
-              <polygon points="50,15 85,80 15,80" fill="none" />
-              <line x1="50" y1="15" x2="50" y2="80" />
-              <line x1="15" y1="80" x2="85" y2="80" />
-              <circle cx="50" cy="15" r="4" fill="#FFFFFF" />
-              <circle cx="85" cy="80" r="4" fill="#FFFFFF" />
-              <circle cx="15" cy="80" r="4" fill="#FFFFFF" />
-              <circle cx="50" cy="55" r="4" fill="#FFFFFF" />
+              <polygon points="50,10 85,30 85,70 50,90 15,70 15,30" fill="none" />
+              <line x1="50" y1="10" x2="50" y2="50" />
+              <line x1="85" y1="70" x2="50" y2="50" />
+              <line x1="15" y1="70" x2="50" y2="50" />
+              <circle cx="50" cy="10" r="4" fill="#FFFFFF" />
+              <circle cx="85" cy="30" r="4" fill="#FFFFFF" />
+              <circle cx="85" cy="70" r="4" fill="#FFFFFF" />
+              <circle cx="50" cy="90" r="4" fill="#FFFFFF" />
+              <circle cx="15" cy="70" r="4" fill="#FFFFFF" />
+              <circle cx="15" cy="30" r="4" fill="#FFFFFF" />
+              <circle cx="50" cy="50" r="5" fill="#FFFFFF" />
             </svg>
           </div>
 

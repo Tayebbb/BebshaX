@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { OtpInput } from './OtpInput';
+import { BebshaXLogo } from '../common/BebshaXLogo';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -264,36 +265,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '10px',
             marginBottom: '20px',
           }}
         >
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#080909',
-              fontWeight: 800,
-              fontSize: '1.1rem',
-            }}
-          >
-            B
-          </div>
-          <span
-            style={{
-              fontSize: '1.75rem',
-              fontWeight: 700,
-              letterSpacing: '-0.03em',
-              color: '#FFFFFF',
-            }}
-          >
-            BebshaX
-          </span>
+          <BebshaXLogo size={34} textSize="1.75rem" />
         </div>
 
         {/* Floating Card */}

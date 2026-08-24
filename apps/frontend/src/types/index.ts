@@ -125,6 +125,11 @@ export interface PersonaDemographics {
   education: string;
 }
 
+export interface PersonaBadge {
+  label: string;
+  value: string;
+}
+
 export interface Persona {
   id: string;
   business_id: string;
@@ -140,6 +145,13 @@ export interface Persona {
   critic_notes: string;
   generation_model: string;
   created_at: string;
+  initials?: string;
+  country_code?: string;
+  country_name?: string;
+  role_id?: string;
+  role_title?: string;
+  description?: string;
+  badges?: PersonaBadge[];
 }
 
 export interface MemoryItem {

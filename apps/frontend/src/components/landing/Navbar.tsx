@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
+import { BebshaXLogo } from '../common/BebshaXLogo';
 
 interface NavbarProps {
   onOpenApp?: () => void;
@@ -102,45 +103,27 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
+            gap: '8px',
             textDecoration: 'none',
             color: '#FFFFFF',
             border: 'none',
           }}
         >
-          <div
+          <BebshaXLogo size={28} textSize="1.22rem" />
+          <span
             style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '8px',
-              background: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              fontSize: '0.62rem',
+              fontWeight: 700,
+              padding: '2px 6px',
+              borderRadius: '9999px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              color: '#A1A1AA',
               border: 'none',
+              letterSpacing: '0.05em',
             }}
           >
-            <Activity size={17} color="#000000" strokeWidth={2.5} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#FFFFFF' }}>
-              Bebsha<span style={{ color: '#F6C878' }}>X</span>
-            </span>
-            <span
-              style={{
-                fontSize: '0.62rem',
-                fontWeight: 700,
-                padding: '2px 6px',
-                borderRadius: '9999px',
-                background: 'rgba(255, 255, 255, 0.08)',
-                color: '#A1A1AA',
-                border: 'none',
-                letterSpacing: '0.05em',
-              }}
-            >
-              PRO
-            </span>
-          </div>
+            PRO
+          </span>
         </a>
 
         {/* Center Minimal Navigation */}

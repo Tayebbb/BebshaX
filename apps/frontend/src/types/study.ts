@@ -61,3 +61,11 @@ export interface Study {
   interviews?: StudyInterview[];
   report?: StudyReport;
 }
+
+export interface PersonaRoleSuggestion {
+  id: string;
+  role: string;
+  description: string;
+  count: number;
+  selected: boolean;
+}
