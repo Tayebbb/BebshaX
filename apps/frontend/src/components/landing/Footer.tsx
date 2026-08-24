@@ -1,202 +1,210 @@
 import React from 'react';
-import { Activity, Globe, MessageSquare, Share2 } from 'lucide-react';
 
 export const Footer: React.FC = () => {
+  const columns = [
+    {
+      title: 'COMPANY',
+      links: [
+        { label: 'Home', href: '#' },
+        { label: 'Our Methodology', href: '#how-it-works' },
+        { label: 'Pricing', href: '#demo' },
+      ],
+    },
+    {
+      title: 'PRODUCT',
+      links: [
+        { label: 'Executive Cockpit', href: '#product' },
+        { label: 'Diagnostic Engine', href: '#product' },
+        { label: 'Action Playbooks', href: '#product' },
+      ],
+    },
+    {
+      title: 'USE CASES',
+      links: [
+        { label: 'Discover', href: '#solutions' },
+        { label: 'Test', href: '#solutions' },
+        { label: 'Validate', href: '#solutions' },
+      ],
+    },
+    {
+      title: 'SOLUTION',
+      links: [
+        { label: 'Agencies', href: '#solutions' },
+        { label: 'SaaS Teams', href: '#solutions' },
+        { label: 'Growth Marketers', href: '#solutions' },
+        { label: 'Consultants & Individuals', href: '#solutions' },
+        { label: 'Healthcare', href: '#solutions' },
+        { label: 'Ecommerce', href: '#solutions' },
+        { label: 'Consumer Goods', href: '#solutions' },
+        { label: 'Concept Testing', href: '#solutions' },
+      ],
+    },
+    {
+      title: 'COMPARE',
+      links: [
+        { label: 'vs Traditional BI', href: '#comparison' },
+        { label: 'vs Static Dashboards', href: '#comparison' },
+        { label: 'vs Spreadsheets', href: '#comparison' },
+        { label: 'vs Manual Reports', href: '#comparison' },
+        { label: 'vs Blackbox AI', href: '#comparison' },
+      ],
+    },
+    {
+      title: 'RESEARCH',
+      links: [
+        { label: 'Download Pre-print', href: '#' },
+        { label: 'Validation Data', href: '#intelligence' },
+        { label: 'Evidence Protocol', href: '#intelligence' },
+      ],
+    },
+    {
+      title: 'LEGAL',
+      links: [
+        { label: 'Terms', href: '#' },
+        { label: 'Privacy', href: '#' },
+      ],
+    },
+    {
+      title: 'CONNECT',
+      links: [
+        { label: 'X (Twitter)', href: 'https://twitter.com' },
+        { label: 'LinkedIn', href: 'https://linkedin.com' },
+        { label: 'Book a Demo', href: '#demo' },
+      ],
+    },
+  ];
+
   return (
     <footer
-      className="glass-panel"
       style={{
-        margin: '0 16px 24px 16px',
-        borderRadius: '28px',
-        background: 'rgba(255, 255, 255, 0.72)',
-        backdropFilter: 'blur(28px)',
-        WebkitBackdropFilter: 'blur(28px)',
-        border: '1px solid rgba(255, 255, 255, 0.85)',
-        padding: '60px 40px 32px 40px',
+        background: '#000000',
+        padding: '90px 0 60px 0',
         position: 'relative',
         zIndex: 1,
-        boxShadow: 'var(--shadow-md)',
         overflow: 'hidden',
+        border: 'none',
+        outline: 'none',
       }}
     >
       <div
         style={{
-          maxWidth: '1200px',
+          maxWidth: '1280px',
           margin: '0 auto',
-          position: 'relative',
+          padding: '0 32px',
         }}
       >
-        {/* Main Footer Navigation Grid */}
+        {/* Multi-Column Sitemap Grid Matching Image */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '40px',
-            marginBottom: '32px',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: '36px 20px',
+            marginBottom: '100px',
           }}
         >
-          {/* Brand Column */}
-          <div style={{ gridColumn: 'span 1' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          {columns.map((col, idx) => (
+            <div key={idx}>
               <div
                 style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '10px',
-                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  color: '#FFFFFF',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  marginBottom: '18px',
                 }}
               >
-                <Activity size={18} color="#FFFFFF" strokeWidth={2.5} />
+                {col.title}
               </div>
-              <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.03em' }}>
-                Bebsha<span style={{ color: '#2563EB' }}>X</span>
-              </span>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {col.links.map((link, i) => (
+                  <li key={i}>
+                    <a
+                      href={link.href}
+                      style={{
+                        fontSize: '0.8rem',
+                        color: '#71717A',
+                        textDecoration: 'none',
+                        transition: 'color 0.2s ease',
+                        lineHeight: 1.4,
+                        display: 'inline-block',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = '#FFFFFF')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = '#71717A')}
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </div>
-
-            <p style={{ fontSize: '0.85rem', color: '#475569', lineHeight: '1.6', marginBottom: '20px' }}>
-              Continuous decision intelligence and evidence-grounded operational telemetry for high-velocity teams.
-            </p>
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <a
-                href="#"
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  background: 'rgba(37, 99, 235, 0.08)',
-                  border: '1px solid rgba(37, 99, 235, 0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#2563EB',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <Globe size={16} />
-              </a>
-              <a
-                href="#"
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  background: 'rgba(37, 99, 235, 0.08)',
-                  border: '1px solid rgba(37, 99, 235, 0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#2563EB',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <MessageSquare size={16} />
-              </a>
-              <a
-                href="#"
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  background: 'rgba(37, 99, 235, 0.08)',
-                  border: '1px solid rgba(37, 99, 235, 0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#2563EB',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <Share2 size={16} />
-              </a>
-            </div>
-          </div>
-
-          {/* Nav Column 1 */}
-          <div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0F172A', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Product
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.88rem' }}>
-              <a href="#product" style={{ color: '#475569', textDecoration: 'none' }}>Executive Cockpit</a>
-              <a href="#product" style={{ color: '#475569', textDecoration: 'none' }}>Diagnostic Engine</a>
-              <a href="#product" style={{ color: '#475569', textDecoration: 'none' }}>Action Playbooks</a>
-              <a href="#product" style={{ color: '#475569', textDecoration: 'none' }}>Predictive Forecaster</a>
-              <a href="#demo" style={{ color: '#475569', textDecoration: 'none' }}>ROI Simulator</a>
-            </div>
-          </div>
-
-          {/* Nav Column 2 */}
-          <div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0F172A', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Solutions
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.88rem' }}>
-              <a href="#solutions" style={{ color: '#475569', textDecoration: 'none' }}>Founders & CEOs</a>
-              <a href="#solutions" style={{ color: '#475569', textDecoration: 'none' }}>Operations Leads</a>
-              <a href="#solutions" style={{ color: '#475569', textDecoration: 'none' }}>Growth & Marketing</a>
-              <a href="#solutions" style={{ color: '#475569', textDecoration: 'none' }}>Finance & Strategy</a>
-            </div>
-          </div>
-
-          {/* Nav Column 3 */}
-          <div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0F172A', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Resources & Legal
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.88rem' }}>
-              <a href="#how-it-works" style={{ color: '#475569', textDecoration: 'none' }}>How It Works</a>
-              <a href="#faq" style={{ color: '#475569', textDecoration: 'none' }}>Documentation & FAQ</a>
-              <a href="#" style={{ color: '#475569', textDecoration: 'none' }}>Privacy Policy</a>
-              <a href="#" style={{ color: '#475569', textDecoration: 'none' }}>Terms of Service</a>
-              <a href="#" style={{ color: '#475569', textDecoration: 'none' }}>Security & Compliance</a>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Large Decorative Brand Signature Wordmark */}
+        {/* Large Fancy Translucent BebshaX Logo Watermark Matching Image */}
         <div
           style={{
-            textAlign: 'center',
-            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '24px',
             userSelect: 'none',
             pointerEvents: 'none',
-            padding: '32px 0 20px 0',
-            position: 'relative',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
+            paddingTop: '20px',
           }}
         >
-          <span className="footer-wordmark">
-            Bebsha<span style={{ color: '#2563EB', WebkitTextFillColor: '#2563EB' }}>X</span>
-          </span>
-        </div>
-
-        {/* Bottom Bar */}
-        <div
-          style={{
-            borderTop: '1px solid rgba(15, 23, 42, 0.08)',
-            paddingTop: '24px',
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            fontSize: '0.82rem',
-            color: '#64748B',
-          }}
-        >
-          <div>
-            © {new Date().getFullYear()} BebshaX Intelligence Inc. All rights reserved.
+          {/* Subtle Geometric Wireframe Emblem */}
+          <div
+            style={{
+              opacity: 0.12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <svg width="100" height="100" viewBox="0 0 100 100" fill="none" stroke="#FFFFFF" strokeWidth="2.5">
+              <polygon points="50,15 85,80 15,80" fill="none" />
+              <line x1="50" y1="15" x2="50" y2="80" />
+              <line x1="15" y1="80" x2="85" y2="80" />
+              <circle cx="50" cy="15" r="4" fill="#FFFFFF" />
+              <circle cx="85" cy="80" r="4" fill="#FFFFFF" />
+              <circle cx="15" cy="80" r="4" fill="#FFFFFF" />
+              <circle cx="50" cy="55" r="4" fill="#FFFFFF" />
+            </svg>
           </div>
 
+          {/* Big Stylized Wordmark */}
+          <div
+            style={{
+              fontSize: 'clamp(3.8rem, 11vw, 9.5rem)',
+              fontWeight: 800,
+              letterSpacing: '-0.04em',
+              color: 'rgba(255, 255, 255, 0.07)',
+              lineHeight: 1,
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            Bebsha<span style={{ color: 'rgba(246, 200, 120, 0.12)' }}>X</span>
+          </div>
+        </div>
+
+        {/* Bottom Micro Row */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: '30px',
+            paddingTop: '20px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.04)',
+            fontSize: '0.75rem',
+            color: '#52525B',
+          }}
+        >
+          <div>© {new Date().getFullYear()} BebshaX Inc. All rights reserved.</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }} />
-            <span style={{ color: '#0F172A', fontWeight: 600 }}>All Systems Fully Operational</span>
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }} />
+            <span style={{ color: '#71717A' }}>All systems operational</span>
           </div>
         </div>
       </div>

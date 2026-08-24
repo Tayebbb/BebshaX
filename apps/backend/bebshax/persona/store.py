@@ -134,3 +134,18 @@ async def load_persona(session: AsyncSession, persona_id: str) -> PersonaProfile
             for e in evidence
         ],
     )
+
+
+async def list_personas(
+    session: AsyncSession, business_id: str | None = None
+) -> list[PersonaProfile]:
+    query = select(Personas.id).order_by(Personas.created_at.desc())
+    if business_id:
+        query = query.where(Personas.business_id == business_id)
+    persona_ids = list((await session.execute(query)).scalars().all())
+    personas = []
+    for pid in persona_ids:
+        p = await load_persona(session, pid)
+        if p:
+            personas.append(p)
+    return personas
