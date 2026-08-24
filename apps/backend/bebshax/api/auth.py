@@ -170,9 +170,32 @@ async def google_auth(
     payload: GoogleAuthRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    """Authenticate or register seamlessly with Google."""
-    email = payload.email or "google.user@example.com"
-    full_name = payload.name or "Google User"
+    """Authenticate or register seamlessly with Google, extracting profile photo and name."""
+    email = payload.email
+    full_name = payload.name
+    avatar_url = payload.avatar_url
+
+    if payload.credential and (not email or not avatar_url):
+        try:
+            import base64
+            import json
+
+            parts = payload.credential.split(".")
+            if len(parts) >= 2:
+                padded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
+                jwt_payload = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+                if not email and "email" in jwt_payload:
+                    email = jwt_payload["email"]
+                if not full_name and "name" in jwt_payload:
+                    full_name = jwt_payload["name"]
+                if not avatar_url and "picture" in jwt_payload:
+                    avatar_url = jwt_payload["picture"]
+        except Exception:
+            pass
+
+    email = email or "google.user@example.com"
+    full_name = full_name or "Google User"
+    avatar_url = avatar_url or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop"
 
     user = await get_user_by_email(session, email)
     if not user:
@@ -181,8 +204,12 @@ async def google_auth(
             email=email,
             full_name=full_name,
             auth_provider="google",
-            avatar_url=payload.avatar_url,
+            avatar_url=avatar_url,
         )
+    elif avatar_url and (not user.avatar_url or user.auth_provider == "google"):
+        user.avatar_url = avatar_url
+        await session.commit()
+        await session.refresh(user)
 
     token = create_access_token(
         data={"sub": user.id, "email": user.email, "name": user.full_name}
@@ -197,3 +224,15 @@ async def google_auth(
 async def get_me(current_user: Users = Depends(get_current_user)):
     """Retrieve current logged-in user profile."""
     return _serialize_user(current_user)
+
+
+@auth_router.post("/refresh", response_model=AuthResponse)
+async def refresh_token(current_user: Users = Depends(get_current_user)):
+    """Refresh a valid access token and return a new persistent JWT session."""
+    token = create_access_token(
+        data={"sub": current_user.id, "email": current_user.email, "name": current_user.full_name}
+    )
+    return AuthResponse(
+        access_token=token,
+        user=_serialize_user(current_user),
+    )

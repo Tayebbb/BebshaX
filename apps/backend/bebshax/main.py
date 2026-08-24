@@ -16,9 +16,8 @@ from bebshax.api.routes import router as routes_router
 from bebshax.api.studies import router as studies_router
 from bebshax.auth.models import Users
 from bebshax.config import get_settings
-from bebshax.db.engine import create_async_sessionmaker, create_engine
+from bebshax.db.engine import create_async_sessionmaker, create_engine, init_database
 from bebshax.db.models import Base, Businesses, LLMRequests, ModelRegistry, Personas, SavedAudiences, Studies
-from bebshax.db.seed import seed_demo_data
 from bebshax.db.sink import ProvenanceSink
 from bebshax.interview.engine import InterviewEngine
 from bebshax.interview.orm import Conversations, ConversationTurns
@@ -57,13 +56,11 @@ async def _lifespan(app: FastAPI):
         llm_router, sessionmaker_, memory=app.state.memory_service
     )
 
-    # Initialize tables and seed demo data if database is reachable
+    # Automatic table creation, extensions, and demo data initialization on startup
     try:
-        async with db_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        await seed_demo_data(sessionmaker_)
+        await init_database(db_engine, sessionmaker_, seed=True)
     except Exception:
-        pass  # best-effort on startup
+        pass  # best-effort on startup (handles offline / cold DB)
 
     yield
     await sink.stop()

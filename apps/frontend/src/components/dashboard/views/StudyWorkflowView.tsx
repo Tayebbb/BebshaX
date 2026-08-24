@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  ArrowLeft,
   ArrowRight,
   Sparkles,
   Package,
-  Clock,
   Lightbulb,
   UserCheck,
   Paperclip,
@@ -12,12 +10,8 @@ import {
   LogOut,
   CheckCircle2,
   Check,
-  Users,
-  MessageSquare,
-  FileText,
   Send,
   Zap,
-  ShieldAlert,
   Download,
   Share2,
   Bookmark,
@@ -26,7 +20,6 @@ import {
   Info,
   Search,
   X,
-  SlidersHorizontal,
   RefreshCw,
 } from 'lucide-react';
 import { Study, ResearchGoal, StudyType, Persona, ConversationTurn, PersonaRoleSuggestion } from '../../../types';
@@ -174,39 +167,68 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     const clamped = Math.max(1, Math.min(newStep, 5));
     setCurrentStep(clamped);
     onStepChange?.(clamped);
+    if (studyId) {
+      api.updateStudy(studyId, {
+        step: clamped,
+        status: clamped === 5 ? 'completed' : 'in_progress',
+        prompt: promptInput || study?.prompt,
+        copilot_messages: copilotMessages,
+        suggested_roles: suggestedRoles,
+        personas_data: personas,
+        persona_count: personas.length,
+        persona_ids: personas.map((p) => p.id),
+        script_questions: questions,
+      }).catch(() => {});
+    }
   };
 
+  // Synchronization refs to eliminate any duplicate assistant turns
+  const isFetchingCopilotRef = useRef<boolean>(false);
+  const initialPromptHandledRef = useRef<string | null>(null);
+
   const fetchCopilotTurn = async (history: { role: 'user' | 'assistant'; content: string }[]) => {
-    // Guard: don't fire a second call if one is already in flight
-    if (isCopilotTyping) return;
+    // Synchronous lock: prevent concurrent double-execution
+    if (isFetchingCopilotRef.current) return;
+    isFetchingCopilotRef.current = true;
     setIsCopilotTyping(true);
     try {
       const res = await api.sendStudyCopilotMessage(history, initialType, studyId);
       const assistantMsg = {
-        id: `msg_a_${Date.now()}`,
+        id: `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         role: 'assistant' as const,
         content: res.reply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
         isGoalCard: res.is_ready_for_approval && !!res.research_goal_card,
         goalCardData: res.research_goal_card || undefined,
       };
-      setCopilotMessages((prev) => [...prev, assistantMsg]);
+
+      setCopilotMessages((prev) => {
+        // Enforce exactly one response: deduplicate identical consecutive assistant messages
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content.trim() === assistantMsg.content.trim()) {
+          return prev;
+        }
+        return [...prev, assistantMsg];
+      });
+
       if (res.suggested_roles && res.suggested_roles.length > 0) {
         setSuggestedRoles(res.suggested_roles);
       }
     } catch {
-      // fallback
+      // fallback handled gracefully
     } finally {
       setIsCopilotTyping(false);
+      isFetchingCopilotRef.current = false;
     }
   };
 
   const handleSendCopilotMessage = (text?: string) => {
+    if (isFetchingCopilotRef.current || isCopilotTyping) return;
     const messageToSend = (typeof text === 'string' ? text : step1Prompt || promptInput).trim();
     if (!messageToSend) return;
 
     const userMsg = {
-      id: `msg_u_${Date.now()}_${Math.random()}`,
+      id: `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       role: 'user' as const,
       content: messageToSend,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
@@ -215,17 +237,53 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     setStep1Prompt('');
     setPromptInput('');
 
-    // Build history synchronously — do NOT call fetchCopilotTurn inside the
-    // setState updater; React StrictMode double-invokes updaters which would
-    // trigger two API calls and render two identical responses.
-    const updatedHistory = [...copilotMessages, userMsg];
-    setCopilotMessages(updatedHistory);
-    fetchCopilotTurn(
-      updatedHistory.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }))
-    );
+    setCopilotMessages((prev) => {
+      // Deduplicate consecutive identical user messages
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'user' && last.content.trim() === userMsg.content.trim()) {
+        return prev;
+      }
+      const updated = [...prev, userMsg];
+      fetchCopilotTurn(
+        updated.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }))
+      );
+      return updated;
+    });
+  };
+
+  const handleSendInterviewMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = userInputMessage.trim();
+    if (!text || isSimulating) return;
+
+    setUserInputMessage('');
+    const userTurn: ConversationTurn = {
+      id: `turn_u_${Date.now()}`,
+      role: 'user',
+      content: text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+    };
+    setChatMessages((prev) => [...prev, userTurn]);
+    setIsSimulating(true);
+
+    try {
+      if (conversationId) {
+        const res = await api.sendMessage(conversationId, text);
+        setChatMessages((prev) => [...prev, res.assistantTurn]);
+      } else {
+        const conv = await api.startConversation(activeInterviewPersonaId, study?.prompt || 'User Research Interview');
+        setConversationId(conv.id);
+        const res = await api.sendMessage(conv.id, text);
+        setChatMessages((prev) => [...prev, res.assistantTurn]);
+      }
+    } catch {
+      // fallback
+    } finally {
+      setIsSimulating(false);
+    }
   };
 
   const handleApproveGoal = async (summary?: string) => {
@@ -388,15 +446,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   }, [initialStep]);
 
   useEffect(() => {
-    if (initialPrompt && copilotMessages.length === 0) {
+    if (initialPrompt && initialPrompt.trim() && initialPromptHandledRef.current !== initialPrompt.trim()) {
+      initialPromptHandledRef.current = initialPrompt.trim();
       const userMsg = {
         id: `msg_u_${Date.now()}`,
         role: 'user' as const,
-        content: initialPrompt,
+        content: initialPrompt.trim(),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
       };
       setCopilotMessages([userMsg]);
-      fetchCopilotTurn([{ role: 'user', content: initialPrompt }]);
+      fetchCopilotTurn([{ role: 'user', content: initialPrompt.trim() }]);
     }
   }, [initialPrompt]);
 
@@ -408,6 +467,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           if (data.prompt) setPromptInput(data.prompt);
           if (data.goal) setSelectedGoal(data.goal);
           if (data.step && !initialStep) setCurrentStep(data.step);
+          if (data.copilot_messages && data.copilot_messages.length > 0) {
+            setCopilotMessages(
+              data.copilot_messages.map((m: any, idx: number) => ({
+                id: m.id || `msg_loaded_${idx}`,
+                role: m.role,
+                content: m.text || m.content || '',
+                timestamp: m.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+                isGoalCard: !!m.isGoalCard,
+                goalCardData: m.goalCardData,
+              }))
+            );
+          }
+          if (data.suggested_roles && data.suggested_roles.length > 0) {
+            setSuggestedRoles(data.suggested_roles);
+          }
+          if (data.personas_data && data.personas_data.length > 0) {
+            setPersonas(data.personas_data);
+            setSelectedPersonaIds(data.personas_data.map((p: any) => p.id));
+          }
+          if (data.script_questions && data.script_questions.length > 0) {
+            setQuestions(data.script_questions);
+          }
         }
       });
     }
@@ -490,7 +571,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       {/* Header Stepper Navigation (Matches Reference Design) */}
       <header
         style={{
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          border: 'none',
+          outline: 'none',
           padding: '14px 32px',
           display: 'flex',
           alignItems: 'center',
@@ -577,7 +659,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           flexDirection: 'column',
           alignItems: 'center',
           padding: currentStep === 2 ? '28px 32px 140px 32px' : '36px 24px 120px 24px',
-          maxWidth: currentStep === 2 ? '1440px' : '860px',
+          maxWidth: currentStep === 2 ? '1440px' : '980px',
           margin: '0 auto',
           width: '100%',
         }}
@@ -772,11 +854,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#FFFFFF' }}>
-                      Ready to generate personas 🥳
+                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#FFFFFF' }}>
+                      Persona Panel Configured
                     </span>
-                    <span style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>
-                      Your report is just 2 steps away
+                    <span style={{ fontSize: '0.78rem', color: '#9CA3AF' }}>
+                      · Ready for synthetic generation
                     </span>
                   </div>
 
@@ -1072,9 +1154,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                      gap: '14px',
-                      marginTop: '12px',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: '12px',
+                      marginTop: '16px',
+                      width: '100%',
                     }}
                   >
                     {goalsList.map((g) => {
@@ -1125,7 +1208,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             STEP 2: PERSONAS GROUNDING & AUDIENCE GENERATION (Matches Screenshots 1, 2, 3)
            ============================================================ */}
         {currentStep === 2 && (
-          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '140px' }}>
             {/* Header: Title + Subtitle */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <h1
@@ -1324,13 +1407,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setSavedAudiences(true);
+                      setSavedAudiences((prev) => [...prev, study?.id || 'audience_1']);
                       alert('Audience saved to Persona Library!');
                     }}
                     style={{
                       background: '#1F2428',
                       border: '1px solid rgba(255, 255, 255, 0.1)',
-                      color: savedAudiences ? '#10B981' : '#FFFFFF',
+                      color: savedAudiences.length > 0 ? '#10B981' : '#FFFFFF',
                       borderRadius: '10px',
                       padding: '10px',
                       fontSize: '0.82rem',
@@ -1416,8 +1499,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
                       gap: '16px',
+                      width: '100%',
                     }}
                   >
                     {personas
@@ -1433,21 +1517,24 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                           <div
                             key={p.id}
                             style={{
-                              background: 'rgba(18, 20, 22, 0.95)',
-                              border: isSelected ? '1px solid rgba(246, 200, 120, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
+                              background: '#121417',
+                              border: isSelected ? '1px solid rgba(246, 200, 120, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
                               borderRadius: '14px',
                               padding: '20px',
                               display: 'flex',
                               flexDirection: 'column',
                               gap: '14px',
-                              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
                               transition: 'all 0.15s ease',
                               position: 'relative',
+                              minWidth: 0,
+                              overflow: 'hidden',
+                              boxSizing: 'border-box',
                             }}
                           >
                             {/* Card Top Row: Initials Avatar + Name & Subline + Action Icons */}
-                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
                                 <div
                                   style={{
                                     width: '42px',
@@ -1465,9 +1552,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                                 >
                                   {initials}
                                 </div>
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span style={{ fontWeight: 600, fontSize: '0.95rem', color: '#FFFFFF' }}>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                    <span style={{ fontWeight: 600, fontSize: '0.95rem', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                       {p.name}
                                     </span>
                                     <span
@@ -1477,22 +1564,24 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                                         borderRadius: '4px',
                                         padding: '1px 5px',
                                         color: '#9CA3AF',
+                                        fontWeight: 600,
+                                        flexShrink: 0,
                                       }}
                                     >
-                                      🇧🇩 BD
+                                      {p.country_code || 'GLOBAL'}
                                     </span>
                                   </div>
-                                  <div style={{ fontSize: '0.76rem', color: '#9CA3AF', marginTop: '2px' }}>
-                                    {p.demographics?.age || 20} years old • {p.demographics?.location || 'Rajshahi, Bangladesh'}
+                                  <div style={{ fontSize: '0.76rem', color: '#9CA3AF', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {p.demographics?.age ? `${p.demographics.age} years old • ` : ''}{p.demographics?.location || 'Target Market'}
                                   </div>
-                                  <div style={{ fontSize: '0.78rem', color: '#F6C878', fontWeight: 600, marginTop: '2px' }}>
+                                  <div style={{ fontSize: '0.78rem', color: '#F6C878', fontWeight: 600, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {p.tagline || p.archetype}
                                   </div>
                                 </div>
                               </div>
 
                               {/* Card Action Icons */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -1547,45 +1636,58 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                               </div>
                             </div>
 
-                            {/* Narrative 2-3 Sentences Description */}
+                            {/* Narrative Description */}
                             <div
                               style={{
                                 fontSize: '0.82rem',
                                 color: '#D1D5DB',
                                 lineHeight: 1.45,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 3,
+                                WebkitBoxOrient: 'vertical',
+                                wordBreak: 'break-word',
                               }}
                             >
                               {p.description ||
-                                `She is a university student in ${p.demographics?.location || 'Bangladesh'} who tries to stay organized without adding extra costs to her month.`}
+                                `${p.name} is a representative archetype synthesized to validate customer adoption, pain points, and willingness to pay.`}
                             </div>
 
-                            {/* Metadata Badges (2-column key-value grid) */}
+                            {/* Metadata Badges (Protected Grid with Truncation) */}
                             <div
                               style={{
                                 display: 'grid',
-                                gridTemplateColumns: '1fr 1fr',
+                                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                                 gap: '10px 14px',
                                 background: 'rgba(255, 255, 255, 0.02)',
                                 border: '1px solid rgba(255, 255, 255, 0.05)',
                                 borderRadius: '10px',
                                 padding: '12px 14px',
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                boxSizing: 'border-box',
                               }}
                             >
-                              {(p.badges || [
-                                { label: 'HOBBIES', value: 'reading Bangla fiction, study vlogs' },
-                                { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-                                { label: 'CLASS SCHEDULE', value: 'Five days a week, morning sessions' },
-                                { label: 'MONTHLY ALLOWANCE', value: '7,500 BDT' },
+                              {(p.badges && p.badges.length > 0 ? p.badges : [
+                                { label: 'USAGE PATTERN', value: 'Active Daily Adopter' },
+                                { label: 'PRICE COMFORT', value: 'Values Transparent Tiers' },
+                                { label: 'PRIMARY GOAL', value: 'Efficiency & Convenience' },
+                                { label: 'CHURN RISK', value: 'High if onboarding is slow' },
                               ]).slice(0, 4).map((b, bIdx) => (
-                                <div key={bIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <div key={bIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, overflow: 'hidden' }}>
                                   <span
                                     style={{
-                                      fontSize: '0.68rem',
+                                      fontSize: '0.66rem',
                                       fontWeight: 700,
                                       color: '#F6C878',
                                       letterSpacing: '0.04em',
                                       textTransform: 'uppercase',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
                                     }}
+                                    title={b.label}
                                   >
                                     {b.label}
                                   </span>
@@ -1597,6 +1699,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                                       whiteSpace: 'nowrap',
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
+                                      display: 'block',
+                                      minWidth: 0,
                                     }}
                                     title={b.value}
                                   >
@@ -1607,7 +1711,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                             </div>
 
                             {/* View Full Profile link */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '4px' }}>
                               <button
                                 type="button"
                                 onClick={() => setViewingPersona(p)}
@@ -1636,6 +1740,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                                   background: 'rgba(16, 185, 129, 0.1)',
                                   padding: '2px 8px',
                                   borderRadius: '6px',
+                                  flexShrink: 0,
                                 }}
                               >
                                 {Math.round((p.grounding_ratio || 0.96) * 100)}% Grounded
@@ -1709,8 +1814,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                           <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
                             {viewingPersona.name}
                           </h2>
-                          <span style={{ fontSize: '0.72rem', background: 'rgba(255, 255, 255, 0.08)', padding: '2px 6px', borderRadius: '4px' }}>
-                            🇧🇩 BD
+                          <span style={{ fontSize: '0.72rem', background: 'rgba(255, 255, 255, 0.08)', padding: '2px 6px', borderRadius: '4px', color: '#9CA3AF', fontWeight: 600 }}>
+                            {viewingPersona.country_code || 'GLOBAL'}
                           </span>
                         </div>
                         <div style={{ fontSize: '0.84rem', color: '#9CA3AF', marginTop: '2px' }}>
@@ -2271,62 +2376,6 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         )}
       </div>
 
-      {/* Floating Action Banner when on Step 1 Role Selection */}
-      {currentStep === 1 && showRoleSelection && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(18, 20, 20, 0.96)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
-            padding: '12px 24px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '28px',
-            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05)',
-            backdropFilter: 'blur(20px)',
-            zIndex: 40,
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>Ready to generate personas</span>
-              <span>🥳</span>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#9CA3AF' }}>
-              Your report is just 2 steps away
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleGeneratePersonas}
-            style={{
-              background: '#F6C878',
-              color: '#080909',
-              border: 'none',
-              borderRadius: '10px',
-              padding: '10px 20px',
-              fontSize: '0.86rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              transition: 'transform 0.15s ease, background 0.15s ease',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.03)')}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-          >
-            <span>Generate Personas</span>
-            <ArrowRight size={15} strokeWidth={2.5} />
-          </button>
-        </div>
-      )}
-
       {/* Floating Action Banner when on Step 2 (Personas) */}
       {currentStep === 2 && (
         <div
@@ -2468,56 +2517,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           <div
             style={{
               width: '100%',
-              maxWidth: '860px',
+              maxWidth: '980px',
               display: 'flex',
               flexDirection: 'column',
               gap: '10px',
             }}
           >
-            {/* Status Pill Badge */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  background: 'rgba(16, 185, 129, 0.1)',
-                  border: '1px solid rgba(16, 185, 129, 0.25)',
-                  borderRadius: '20px',
-                  padding: '4px 12px',
-                  fontSize: '0.76rem',
-                  color: '#10B981',
-                }}
-              >
-                <Users size={13} />
-                <span style={{ fontWeight: 600 }}>User Interviews</span>
-                <span style={{ opacity: 0.6 }}>•</span>
-                <span>Ready - Modelled buyers • Same-day results</span>
-              </div>
-
-              {/* Navigation button */}
-              <button
-                type="button"
-                onClick={() => handleStepChange(currentStep + 1)}
-                style={{
-                  background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
-                  border: 'none',
-                  color: '#080909',
-                  borderRadius: '10px',
-                  padding: '7px 18px',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <span>Continue to {stepsList[currentStep]?.label || 'Report'}</span>
-                <ArrowRight size={14} />
-              </button>
-            </div>
-
             {/* Prompt input field */}
             <div
               style={{

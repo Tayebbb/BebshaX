@@ -14,9 +14,8 @@ const AppContent: React.FC = () => {
   const [authInitialView, setAuthInitialView] = useState<
     'signin' | 'signup-options' | 'signup-email'
   >('signin');
-  const [showLandingPreview, setShowLandingPreview] = useState<boolean>(false);
 
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const { currentPath, navigate } = useNavigation();
 
   useEffect(() => {
@@ -52,6 +51,39 @@ const AppContent: React.FC = () => {
     }
   };
 
+  // 1. Session verification loading screen
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          backgroundColor: '#080909',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#F6C878',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              border: '3px solid rgba(246, 200, 120, 0.15)',
+              borderTopColor: '#F6C878',
+              borderRadius: '50%',
+              animation: 'authSpin 0.7s linear infinite',
+            }}
+          />
+          <style>{`@keyframes authSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          <span style={{ fontSize: '0.82rem', color: '#9CA3AF', letterSpacing: '0.03em' }}>
+            Checking authentication...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   // Check if current URL is a dedicated Auth page route
   const isAuthRoute =
     currentPath.startsWith('/auth') ||
@@ -61,6 +93,11 @@ const AppContent: React.FC = () => {
     currentPath === '/register';
 
   if (isAuthRoute) {
+    if (isAuthenticated) {
+      return (
+        <DashboardLayout onOpenLandingPage={() => navigate('/')} />
+      );
+    }
     return <AuthPage />;
   }
 
@@ -74,11 +111,13 @@ const AppContent: React.FC = () => {
     currentPath.startsWith('/personas') ||
     currentPath.startsWith('/research') ||
     currentPath.startsWith('/study') ||
-    currentPath.startsWith('/organisation') ||
-    currentPath.startsWith('/organization') ||
-    currentPath.startsWith('/settings');
+    currentPath.startsWith('/router') ||
+    currentPath.startsWith('/provenance');
 
   if (isAppRoute) {
+    if (!isAuthenticated) {
+      return <AuthPage initialMode="signin" />;
+    }
     return (
       <>
         {/* Screen-reader accessible identity */}

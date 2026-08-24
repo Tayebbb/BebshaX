@@ -3,15 +3,11 @@ import {
   PenSquare,
   LayoutGrid,
   Contact2,
-  Building2,
+  Cpu,
   ChevronDown,
   ChevronRight,
   PanelLeft,
-  MessageCircle,
   LogOut,
-  ExternalLink,
-  Sparkles,
-  Zap,
   Globe,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -20,12 +16,12 @@ import { NewStudyView } from './views/NewStudyView';
 import { StudiesDashboardView } from './views/StudiesDashboardView';
 import { PersonaLibraryView } from './views/PersonaLibraryView';
 import { StudyWorkflowView } from './views/StudyWorkflowView';
-import { OrganisationView } from './views/OrganisationView';
+import { ModelRouterView } from './views/ModelRouterView';
 import { StudyType, Study } from '../../types';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 
-export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'organisation' | 'study-workflow';
+export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'router' | 'study-workflow';
 
 interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
@@ -39,8 +35,8 @@ const parseDashboardPath = (path: string): {
   if (path.startsWith('/persona-library') || path.startsWith('/personas')) {
     return { tab: 'personas' };
   }
-  if (path.startsWith('/organisation') || path.startsWith('/organization') || path.startsWith('/settings')) {
-    return { tab: 'organisation' };
+  if (path.startsWith('/router') || path.startsWith('/provenance') || path.startsWith('/routes') || path.startsWith('/models')) {
+    return { tab: 'router' };
   }
   if (path.startsWith('/dashboard')) {
     return { tab: 'dashboard' };
@@ -78,7 +74,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [initialWorkflowType, setInitialWorkflowType] = useState<StudyType>('interviews');
   const [initialWorkflowPrompt, setInitialWorkflowPrompt] = useState<string | undefined>(undefined);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showAssistantModal, setShowAssistantModal] = useState(false);
 
   useEffect(() => {
     const parsed = parseDashboardPath(currentPath);
@@ -117,23 +112,48 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     if (tab === 'new-study') navigate('/create-study');
     else if (tab === 'dashboard') navigate('/dashboard');
     else if (tab === 'personas') navigate('/persona-library');
-    else if (tab === 'organisation') navigate('/organisation');
+    else if (tab === 'router') navigate('/router');
     else if (tab === 'study-workflow') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
   };
 
-  const handleStartStudy = (type: StudyType, prompt?: string) => {
+  const handleStartStudy = async (type: StudyType, prompt?: string) => {
     setInitialWorkflowType(type);
     setInitialWorkflowPrompt(prompt);
-    const newId = 'tj6FY3cXDO8oxpuxeAMb';
-    setActiveStudyId(newId);
-    setActiveStep(1);
-    navigate(`/research/${newId}/step1`);
+    try {
+      const title = prompt
+        ? prompt.length > 40
+          ? prompt.slice(0, 40) + '...'
+          : prompt
+        : type === 'interviews'
+        ? 'Customer Discovery Study'
+        : type === 'landing_page_test'
+        ? 'Concept & Demand Validation'
+        : type === 'ab_test'
+        ? 'Pricing Sensitivity Test'
+        : 'Message Hook Testing';
+
+      const created = await api.createStudy({
+        title,
+        type: type,
+        prompt: prompt,
+        status: 'in_progress',
+        step: 1,
+      });
+      setActiveStudyId(created.id);
+      setActiveStep(1);
+      navigate(`/research/${created.id}/step1`);
+    } catch {
+      const fallbackId = `study_${Date.now()}`;
+      setActiveStudyId(fallbackId);
+      setActiveStep(1);
+      navigate(`/research/${fallbackId}/step1`);
+    }
   };
 
-  const handleOpenStudy = (studyId: string) => {
+  const handleOpenStudy = (studyId: string, step: number = 1) => {
     setActiveStudyId(studyId);
-    setActiveStep(1);
-    navigate(`/research/${studyId}/step1`);
+    setActiveStep(step);
+    navigate(`/research/${studyId}/step${step}`);
   };
 
   const handleStepChange = (step: number) => {
@@ -158,9 +178,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       icon: <Contact2 size={16} />,
     },
     {
-      id: 'organisation' as DashboardTab,
-      label: 'Organisation',
-      icon: <Building2 size={16} />,
+      id: 'router' as DashboardTab,
+      label: 'Model Router',
+      icon: <Cpu size={16} />,
     },
   ];
 
@@ -313,6 +333,17 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '4px' }}>
                   {recentStudies.map((st) => {
                     const isCompleted = st.status === 'completed';
+                    const displayTitle =
+                      st.title && st.title !== 'Untitled Study'
+                        ? st.title
+                        : st.type === 'interviews'
+                        ? 'Customer Discovery Study'
+                        : st.type === 'landing_page_test'
+                        ? 'Concept & Demand Validation'
+                        : st.type === 'ab_test'
+                        ? 'Pricing Sensitivity Test'
+                        : 'Message Hook Testing';
+
                     return (
                       <div
                         key={st.id}
@@ -339,6 +370,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                           e.currentTarget.style.color = '#9CA3AF';
                           e.currentTarget.style.background = 'transparent';
                         }}
+                        title={displayTitle}
                       >
                         {isCompleted && (
                           <div
@@ -351,7 +383,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                             }}
                           />
                         )}
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.title}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayTitle}</span>
                       </div>
                     );
                   })}
@@ -383,31 +415,54 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               alignItems: 'center',
               gap: '10px',
               justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
-              padding: isSidebarCollapsed ? '8px 0' : '8px 10px',
+              padding: isSidebarCollapsed ? '8px 0' : '8px 12px',
               borderRadius: '12px',
-              background: 'rgba(255, 255, 255, 0.025)',
-              border: '1px solid rgba(255, 255, 255, 0.06)',
+              background: showUserMenu ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+              border: 'none',
+              outline: 'none',
               cursor: 'pointer',
+              transition: 'background 0.15s ease',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* User Avatar */}
-              <div
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
-                  color: '#FFFFFF',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {displayName.charAt(0)}
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px', minWidth: 0 }}>
+              {/* User Avatar (Real Google Avatar or Initial Gradient) */}
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={displayName}
+                  referrerPolicy="no-referrer"
+                  style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: 'none',
+                    outline: 'none',
+                    flexShrink: 0,
+                  }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
+                    color: '#080909',
+                    fontWeight: 700,
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  {displayName.charAt(0)}
+                </div>
+              )}
 
               {!isSidebarCollapsed && (
                 <span
@@ -416,6 +471,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     fontWeight: 600,
                     color: '#FFFFFF',
                     letterSpacing: '0.02em',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                   }}
                 >
                   {displayName}
@@ -427,15 +485,16 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               <span
                 style={{
                   fontSize: '0.7rem',
-                  fontWeight: 700,
-                  color: '#F6C878',
-                  background: 'rgba(246, 200, 120, 0.12)',
-                  border: '1px solid rgba(246, 200, 120, 0.25)',
-                  padding: '2px 6px',
+                  fontWeight: 600,
+                  color: '#10B981',
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  border: 'none',
+                  outline: 'none',
+                  padding: '2px 7px',
                   borderRadius: '6px',
                 }}
               >
-                1 left
+                Free Tier
               </span>
             )}
           </div>
@@ -448,15 +507,91 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 bottom: '100%',
                 left: 0,
                 marginBottom: '8px',
-                width: isSidebarCollapsed ? '180px' : '100%',
-                background: '#121315',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '12px',
-                padding: '6px',
-                boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6)',
+                width: isSidebarCollapsed ? '220px' : '100%',
+                background: '#141619',
+                border: 'none',
+                outline: 'none',
+                borderRadius: '14px',
+                padding: '8px',
+                boxShadow: '0 16px 40px rgba(0, 0, 0, 0.85)',
                 zIndex: 50,
               }}
             >
+              {/* User Info Header */}
+              <div
+                style={{
+                  padding: '6px 8px 10px 8px',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                  marginBottom: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '9px',
+                }}
+              >
+                {user?.avatar_url ? (
+                  <img
+                    src={user.avatar_url}
+                    alt={displayName}
+                    referrerPolicy="no-referrer"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      objectFit: 'cover',
+                      border: 'none',
+                      outline: 'none',
+                      flexShrink: 0,
+                    }}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
+                      color: '#080909',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {displayName.charAt(0)}
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <span
+                    style={{
+                      fontSize: '0.84rem',
+                      fontWeight: 600,
+                      color: '#FFFFFF',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {user?.full_name || displayName}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      color: '#9CA3AF',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {user?.email || 'Logged in'}
+                  </span>
+                </div>
+              </div>
+
               {onOpenLandingPage && (
                 <button
                   type="button"
@@ -472,12 +607,16 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     padding: '8px 10px',
                     background: 'transparent',
                     border: 'none',
+                    outline: 'none',
                     color: '#FFFFFF',
                     fontSize: '0.82rem',
                     textAlign: 'left',
                     cursor: 'pointer',
                     borderRadius: '8px',
+                    transition: 'background 0.15s ease',
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
                   <Globe size={14} /> Marketing Site
                 </button>
@@ -487,6 +626,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 onClick={() => {
                   setShowUserMenu(false);
                   logout();
+                  if (onOpenLandingPage) {
+                    onOpenLandingPage();
+                  } else {
+                    navigate('/');
+                  }
                 }}
                 style={{
                   width: '100%',
@@ -496,12 +640,17 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   padding: '8px 10px',
                   background: 'transparent',
                   border: 'none',
+                  outline: 'none',
                   color: '#EF4444',
                   fontSize: '0.82rem',
+                  fontWeight: 500,
                   textAlign: 'left',
                   cursor: 'pointer',
                   borderRadius: '8px',
+                  transition: 'background 0.15s ease',
                 }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
                 <LogOut size={14} /> Sign Out
               </button>
@@ -534,44 +683,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             >
               {getGreeting()}, {displayName}
             </div>
-
-            {/* Quick Status Pill */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: 'rgba(16, 185, 129, 0.08)',
-                  border: '1px solid rgba(16, 185, 129, 0.2)',
-                  borderRadius: '20px',
-                  padding: '4px 12px',
-                  fontSize: '0.76rem',
-                  color: '#10B981',
-                }}
-              >
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }} />
-                <span>FreeLLMpool • 222 Routes Active</span>
-              </div>
-
-              {onOpenLandingPage && (
-                <button
-                  type="button"
-                  onClick={onOpenLandingPage}
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    color: '#9CA3AF',
-                    borderRadius: '8px',
-                    padding: '4px 10px',
-                    fontSize: '0.76rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  View Landing Page
-                </button>
-              )}
-            </div>
           </header>
         )}
 
@@ -595,7 +706,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           />
         )}
 
-        {activeTab === 'organisation' && <OrganisationView />}
+        {activeTab === 'router' && <ModelRouterView />}
 
         {activeTab === 'study-workflow' && (
           <StudyWorkflowView
@@ -609,117 +720,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         )}
       </main>
 
-      {/* ============================================================
-          FLOATING GOLD ASSISTANT BUBBLE (Bottom-right corner)
-         ============================================================ */}
-      <button
-        type="button"
-        aria-label="Ask BebshaX AI Assistant"
-        onClick={() => setShowAssistantModal(true)}
-        style={{
-          position: 'fixed',
-          bottom: '28px',
-          right: '28px',
-          width: '50px',
-          height: '50px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
-          color: '#080909',
-          border: 'none',
-          boxShadow: '0 8px 24px rgba(246, 200, 120, 0.35)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          zIndex: 50,
-          transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
-        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-      >
-        <MessageCircle size={24} fill="#080909" />
-      </button>
-
-      {/* Quick AI Assistant Guidance Modal */}
-      {showAssistantModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 100,
-            display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'flex-end',
-            padding: '24px',
-            background: 'rgba(0, 0, 0, 0.5)',
-          }}
-          onClick={() => setShowAssistantModal(false)}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: '380px',
-              background: '#121315',
-              border: '1px solid rgba(246, 200, 120, 0.35)',
-              borderRadius: '20px',
-              padding: '24px',
-              boxShadow: '0 20px 48px rgba(0, 0, 0, 0.6)',
-              marginBottom: '60px',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <Sparkles size={18} color="#F6C878" />
-              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
-                BebshaX Research Assistant
-              </h2>
-            </div>
-            <p style={{ fontSize: '0.84rem', color: '#9CA3AF', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-              How can I help you design your next study? You can test positioning, interview synthetic buyers, or simulate landing page friction.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAssistantModal(false);
-                  handleStartStudy('interviews', 'Should we lead with pricing or with the product story?');
-                }}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  color: '#FFFFFF',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  fontSize: '0.8rem',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                }}
-              >
-                "Should we lead with pricing or product story?"
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAssistantModal(false);
-                  handleStartStudy('landing_page_test', 'Test friction points on our checkout flow');
-                }}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  color: '#FFFFFF',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  fontSize: '0.8rem',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                }}
-              >
-                "Test friction points on checkout flow"
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

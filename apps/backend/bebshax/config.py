@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     embedding_backend: str = "local"
     embedding_model: str | None = None
 
+    # JWT Authentication settings (long-lived persistent login)
+    jwt_secret: str = "bebshax-super-secret-jwt-signing-key-2026-auth-v1"
+    jwt_expire_days: int = 365
+
 
 @lru_cache
 def get_settings() -> Settings:

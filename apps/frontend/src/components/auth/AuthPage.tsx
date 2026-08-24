@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   KeyRound,
   ShieldCheck,
-  RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
@@ -256,9 +255,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     resetMessages();
     try {
       setIsLoading(true);
+      const userEmail = email.trim() || 'saidul.islam@gmail.com';
+      const userName = fullName.trim() || userEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      const avatarUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&h=120&fit=crop&crop=faces';
+
       await googleAuth({
-        email: email || 'alex.founder@bebshax.io',
-        name: fullName || 'Alex Founder',
+        email: userEmail,
+        name: userName,
+        avatar_url: avatarUrl,
       });
       navigate('/app');
     } catch (err: any) {

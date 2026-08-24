@@ -20,39 +20,73 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => api.getStoredUser());
   const [token, setToken] = useState<string | null>(() => api.getAuthToken());
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<User | null>(() => {
+    const stored = api.getStoredUser();
+    if (stored) return stored;
+    const storedToken = api.getAuthToken();
+    if (storedToken) {
+      return {
+        id: 'usr_stored',
+        email: 'user@example.com',
+        full_name: 'Authenticated User',
+        avatar_url: null,
+        is_active: true,
+        is_verified: true,
+        auth_provider: 'email',
+        created_at: new Date().toISOString(),
+      };
+    }
+    return null;
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
-      // Check query params for token if redirected from OAuth callback
-      if (typeof window !== 'undefined') {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlToken = urlParams.get('token') || urlParams.get('access_token');
-        if (urlToken) {
-          api.setAuthToken(urlToken);
-        }
-      }
-      const storedToken = api.getAuthToken();
       try {
-        const profile = await api.getMe();
-        if (profile) {
-          setUser(profile);
-          const activeToken = api.getAuthToken();
-          if (activeToken) setToken(activeToken);
-        } else if (!storedToken) {
-          setUser(null);
-          setToken(null);
+        // 1. Check query params for token if redirected from OAuth callback
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search);
+          const urlToken = urlParams.get('token') || urlParams.get('access_token');
+          if (urlToken) {
+            api.setAuthToken(urlToken);
+            if (isMounted) setToken(urlToken);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
         }
-      } catch {
-        // preserve offline/mock session if available
+
+        // 2. Query live Neon Auth session & backend /auth/me
+        if (!api.isMockMode()) {
+          const profile = await api.getMe();
+          if (profile && isMounted) {
+            setUser(profile);
+            const activeToken = api.getAuthToken();
+            if (activeToken) setToken(activeToken);
+          } else if (!profile && isMounted) {
+            const storedToken = api.getAuthToken();
+            if (!storedToken) {
+              setUser(null);
+              setToken(null);
+              api.setStoredUser(null);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Session initialization error:', err);
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     initAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const signin = async (email: string, password: string) => {
@@ -63,8 +97,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signup = async (fullName: string, email: string, password: string) => {
     const res = await api.signup({ full_name: fullName, email, password });
-    setToken(res.access_token);
-    setUser(res.user);
+    if (res.user?.is_verified) {
+      setToken(res.access_token);
+      setUser(res.user);
+    }
   };
 
   const googleAuth = async (data?: GoogleAuthData) => {

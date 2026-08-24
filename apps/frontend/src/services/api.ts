@@ -6,9 +6,11 @@ import {
   HealthResponse,
   MemoryItem,
   Persona,
+  PersonaRoleSuggestion,
   ProvenanceRecord,
   RoutesStatusResponse,
   Study,
+  StudyType,
 } from '../types';
 import {
   AuthResponse,
@@ -529,7 +531,6 @@ export const api = {
   },
 
   // 9. Authentication & User Management (JWT + Neon DB)
-  // 9. Authentication & User Management (Neon Auth + Better Auth)
   getAuthToken(): string | null {
     try {
       return localStorage.getItem('bebshax_auth_token');
@@ -571,6 +572,42 @@ export const api = {
     }
   },
 
+  getAuthHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...customHeaders,
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  },
+
+  async refreshToken(): Promise<AuthResponse | null> {
+    const token = this.getAuthToken();
+    if (!token) return null;
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(4000),
+        });
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          this.setStoredUser(result.user);
+          lastKnownLive = true;
+          return result;
+        }
+      } catch {
+        // preserve existing session
+      }
+    }
+    return null;
+  },
+
   async signup(data: SignUpData): Promise<AuthResponse> {
     if (!this.isMockMode()) {
       // 1. Primary: Direct Neon Auth registration
@@ -581,8 +618,10 @@ export const api = {
           name: data.full_name,
         });
         const token = neonRes.token || `neon_sess_${Date.now()}`;
-        this.setAuthToken(token);
-        this.setStoredUser(neonRes.user);
+        if (!neonRes.emailVerificationRequired && neonRes.user.is_verified) {
+          this.setAuthToken(token);
+          this.setStoredUser(neonRes.user);
+        }
         lastKnownLive = true;
         return {
           access_token: token,
@@ -611,8 +650,6 @@ export const api = {
           });
           if (res.ok) {
             const result: AuthResponse = await res.json();
-            this.setAuthToken(result.access_token);
-            this.setStoredUser(result.user);
             lastKnownLive = true;
             return result;
           }
@@ -643,8 +680,6 @@ export const api = {
       expires_in_days: 7,
       user: mockUser,
     };
-    this.setAuthToken(mockRes.access_token);
-    this.setStoredUser(mockUser);
     return mockRes;
   },
 
@@ -725,18 +760,44 @@ export const api = {
   },
 
   async googleAuth(data: GoogleAuthData): Promise<AuthResponse> {
-    if (!this.isMockMode()) {
-      try {
-        await neonAuth.signInWithGoogle();
-      } catch {
-        // Fall back to backend or simulated payload if redirect not triggered
-      }
+    let email = data.email;
+    let name = data.name;
+    let avatarUrl = data.avatar_url;
 
+    if (data.credential && (!avatarUrl || !name || !email)) {
+      try {
+        const parts = data.credential.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          if (payload.picture && !avatarUrl) avatarUrl = payload.picture;
+          if (payload.name && !name) name = payload.name;
+          if (payload.email && !email) email = payload.email;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    email = email || 'saidul.islam@gmail.com';
+    name = name || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    avatarUrl =
+      avatarUrl ||
+      `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&h=120&fit=crop&crop=faces`;
+
+    const requestPayload = {
+      email,
+      name,
+      avatar_url: avatarUrl,
+      credential: data.credential,
+    };
+
+    if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify(requestPayload),
+          signal: AbortSignal.timeout(4000),
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
@@ -746,25 +807,24 @@ export const api = {
           return result;
         }
       } catch {
-        // fallback
+        // fallback to robust local session
       }
     }
 
-    const email = data.email || 'google.user@example.com';
     const mockUser: User = {
-      id: `usr_g_${Date.now()}`,
+      id: `usr_g_${Date.now().toString(36)}`,
       email: email,
-      full_name: data.name || 'Google User',
-      avatar_url: data.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop',
+      full_name: name,
+      avatar_url: avatarUrl,
       is_active: true,
       is_verified: true,
       auth_provider: 'google',
       created_at: new Date().toISOString(),
     };
     const mockRes: AuthResponse = {
-      access_token: `mock_jwt_g_${Date.now()}`,
+      access_token: `jwt_g_${Date.now()}`,
       token_type: 'bearer',
-      expires_in_days: 7,
+      expires_in_days: 365,
       user: mockUser,
     };
     this.setAuthToken(mockRes.access_token);
@@ -774,50 +834,48 @@ export const api = {
 
   async getMe(): Promise<User | null> {
     const token = this.getAuthToken();
-    if (!token) return null;
 
     if (!this.isMockMode()) {
-      // Check Neon Auth live session first
+      // 1. Check Neon Auth live session (with token if present, and with cookies)
       try {
         const neonUser = await neonAuth.getSession(token);
         if (neonUser) {
           lastKnownLive = true;
           this.setStoredUser(neonUser);
+          if (neonUser.token) {
+            this.setAuthToken(neonUser.token);
+          }
           return neonUser;
         }
       } catch {
         // ignore
       }
 
-      // Check Backend API /auth/me
-      try {
-        const res = await fetch(`${API_BASE}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          const user = await res.json();
-          this.setStoredUser(user);
-          return user;
+      // 2. Check Backend API /auth/me if we have a token
+      if (token) {
+        try {
+          const res = await fetch(`${API_BASE}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(3000),
+          });
+          if (res.ok) {
+            lastKnownLive = true;
+            const user = await res.json();
+            this.setStoredUser(user);
+            return user;
+          }
+        } catch {
+          // fallback
         }
-      } catch {
-        // fallback
       }
     }
 
-    const stored = this.getStoredUser();
-    if (stored) return stored;
+    if (token) {
+      const stored = this.getStoredUser();
+      if (stored) return stored;
+    }
 
-    return {
-      id: 'usr_sarah_founder',
-      email: 'founder@bebshax.io',
-      full_name: 'Sarah Chen',
-      avatar_url: null,
-      is_active: true,
-      is_verified: true,
-      auth_provider: 'email',
-      created_at: new Date().toISOString(),
-    };
+    return null;
   },
 
   async resendVerificationEmail(email: string): Promise<boolean> {
@@ -879,14 +937,52 @@ export const api = {
   },
 
   // 10. Research Studies Management (New Study, Dashboard, Workflows)
+  // 10. Research Studies Management (User-Scoped 5-Step Workflow Persistence)
+  getUserStudiesStorageKey(): string {
+    const user = this.getStoredUser();
+    return `bebshax_studies_${user?.id || 'default_user'}`;
+  },
+
+  getStoredUserStudies(): Study[] {
+    try {
+      const key = this.getUserStudiesStorageKey();
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [...mockStore.studies];
+  },
+
+  saveStoredUserStudies(studies: Study[]) {
+    try {
+      const key = this.getUserStudiesStorageKey();
+      localStorage.setItem(key, JSON.stringify(studies));
+    } catch {
+      // ignore
+    }
+  },
+
   async getStudies(): Promise<Study[]> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/studies`, { signal: AbortSignal.timeout(3000) });
+        const token = this.getAuthToken();
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(`${API_BASE}/studies`, {
+          headers,
+          signal: AbortSignal.timeout(3000),
+        });
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
             lastKnownLive = true;
+            this.saveStoredUserStudies(data);
             return data;
           }
         }
@@ -894,13 +990,19 @@ export const api = {
         // fallback
       }
     }
-    return [...mockStore.studies];
+    return this.getStoredUserStudies();
   },
 
   async getStudyById(id: string): Promise<Study | null> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/studies/${id}`, { signal: AbortSignal.timeout(3000) });
+        const token = this.getAuthToken();
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(`${API_BASE}/studies/${id}`, {
+          headers,
+          signal: AbortSignal.timeout(3000),
+        });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
@@ -909,7 +1011,8 @@ export const api = {
         // fallback
       }
     }
-    const study = mockStore.studies.find((s) => s.id === id);
+    const studies = this.getStoredUserStudies();
+    const study = studies.find((s) => s.id === id);
     return study ? { ...study } : null;
   },
 
@@ -918,18 +1021,29 @@ export const api = {
   },
 
   async createStudy(studyData: Partial<Study>): Promise<Study> {
+    const user = this.getStoredUser();
+    const payload = {
+      ...studyData,
+      user_id: user?.id || 'usr_sarah_founder',
+    };
+
     if (!this.isMockMode()) {
       try {
+        const token = this.getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(`${API_BASE}/studies`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(studyData),
+          headers,
+          body: JSON.stringify(payload),
           signal: AbortSignal.timeout(5000),
         });
         if (res.ok) {
           lastKnownLive = true;
           const created = await res.json();
-          mockStore.studies.unshift(created);
+          const current = this.getStoredUserStudies();
+          const next = [created, ...current.filter((s) => s.id !== created.id)];
+          this.saveStoredUserStudies(next);
           return created;
         }
       } catch {
@@ -939,6 +1053,7 @@ export const api = {
 
     const newStudy: Study = {
       id: studyData.id || `study_${Date.now()}`,
+      user_id: user?.id || 'usr_sarah_founder',
       title: studyData.title || 'Untitled Study',
       type: studyData.type || 'interviews',
       goal: studyData.goal || 'demand_validation',
@@ -953,24 +1068,35 @@ export const api = {
       step: studyData.step || 1,
       ...studyData,
     };
-    mockStore.studies.unshift(newStudy);
+    const current = this.getStoredUserStudies();
+    const next = [newStudy, ...current.filter((s) => s.id !== newStudy.id)];
+    this.saveStoredUserStudies(next);
     return newStudy;
   },
 
   async updateStudy(id: string, updates: Partial<Study>): Promise<Study> {
     if (!this.isMockMode()) {
       try {
+        const token = this.getAuthToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(`${API_BASE}/studies/${id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(updates),
           signal: AbortSignal.timeout(5000),
         });
         if (res.ok) {
           lastKnownLive = true;
           const updated = await res.json();
-          const index = mockStore.studies.findIndex((s) => s.id === id);
-          if (index !== -1) mockStore.studies[index] = updated;
+          const current = this.getStoredUserStudies();
+          const index = current.findIndex((s) => s.id === id);
+          if (index !== -1) {
+            current[index] = updated;
+          } else {
+            current.unshift(updated);
+          }
+          this.saveStoredUserStudies(current);
           return updated;
         }
       } catch {
@@ -978,25 +1104,31 @@ export const api = {
       }
     }
 
-    const index = mockStore.studies.findIndex((s) => s.id === id);
+    const current = this.getStoredUserStudies();
+    const index = current.findIndex((s) => s.id === id);
     if (index === -1) {
       const created = await this.createStudy({ id, ...updates });
       return created;
     }
-    const updated = {
-      ...mockStore.studies[index],
+    const updated: Study = {
+      ...current[index],
       ...updates,
       updated_at: new Date().toISOString(),
     };
-    mockStore.studies[index] = updated;
+    current[index] = updated;
+    this.saveStoredUserStudies(current);
     return updated;
   },
 
   async deleteStudy(id: string): Promise<boolean> {
     if (!this.isMockMode()) {
       try {
+        const token = this.getAuthToken();
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(`${API_BASE}/studies/${id}`, {
           method: 'DELETE',
+          headers,
           signal: AbortSignal.timeout(4000),
         });
         if (res.ok) {
@@ -1006,7 +1138,9 @@ export const api = {
         // fallback
       }
     }
-    mockStore.studies = mockStore.studies.filter((s) => s.id !== id);
+    const current = this.getStoredUserStudies();
+    const next = current.filter((s) => s.id !== id);
+    this.saveStoredUserStudies(next);
     return true;
   },
 
@@ -1186,7 +1320,7 @@ export const api = {
 
     if (turnCount === 1) {
       return {
-        reply: `I've identified your idea — you want to validate your ${productType} and understand how target users would respond to it${hasPricing ? ' at your target price point' : ''}. A User Interviews study is the right approach here — deep conversations will uncover mental models, current frustrations, and real willingness to pay.\n\n${audienceQ}`,
+        reply: `Got it — you're exploring a ${productType}${hasPricing ? ' with a target pricing model' : ''}. User Interviews are ideal here to uncover mental models, key objections, and real willingness to pay.\n\n${audienceQ}`,
         suggested_study_type: 'interviews',
         is_ready_for_approval: false,
         research_goal_card: null,
@@ -1209,7 +1343,7 @@ export const api = {
         is_ready_for_approval: true,
         research_goal_card: {
           title: 'RESEARCH GOAL',
-          summary: `You want to validate whether your ${productType} solves a real problem for your target users and whether they would adopt it${hasPricing ? ' at your target price point' : ' as part of their routine'}, so you can make a confident build or no-build decision. The research will uncover user motivations, current frustrations, key objections, and willingness to pay. Does this capture what you're looking for?`,
+          summary: `Validate whether your ${productType} solves a genuine need for target users and determine demand${hasPricing ? ' at your target price point' : ''}. Does this capture what you're looking for?`,
           target_audience: `Target users of the ${productType}`,
           core_hypothesis: `Demand and product-market fit for the ${productType}`,
         },

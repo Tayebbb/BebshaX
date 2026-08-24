@@ -2,16 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   Search,
   Plus,
-  Sparkles,
-  CheckCircle2,
-  Clock,
   MoreVertical,
   ArrowUpRight,
   FlaskConical,
   FileText,
   Trash2,
 } from 'lucide-react';
-import { Study, StudyStatus } from '../../../types';
+import { Study } from '../../../types';
 import { api } from '../../../services/api';
 
 interface StudiesDashboardViewProps {
@@ -88,21 +85,21 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
         width: '100%',
       }}
     >
-      {/* Top Banner: Trial / Quota Status */}
+      {/* Top Banner: BebshaX Zero-Budget Intelligence Overview */}
       <div
         style={{
           background:
-            'linear-gradient(135deg, rgba(30, 26, 15, 0.9) 0%, rgba(20, 18, 12, 0.9) 100%)',
-          border: '1px solid rgba(246, 200, 120, 0.25)',
+            'linear-gradient(135deg, rgba(30, 26, 15, 0.7) 0%, rgba(16, 20, 18, 0.7) 100%)',
+          border: '1px solid rgba(246, 200, 120, 0.2)',
           borderRadius: '16px',
-          padding: '16px 24px',
+          padding: '18px 24px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '16px',
           marginBottom: '36px',
-          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(246, 200, 120, 0.15)',
+          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(246, 200, 120, 0.12)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -122,38 +119,33 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
           </div>
           <div>
             <div style={{ fontWeight: 600, color: '#FFFFFF', fontSize: '0.95rem' }}>
-              1 study done — 1 left on your trial
+              Synthetic Research Hub · Zero API Budget
             </div>
             <div style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>
-              Make it count or upgrade for full access.
+              Multi-model routing active with FreeLLMpool & local Ollama reliability fallback.
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          {/* Countdown timer */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontFamily: 'monospace',
-              fontSize: '0.85rem',
-              color: '#F6C878',
-              letterSpacing: '0.04em',
-            }}
-          >
-            <span>03 DAY</span> : <span>21 HR</span> : <span>06 MIN</span> : <span>59 SEC</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.82rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10B981' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }} />
+              <span>222 Free Routes</span>
+            </div>
+            <div style={{ color: '#9CA3AF' }}>•</div>
+            <div style={{ color: '#F6C878' }}>
+              <span>Local Fallback Ready</span>
+            </div>
           </div>
 
-          {/* Upgrade CTA */}
           <button
             type="button"
             onClick={onCreateStudy}
             style={{
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#FFFFFF',
+              background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
+              border: 'none',
+              color: '#080909',
               borderRadius: '10px',
               padding: '8px 16px',
               fontSize: '0.82rem',
@@ -162,18 +154,11 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
               alignItems: 'center',
               gap: '6px',
               cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(246, 200, 120, 0.25)',
               transition: 'all 0.2s ease',
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#F6C878';
-              e.currentTarget.style.color = '#F6C878';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-              e.currentTarget.style.color = '#FFFFFF';
-            }}
           >
-            Upgrade <ArrowUpRight size={14} />
+            New Study <ArrowUpRight size={14} />
           </button>
         </div>
       </div>

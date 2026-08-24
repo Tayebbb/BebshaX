@@ -274,10 +274,9 @@ def _generate_fallback_response(messages: list[CopilotMessage]) -> CopilotRespon
 
     if turn_count == 1:
         reply = (
-            f"I think I've got it — you want to validate whether your {product_type} will resonate with target users "
-            f"{'and whether the pricing is right' if has_pricing else 'and what value it provides'}, "
-            f"and a User Interviews study is the best way to do this. Deep exploratory conversations will uncover "
-            f"mental models, current workarounds, and real willingness to pay.\n\n{audience_q}"
+            f"Got it — you're exploring a {product_type}{' with a target pricing model' if has_pricing else ''}. "
+            f"User Interviews are ideal here to uncover mental models, key objections, and real willingness to pay.\n\n"
+            f"{audience_q}"
         )
         return CopilotResponse(
             reply=reply,
@@ -301,10 +300,8 @@ def _generate_fallback_response(messages: list[CopilotMessage]) -> CopilotRespon
     else:
         # Generate context-aware summary
         summary = (
-            f"You want to validate whether your {product_type} solves a real problem for your target users "
-            f"and whether they would adopt it {'at your target price point' if has_pricing else 'as part of their routine'}, "
-            f"so you can make a confident build or no-build decision. "
-            f"The research will uncover user motivations, current frustrations, key objections, and willingness to pay. "
+            f"Validate whether your {product_type} solves a genuine need for target users "
+            f"and determine demand{' at your target price point' if has_pricing else ''}. "
             f"Does this capture what you're looking for?"
         )
 

@@ -10,7 +10,9 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from bebshax.db.models import Businesses, Personas, LLMRequests
+from bebshax.auth.models import Users
+from bebshax.auth.security import hash_password
+from bebshax.db.models import Businesses, Personas, LLMRequests, Studies
 from bebshax.persona.schema import (
     EvidenceItem,
     PersonaAttribute,
@@ -23,13 +25,24 @@ logger = logging.getLogger(__name__)
 
 
 async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession]) -> None:
-    """Seed initial known-good business, persona, and provenance if database is empty."""
+    """Seed initial known-good user, business, persona, studies, and provenance if database is empty."""
     async with sessionmaker_() as session:
         count = (await session.execute(select(func.count(Businesses.id)))).scalar_one_or_none() or 0
         if count > 0:
             return  # Already seeded or has data
 
-        logger.info("Seeding demo business, persona, and initial records...")
+        logger.info("Seeding demo user, business, personas, studies, and initial records...")
+
+        # 0. Seed Demo User
+        user = Users(
+            id="usr_sarah_founder",
+            email="founder@bebshax.ai",
+            full_name="Sarah Chen",
+            hashed_password=hash_password("Password123!"),
+            auth_provider="email",
+            is_verified=True,
+        )
+        session.add(user)
 
         # 1. Seed Business
         biz_id = "biz_fintech_01"
@@ -71,6 +84,74 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession]) -> None:
             success=True,
         )
         session.add(prov)
+
+        # 3. Seed Demo Studies across all 5 steps
+        demo_studies = [
+            Studies(
+                id="study_demo_01",
+                user_id="usr_sarah_founder",
+                title="Customer Discovery Study",
+                type="interviews",
+                goal="demand_validation",
+                prompt="Student academic planner with automated study group scheduling",
+                status="completed",
+                step=5,
+                persona_count=3,
+                persona_ids=["per_sarah_01"],
+                is_demo=True,
+                duration_text="Completed • 3 Personas interviewed",
+                findings={
+                    "executive_summary": "Strong demand for automated scheduling with 84% willingness to pay among surveyed university students.",
+                    "demand_signal": "High",
+                    "sentiment_score": 84,
+                },
+            ),
+            Studies(
+                id="study_demo_02",
+                user_id="usr_sarah_founder",
+                title="Pricing Sensitivity Test",
+                type="ab_test",
+                goal="demand_validation",
+                prompt="Testing 250 BDT/month vs 500 BDT/month tier elasticity",
+                status="in_progress",
+                step=4,
+                persona_count=4,
+                persona_ids=["per_sarah_01"],
+                is_demo=True,
+                duration_text="In Progress • Step 4 Interviews",
+            ),
+            Studies(
+                id="study_demo_03",
+                user_id="usr_sarah_founder",
+                title="Concept & Demand Validation",
+                type="landing_page_test",
+                goal="feature_concept_exploration",
+                prompt="Evaluating calendar sync vs exam deadline notifications",
+                status="in_progress",
+                step=2,
+                persona_count=2,
+                persona_ids=["per_sarah_01"],
+                is_demo=True,
+                duration_text="In Progress • Step 2 Personas",
+            ),
+            Studies(
+                id="study_demo_04",
+                user_id="usr_sarah_founder",
+                title="Brand Messaging Discovery",
+                type="message_testing",
+                goal="messaging_positioning",
+                prompt="Explore pitch angles for university entrance candidates",
+                status="in_progress",
+                step=1,
+                persona_count=0,
+                persona_ids=[],
+                is_demo=True,
+                duration_text="Just created • Step 1 Context",
+            ),
+        ]
+        for s in demo_studies:
+            session.add(s)
+
         await session.commit()
 
     # 3. Seed Persona Profile using save_persona
