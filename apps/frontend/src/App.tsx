@@ -2,20 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { api } from './services/api';
 import { HealthResponse } from './types';
 import { LandingPage } from './components/landing/LandingPage';
-import { AppModal } from './components/app/AppModal';
+import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { AuthPage } from './components/auth/AuthPage';
 import { AuthModal } from './components/auth/AuthModal';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { NavigationProvider, useNavigation } from './context/NavigationContext';
 
 const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [isAppModalOpen, setIsAppModalOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authInitialView, setAuthInitialView] = useState<
     'signin' | 'signup-options' | 'signup-email'
   >('signin');
+  const [showLandingPreview, setShowLandingPreview] = useState<boolean>(false);
 
+  const { isAuthenticated } = useAuth();
   const { currentPath, navigate } = useNavigation();
 
   useEffect(() => {
@@ -44,7 +45,11 @@ const AppContent: React.FC = () => {
   };
 
   const handleOpenApp = () => {
-    setIsAppModalOpen(true);
+    if (isAuthenticated) {
+      navigate('/app');
+    } else {
+      navigate('/auth/signin');
+    }
   };
 
   // Check if current URL is a dedicated Auth page route
@@ -57,6 +62,42 @@ const AppContent: React.FC = () => {
 
   if (isAuthRoute) {
     return <AuthPage />;
+  }
+
+  // Check if current URL is an App / Dashboard route
+  const isAppRoute =
+    currentPath.startsWith('/app') ||
+    currentPath.startsWith('/dashboard') ||
+    currentPath.startsWith('/new-study') ||
+    currentPath.startsWith('/personas') ||
+    currentPath.startsWith('/organisation');
+
+  if (isAppRoute) {
+    return (
+      <>
+        {/* Screen-reader accessible identity */}
+        <div
+          style={{
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            padding: 0,
+            margin: '-1px',
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            borderWidth: 0,
+          }}
+        >
+          <h1>BebshaX</h1>
+          <p>Synthetic Persona Research Platform</p>
+          <div>Backend Status: {health?.status || 'Connecting...'}</div>
+        </div>
+
+        {/* Dashboard Shell Application */}
+        <DashboardLayout onOpenLandingPage={() => navigate('/')} />
+      </>
+    );
   }
 
   return (
@@ -84,12 +125,6 @@ const AppContent: React.FC = () => {
       <LandingPage
         onOpenApp={handleOpenApp}
         onOpenAuth={handleOpenAuth}
-      />
-
-      {/* Live App Platform Console Modal */}
-      <AppModal
-        isOpen={isAppModalOpen}
-        onClose={() => setIsAppModalOpen(false)}
       />
 
       {/* Modal Fallback */}

@@ -8,17 +8,26 @@ import {
   ArrowLeft,
   AlertCircle,
   CheckCircle2,
+  ShieldCheck,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { OtpInput } from './OtpInput';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialView?: 'signin' | 'signup-options' | 'signup-email';
+  initialView?: 'signin' | 'signup-options' | 'signup-email' | 'verify-otp';
   onSuccess?: () => void;
 }
 
-type AuthView = 'signin' | 'signup-options' | 'signup-email' | 'forgot-password';
+type AuthView =
+  | 'signin'
+  | 'signup-options'
+  | 'signup-email'
+  | 'verify-otp'
+  | 'forgot-password'
+  | 'reset-password-otp';
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
@@ -26,26 +35,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialView = 'signin',
   onSuccess,
 }) => {
-  const { signin, signup, googleAuth } = useAuth();
   const [view, setView] = useState<AuthView>(initialView);
 
   // Form states
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [otp, setOtp] = useState('');
+
+  // Resend countdown
+  const [countdown, setCountdown] = useState(0);
 
   // Loading & Error states
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const {
+    signin,
+    signup,
+    googleAuth,
+    sendOtp,
+    verifyEmailOtp,
+    resetPasswordWithOtp,
+  } = useAuth();
 
   if (!isOpen) return null;
 
   const resetForm = () => {
-    setFullName('');
-    setEmail('');
-    setPassword('');
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsLoading(false);
@@ -58,7 +79,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
+    resetForm();
     if (!email || !password) {
       setErrorMessage('Please provide both email and password.');
       return;
@@ -70,7 +91,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onSuccess?.();
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Invalid email or password.');
+      if (err.code === 'EMAIL_NOT_VERIFIED' || err.message?.includes('Email not verified')) {
+        await sendOtp(email, 'email-verification').catch(() => {});
+        setSuccessMessage(`We sent a 6-digit verification code to ${email}.`);
+        setCountdown(30);
+        setView('verify-otp');
+      } else {
+        setErrorMessage(err.message || 'Invalid email or password.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -78,7 +106,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
+    resetForm();
     if (!fullName || !email || !password) {
       setErrorMessage('Please fill in all fields.');
       return;
@@ -91,10 +119,98 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       setIsLoading(true);
       await signup(fullName, email, password);
+      await sendOtp(email, 'email-verification').catch(() => {});
+      setSuccessMessage(`We sent a 6-digit verification code to ${email}.`);
+      setCountdown(30);
+      setOtp('');
+      setView('verify-otp');
+    } catch (err: any) {
+      if (err.message?.includes('already exists')) {
+        setErrorMessage('An account with this email already exists. Please sign in.');
+      } else if (err.code === 'EMAIL_NOT_VERIFIED' || err.message?.includes('verification')) {
+        await sendOtp(email, 'email-verification').catch(() => {});
+        setSuccessMessage(`Please enter the 6-digit verification code sent to ${email}.`);
+        setCountdown(30);
+        setView('verify-otp');
+      } else {
+        setErrorMessage(err.message || 'Registration failed. Email might already exist.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetForm();
+    if (!otp || otp.length < 6) {
+      setErrorMessage('Please enter the 6-digit verification code.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await verifyEmailOtp(email, otp);
       onSuccess?.();
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Registration failed. Email might already exist.');
+      setErrorMessage(err.message || 'Invalid verification code. Please check and try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetForm();
+    if (!email) {
+      setErrorMessage('Please enter your email address.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const sent = await sendOtp(email, 'forget-password');
+      if (sent) {
+        setSuccessMessage(`A 6-digit password reset code was sent to ${email}.`);
+        setCountdown(30);
+        setOtp('');
+        setPassword('');
+        setConfirmPassword('');
+        setView('reset-password-otp');
+      } else {
+        setErrorMessage('Could not send reset code. Please check the email address.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to send reset code.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPasswordWithOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetForm();
+    if (!otp || otp.length < 6) {
+      setErrorMessage('Please enter the 6-digit reset code.');
+      return;
+    }
+    if (!password || password.length < 8) {
+      setErrorMessage('New password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords do not match.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await resetPasswordWithOtp(email, otp, password);
+      await signin(email, password);
+      onSuccess?.();
+      onClose();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to reset password. Please check the OTP code.');
     } finally {
       setIsLoading(false);
     }
@@ -116,19 +232,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) {
-      setErrorMessage('Please enter your email address.');
-      return;
-    }
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setSuccessMessage('Password reset link sent to your email.');
-    }, 800);
-  };
-
   return (
     <div
       style={{
@@ -145,7 +248,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }}
       onClick={onClose}
     >
-      {/* Background Ambience & Dotted Texture */}
+      {/* Container */}
       <div
         style={{
           position: 'relative',
@@ -155,7 +258,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Brand Logo & Wordmark at top */}
+        {/* Brand Logo & Wordmark */}
         <div
           style={{
             display: 'flex',
@@ -165,33 +268,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             marginBottom: '20px',
           }}
         >
-          {/* Geometric Triangle Node Logo */}
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M16 4L28 26H4L16 4Z"
-              stroke="#2B3024"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle cx="16" cy="4" r="2.5" fill="#2B3024" />
-            <circle cx="28" cy="26" r="2.5" fill="#2B3024" />
-            <circle cx="4" cy="26" r="2.5" fill="#2B3024" />
-            <circle cx="16" cy="18" r="2" fill="#2B3024" />
-            <line x1="16" y1="4" x2="16" y2="18" stroke="#2B3024" strokeWidth="1.8" />
-            <line x1="4" y1="26" x2="16" y2="18" stroke="#2B3024" strokeWidth="1.8" />
-            <line x1="28" y1="26" x2="16" y2="18" stroke="#2B3024" strokeWidth="1.8" />
-          </svg>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#080909',
+              fontWeight: 800,
+              fontSize: '1.1rem',
+            }}
+          >
+            B
+          </div>
           <span
             style={{
               fontSize: '1.75rem',
               fontWeight: 700,
               letterSpacing: '-0.03em',
-              color: '#2B3024',
-              fontFamily: 'var(--font-sans)',
+              color: '#FFFFFF',
             }}
           >
-            Bebsha<span style={{ color: '#2B3024' }}>X</span>
+            BebshaX
           </span>
         </div>
 
@@ -230,14 +331,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <X size={15} />
           </button>
 
-          {/* Feedback alerts */}
+          {/* Alerts */}
           {errorMessage && (
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 14px',
+                padding: '12px 14px',
                 borderRadius: '10px',
                 background: 'rgba(239, 68, 68, 0.08)',
                 border: '1px solid rgba(239, 68, 68, 0.2)',
@@ -246,8 +344,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 marginBottom: '18px',
               }}
             >
-              <AlertCircle size={16} />
-              <span>{errorMessage}</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <AlertCircle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>{errorMessage}</div>
+              </div>
             </div>
           )}
 
@@ -271,9 +371,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {/* ============================================================
-              VIEW 1: SIGN IN
-             ============================================================ */}
+          {/* VIEW: SIGN IN */}
           {view === 'signin' && (
             <div>
               <div style={{ textAlign: 'center', marginBottom: '24px' }}>
@@ -312,7 +410,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   fontSize: '0.85rem',
                   fontWeight: 600,
                   cursor: 'pointer',
-                  transition: 'background 0.2s ease',
                   boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
                 }}
               >
@@ -337,7 +434,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <span>Continue with Google</span>
               </button>
 
-              {/* Divider */}
               <div
                 style={{
                   display: 'flex',
@@ -360,7 +456,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
               </div>
 
-              {/* Form */}
               <form onSubmit={handleSignIn}>
                 <div style={{ marginBottom: '16px' }}>
                   <label
@@ -390,15 +485,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       color: '#111827',
                       background: '#FFFFFF',
                       outline: 'none',
-                      transition: 'border 0.2s, box-shadow 0.2s',
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#F6C878';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#D1D5DB';
-                      e.target.style.boxShadow = 'none';
                     }}
                   />
                 </div>
@@ -412,13 +498,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       marginBottom: '6px',
                     }}
                   >
-                    <label
-                      style={{
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        color: '#374151',
-                      }}
-                    >
+                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>
                       Password
                     </label>
                     <button
@@ -454,15 +534,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         color: '#111827',
                         background: '#FFFFFF',
                         outline: 'none',
-                        transition: 'border 0.2s, box-shadow 0.2s',
-                      }}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = '#F6C878';
-                        e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = '#D1D5DB';
-                        e.target.style.boxShadow = 'none';
                       }}
                     />
                     <button
@@ -478,9 +549,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         border: 'none',
                         color: '#9CA3AF',
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
                         padding: 0,
                       }}
                     >
@@ -489,7 +557,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
 
-                {/* Primary CTA Golden Button */}
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -503,21 +570,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     fontSize: '0.9rem',
                     fontWeight: 700,
                     cursor: isLoading ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s ease',
                     boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isLoading) (e.target as HTMLElement).style.background = '#E5B45F';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isLoading) (e.target as HTMLElement).style.background = '#F6C878';
                   }}
                 >
                   {isLoading ? 'Signing in...' : 'Sign in'}
                 </button>
               </form>
 
-              {/* Footer Switch */}
               <div style={{ textAlign: 'center', marginTop: '22px' }}>
                 <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
                   Don't have an account?{' '}
@@ -540,9 +599,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {/* ============================================================
-              VIEW 2: SIGN UP OPTIONS
-             ============================================================ */}
+          {/* VIEW: SIGN UP OPTIONS */}
           {view === 'signup-options' && (
             <div>
               <div style={{ textAlign: 'center', marginBottom: '24px' }}>
@@ -562,7 +619,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </p>
               </div>
 
-              {/* Google Button */}
               <button
                 type="button"
                 onClick={handleGoogleAuth}
@@ -581,8 +637,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   fontSize: '0.85rem',
                   fontWeight: 600,
                   cursor: 'pointer',
-                  transition: 'background 0.2s ease',
-                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24">
@@ -610,21 +664,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                  marginTop: '8px',
-                  color: '#9CA3AF',
-                  fontSize: '0.72rem',
-                }}
-              >
-                <span>⚡ Fastest way in</span>
-              </div>
-
-              {/* Divider */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
                   gap: '12px',
                   margin: '20px 0',
                 }}
@@ -643,7 +682,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
               </div>
 
-              {/* Sign up with email option card */}
               <button
                 type="button"
                 onClick={() => handleSwitchView('signup-email')}
@@ -657,16 +695,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
                   textAlign: 'left',
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = '#F9FAFB';
-                  (e.currentTarget as HTMLElement).style.borderColor = '#D1D5DB';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = '#FFFFFF';
-                  (e.currentTarget as HTMLElement).style.borderColor = '#E5E7EB';
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -689,14 +718,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       Sign up with email
                     </div>
                     <div style={{ fontSize: '0.74rem', color: '#6B7280' }}>
-                      Use a work email and password
+                      Use a work email and password with instant OTP
                     </div>
                   </div>
                 </div>
                 <ChevronRight size={18} color="#9CA3AF" />
               </button>
 
-              {/* Footer Switch */}
               <div style={{ textAlign: 'center', marginTop: '26px' }}>
                 <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
                   Already have an account?{' '}
@@ -719,12 +747,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {/* ============================================================
-              VIEW 3: EMAIL SIGN UP FORM
-             ============================================================ */}
+          {/* VIEW: SIGN UP EMAIL */}
           {view === 'signup-email' && (
             <div>
-              {/* Back to all options */}
               <button
                 type="button"
                 onClick={() => handleSwitchView('signup-options')}
@@ -743,7 +768,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 }}
               >
                 <ArrowLeft size={14} />
-                <span>Back to all options</span>
+                <span>Back</span>
               </button>
 
               <div style={{ marginBottom: '20px' }}>
@@ -759,7 +784,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   Sign up with email
                 </h2>
                 <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
-                  We'll send a verification link to confirm your address.
+                  We'll send a 6-digit verification code to your email.
                 </p>
               </div>
 
@@ -792,15 +817,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       color: '#111827',
                       background: '#FFFFFF',
                       outline: 'none',
-                      transition: 'border 0.2s, box-shadow 0.2s',
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#F6C878';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#D1D5DB';
-                      e.target.style.boxShadow = 'none';
                     }}
                   />
                 </div>
@@ -833,15 +849,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       color: '#111827',
                       background: '#FFFFFF',
                       outline: 'none',
-                      transition: 'border 0.2s, box-shadow 0.2s',
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#F6C878';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#D1D5DB';
-                      e.target.style.boxShadow = 'none';
                     }}
                   />
                 </div>
@@ -875,15 +882,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         color: '#111827',
                         background: '#FFFFFF',
                         outline: 'none',
-                        transition: 'border 0.2s, box-shadow 0.2s',
-                      }}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = '#F6C878';
-                        e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = '#D1D5DB';
-                        e.target.style.boxShadow = 'none';
                       }}
                     />
                     <button
@@ -899,21 +897,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         border: 'none',
                         color: '#9CA3AF',
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
                         padding: 0,
                       }}
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                  <div style={{ fontSize: '0.74rem', color: '#9CA3AF', marginTop: '6px' }}>
-                    At least 8 characters, alphanumeric.
-                  </div>
                 </div>
 
-                {/* Create account button */}
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -927,46 +918,125 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     fontSize: '0.9rem',
                     fontWeight: 700,
                     cursor: isLoading ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s ease',
                     boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isLoading) (e.target as HTMLElement).style.background = '#E5B45F';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isLoading) (e.target as HTMLElement).style.background = '#F6C878';
                   }}
                 >
                   {isLoading ? 'Creating account...' : 'Create account'}
                 </button>
               </form>
+            </div>
+          )}
 
-              {/* Footer Switch */}
-              <div style={{ textAlign: 'center', marginTop: '22px' }}>
+          {/* VIEW: VERIFY OTP */}
+          {view === 'verify-otp' && (
+            <div>
+              <button
+                type="button"
+                onClick={() => handleSwitchView('signup-email')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'none',
+                  border: 'none',
+                  color: '#6B7280',
+                  fontSize: '0.82rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  padding: 0,
+                  marginBottom: '16px',
+                }}
+              >
+                <ArrowLeft size={14} />
+                <span>Back</span>
+              </button>
+
+              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                <div
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '12px',
+                    background: 'rgba(246, 200, 120, 0.15)',
+                    color: '#D4AF37',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 12px auto',
+                  }}
+                >
+                  <ShieldCheck size={24} />
+                </div>
+                <h2
+                  style={{
+                    fontSize: '1.45rem',
+                    fontWeight: 600,
+                    color: '#1E2319',
+                    letterSpacing: '-0.02em',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Enter verification code
+                </h2>
+                <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
+                  We sent a 6-digit code to <strong style={{ color: '#111827' }}>{email}</strong>.
+                </p>
+              </div>
+
+              <form onSubmit={handleVerifyOtp}>
+                <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
+
+                <button
+                  type="submit"
+                  disabled={isLoading || otp.length < 6}
+                  style={{
+                    width: '100%',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: (isLoading || otp.length < 6) ? '#F0D49D' : '#F6C878',
+                    color: '#2B2516',
+                    border: 'none',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    cursor: (isLoading || otp.length < 6) ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
+                  }}
+                >
+                  {isLoading ? 'Verifying...' : 'Verify & Continue'}
+                </button>
+              </form>
+
+              <div style={{ textAlign: 'center', marginTop: '20px' }}>
                 <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
-                  Already have an account?{' '}
+                  Didn't receive the code?{' '}
                   <button
                     type="button"
-                    onClick={() => handleSwitchView('signin')}
+                    disabled={countdown > 0 || isResending}
+                    onClick={async () => {
+                      if (countdown > 0 || !email) return;
+                      setIsResending(true);
+                      await sendOtp(email, 'email-verification').catch(() => {});
+                      setIsResending(false);
+                      setCountdown(30);
+                      setSuccessMessage(`New code sent to ${email}.`);
+                    }}
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#8A6B29',
+                      color: countdown > 0 ? '#9CA3AF' : '#8A6B29',
                       fontWeight: 700,
-                      cursor: 'pointer',
+                      cursor: countdown > 0 ? 'not-allowed' : 'pointer',
                       padding: 0,
                     }}
                   >
-                    Sign in
+                    {countdown > 0 ? `Resend in ${countdown}s` : 'Resend code'}
                   </button>
                 </p>
               </div>
             </div>
           )}
 
-          {/* ============================================================
-              VIEW 4: FORGOT PASSWORD
-             ============================================================ */}
+          {/* VIEW: FORGOT PASSWORD */}
           {view === 'forgot-password' && (
             <div>
               <button
@@ -1003,7 +1073,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   Reset password
                 </h2>
                 <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
-                  Enter your email and we'll send you a password reset link.
+                  Enter your email to receive a 6-digit reset code.
                 </p>
               </div>
 
@@ -1037,14 +1107,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       background: '#FFFFFF',
                       outline: 'none',
                     }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#F6C878';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#D1D5DB';
-                      e.target.style.boxShadow = 'none';
-                    }}
                   />
                 </div>
 
@@ -1063,25 +1125,208 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     cursor: isLoading ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {isLoading ? 'Sending...' : 'Send reset link'}
+                  {isLoading ? 'Sending code...' : 'Send reset code'}
                 </button>
               </form>
             </div>
           )}
-        </div>
 
-        {/* Global Footer Disclaimer */}
-        <div style={{ textAlign: 'center', marginTop: '18px' }}>
-          <p style={{ fontSize: '0.72rem', color: '#9CA3AF', lineHeight: 1.4 }}>
-            By creating an account, you agree to our{' '}
-            <a href="#" style={{ color: '#6B7280', textDecoration: 'underline' }}>
-              Terms of Service
-            </a>{' '}
-            and{' '}
-            <a href="#" style={{ color: '#6B7280', textDecoration: 'underline' }}>
-              Privacy Policy
-            </a>
-          </p>
+          {/* VIEW: RESET PASSWORD WITH OTP */}
+          {view === 'reset-password-otp' && (
+            <div>
+              <button
+                type="button"
+                onClick={() => handleSwitchView('forgot-password')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'none',
+                  border: 'none',
+                  color: '#6B7280',
+                  fontSize: '0.82rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  padding: 0,
+                  marginBottom: '16px',
+                }}
+              >
+                <ArrowLeft size={14} />
+                <span>Back</span>
+              </button>
+
+              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                <div
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '12px',
+                    background: 'rgba(246, 200, 120, 0.15)',
+                    color: '#D4AF37',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 12px auto',
+                  }}
+                >
+                  <KeyRound size={24} />
+                </div>
+                <h2
+                  style={{
+                    fontSize: '1.45rem',
+                    fontWeight: 600,
+                    color: '#1E2319',
+                    letterSpacing: '-0.02em',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Set new password
+                </h2>
+                <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
+                  Enter the 6-digit code sent to <strong style={{ color: '#111827' }}>{email}</strong>.
+                </p>
+              </div>
+
+              <form onSubmit={handleResetPasswordWithOtp}>
+                <div style={{ marginBottom: '12px' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      color: '#374151',
+                      marginBottom: '4px',
+                      textAlign: 'center',
+                    }}
+                  >
+                    6-digit reset code
+                  </label>
+                  <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
+                </div>
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      color: '#374151',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    New password
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 8 characters"
+                      style={{
+                        width: '100%',
+                        height: '42px',
+                        padding: '0 40px 0 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #D1D5DB',
+                        fontSize: '0.88rem',
+                        color: '#111827',
+                        background: '#FFFFFF',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#9CA3AF',
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '22px' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      color: '#374151',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    Confirm new password
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat new password"
+                      style={{
+                        width: '100%',
+                        height: '42px',
+                        padding: '0 40px 0 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #D1D5DB',
+                        fontSize: '0.88rem',
+                        color: '#111827',
+                        background: '#FFFFFF',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#9CA3AF',
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading || otp.length < 6}
+                  style={{
+                    width: '100%',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: (isLoading || otp.length < 6) ? '#F0D49D' : '#F6C878',
+                    color: '#2B2516',
+                    border: 'none',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    cursor: (isLoading || otp.length < 6) ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
+                  }}
+                >
+                  {isLoading ? 'Resetting...' : 'Reset Password & Sign In'}
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -3,13 +3,13 @@
    ========================================================================== */
 
 :root {
-  /* Core Color Palette: Pure Obsidian & High-Craft Dark */
-  --bg-pure: #000000;
-  --bg-primary: #000000;
-  --bg-secondary: #08080A;
-  --bg-card: #0A0A0E;
-  --bg-card-hover: #121217;
-  --bg-glass: rgba(12, 12, 16, 0.85);
+  /* Core Color Palette: High-Craft Dark with #080909 Base */
+  --bg-pure: #080909;
+  --bg-primary: #080909;
+  --bg-secondary: #0F1011;
+  --bg-card: #131415;
+  --bg-card-hover: #1A1B1D;
+  --bg-glass: rgba(8, 9, 9, 0.85);
 
   /* Borders & Dividers - Set to none / transparent for ultra-clean look */
   --border-subtle: transparent;
@@ -244,12 +244,12 @@ h1, h2, h3, h4, h5, h6 {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #000000;
+  background: #080909;
 }
 ::-webkit-scrollbar-thumb {
-  background: #222226;
+  background: #232528;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #33333A;
+  background: #32353A;
 }

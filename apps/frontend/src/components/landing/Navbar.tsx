@@ -73,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
         display: 'flex',
         alignItems: 'center',
         background: scrolled
-          ? 'rgba(0, 0, 0, 0.9)'
+          ? 'rgba(8, 9, 9, 0.92)'
           : 'transparent',
         backdropFilter: scrolled ? 'blur(16px)' : 'none',
         WebkitBackdropFilter: scrolled ? 'blur(16px)' : 'none',

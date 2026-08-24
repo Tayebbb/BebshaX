@@ -114,7 +114,7 @@ describe('BebshaX Premium Landing Page', () => {
     fireEvent.click(cta);
 
     expect(
-      await screen.findByRole('heading', { name: /BebshaX Platform Console/i })
+      await screen.findByRole('heading', { name: /What do you want to find out/i })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { name: /Create your account/i })
@@ -131,7 +131,7 @@ describe('BebshaX Premium Landing Page', () => {
     fireEvent.click(cta);
 
     expect(
-      await screen.findByRole('heading', { name: /BebshaX Platform Console/i })
+      await screen.findByRole('heading', { name: /What do you want to find out/i })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { name: /Create your account/i })

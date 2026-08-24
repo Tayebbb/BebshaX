@@ -27,7 +27,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenApp, onOpenAuth 
       style={{
         position: 'relative',
         minHeight: '100vh',
-        background: '#000000',
+        background: '#080909',
         color: '#FFFFFF',
         overflowX: 'hidden',
       }}

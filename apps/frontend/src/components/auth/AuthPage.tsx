@@ -7,21 +7,36 @@ import {
   ArrowLeft,
   AlertCircle,
   CheckCircle2,
+  KeyRound,
+  ShieldCheck,
+  RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
+import { OtpInput } from './OtpInput';
 
 interface AuthPageProps {
-  initialMode?: 'signin' | 'signup' | 'signup-email' | 'forgot-password';
+  initialMode?: 'signin' | 'signup' | 'signup-email' | 'forgot-password' | 'verify-otp' | 'reset-password-otp';
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) => {
-  const { signin, signup, googleAuth, isAuthenticated } = useAuth();
   const { currentPath, navigate } = useNavigation();
+  const {
+    signin,
+    signup,
+    googleAuth,
+    sendOtp,
+    verifyEmailOtp,
+    resetPasswordWithOtp,
+    isAuthenticated,
+  } = useAuth();
 
-  // Determine current view from URL path or prop
-  const [view, setView] = useState<'signin' | 'signup' | 'signup-email' | 'forgot-password'>(() => {
+  // Determine current view
+  const [view, setView] = useState<
+    'signin' | 'signup' | 'signup-email' | 'forgot-password' | 'verify-otp' | 'reset-password-otp'
+  >(() => {
     if (currentPath.includes('/signup/email')) return 'signup-email';
+    if (currentPath.includes('/verify') || currentPath.includes('/otp')) return 'verify-otp';
     if (currentPath.includes('/signup') || currentPath.includes('/register')) return 'signup';
     if (currentPath.includes('/forgot-password') || currentPath.includes('/reset')) return 'forgot-password';
     return initialMode;
@@ -30,6 +45,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   useEffect(() => {
     if (currentPath.includes('/signup/email')) {
       setView('signup-email');
+    } else if (currentPath.includes('/verify') || currentPath.includes('/otp')) {
+      setView('verify-otp');
     } else if (currentPath.includes('/signup') || currentPath.includes('/register')) {
       setView('signup');
     } else if (currentPath.includes('/forgot-password') || currentPath.includes('/reset')) {
@@ -39,10 +56,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     }
   }, [currentPath]);
 
-  // If already authenticated, redirect to /
+  // If already authenticated, redirect to /app
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/');
+      navigate('/app');
     }
   }, [isAuthenticated, navigate]);
 
@@ -50,10 +67,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [otp, setOtp] = useState('');
+
+  // Resend Countdown
+  const [countdown, setCountdown] = useState(0);
+
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
 
   // States
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -73,9 +104,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     try {
       setIsLoading(true);
       await signin(email, password);
-      navigate('/');
+      navigate('/app');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Invalid email or password.');
+      if (err.code === 'EMAIL_NOT_VERIFIED' || err.message?.includes('Email not verified')) {
+        // Send verification OTP and switch to verify-otp view
+        await sendOtp(email, 'email-verification').catch(() => {});
+        setSuccessMessage(`We sent a 6-digit verification code to ${email}. Please enter it below.`);
+        setCountdown(30);
+        setView('verify-otp');
+      } else {
+        setErrorMessage(err.message || 'Invalid email or password.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -96,25 +135,42 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     try {
       setIsLoading(true);
       await signup(fullName, email, password);
-      navigate('/');
+      // Automatically send verification OTP and switch to OTP form
+      await sendOtp(email, 'email-verification').catch(() => {});
+      setSuccessMessage(`Account created! We've sent a 6-digit verification code to ${email}.`);
+      setCountdown(30);
+      setOtp('');
+      setView('verify-otp');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Registration failed. Email may already be in use.');
+      if (err.message?.includes('already exists')) {
+        setErrorMessage('An account with this email already exists. Please sign in.');
+      } else if (err.code === 'EMAIL_NOT_VERIFIED' || err.message?.includes('verification')) {
+        await sendOtp(email, 'email-verification').catch(() => {});
+        setSuccessMessage(`Please enter the 6-digit verification code sent to ${email}.`);
+        setCountdown(30);
+        setView('verify-otp');
+      } else {
+        setErrorMessage(err.message || 'Registration failed. Please check your information.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleAuth = async () => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
     resetMessages();
+    if (!otp || otp.length < 6) {
+      setErrorMessage('Please enter the full 6-digit verification code.');
+      return;
+    }
+
     try {
       setIsLoading(true);
-      await googleAuth({
-        email: email || 'alex.founder@bebshax.io',
-        name: fullName || 'Alex Founder',
-      });
-      navigate('/');
+      await verifyEmailOtp(email, otp);
+      navigate('/app');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Google authentication failed.');
+      setErrorMessage(err.message || 'Invalid verification code. Please check and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -128,10 +184,87 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
       return;
     }
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const sent = await sendOtp(email, 'forget-password');
+      if (sent) {
+        setSuccessMessage(`A 6-digit password reset code was sent to ${email}.`);
+        setCountdown(30);
+        setOtp('');
+        setPassword('');
+        setConfirmPassword('');
+        setView('reset-password-otp');
+      } else {
+        setErrorMessage('Could not send reset code. Please check the email address.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to send reset code.');
+    } finally {
       setIsLoading(false);
-      setSuccessMessage('Password reset link sent to your email.');
-    }, 800);
+    }
+  };
+
+  const handleResetPasswordWithOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetMessages();
+    if (!otp || otp.length < 6) {
+      setErrorMessage('Please enter the 6-digit reset code.');
+      return;
+    }
+    if (!password || password.length < 8) {
+      setErrorMessage('New password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords do not match.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await resetPasswordWithOtp(email, otp, password);
+      // Auto sign in with new password
+      await signin(email, password);
+      navigate('/app');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to reset password. Please check the OTP code.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async (type: 'email-verification' | 'forget-password') => {
+    if (countdown > 0 || isResending || !email) return;
+    try {
+      setIsResending(true);
+      resetMessages();
+      const sent = await sendOtp(email, type);
+      if (sent) {
+        setSuccessMessage(`New 6-digit code sent to ${email}.`);
+        setCountdown(30);
+      } else {
+        setErrorMessage('Failed to resend code. Please try again.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to resend code.');
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    resetMessages();
+    try {
+      setIsLoading(true);
+      await googleAuth({
+        email: email || 'alex.founder@bebshax.io',
+        name: fullName || 'Alex Founder',
+      });
+      navigate('/app');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Google authentication failed.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -139,10 +272,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
       style={{
         minHeight: '100vh',
         width: '100%',
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#080909',
         backgroundImage: `
           radial-gradient(circle at 50% 35%, rgba(246, 200, 120, 0.12) 0%, rgba(246, 200, 120, 0.03) 45%, transparent 75%),
-          radial-gradient(circle, #D1D5DB 1.15px, transparent 1.15px)
+          radial-gradient(circle, rgba(255, 255, 255, 0.08) 1.15px, transparent 1.15px)
         `,
         backgroundSize: '100% 100%, 18px 18px',
         display: 'flex',
@@ -151,11 +284,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         justifyContent: 'center',
         padding: '32px 16px',
         position: 'relative',
-        color: '#1E2319',
+        color: '#F4F4F5',
       }}
     >
       {/* Back to Home Button at Top-Left */}
       <button
+        type="button"
         onClick={() => navigate('/')}
         style={{
           position: 'absolute',
@@ -164,27 +298,27 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
-          background: 'rgba(255, 255, 255, 0.8)',
+          background: 'rgba(255, 255, 255, 0.08)',
           backdropFilter: 'blur(10px)',
-          border: '1px solid #E5E7EB',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
           borderRadius: '10px',
           padding: '8px 14px',
           fontSize: '0.82rem',
           fontWeight: 600,
-          color: '#4B5563',
+          color: '#E5E7EB',
           cursor: 'pointer',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
           transition: 'all 0.2s ease',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = '#FFFFFF';
-          e.currentTarget.style.borderColor = '#D1D5DB';
-          e.currentTarget.style.color = '#111827';
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.14)';
+          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+          e.currentTarget.style.color = '#FFFFFF';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
-          e.currentTarget.style.borderColor = '#E5E7EB';
-          e.currentTarget.style.color = '#4B5563';
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+          e.currentTarget.style.color = '#E5E7EB';
         }}
       >
         <ArrowLeft size={15} />
@@ -202,29 +336,29 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           cursor: 'pointer',
         }}
       >
-        {/* Geometric Star/Triangle Logo Node */}
-        <svg width="34" height="34" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M16 4L28 26H4L16 4Z"
-            stroke="#2B3024"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <circle cx="16" cy="4" r="2.5" fill="#2B3024" />
-          <circle cx="28" cy="26" r="2.5" fill="#2B3024" />
-          <circle cx="4" cy="26" r="2.5" fill="#2B3024" />
-          <circle cx="16" cy="18" r="2" fill="#2B3024" />
-          <line x1="16" y1="4" x2="16" y2="18" stroke="#2B3024" strokeWidth="1.8" />
-          <line x1="4" y1="26" x2="16" y2="18" stroke="#2B3024" strokeWidth="1.8" />
-          <line x1="28" y1="26" x2="16" y2="18" stroke="#2B3024" strokeWidth="1.8" />
-        </svg>
+        {/* Geometric Star Logo Node */}
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#080909',
+            fontWeight: 800,
+            fontSize: '1.1rem',
+          }}
+        >
+          B
+        </div>
         <span
           style={{
             fontSize: '1.85rem',
             fontWeight: 700,
             letterSpacing: '-0.03em',
-            color: '#2B3024',
+            color: '#FFFFFF',
           }}
         >
           BebshaX
@@ -248,10 +382,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         {errorMessage && (
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 14px',
+              padding: '12px 14px',
               borderRadius: '10px',
               background: 'rgba(239, 68, 68, 0.08)',
               border: '1px solid rgba(239, 68, 68, 0.2)',
@@ -260,8 +391,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               marginBottom: '18px',
             }}
           >
-            <AlertCircle size={16} />
-            <span>{errorMessage}</span>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <AlertCircle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>{errorMessage}</div>
+            </div>
           </div>
         )}
 
@@ -712,7 +845,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     Sign up with email
                   </div>
                   <div style={{ fontSize: '0.74rem', color: '#6B7280' }}>
-                    Use a work email and password
+                    Use a work email and password with instant OTP
                   </div>
                 </div>
               </div>
@@ -787,7 +920,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 Sign up with email
               </h1>
               <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
-                We'll send a verification link to confirm your address.
+                We'll send a 6-digit verification code to confirm your address.
               </p>
             </div>
 
@@ -996,7 +1129,115 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         )}
 
         {/* ============================================================
-            VIEW 4: FORGOT PASSWORD
+            VIEW 4: VERIFY EMAIL OTP (/auth/verify-otp)
+           ============================================================ */}
+        {view === 'verify-otp' && (
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                resetMessages();
+                setView('signup-email');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'none',
+                border: 'none',
+                color: '#6B7280',
+                fontSize: '0.82rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                padding: 0,
+                marginBottom: '16px',
+              }}
+            >
+              <ArrowLeft size={14} />
+              <span>Back / Change email</span>
+            </button>
+
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'rgba(246, 200, 120, 0.15)',
+                  color: '#D4AF37',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 12px auto',
+                }}
+              >
+                <ShieldCheck size={24} />
+              </div>
+              <h1
+                style={{
+                  fontSize: '1.45rem',
+                  fontWeight: 600,
+                  color: '#1E2319',
+                  letterSpacing: '-0.02em',
+                  marginBottom: '6px',
+                }}
+              >
+                Enter verification code
+              </h1>
+              <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0, lineHeight: 1.5 }}>
+                We sent a 6-digit code to <strong style={{ color: '#111827' }}>{email || 'your email'}</strong>.
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyOtp}>
+              <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
+
+              <button
+                type="submit"
+                disabled={isLoading || otp.length < 6}
+                style={{
+                  width: '100%',
+                  height: '44px',
+                  borderRadius: '10px',
+                  background: (isLoading || otp.length < 6) ? '#F0D49D' : '#F6C878',
+                  color: '#2B2516',
+                  border: 'none',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  cursor: (isLoading || otp.length < 6) ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
+                }}
+              >
+                {isLoading ? 'Verifying...' : 'Verify & Continue'}
+              </button>
+            </form>
+
+            <div style={{ textAlign: 'center', marginTop: '20px' }}>
+              <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
+                Didn't receive the code?{' '}
+                <button
+                  type="button"
+                  disabled={countdown > 0 || isResending}
+                  onClick={() => handleResendOtp('email-verification')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: countdown > 0 ? '#9CA3AF' : '#8A6B29',
+                    fontWeight: 700,
+                    cursor: countdown > 0 ? 'not-allowed' : 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {countdown > 0 ? `Resend in ${countdown}s` : isResending ? 'Sending...' : 'Resend code'}
+                </button>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================
+            VIEW 5: FORGOT PASSWORD (REQUEST OTP)
            ============================================================ */}
         {view === 'forgot-password' && (
           <div>
@@ -1037,7 +1278,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 Reset password
               </h1>
               <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
-                Enter your email to receive a password reset link.
+                Enter your email to receive a 6-digit reset code.
               </p>
             </div>
 
@@ -1097,9 +1338,232 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   cursor: isLoading ? 'not-allowed' : 'pointer',
                 }}
               >
-                {isLoading ? 'Sending...' : 'Send reset link'}
+                {isLoading ? 'Sending code...' : 'Send reset code'}
               </button>
             </form>
+          </div>
+        )}
+
+        {/* ============================================================
+            VIEW 6: RESET PASSWORD WITH OTP
+           ============================================================ */}
+        {view === 'reset-password-otp' && (
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                resetMessages();
+                setView('forgot-password');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'none',
+                border: 'none',
+                color: '#6B7280',
+                fontSize: '0.82rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                padding: 0,
+                marginBottom: '16px',
+              }}
+            >
+              <ArrowLeft size={14} />
+              <span>Back / Change email</span>
+            </button>
+
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'rgba(246, 200, 120, 0.15)',
+                  color: '#D4AF37',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 12px auto',
+                }}
+              >
+                <KeyRound size={24} />
+              </div>
+              <h1
+                style={{
+                  fontSize: '1.45rem',
+                  fontWeight: 600,
+                  color: '#1E2319',
+                  letterSpacing: '-0.02em',
+                  marginBottom: '6px',
+                }}
+              >
+                Set new password
+              </h1>
+              <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0, lineHeight: 1.5 }}>
+                Enter the 6-digit code sent to <strong style={{ color: '#111827' }}>{email}</strong> and your new password.
+              </p>
+            </div>
+
+            <form onSubmit={handleResetPasswordWithOtp}>
+              <div style={{ marginBottom: '12px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: '#374151',
+                    marginBottom: '4px',
+                    textAlign: 'center',
+                  }}
+                >
+                  6-digit reset code
+                </label>
+                <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: '#374151',
+                    marginBottom: '6px',
+                  }}
+                >
+                  New password
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      padding: '0 40px 0 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      fontSize: '0.88rem',
+                      color: '#111827',
+                      background: '#FFFFFF',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: '#9CA3AF',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '22px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: '#374151',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Confirm new password
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat new password"
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      padding: '0 40px 0 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      fontSize: '0.88rem',
+                      color: '#111827',
+                      background: '#FFFFFF',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: '#9CA3AF',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading || otp.length < 6}
+                style={{
+                  width: '100%',
+                  height: '44px',
+                  borderRadius: '10px',
+                  background: (isLoading || otp.length < 6) ? '#F0D49D' : '#F6C878',
+                  color: '#2B2516',
+                  border: 'none',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  cursor: (isLoading || otp.length < 6) ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
+                }}
+              >
+                {isLoading ? 'Resetting...' : 'Reset Password & Sign In'}
+              </button>
+            </form>
+
+            <div style={{ textAlign: 'center', marginTop: '20px' }}>
+              <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
+                Didn't receive the code?{' '}
+                <button
+                  type="button"
+                  disabled={countdown > 0 || isResending}
+                  onClick={() => handleResendOtp('forget-password')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: countdown > 0 ? '#9CA3AF' : '#8A6B29',
+                    fontWeight: 700,
+                    cursor: countdown > 0 ? 'not-allowed' : 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {countdown > 0 ? `Resend in ${countdown}s` : isResending ? 'Sending...' : 'Resend code'}
+                </button>
+              </p>
+            </div>
           </div>
         )}
       </div>

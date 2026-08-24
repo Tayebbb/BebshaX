@@ -10,37 +10,37 @@ interface AuthContextType {
   signin: (email: string, password: string) => Promise<void>;
   signup: (fullName: string, email: string, password: string) => Promise<void>;
   googleAuth: (data?: GoogleAuthData) => Promise<void>;
+  resendVerification: (email: string) => Promise<boolean>;
+  sendOtp: (email: string, type?: 'email-verification' | 'forget-password') => Promise<boolean>;
+  verifyEmailOtp: (email: string, otp: string) => Promise<void>;
+  resetPasswordWithOtp: (email: string, otp: string, password: string) => Promise<boolean>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => api.getStoredUser());
   const [token, setToken] = useState<string | null>(() => api.getAuthToken());
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const initAuth = async () => {
       const storedToken = api.getAuthToken();
-      if (storedToken) {
-        try {
-          const profile = await api.getMe();
-          if (profile) {
-            setUser(profile);
-            setToken(storedToken);
-          } else {
-            api.setAuthToken(null);
-            setToken(null);
-            setUser(null);
-          }
-        } catch {
-          api.setAuthToken(null);
-          setToken(null);
+      try {
+        const profile = await api.getMe();
+        if (profile) {
+          setUser(profile);
+          if (storedToken) setToken(storedToken);
+        } else if (!storedToken) {
           setUser(null);
+          setToken(null);
         }
+      } catch {
+        // preserve offline/mock session if available
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     initAuth();
@@ -64,8 +64,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(res.user);
   };
 
+  const resendVerification = async (email: string): Promise<boolean> => {
+    return await api.resendVerificationEmail(email);
+  };
+
+  const sendOtp = async (
+    email: string,
+    type: 'email-verification' | 'forget-password' = 'email-verification'
+  ): Promise<boolean> => {
+    return await api.sendOtp(email, type);
+  };
+
+  const verifyEmailOtp = async (email: string, otp: string): Promise<void> => {
+    const res = await api.verifyEmailOtp(email, otp);
+    if (res.token) setToken(res.token);
+    setUser(res.user);
+  };
+
+  const resetPasswordWithOtp = async (
+    email: string,
+    otp: string,
+    password: string
+  ): Promise<boolean> => {
+    return await api.resetPasswordWithOtp(email, otp, password);
+  };
+
   const logout = () => {
-    api.setAuthToken(null);
+    api.signout().catch(() => {});
     setToken(null);
     setUser(null);
   };
@@ -80,6 +105,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         signin,
         signup,
         googleAuth,
+        resendVerification,
+        sendOtp,
+        verifyEmailOtp,
+        resetPasswordWithOtp,
         logout,
       }}
     >

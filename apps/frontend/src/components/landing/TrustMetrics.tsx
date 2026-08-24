@@ -35,7 +35,7 @@ export const TrustMetrics: React.FC = () => {
         position: 'relative',
         padding: '60px 0 80px 0',
         zIndex: 1,
-        background: '#000000',
+        background: '#080909',
       }}
     >
       <div

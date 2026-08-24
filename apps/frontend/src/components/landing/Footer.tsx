@@ -48,7 +48,7 @@ export const Footer: React.FC = () => {
   return (
     <footer
       style={{
-        background: '#000000',
+        background: '#080909',
         padding: '90px 0 60px 0',
         position: 'relative',
         zIndex: 1,

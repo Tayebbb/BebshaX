@@ -25,7 +25,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
         position: 'relative',
         padding: '80px 0 100px 0',
         zIndex: 1,
-        background: '#000000',
+        background: '#080909',
       }}
     >
       <div

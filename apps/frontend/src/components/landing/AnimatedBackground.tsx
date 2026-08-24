@@ -91,7 +91,7 @@ export const AnimatedBackground: React.FC = () => {
             scale: 1.0,
             scaleMobile: 1.0,
             color: 0xf6c878,
-            backgroundColor: 0x050507,
+            backgroundColor: 0x080909,
           });
 
           // Ensure p5 rendering loop stays unpaused
@@ -136,7 +136,7 @@ export const AnimatedBackground: React.FC = () => {
         zIndex: 0,
         pointerEvents: 'none',
         overflow: 'hidden',
-        background: '#050507',
+        background: '#080909',
       }}
     >
       {/* Vanta Topology Canvas */}
@@ -150,7 +150,7 @@ export const AnimatedBackground: React.FC = () => {
         }}
       />
 
-      {/* Smooth bottom transition fade to solid black */}
+      {/* Smooth bottom transition fade to solid #080909 */}
       <div
         style={{
           position: 'absolute',
@@ -158,7 +158,7 @@ export const AnimatedBackground: React.FC = () => {
           left: 0,
           right: 0,
           height: '240px',
-          background: 'linear-gradient(to bottom, rgba(5, 5, 7, 0) 0%, rgba(0, 0, 0, 0.7) 60%, #000000 100%)',
+          background: 'linear-gradient(to bottom, rgba(8, 9, 9, 0) 0%, rgba(8, 9, 9, 0.7) 60%, #080909 100%)',
           pointerEvents: 'none',
         }}
       />

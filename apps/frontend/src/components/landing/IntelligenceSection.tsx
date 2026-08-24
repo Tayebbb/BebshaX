@@ -16,7 +16,7 @@ export const IntelligenceSection: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
-        background: '#000000',
+        background: '#080909',
       }}
     >
       <div

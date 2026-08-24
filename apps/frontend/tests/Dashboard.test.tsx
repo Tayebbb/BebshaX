@@ -1,0 +1,104 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { DashboardLayout } from '../src/components/dashboard/DashboardLayout';
+import { AuthProvider } from '../src/context/AuthContext';
+import { NavigationProvider } from '../src/context/NavigationContext';
+import { api } from '../src/services/api';
+
+describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
+  beforeEach(() => {
+    api.setMockMode(true);
+  });
+
+  const renderDashboard = () => {
+    return render(
+      <NavigationProvider>
+        <AuthProvider>
+          <DashboardLayout />
+        </AuthProvider>
+      </NavigationProvider>
+    );
+  };
+
+  it('renders brand sidebar, dynamic greeting, and New Study prompt hero', async () => {
+    renderDashboard();
+
+    expect(screen.getByText('BebshaX')).toBeInTheDocument();
+    expect(screen.getByText(/Good (morning|afternoon|evening)/i)).toBeInTheDocument();
+    expect(screen.getByText('What do you want to find out?')).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText('Should we lead with pricing or with the product story?')
+    ).toBeInTheDocument();
+  });
+
+  it('renders all 4 study type cards on New Study view', async () => {
+    renderDashboard();
+
+    expect(screen.getByText('User Interviews')).toBeInTheDocument();
+    expect(screen.getByText('Landing Page Test')).toBeInTheDocument();
+    expect(screen.getByText('Message Testing')).toBeInTheDocument();
+    expect(screen.getByText('A/B Test')).toBeInTheDocument();
+  });
+
+  it('navigates to Dashboard / Studies view showing trial status banner and demo study', async () => {
+    renderDashboard();
+
+    // Click on Dashboard tab in sidebar
+    const dashboardTab = screen.getByRole('button', { name: /Dashboard/i });
+    fireEvent.click(dashboardTab);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /^Studies$/i })).toBeInTheDocument();
+      expect(screen.getByText('1 study done — 1 left on your trial')).toBeInTheDocument();
+      expect(screen.getAllByText('Brand Messaging Discovery').length).toBeGreaterThan(0);
+      expect(screen.getByText('DEMO STUDY')).toBeInTheDocument();
+      expect(screen.getAllByText('Price Tracker Demand').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('navigates to Persona Library view showing empirical grounded personas', async () => {
+    renderDashboard();
+
+    // Click on Persona Library tab in sidebar
+    const personaTab = screen.getByRole('button', { name: /Persona Library/i });
+    fireEvent.click(personaTab);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /^Persona Library$/i })).toBeInTheDocument();
+      expect(screen.getByText('Saved personas and audiences you can reuse in any study.')).toBeInTheDocument();
+      expect(screen.getByText('Sarah Chen')).toBeInTheDocument();
+    });
+  });
+
+  it('navigates to Organisation view showing FreeLLMpool active provider routes', async () => {
+    renderDashboard();
+
+    // Click on Organisation tab in sidebar
+    const orgTab = screen.getByRole('button', { name: /Organisation/i });
+    fireEvent.click(orgTab);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Organisation & Routing Architecture/i })).toBeInTheDocument();
+      expect(screen.getByText('Live Provider Health Matrix')).toBeInTheDocument();
+      expect(screen.getByText('222 Free Model Routes')).toBeInTheDocument();
+    });
+  });
+
+  it('initiates study workflow from New Study prompt and moves through steps', async () => {
+    renderDashboard();
+
+    const input = screen.getByPlaceholderText('Should we lead with pricing or with the product story?');
+    fireEvent.change(input, { target: { value: 'Test pricing sensitivity' } });
+
+    const userInterviewsCard = screen.getByText('User Interviews');
+    fireEvent.click(userInterviewsCard);
+
+    await waitFor(() => {
+      expect(screen.getByText('Design your user interviews')).toBeInTheDocument();
+      expect(screen.getByText('Demand Validation')).toBeInTheDocument();
+      expect(screen.getByText('Messaging & Positioning')).toBeInTheDocument();
+    });
+  });
+});

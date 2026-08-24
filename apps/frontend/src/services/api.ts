@@ -8,6 +8,7 @@ import {
   Persona,
   ProvenanceRecord,
   RoutesStatusResponse,
+  Study,
 } from '../types';
 import {
   AuthResponse,
@@ -25,7 +26,9 @@ import {
   mockPersonas,
   mockProvenanceRecords,
   mockRoutesStatus,
+  mockStudies,
 } from '../mocks/fixtures';
+import { neonAuth } from './neonAuth';
 
 const API_BASE = import.meta.env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 
@@ -36,6 +39,7 @@ class MockStore {
   memories: Record<string, MemoryItem[]> = { ...mockMemories };
   conversations: Record<string, Conversation> = { ...mockConversations };
   provenance: ProvenanceRecord[] = [...mockProvenanceRecords];
+  studies: Study[] = [...mockStudies];
 }
 
 const mockStore = new MockStore();
@@ -525,6 +529,7 @@ export const api = {
   },
 
   // 9. Authentication & User Management (JWT + Neon DB)
+  // 9. Authentication & User Management (Neon Auth + Better Auth)
   getAuthToken(): string | null {
     try {
       return localStorage.getItem('bebshax_auth_token');
@@ -545,25 +550,78 @@ export const api = {
     }
   },
 
+  getStoredUser(): User | null {
+    try {
+      const raw = localStorage.getItem('bebshax_auth_user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  setStoredUser(user: User | null) {
+    try {
+      if (user) {
+        localStorage.setItem('bebshax_auth_user', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('bebshax_auth_user');
+      }
+    } catch {
+      // ignore
+    }
+  },
+
   async signup(data: SignUpData): Promise<AuthResponse> {
     if (!this.isMockMode()) {
+      // 1. Primary: Direct Neon Auth registration
       try {
-        const res = await fetch(`${API_BASE}/auth/signup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+        const neonRes = await neonAuth.signUp({
+          email: data.email,
+          password: data.password,
+          name: data.full_name,
         });
-        if (res.ok) {
-          const result: AuthResponse = await res.json();
-          this.setAuthToken(result.access_token);
-          lastKnownLive = true;
-          return result;
-        }
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Signup failed');
+        const token = neonRes.token || `neon_sess_${Date.now()}`;
+        this.setAuthToken(token);
+        this.setStoredUser(neonRes.user);
+        lastKnownLive = true;
+        return {
+          access_token: token,
+          token_type: 'bearer',
+          expires_in_days: 7,
+          user: neonRes.user,
+        };
       } catch (err: any) {
-        if (err.message && err.message !== 'Failed to fetch') {
+        // If Neon Auth returned an explicit client error (e.g. duplicate email), surface it
+        if (
+          err.message &&
+          (err.message.includes('already exists') ||
+            err.message.includes('Password') ||
+            err.message.includes('Invalid') ||
+            err.message.includes('Origin'))
+        ) {
           throw err;
+        }
+
+        // 2. Secondary: Backend API fallback if Neon Auth network failed
+        try {
+          const res = await fetch(`${API_BASE}/auth/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          if (res.ok) {
+            const result: AuthResponse = await res.json();
+            this.setAuthToken(result.access_token);
+            this.setStoredUser(result.user);
+            lastKnownLive = true;
+            return result;
+          }
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.detail || 'Signup failed');
+        } catch (backendErr: any) {
+          if (backendErr.message && backendErr.message !== 'Failed to fetch') {
+            throw backendErr;
+          }
         }
       }
     }
@@ -586,28 +644,60 @@ export const api = {
       user: mockUser,
     };
     this.setAuthToken(mockRes.access_token);
+    this.setStoredUser(mockUser);
     return mockRes;
   },
 
   async signin(data: SignInData): Promise<AuthResponse> {
     if (!this.isMockMode()) {
+      // 1. Primary: Direct Neon Auth authentication
       try {
-        const res = await fetch(`${API_BASE}/auth/signin`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+        const neonRes = await neonAuth.signIn({
+          email: data.email,
+          password: data.password,
         });
-        if (res.ok) {
-          const result: AuthResponse = await res.json();
-          this.setAuthToken(result.access_token);
-          lastKnownLive = true;
-          return result;
-        }
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Invalid email or password');
+        const token = neonRes.token || `neon_sess_${Date.now()}`;
+        this.setAuthToken(token);
+        this.setStoredUser(neonRes.user);
+        lastKnownLive = true;
+        return {
+          access_token: token,
+          token_type: 'bearer',
+          expires_in_days: 7,
+          user: neonRes.user,
+        };
       } catch (err: any) {
-        if (err.message && err.message !== 'Failed to fetch') {
+        // If Neon Auth returned an explicit verification or credential error, surface it
+        if (
+          err.message &&
+          (err.code === 'EMAIL_NOT_VERIFIED' ||
+            err.message.includes('Email not verified') ||
+            err.message.includes('Invalid email or password') ||
+            err.message.includes('Origin'))
+        ) {
           throw err;
+        }
+
+        // 2. Secondary: Backend API fallback
+        try {
+          const res = await fetch(`${API_BASE}/auth/signin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          if (res.ok) {
+            const result: AuthResponse = await res.json();
+            this.setAuthToken(result.access_token);
+            this.setStoredUser(result.user);
+            lastKnownLive = true;
+            return result;
+          }
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.detail || 'Invalid email or password');
+        } catch (backendErr: any) {
+          if (backendErr.message && backendErr.message !== 'Failed to fetch') {
+            throw backendErr;
+          }
         }
       }
     }
@@ -630,11 +720,18 @@ export const api = {
       user: mockUser,
     };
     this.setAuthToken(mockRes.access_token);
+    this.setStoredUser(mockUser);
     return mockRes;
   },
 
   async googleAuth(data: GoogleAuthData): Promise<AuthResponse> {
     if (!this.isMockMode()) {
+      try {
+        await neonAuth.signInWithGoogle();
+      } catch {
+        // Fall back to backend or simulated payload if redirect not triggered
+      }
+
       try {
         const res = await fetch(`${API_BASE}/auth/google`, {
           method: 'POST',
@@ -644,6 +741,7 @@ export const api = {
         if (res.ok) {
           const result: AuthResponse = await res.json();
           this.setAuthToken(result.access_token);
+          this.setStoredUser(result.user);
           lastKnownLive = true;
           return result;
         }
@@ -670,6 +768,7 @@ export const api = {
       user: mockUser,
     };
     this.setAuthToken(mockRes.access_token);
+    this.setStoredUser(mockUser);
     return mockRes;
   },
 
@@ -678,18 +777,36 @@ export const api = {
     if (!token) return null;
 
     if (!this.isMockMode()) {
+      // Check Neon Auth live session first
+      try {
+        const neonUser = await neonAuth.getSession(token);
+        if (neonUser) {
+          lastKnownLive = true;
+          this.setStoredUser(neonUser);
+          return neonUser;
+        }
+      } catch {
+        // ignore
+      }
+
+      // Check Backend API /auth/me
       try {
         const res = await fetch(`${API_BASE}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
           lastKnownLive = true;
-          return await res.json();
+          const user = await res.json();
+          this.setStoredUser(user);
+          return user;
         }
       } catch {
         // fallback
       }
     }
+
+    const stored = this.getStoredUser();
+    if (stored) return stored;
 
     return {
       id: 'usr_sarah_founder',
@@ -701,5 +818,115 @@ export const api = {
       auth_provider: 'email',
       created_at: new Date().toISOString(),
     };
+  },
+
+  async resendVerificationEmail(email: string): Promise<boolean> {
+    return await neonAuth.sendVerificationEmail(email);
+  },
+
+  async sendOtp(
+    email: string,
+    type: 'email-verification' | 'forget-password' | 'sign-in' = 'email-verification'
+  ): Promise<boolean> {
+    if (!this.isMockMode()) {
+      return await neonAuth.sendVerificationOtp(email, type);
+    }
+    return true;
+  },
+
+  async verifyEmailOtp(
+    email: string,
+    otp: string
+  ): Promise<{ user: User; token?: string | null }> {
+    if (!this.isMockMode()) {
+      const res = await neonAuth.verifyEmailOtp({ email, otp });
+      if (res.token) this.setAuthToken(res.token);
+      this.setStoredUser(res.user);
+      return res;
+    }
+    const user: User = {
+      id: `usr_${Date.now().toString(36)}`,
+      email,
+      full_name: email.split('@')[0],
+      avatar_url: null,
+      is_active: true,
+      is_verified: true,
+      auth_provider: 'neon',
+      created_at: new Date().toISOString(),
+    };
+    this.setAuthToken(`mock_jwt_${Date.now()}`);
+    this.setStoredUser(user);
+    return { user, token: this.getAuthToken() };
+  },
+
+  async resetPasswordWithOtp(
+    email: string,
+    otp: string,
+    password: string
+  ): Promise<boolean> {
+    if (!this.isMockMode()) {
+      return await neonAuth.resetPasswordWithOtp({ email, otp, password });
+    }
+    return true;
+  },
+
+  async signout(): Promise<void> {
+    this.setAuthToken(null);
+    this.setStoredUser(null);
+    if (!this.isMockMode()) {
+      await neonAuth.signOut();
+    }
+  },
+
+  // 10. Research Studies Management (New Study, Dashboard, Workflows)
+  async getStudies(): Promise<Study[]> {
+    return [...mockStore.studies];
+  },
+
+  async getStudyById(id: string): Promise<Study | null> {
+    const study = mockStore.studies.find((s) => s.id === id);
+    return study ? { ...study } : null;
+  },
+
+  async createStudy(studyData: Partial<Study>): Promise<Study> {
+    const newStudy: Study = {
+      id: `study_${Date.now()}`,
+      title: studyData.title || 'Untitled Study',
+      type: studyData.type || 'interviews',
+      goal: studyData.goal || 'demand_validation',
+      prompt: studyData.prompt || '',
+      status: studyData.status || 'draft',
+      persona_count: studyData.persona_count || 0,
+      persona_ids: studyData.persona_ids || [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      duration_text: 'Just created • No personas yet',
+      is_demo: false,
+      step: studyData.step || 1,
+      ...studyData,
+    };
+    mockStore.studies.unshift(newStudy);
+    return newStudy;
+  },
+
+  async updateStudy(id: string, updates: Partial<Study>): Promise<Study> {
+    const index = mockStore.studies.findIndex((s) => s.id === id);
+    if (index === -1) {
+      throw new Error(`Study with id ${id} not found`);
+    }
+    const updated = {
+      ...mockStore.studies[index],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    mockStore.studies[index] = updated;
+    return updated;
+  },
+
+  async deleteStudy(id: string): Promise<boolean> {
+    const index = mockStore.studies.findIndex((s) => s.id === id);
+    if (index === -1) return false;
+    mockStore.studies.splice(index, 1);
+    return true;
   },
 };
