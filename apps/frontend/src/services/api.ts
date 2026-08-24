@@ -36,12 +36,25 @@ const API_BASE = import.meta.env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 
 // In-memory state store for client modifications during mock/fallback mode
 class MockStore {
-  businesses: Business[] = [...mockBusinesses];
-  personas: Record<string, Persona> = { ...mockPersonas };
-  memories: Record<string, MemoryItem[]> = { ...mockMemories };
-  conversations: Record<string, Conversation> = { ...mockConversations };
-  provenance: ProvenanceRecord[] = [...mockProvenanceRecords];
-  studies: Study[] = [...mockStudies];
+  businesses: Business[] = [];
+  personas: Record<string, Persona> = {};
+  memories: Record<string, MemoryItem[]> = {};
+  conversations: Record<string, Conversation> = {};
+  provenance: ProvenanceRecord[] = [];
+  studies: Study[] = [];
+
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.businesses = JSON.parse(JSON.stringify(mockBusinesses));
+    this.personas = JSON.parse(JSON.stringify(mockPersonas));
+    this.memories = JSON.parse(JSON.stringify(mockMemories));
+    this.conversations = JSON.parse(JSON.stringify(mockConversations));
+    this.provenance = JSON.parse(JSON.stringify(mockProvenanceRecords));
+    this.studies = JSON.parse(JSON.stringify(mockStudies));
+  }
 }
 
 const mockStore = new MockStore();
@@ -50,6 +63,10 @@ let forceMockMode: boolean | null = null;
 let lastKnownLive = false;
 
 export const api = {
+  resetMockStore() {
+    mockStore.reset();
+  },
+
   setMockMode(enabled: boolean) {
     forceMockMode = enabled;
   },
@@ -70,11 +87,15 @@ export const api = {
       return mockHealth;
     }
     try {
-      const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(2000) });
+      const res = await fetch(`${API_BASE}/health`, {
+        headers: this.getAuthHeaders(),
+        signal: AbortSignal.timeout(3000),
+      });
       if (res.ok) {
         lastKnownLive = true;
         return await res.json();
       }
+      lastKnownLive = false;
     } catch {
       lastKnownLive = false;
     }
@@ -85,13 +106,17 @@ export const api = {
   async getRoutesStatus(): Promise<RoutesStatusResponse> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/routes/status`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE}/routes/status`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
+        lastKnownLive = false;
       } catch {
-        // fallback
+        lastKnownLive = false;
       }
     }
     return mockRoutesStatus;
@@ -101,16 +126,20 @@ export const api = {
   async getProvenance(limit = 50): Promise<{ items: ProvenanceRecord[]; total: number }> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/provenance?limit=${limit}`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE}/provenance?limit=${limit}`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
           const data = await res.json();
-          if (data.items && data.items.length > 0) {
+          if (data && Array.isArray(data.items)) {
             lastKnownLive = true;
             return data;
           }
         }
+        lastKnownLive = false;
       } catch {
-        // fallback
+        lastKnownLive = false;
       }
     }
     return {
@@ -123,16 +152,20 @@ export const api = {
   async getBusinesses(): Promise<Business[]> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/businesses`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE}/businesses`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data)) {
             lastKnownLive = true;
             return data;
           }
         }
+        lastKnownLive = false;
       } catch {
-        // fallback
+        lastKnownLive = false;
       }
     }
     return mockStore.businesses;
@@ -143,9 +176,9 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/businesses`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(data),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(10000),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -153,8 +186,12 @@ export const api = {
           mockStore.businesses.unshift(created);
           return created;
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Failed to create business' }));
+        throw new Error(err.detail || err.message || `Failed to create business (HTTP ${res.status})`);
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
       }
     }
     const newBiz: Business = {
@@ -174,16 +211,22 @@ export const api = {
   async getPersonas(): Promise<Persona[]> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/personas`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE}/personas`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data)) {
             lastKnownLive = true;
             return data;
           }
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        throw new Error(`Failed to fetch personas (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return Object.values(mockStore.personas);
@@ -192,13 +235,19 @@ export const api = {
   async getPersona(id: string): Promise<Persona | null> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/personas/${id}`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE}/personas/${id}`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        throw new Error(`Failed to fetch persona (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return mockStore.personas[id] || null;
@@ -213,13 +262,13 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/businesses/${businessId}/personas`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             audience_segment: audienceSegment,
             generation_hints: hints,
             hints: hints.join(', '),
           }),
-          signal: AbortSignal.timeout(25000),
+          signal: AbortSignal.timeout(120000),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -247,8 +296,12 @@ export const api = {
           mockStore.personas[persona.id] = persona;
           return { persona, provenance: prov };
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Persona generation failed' }));
+        throw new Error(err.detail || err.message || `Persona generation failed (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -347,10 +400,13 @@ export const api = {
   async getMemories(personaId: string): Promise<MemoryItem[]> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/personas/${personaId}/memories`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE}/personas/${personaId}/memories`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data)) {
             lastKnownLive = true;
             return data.map((d: any) => ({
               id: d.id,
@@ -364,8 +420,11 @@ export const api = {
             }));
           }
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        throw new Error(`Failed to fetch memories (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return mockStore.memories[personaId] || [];
@@ -375,7 +434,10 @@ export const api = {
   async getConversation(id: string): Promise<Conversation | null> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/conversations/${id}`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE}/conversations/${id}`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
           const data = await res.json();
           lastKnownLive = true;
@@ -393,8 +455,11 @@ export const api = {
             })),
           };
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        throw new Error(`Failed to fetch conversation (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return mockStore.conversations[id] || null;
@@ -405,9 +470,9 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/conversations`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ persona_id: personaId, objective }),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(120000),
         });
         if (res.ok) {
           const data = await res.json();
@@ -423,8 +488,12 @@ export const api = {
           mockStore.conversations[conv.id] = conv;
           return conv;
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        const errorData = await res.json().catch(() => ({ detail: `Failed to start conversation (${res.status})` }));
+        throw new Error(errorData.detail || errorData.message || 'Failed to start conversation');
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -449,9 +518,9 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/conversations/${conversationId}/messages`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ content: message, message }),
-          signal: AbortSignal.timeout(20000),
+          signal: AbortSignal.timeout(120000),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -477,8 +546,12 @@ export const api = {
           }
           return { userTurn, assistantTurn };
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        const errorData = await res.json().catch(() => ({ detail: `Interview message failed with status ${res.status}` }));
+        throw new Error(errorData.detail || errorData.message || 'Interview message failed');
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -518,22 +591,47 @@ export const api = {
   async getEvaluationMetrics(): Promise<EvaluationMetrics> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/evaluation/metrics`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE}/evaluation/metrics`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
+        lastKnownLive = false;
       } catch {
-        // fallback
+        lastKnownLive = false;
       }
     }
     return mockEvaluationMetrics;
   },
 
   // 9. Authentication & User Management (JWT + Neon DB)
+  _isTokenExpired(token: string): boolean {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return false;
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+      if (payload && typeof payload.exp === 'number') {
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        return payload.exp < nowSeconds;
+      }
+    } catch {
+      // not standard JWT or parsing error
+    }
+    return false;
+  },
+
   getAuthToken(): string | null {
     try {
-      return localStorage.getItem('bebshax_auth_token');
+      const token = localStorage.getItem('bebshax_auth_token');
+      if (token && this._isTokenExpired(token)) {
+        this.setAuthToken(null);
+        this.setStoredUser(null);
+        return null;
+      }
+      return token;
     } catch {
       return null;
     }
@@ -578,6 +676,9 @@ export const api = {
       'Content-Type': 'application/json',
       ...customHeaders,
     };
+    if (this.isMockMode()) {
+      headers['X-BebshaX-Mock'] = '1';
+    }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -592,7 +693,7 @@ export const api = {
         const res = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(5000),
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
@@ -601,8 +702,9 @@ export const api = {
           lastKnownLive = true;
           return result;
         }
+        lastKnownLive = false;
       } catch {
-        // preserve existing session
+        lastKnownLive = false;
       }
     }
     return null;
@@ -630,7 +732,7 @@ export const api = {
           user: neonRes.user,
         };
       } catch (err: any) {
-        // If Neon Auth returned an explicit client error (e.g. duplicate email), surface it
+        // If Neon Auth returned an explicit client error, surface it
         if (
           err.message &&
           (err.message.includes('already exists') ||
@@ -647,18 +749,19 @@ export const api = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
+            signal: AbortSignal.timeout(10000),
           });
           if (res.ok) {
             const result: AuthResponse = await res.json();
             lastKnownLive = true;
             return result;
           }
+          lastKnownLive = false;
           const errorData = await res.json().catch(() => ({}));
           throw new Error(errorData.detail || 'Signup failed');
         } catch (backendErr: any) {
-          if (backendErr.message && backendErr.message !== 'Failed to fetch') {
-            throw backendErr;
-          }
+          lastKnownLive = false;
+          throw backendErr;
         }
       }
     }
@@ -702,7 +805,6 @@ export const api = {
           user: neonRes.user,
         };
       } catch (err: any) {
-        // If Neon Auth returned an explicit verification or credential error, surface it
         if (
           err.message &&
           (err.code === 'EMAIL_NOT_VERIFIED' ||
@@ -719,6 +821,7 @@ export const api = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
+            signal: AbortSignal.timeout(10000),
           });
           if (res.ok) {
             const result: AuthResponse = await res.json();
@@ -727,12 +830,12 @@ export const api = {
             lastKnownLive = true;
             return result;
           }
+          lastKnownLive = false;
           const errorData = await res.json().catch(() => ({}));
           throw new Error(errorData.detail || 'Invalid email or password');
         } catch (backendErr: any) {
-          if (backendErr.message && backendErr.message !== 'Failed to fetch') {
-            throw backendErr;
-          }
+          lastKnownLive = false;
+          throw backendErr;
         }
       }
     }
@@ -778,11 +881,9 @@ export const api = {
       }
     }
 
-    email = email || 'saidul.islam@gmail.com';
+    email = email || 'user@bebshax.io';
     name = name || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    avatarUrl =
-      avatarUrl ||
-      `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&h=120&fit=crop&crop=faces`;
+    avatarUrl = avatarUrl || undefined;
 
     const requestPayload = {
       email,
@@ -797,7 +898,7 @@ export const api = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestPayload),
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(10000),
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
@@ -806,8 +907,9 @@ export const api = {
           lastKnownLive = true;
           return result;
         }
+        lastKnownLive = false;
       } catch {
-        // fallback to robust local session
+        lastKnownLive = false;
       }
     }
 
@@ -834,9 +936,10 @@ export const api = {
 
   async getMe(): Promise<User | null> {
     const token = this.getAuthToken();
+    if (!token) return null;
 
     if (!this.isMockMode()) {
-      // 1. Check Neon Auth live session (with token if present, and with cookies)
+      // 1. Check Neon Auth live session (with token if present)
       try {
         const neonUser = await neonAuth.getSession(token);
         if (neonUser) {
@@ -848,34 +951,36 @@ export const api = {
           return neonUser;
         }
       } catch {
-        // ignore
+        // ignore neon check error
       }
 
       // 2. Check Backend API /auth/me if we have a token
-      if (token) {
-        try {
-          const res = await fetch(`${API_BASE}/auth/me`, {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: AbortSignal.timeout(3000),
-          });
-          if (res.ok) {
-            lastKnownLive = true;
-            const user = await res.json();
-            this.setStoredUser(user);
-            return user;
-          }
-        } catch {
-          // fallback
+      try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          const user = await res.json();
+          this.setStoredUser(user);
+          return user;
+        } else if (res.status === 401 || res.status === 403) {
+          // Token is rejected or invalid
+          lastKnownLive = true;
+          this.setAuthToken(null);
+          this.setStoredUser(null);
+          return null;
         }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+        // On network failure with valid non-expired token, return stored user if present
+        return this.getStoredUser();
       }
     }
 
-    if (token) {
-      const stored = this.getStoredUser();
-      if (stored) return stored;
-    }
-
-    return null;
+    return this.getStoredUser();
   },
 
   async resendVerificationEmail(email: string): Promise<boolean> {
@@ -949,7 +1054,7 @@ export const api = {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
@@ -971,23 +1076,25 @@ export const api = {
   async getStudies(): Promise<Study[]> {
     if (!this.isMockMode()) {
       try {
-        const token = this.getAuthToken();
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const res = await fetch(`${API_BASE}/studies`, {
-          headers,
-          signal: AbortSignal.timeout(3000),
+        const user = this.getStoredUser();
+        const url = user?.id ? `${API_BASE}/studies?user_id=${encodeURIComponent(user.id)}` : `${API_BASE}/studies`;
+        const res = await fetch(url, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
         });
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data)) {
             lastKnownLive = true;
             this.saveStoredUserStudies(data);
             return data;
           }
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        throw new Error(`Failed to fetch studies (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return this.getStoredUserStudies();
@@ -996,19 +1103,19 @@ export const api = {
   async getStudyById(id: string): Promise<Study | null> {
     if (!this.isMockMode()) {
       try {
-        const token = this.getAuthToken();
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(`${API_BASE}/studies/${id}`, {
-          headers,
-          signal: AbortSignal.timeout(3000),
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
         });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        throw new Error(`Failed to fetch study (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     const studies = this.getStoredUserStudies();
@@ -1024,19 +1131,16 @@ export const api = {
     const user = this.getStoredUser();
     const payload = {
       ...studyData,
-      user_id: user?.id || 'usr_sarah_founder',
+      user_id: user?.id || 'usr_default',
     };
 
     if (!this.isMockMode()) {
       try {
-        const token = this.getAuthToken();
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(`${API_BASE}/studies`, {
           method: 'POST',
-          headers,
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(120000),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -1046,14 +1150,18 @@ export const api = {
           this.saveStoredUserStudies(next);
           return created;
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Failed to create study' }));
+        throw new Error(err.detail || err.message || `Failed to create study (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
     const newStudy: Study = {
       id: studyData.id || `study_${Date.now()}`,
-      user_id: user?.id || 'usr_sarah_founder',
+      user_id: user?.id || 'usr_default',
       title: studyData.title || 'Untitled Study',
       type: studyData.type || 'interviews',
       goal: studyData.goal || 'demand_validation',
@@ -1077,14 +1185,11 @@ export const api = {
   async updateStudy(id: string, updates: Partial<Study>): Promise<Study> {
     if (!this.isMockMode()) {
       try {
-        const token = this.getAuthToken();
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(`${API_BASE}/studies/${id}`, {
           method: 'PATCH',
-          headers,
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(updates),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(120000),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -1099,8 +1204,12 @@ export const api = {
           this.saveStoredUserStudies(current);
           return updated;
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Failed to update study' }));
+        throw new Error(err.detail || err.message || `Failed to update study (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -1123,19 +1232,18 @@ export const api = {
   async deleteStudy(id: string): Promise<boolean> {
     if (!this.isMockMode()) {
       try {
-        const token = this.getAuthToken();
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(`${API_BASE}/studies/${id}`, {
           method: 'DELETE',
-          headers,
-          signal: AbortSignal.timeout(4000),
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(10000),
         });
         if (res.ok) {
           lastKnownLive = true;
+        } else {
+          lastKnownLive = false;
         }
       } catch {
-        // fallback
+        lastKnownLive = false;
       }
     }
     const current = this.getStoredUserStudies();
@@ -1152,20 +1260,29 @@ export const api = {
     personas_payload?: any[];
     role_distribution?: Record<string, number>;
   }): Promise<{ id: string; name: string }> {
+    const user = this.getStoredUser();
+    const payload = {
+      ...data,
+      user_id: user?.id || 'usr_default',
+    };
     if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/audiences`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-          signal: AbortSignal.timeout(5000),
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(10000),
         });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Failed to save audience' }));
+        throw new Error(err.detail || err.message || `Failed to save audience (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return { id: `aud_${Date.now()}`, name: data.name };
@@ -1174,13 +1291,24 @@ export const api = {
   async getSavedAudiences(): Promise<any[]> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/audiences`, { signal: AbortSignal.timeout(3000) });
+        const user = this.getStoredUser();
+        const url = user?.id ? `${API_BASE}/audiences?user_id=${encodeURIComponent(user.id)}` : `${API_BASE}/audiences`;
+        const res = await fetch(url, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
         if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            lastKnownLive = true;
+            return data;
+          }
         }
-      } catch {
-        // fallback
+        lastKnownLive = false;
+        throw new Error(`Failed to fetch audiences (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return [];
@@ -1208,18 +1336,24 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/study/copilot`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             messages,
             study_type: studyType,
             study_id: studyId,
           }),
+          signal: AbortSignal.timeout(120000),
         });
         if (res.ok) {
+          lastKnownLive = true;
           return await res.json();
         }
-      } catch {
-        // fallback to deterministic copilot simulator
+        lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Copilot request failed' }));
+        throw new Error(err.detail || err.message || `Copilot request failed (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -1358,14 +1492,17 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/study/suggest-roles`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ study_prompt: studyPrompt }),
+          signal: AbortSignal.timeout(120000),
         });
         if (res.ok) {
+          lastKnownLive = true;
           return await res.json();
         }
+        lastKnownLive = false;
       } catch {
-        // fallback
+        lastKnownLive = false;
       }
     }
     // Context-aware fallback: derive roles from the study prompt
@@ -1434,27 +1571,31 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/study/generate-personas`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             study_id: studyId,
             study_prompt: prompt,
             study_title: title,
             roles: roles || [],
           }),
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(120000),
         });
         if (res.ok) {
           lastKnownLive = true;
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data)) {
             data.forEach((p) => {
               mockStore.personas[p.id] = p;
             });
             return data;
           }
         }
-      } catch {
-        // fallback to grounded mock personas
+        lastKnownLive = false;
+        const errorData = await res.json().catch(() => ({ detail: `Persona generation failed with status ${res.status}` }));
+        throw new Error(errorData.detail || errorData.message || 'Persona generation failed');
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 

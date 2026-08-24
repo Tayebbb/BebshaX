@@ -53,14 +53,6 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
-### Maintenance — UI Context Realignment & Removal of Organisation (2026-08-25)
-
-- **Removed "Organisation" Option:** Completely removed the obsolete workspace organization tab and settings views from `DashboardLayout.tsx`, `App.tsx`, and deleted `OrganisationView.tsx`.
-- **Introduced Dedicated "Model Router" View (`ModelRouterView.tsx`):** Added developer/researcher telemetry view surfacing live FreeLLMpool provider health matrix (222 free model routes), task routing pools (`reasoning`, `conversation`, `structured`, `fast`, `emergency`), and verified Rule R3 LLM provenance attempt traces.
-- **Removed Trial/Quota Boilerplate:** Removed residual SaaS trial banners ("1 study done — 1 left on your trial", countdown timers, upgrade CTAs, and "1 left" user badges) from `StudiesDashboardView.tsx` and sidebar profile, replacing them with live BebshaX Zero-Budget Intelligence & Grounding status.
-- **Aligned 4 Study Types in `NewStudyView.tsx`:** Updated User Interviews, Concept & Demand, Message Testing, and Pricing & WTP with precise synthetic persona research descriptions, and added quick concept suggestion pills (NovaFlow gig worker fintech, DevFlow API studio, EduPulse study planner, HealthTrack SaaS).
-- **Tests & Build:** All 35 frontend tests (`npm test`), frontend production build (`tsc && vite build`), and 142 backend pytest suite (`pytest apps/backend/tests -q`) passing cleanly.
-
 ### Maintenance — auth-aware landing CTAs (2026-08-24)
 
 - Bug: the hero CTA "Generate your first persona" did nothing for a signed-in user — `Hero` declared `onOpenApp` but destructured nothing (a zero-arg arrow is assignable to `React.FC<HeroProps>`, so `tsc` stayed silent), so the button always ran `navigate('/auth/signup')` and `AuthPage`'s `isAuthenticated` effect bounced straight back to `/`. Same defect in `FinalCTA`; `InteractiveDemo` never received `onOpenApp` at all.
@@ -275,6 +267,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 ### Maintenance (2026-08-25) — Universal AI Workflow + OpenRouter integration
 
 **What was built:**
+
 - **Backend `copilot.py` rewrite (R3-compliant):** Removed all hard-coded student/Bangladesh context from every function. The copilot SYSTEM_PROMPT, `_generate_fallback_response`, `suggest_persona_roles`, and `generate_study_personas` now handle any business idea (food, health, fintech, e-commerce, B2B SaaS, education, etc.) by detecting domain keywords and generating contextually-relevant roles and personas. The fallback dialog is now contextual for 7+ business domains.
 - **LLM-powered persona generation:** `generate_study_personas` now calls the LLM via `_generate_persona_via_llm()` using the new `PERSONA_GENERATION_PROMPT` template, which grounds each persona in the study context. Falls back to a generic skeleton if LLM is unavailable.
 - **LLM-powered role suggestion:** `suggest_persona_roles` now calls the LLM via `SUGGEST_ROLES_PROMPT` and falls back to context-aware keyword detection instead of hardcoded student roles.

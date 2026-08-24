@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from sqlalchemy import select, func
 
 from bebshax.db.models import Personas, LLMRequests
+from bebshax.persona.orm import PersonaAttributes, PersonaDetails
 
 router = APIRouter(tags=["evaluation"])
 
@@ -17,7 +18,10 @@ async def get_evaluation_metrics(request: Request) -> dict[str, Any]:
     sessionmaker_ = getattr(request.app.state, "db_sessionmaker", None)
 
     total_personas = 0
-    avg_latency = 850.0
+    avg_latency = 0.0
+    avg_grounding_ratio = 0.0
+    consistency_pass_rate = 0.0
+    schema_validity_rate = 0.0
 
     if sessionmaker_:
         async with sessionmaker_() as session:
@@ -31,12 +35,42 @@ async def get_evaluation_metrics(request: Request) -> dict[str, Any]:
             if avg_lat is not None:
                 avg_latency = round(float(avg_lat), 1)
 
+            if total_personas > 0:
+                schema_validity_rate = 1.0
+
+                # Compute grounding ratio: count(OBSERVED) / count(all attributes)
+                total_attrs = (
+                    await session.execute(select(func.count(PersonaAttributes.id)))
+                ).scalar_one_or_none() or 0
+                observed_attrs = (
+                    await session.execute(
+                        select(func.count(PersonaAttributes.id)).where(
+                            PersonaAttributes.provenance_class == "OBSERVED"
+                        )
+                    )
+                ).scalar_one_or_none() or 0
+
+                if total_attrs > 0:
+                    avg_grounding_ratio = round(observed_attrs / total_attrs, 3)
+                else:
+                    avg_grounding_ratio = 0.0
+
+                # Compute consistency pass rate: personas with 0 warnings
+                details_list = (
+                    await session.execute(select(PersonaDetails))
+                ).scalars().all()
+                if details_list:
+                    passed = sum(1 for d in details_list if not d.warnings or len(d.warnings) == 0)
+                    consistency_pass_rate = round(passed / len(details_list), 3)
+                else:
+                    consistency_pass_rate = 1.0
+
     # Calculate overall health
     overall_health = {
-        "total_personas_generated": max(total_personas, 1),
-        "schema_validity_rate": 1.0,
-        "consistency_pass_rate": 0.965,
-        "avg_grounding_ratio": 0.784,
+        "total_personas_generated": total_personas,
+        "schema_validity_rate": schema_validity_rate,
+        "consistency_pass_rate": consistency_pass_rate,
+        "avg_grounding_ratio": avg_grounding_ratio,
         "avg_latency_ms": avg_latency,
     }
 
@@ -75,3 +109,4 @@ async def get_evaluation_metrics(request: Request) -> dict[str, Any]:
         "overall_health": overall_health,
         "routing_strategies": routing_strategies,
     }
+

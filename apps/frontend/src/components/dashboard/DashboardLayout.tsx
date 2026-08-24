@@ -3,7 +3,7 @@ import {
   PenSquare,
   LayoutGrid,
   Contact2,
-  Cpu,
+  Building2,
   ChevronDown,
   ChevronRight,
   PanelLeft,
@@ -16,12 +16,12 @@ import { NewStudyView } from './views/NewStudyView';
 import { StudiesDashboardView } from './views/StudiesDashboardView';
 import { PersonaLibraryView } from './views/PersonaLibraryView';
 import { StudyWorkflowView } from './views/StudyWorkflowView';
-import { ModelRouterView } from './views/ModelRouterView';
+import { OrganisationView } from './views/OrganisationView';
 import { StudyType, Study } from '../../types';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 
-export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'router' | 'study-workflow';
+export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'organisation' | 'study-workflow';
 
 interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
@@ -35,8 +35,8 @@ const parseDashboardPath = (path: string): {
   if (path.startsWith('/persona-library') || path.startsWith('/personas')) {
     return { tab: 'personas' };
   }
-  if (path.startsWith('/router') || path.startsWith('/provenance') || path.startsWith('/routes') || path.startsWith('/models')) {
-    return { tab: 'router' };
+  if (path.startsWith('/organisation') || path.startsWith('/organization') || path.startsWith('/settings')) {
+    return { tab: 'organisation' };
   }
   if (path.startsWith('/dashboard')) {
     return { tab: 'dashboard' };
@@ -112,7 +112,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     if (tab === 'new-study') navigate('/create-study');
     else if (tab === 'dashboard') navigate('/dashboard');
     else if (tab === 'personas') navigate('/persona-library');
-    else if (tab === 'router') navigate('/router');
+    else if (tab === 'organisation') navigate('/organisation');
     else if (tab === 'study-workflow') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
   };
 
@@ -178,9 +178,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       icon: <Contact2 size={16} />,
     },
     {
-      id: 'router' as DashboardTab,
-      label: 'Model Router',
-      icon: <Cpu size={16} />,
+      id: 'organisation' as DashboardTab,
+      label: 'Organisation',
+      icon: <Building2 size={16} />,
     },
   ];
 
@@ -486,15 +486,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 style={{
                   fontSize: '0.7rem',
                   fontWeight: 600,
-                  color: '#10B981',
-                  background: 'rgba(16, 185, 129, 0.12)',
+                  color: '#F6C878',
+                  background: 'rgba(246, 200, 120, 0.12)',
                   border: 'none',
                   outline: 'none',
                   padding: '2px 7px',
                   borderRadius: '6px',
                 }}
               >
-                Free Tier
+                1 left
               </span>
             )}
           </div>
@@ -706,7 +706,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           />
         )}
 
-        {activeTab === 'router' && <ModelRouterView />}
+        {activeTab === 'organisation' && <OrganisationView />}
 
         {activeTab === 'study-workflow' && (
           <StudyWorkflowView
