@@ -108,6 +108,34 @@ async def get_current_user(
         return user
 
 
+async def get_optional_current_user(
+    request: Request,
+    authorization: str | None = Header(None, alias="Authorization"),
+) -> Users | None:
+    """Extract and validate current user if Bearer token is provided, otherwise return None."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.split(" ", 1)[1].strip()
+    payload = decode_access_token(token)
+    if not payload or "sub" not in payload:
+        return None
+
+    user_id = payload["sub"]
+    sessionmaker = getattr(request.app.state, "db_sessionmaker", None) or getattr(
+        request.app.state, "sessionmaker", None
+    )
+    if not sessionmaker:
+        return None
+    try:
+        async with sessionmaker() as session:
+            user = await get_user_by_id(session, user_id)
+            if user and user.is_active:
+                return user
+    except Exception:
+        pass
+    return None
+
+
 @auth_router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def signup(
     payload: SignUpRequest,
