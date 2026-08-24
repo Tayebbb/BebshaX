@@ -10,38 +10,38 @@ import {
 export const FeatureGrid: React.FC = () => {
   const features = [
     {
-      title: 'Provenance & Verifiability',
-      description: 'Every recommendation cites the exact underlying event rows, timestamps, and confidence scores. Zero black-box guesswork.',
+      title: 'Per-attribute provenance, enforced in code',
+      description: 'Every attribute is OBSERVED, INFERRED or SYNTHETIC. Fabricated citations are stripped and the attribute is downgraded. A class can only ever move down, never up.',
       icon: <ShieldAlert size={20} color="#F6C878" />,
-      tag: 'Core Reliability',
+      tag: 'Grounding',
       span: 'span 7',
     },
     {
-      title: 'Continuous Autonomous Sync',
-      description: 'Ingests from databases, CRM, billing, and logs in real-time with sub-second change detection.',
+      title: 'Never truncate context',
+      description: 'Persona identity, memory and evidence are never compressed to fit a smaller model. If nothing in the pool can hold the request, it fails with ContextWindowExceeded.',
       icon: <Cpu size={20} color="#FFFFFF" />,
-      tag: 'Real-time',
+      tag: 'Explicit failure',
       span: 'span 5',
     },
     {
-      title: 'Predictive What-If Sandbox',
-      description: 'Simulate business decisions before investing capital or making irreversible strategic changes.',
+      title: 'A closed failure taxonomy',
+      description: 'Fourteen failure kinds, each with one policy: retry the route once, advance, or cool it for 60 seconds per provider and model.',
       icon: <Gauge size={20} color="#F6C878" />,
-      tag: 'Simulation',
+      tag: 'Routing',
       span: 'span 4',
     },
     {
-      title: 'Pre-Built Executive Playbooks',
-      description: 'Deploy battle-tested action workflows designed specifically for SaaS, agencies, commerce, and digital operations.',
+      title: 'Fallback that ends on your machine',
+      description: 'Every pool terminates at the local Ollama adapter, and the emergency pool is local-first.',
       icon: <GitBranch size={20} color="#FFFFFF" />,
-      tag: 'Execution',
+      tag: 'Local',
       span: 'span 4',
     },
     {
-      title: 'Multi-Department Unified Model',
-      description: 'Unify sales, product, marketing, and finance into one synchronized organizational graph.',
+      title: 'Stable identity across turns',
+      description: 'The persona is never rebuilt mid-interview. The identity card is byte-identical on every turn, and a test enforces that.',
       icon: <Layers size={20} color="#F6C878" />,
-      tag: 'Architecture',
+      tag: 'Interviews',
       span: 'span 4',
     },
   ];
@@ -95,14 +95,14 @@ export const FeatureGrid: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            Built for modern operators who{' '}
+            Built so the failure modes are{' '}
             <span className="text-gradient-blue">
-              demand precision.
+              loud, not silent.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            Every feature in BebshaX is engineered to remove guesswork and provide actionable clarity.
+            The guarantees below are enforced in code and covered by tests, not stated as intentions.
           </p>
         </div>
 

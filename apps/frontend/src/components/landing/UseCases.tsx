@@ -2,58 +2,54 @@ import React, { useState } from 'react';
 import {
   Users,
   Briefcase,
-  DollarSign,
+  Wallet,
   CheckCircle,
-  TrendingUp,
+  GraduationCap,
 } from 'lucide-react';
 
 export const UseCases: React.FC = () => {
-  const [activeRole, setActiveRole] = useState<'founders' | 'ops' | 'growth' | 'finance'>('founders');
+  const [activeRole, setActiveRole] = useState<'founders' | 'researchers' | 'students' | 'nobudget'>('founders');
 
   const roles = [
     {
       id: 'founders' as const,
-      label: 'Founders & CEOs',
+      label: 'Founders',
       icon: <Briefcase size={16} />,
-      headline: 'A single, trusted heartbeat of the entire business.',
-      pain: 'Tired of conflicting answers from different team leads when asking why revenue shifted.',
-      gain: 'Instant holistic clarity across churn, cash runway, and expansion velocity without waiting for weekly syncs.',
-      metrics: ['100% executive alignment', '4.5 hrs saved weekly', 'Sub-second real-time queries'],
-      quote: '"BebshaX gives me executive-level diagnostic clarity in 30 seconds every morning."',
-      author: 'David Vance, Founder & CEO at CloudPeak',
+      headline: 'Interview a persona for your idea before you build it.',
+      pain: 'Validating an idea normally means recruiting and scheduling real interviews first.',
+      gain: 'Describe the business, generate a grounded persona, and interview it in a multi-turn conversation the same day.',
+      metrics: ['Name, description, industry, target market', 'Optional audience segment', 'No data connection required'],
+      detail: 'Input is a business description and nothing else. There is no data connection of any kind.',
     },
     {
-      id: 'ops' as const,
-      label: 'Operations Leads',
+      id: 'researchers' as const,
+      label: 'Product & UX research',
       icon: <Users size={16} />,
-      headline: 'Automate manual cross-tool data gathering and reconciliation.',
-      pain: 'Spending half of every week manually matching CRM IDs, billing invoices, and support tickets.',
-      gain: 'Continuous automated organizational graph that connects all operational signals automatically.',
-      metrics: ['Zero manual CSV exports', 'Instant anomaly alerts', 'Pre-built playbooks'],
-      quote: '"We eliminated our monthly spreadsheet reconciliation scramble completely."',
-      author: 'Sarah Chen, VP Operations at SwiftLogistics',
+      headline: 'Directional input where every attribute is labelled.',
+      pain: 'An ungrounded persona reads convincingly and hides which traits are actually supported.',
+      gain: 'Each attribute is OBSERVED, INFERRED or SYNTHETIC, so you can read the persona and its confidence at the same time.',
+      metrics: ['3 provenance classes', 'idf-weighted evidence retrieval', 'Downgrade-only classification'],
+      detail: 'Fabricated citations are stripped in code and the attribute is downgraded. Classes never move up.',
     },
     {
-      id: 'growth' as const,
-      label: 'Growth & Marketing',
-      icon: <TrendingUp size={16} />,
-      headline: 'Attribute real customer lifetime value to actual channels.',
-      pain: 'Attribution models relying on last-click data that misdirect performance spend.',
-      gain: 'True multi-touch attribution grounded in actual downstream retention and expansion behavior.',
-      metrics: ['+28% ROI on paid spend', 'Precise cohort analysis', '1-click re-engagement'],
-      quote: '"We reallocated $45k in ad spend based on verified expansion data in week two."',
-      author: 'Marcus Brody, Head of Growth at ScaleWave',
+      id: 'students' as const,
+      label: 'Researchers & students',
+      icon: <GraduationCap size={16} />,
+      headline: 'A working testbed for multi-model routing.',
+      pain: 'Studying routing usually means building the whole harness before you can measure anything.',
+      gain: 'Seven routing strategies can be compared offline, and replay evaluation runs against RouterArena and xRouteBench.',
+      metrics: ['HYBRID, ROUND_ROBIN, LEAST_USED', 'QUALITY_FIRST, LATENCY_FIRST', 'CAPABILITY_FIRST, QUOTA_AWARE'],
+      detail: 'Datasets are used for grounding and evaluation only. No fine-tuning, ever — that is an explicit project rule.',
     },
     {
-      id: 'finance' as const,
-      label: 'Finance & Strategy',
-      icon: <DollarSign size={16} />,
-      headline: 'Predictive scenario planning with verifiable audit trails.',
-      pain: 'Board models based on static assumptions that break down when market dynamics shift.',
-      gain: 'Live dynamic what-if simulation engine citing exact historical event rows.',
-      metrics: ['Deterministic scenario models', 'Full provenance audit trail', 'Faster board prep'],
-      quote: '"Audit-ready forecasts with complete provenance. Our board was blown away."',
-      author: 'Elena Rostova, CFO at Vertex Holdings',
+      id: 'nobudget' as const,
+      label: 'No API budget',
+      icon: <Wallet size={16} />,
+      headline: 'Zero API keys is a supported configuration.',
+      pain: 'Most persona tooling assumes you already pay for a frontier model.',
+      gain: 'Keyless free provider tiers work out of the box, and every pool terminates at a local Ollama model.',
+      metrics: ['Keyless start', 'Local model as final fallback', 'Emergency pool is local-first'],
+      detail: 'The freellmpool adapter aggregates roughly 18–24 free providers and 200+ routes behind one API.',
     },
   ];
 
@@ -96,7 +92,7 @@ export const UseCases: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            Tailored Solutions
+            Who It Is For
           </div>
 
           <h2
@@ -108,14 +104,14 @@ export const UseCases: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            Built for everyone who{' '}
+            Built for people who need{' '}
             <span className="text-gradient-blue">
-              drives business forward.
+              a persona today.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            Explore how BebshaX solves critical challenges for your specific functional discipline.
+            Four ways the same loop — describe, generate, interview — gets used.
           </p>
         </div>
 
@@ -207,14 +203,14 @@ export const UseCases: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
                 <div style={{ padding: '14px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.1)', border: 'none' }}>
                   <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F87171', textTransform: 'uppercase', marginBottom: '2px' }}>
-                    THE BOTTLENECK
+                    THE PROBLEM
                   </div>
                   <div style={{ fontSize: '0.84rem', color: '#D4D4D8' }}>{current.pain}</div>
                 </div>
 
                 <div style={{ padding: '14px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.04)', border: 'none' }}>
                   <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', marginBottom: '2px' }}>
-                    THE BEBSHAX GAIN
+                    WHAT BEBSHAX DOES
                   </div>
                   <div style={{ fontSize: '0.84rem', color: '#D4D4D8' }}>{current.gain}</div>
                 </div>
@@ -244,7 +240,7 @@ export const UseCases: React.FC = () => {
               </div>
             </div>
 
-            {/* Testimonial Quote (No outline) */}
+            {/* Supporting Detail Panel (No outline) */}
             <div
               style={{
                 borderRadius: '16px',
@@ -254,11 +250,11 @@ export const UseCases: React.FC = () => {
                 padding: '28px',
               }}
             >
-              <div style={{ fontSize: '1.02rem', fontStyle: 'italic', color: '#FFFFFF', lineHeight: '1.6', marginBottom: '18px' }}>
-                {current.quote}
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+                HOW IT WORKS
               </div>
-              <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#F6C878' }}>
-                {current.author}
+              <div style={{ fontSize: '1.02rem', color: '#FFFFFF', lineHeight: '1.6' }}>
+                {current.detail}
               </div>
             </div>
           </div>

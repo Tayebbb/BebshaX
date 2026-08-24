@@ -46,7 +46,7 @@ export const IntelligenceSection: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            Verifiable Decision Intelligence
+            The Routing Layer
           </div>
 
           <h2
@@ -58,14 +58,14 @@ export const IntelligenceSection: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            Data → Diagnostic Insight →{' '}
+            Task → pool →{' '}
             <span className="text-gradient-blue">
-              Actionable Playbook.
+              a local model, always.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            Unlike generic dashboards that stop at reporting numbers, BebshaX tells you exactly why changes happen and gives you the playbook to respond.
+            Every LLM call goes through one entry point with an explicit task type. No model classifies the task — the application always declares it.
           </p>
         </div>
 
@@ -107,28 +107,28 @@ export const IntelligenceSection: React.FC = () => {
               }}
             >
               <Search size={12} />
-              <span>1. WHAT IS HAPPENING</span>
+              <span>1. WHERE THE CALL GOES</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: 'none' }}>
-                <TrendingDown size={18} color="#EF4444" />
+              <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', border: 'none' }}>
+                <TrendingDown size={18} color="#60A5FA" />
               </div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
-                Conversion Drop in Tier 2
+                16 task types, 7 pools
               </h3>
             </div>
 
             <p style={{ fontSize: '0.85rem', color: '#8E8E93', lineHeight: '1.6', marginBottom: '20px' }}>
-              Observed telemetry: Signup-to-paid conversion decreased from <strong style={{ color: '#FFFFFF' }}>6.2% to 4.1%</strong> among self-serve users over the last 14 days.
+              Each task type maps to one pool, and the ordering inside a pool is a <strong style={{ color: '#FFFFFF' }}>preference order</strong>. Every pool ends at the local adapter, so fallback terminates on-machine. The emergency pool is local-first.
             </p>
 
             <div style={{ padding: '12px', borderRadius: '8px', background: '#040406', border: 'none', fontSize: '0.75rem', color: '#71717A' }}>
-              Data source: PostHog event logs & Stripe billing webhooks (Verified 100% complete)
+              Grounding sources: PersonaHub, Google Synthetic-Persona-Chat, EmpatheticDialogues, an Amazon Reviews slice, MMLU and GSM8K micro slices, RouterArena, xRouteBench
             </div>
           </div>
 
-          {/* Card 2: Root Cause Diagnosis */}
+          {/* Card 2: Failure Classification */}
           <div
             className="clean-card"
             style={{
@@ -157,7 +157,7 @@ export const IntelligenceSection: React.FC = () => {
               }}
             >
               <Brain size={12} />
-              <span>2. WHY IT IS HAPPENING</span>
+              <span>2. WHEN A PROVIDER FAILS</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
@@ -165,20 +165,20 @@ export const IntelligenceSection: React.FC = () => {
                 <Sparkles size={18} color="#60A5FA" />
               </div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
-                Onboarding Step 3 Friction
+                14 failure kinds, one policy each
               </h3>
             </div>
 
             <p style={{ fontSize: '0.85rem', color: '#8E8E93', lineHeight: '1.6', marginBottom: '20px' }}>
-              Diagnostic link: 78% of abandoned users stalled at database credential entry. The mandatory TLS cert upload caused 3.8× drop-off compared to previous OAuth flow.
+              The failure is classified, then the policy applies: retry the same route once, advance to the next candidate, or put the route on cooldown. Low answer quality is never treated as an infrastructure failure — quality belongs to the evaluation layer.
             </p>
 
             <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', border: 'none', fontSize: '0.75rem', color: '#93C5FD', fontWeight: 500 }}>
-              Confidence: 96.4% statistical significance (p &lt; 0.001)
+              Cooldown: 60 seconds, in-memory, per provider and model. Cooling routes are skipped and return automatically.
             </div>
           </div>
 
-          {/* Card 3: Actionable Playbook */}
+          {/* Card 3: Explicit Failure */}
           <div
             className="clean-card"
             style={{
@@ -207,7 +207,7 @@ export const IntelligenceSection: React.FC = () => {
               }}
             >
               <Zap size={12} />
-              <span>3. WHAT TO DO NEXT</span>
+              <span>3. WHEN NOTHING FITS</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
@@ -215,12 +215,12 @@ export const IntelligenceSection: React.FC = () => {
                 <Zap size={18} color="#000000" />
               </div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
-                Deploy Fallback Connector
+                ContextWindowExceeded
               </h3>
             </div>
 
             <p style={{ fontSize: '0.85rem', color: '#8E8E93', lineHeight: '1.6', marginBottom: '20px' }}>
-              Playbook ready: Toggle 1-click cloud connector wizard, defer TLS cert to settings, and trigger re-engagement email to 142 stalled users.
+              Context is never truncated to fit a smaller model. If nothing in the pool can hold the request, it fails explicitly instead of quietly dropping persona identity, memory, or evidence.
             </p>
 
             <a
@@ -240,7 +240,7 @@ export const IntelligenceSection: React.FC = () => {
                 outline: 'none',
               }}
             >
-              <span>Execute Simulated Playbook</span>
+              <span>See the task-to-pool map</span>
               <ArrowRight size={14} color="#000000" />
             </a>
           </div>

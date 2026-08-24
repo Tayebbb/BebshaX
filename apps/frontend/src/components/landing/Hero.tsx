@@ -52,11 +52,11 @@ export const Hero: React.FC<HeroProps> = () => {
           }}
         >
           <span style={{ color: '#F6C878', opacity: 0.6 }}>[</span>
-          <span>Next-Gen <strong style={{ color: '#FFFFFF', fontWeight: 700 }}>Autonomous Decision Intelligence</strong></span>
+          <span><strong style={{ color: '#FFFFFF', fontWeight: 700 }}>Synthetic Persona Research</strong></span>
           <span style={{ color: '#F6C878', opacity: 0.6 }}>]</span>
         </div>
 
-        {/* Personas Simulated Pill */}
+        {/* Free-Tier Pill */}
         <div
           style={{
             display: 'inline-flex',
@@ -70,8 +70,8 @@ export const Hero: React.FC<HeroProps> = () => {
             color: '#A1A1AA',
           }}
         >
-          <span>Customer Personas Simulated on BebshaX — <strong style={{ color: '#FFFFFF' }}>48,907</strong></span>
-          <span style={{ fontStyle: 'italic', color: '#F6C878' }}>and counting</span>
+          <span>Runs on free provider tiers — </span>
+          <span style={{ fontStyle: 'italic', color: '#F6C878' }}>zero API keys required to start</span>
         </div>
       </div>
 
@@ -97,7 +97,7 @@ export const Hero: React.FC<HeroProps> = () => {
             color: '#FFFFFF',
           }}
         >
-          Simulate every decision.
+          Generate evidence-grounded personas.
           <span
             style={{
               display: 'block',
@@ -107,7 +107,7 @@ export const Hero: React.FC<HeroProps> = () => {
               marginTop: '4px',
             }}
           >
-            Scale with certainty.
+            Then interview them.
           </span>
         </h1>
 
@@ -122,7 +122,7 @@ export const Hero: React.FC<HeroProps> = () => {
             fontWeight: 400,
           }}
         >
-          Autonomous persona intelligence and cohort simulation grounded in real customer telemetry. Stress-test pricing, messaging, and feature adoption before spending capital.
+          Describe your business. BebshaX generates personas whose every attribute is labelled OBSERVED, INFERRED or SYNTHETIC against public research datasets — then you interview them in multi-turn conversations routed across free LLM providers, with a local model as the final fallback.
         </p>
 
         {/* Single Glowing Gold Pill Button */}
@@ -152,7 +152,7 @@ export const Hero: React.FC<HeroProps> = () => {
             e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
-          Simulate your first cohort free
+          Generate your first persona
         </button>
       </div>
 
@@ -179,10 +179,10 @@ export const Hero: React.FC<HeroProps> = () => {
               marginBottom: '6px',
             }}
           >
-            98.4%
+            16
           </div>
           <div style={{ fontSize: '0.82rem', color: '#8E8E93', lineHeight: '1.4' }}>
-            Behavioral fidelity — <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>grounded across 48k+ events</strong>
+            Fixed task types, routed across <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>7 routing pools</strong>
           </div>
         </div>
 
@@ -197,10 +197,10 @@ export const Hero: React.FC<HeroProps> = () => {
               marginBottom: '6px',
             }}
           >
-            &lt; 15 <span style={{ fontSize: '0.7em', color: '#FFFFFF', fontWeight: 700 }}>sec</span>
+            14
           </div>
           <div style={{ fontSize: '0.82rem', color: '#8E8E93', lineHeight: '1.4' }}>
-            From hypothesis to <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>actionable decision report</strong>
+            Failure kinds, each with an <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>explicit routing policy</strong>
           </div>
         </div>
 
@@ -215,10 +215,10 @@ export const Hero: React.FC<HeroProps> = () => {
               marginBottom: '6px',
             }}
           >
-            3.8×
+            0
           </div>
           <div style={{ fontSize: '0.82rem', color: '#8E8E93', lineHeight: '1.4' }}>
-            Faster conviction on <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>product & pricing bets</strong>
+            API keys required — <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>keyless providers plus local Ollama</strong>
           </div>
         </div>
       </div>

@@ -6,15 +6,46 @@ import {
 } from 'lucide-react';
 import { useNavigation } from '../../context/NavigationContext';
 
+interface PoolInfo {
+  pool: string;
+  limit: number;
+  candidates: string;
+}
+
+const POOLS: Record<string, PoolInfo> = {
+  reasoning: { pool: 'reasoning', limit: 2, candidates: 'freellmpool → ollama (local)' },
+  conversation: { pool: 'conversation', limit: 5, candidates: 'freellmpool → ollama (local)' },
+  structured: { pool: 'structured', limit: 3, candidates: 'freellmpool → ollama (local)' },
+  fast: { pool: 'fast', limit: 5, candidates: 'freellmpool → ollama (local)' },
+  long_context: { pool: 'long_context', limit: 2, candidates: 'freellmpool → ollama (local)' },
+  emergency: { pool: 'emergency', limit: 2, candidates: 'ollama (local) → freellmpool' },
+};
+
+const TASK_TYPES: { task: string; pool: keyof typeof POOLS }[] = [
+  { task: 'PERSONA_GENERATION', pool: 'reasoning' },
+  { task: 'PERSONA_REFINEMENT', pool: 'reasoning' },
+  { task: 'PERSONA_VALIDATION', pool: 'reasoning' },
+  { task: 'CONTRADICTION_CHECK', pool: 'reasoning' },
+  { task: 'CRITIC', pool: 'reasoning' },
+  { task: 'PERSONA_INTERVIEW', pool: 'conversation' },
+  { task: 'PERSONA_RESPONSE', pool: 'conversation' },
+  { task: 'EVIDENCE_EXTRACTION', pool: 'structured' },
+  { task: 'EVIDENCE_CLASSIFICATION', pool: 'structured' },
+  { task: 'STRUCTURED_OUTPUT', pool: 'structured' },
+  { task: 'BROWSER_AGENT', pool: 'structured' },
+  { task: 'TOOL_CALLING', pool: 'structured' },
+  { task: 'MEMORY_RETRIEVAL', pool: 'fast' },
+  { task: 'MEMORY_SUMMARIZATION', pool: 'fast' },
+  { task: 'REPORT_GENERATION', pool: 'long_context' },
+  { task: 'EMERGENCY_FALLBACK', pool: 'emergency' },
+];
+
 export const InteractiveDemo: React.FC = () => {
   const { navigate } = useNavigation();
-  const [mrr, setMrr] = useState<number>(120);
-  const [churnRate, setChurnRate] = useState<number>(3.5);
-  const [expansionRate, setExpansionRate] = useState<number>(15);
+  const [selectedTask, setSelectedTask] = useState<string>('PERSONA_GENERATION');
 
-  const calculatedExpansion = Math.round(mrr * (expansionRate / 100) * 12);
-  const savedFromChurn = Math.round(mrr * (churnRate / 100) * 0.45 * 12);
-  const totalGain = calculatedExpansion + savedFromChurn;
+  const current = TASK_TYPES.find((t) => t.task === selectedTask)!;
+  const pool = POOLS[current.pool];
 
   return (
     <section
@@ -53,7 +84,7 @@ export const InteractiveDemo: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            ROI & Growth Simulator
+            Task → Pool Map
           </div>
 
           <h2
@@ -65,18 +96,18 @@ export const InteractiveDemo: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            Simulate your business outcomes{' '}
+            Pick a task type and see{' '}
             <span className="text-gradient-blue">
-              in real time.
+              exactly where it routes.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            Adjust your scale parameters below to see how BebshaX detects hidden expansion potential and protects revenue.
+            This is the real configuration: 16 fixed task types, 7 pools, preference-ordered candidates, and a local model at the end of every chain.
           </p>
         </div>
 
-        {/* Interactive Simulator Card (No outline) */}
+        {/* Routing Map Card (No outline) */}
         <div
           className="clean-card"
           style={{
@@ -95,94 +126,44 @@ export const InteractiveDemo: React.FC = () => {
               alignItems: 'center',
             }}
           >
-            {/* Left Controls Column */}
+            {/* Left Task Type List */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
                 <Sliders size={18} color="#FFFFFF" />
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
-                  Business Parameters
+                  Task type
                 </h3>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {/* MRR Slider */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '0.84rem', fontWeight: 500, color: '#8E8E93' }}>
-                      Current Monthly Revenue (MRR)
-                    </span>
-                    <strong style={{ fontSize: '0.95rem', color: '#FFFFFF' }}>
-                      ${mrr}k /mo
-                    </strong>
-                  </div>
-                  <input
-                    type="range"
-                    min="20"
-                    max="500"
-                    step="10"
-                    value={mrr}
-                    onChange={(e) => setMrr(Number(e.target.value))}
-                    style={{ width: '100%', accentColor: '#FFFFFF', cursor: 'pointer', border: 'none', outline: 'none' }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#52525B', marginTop: '4px' }}>
-                    <span>$20k</span>
-                    <span>$500k</span>
-                  </div>
-                </div>
-
-                {/* Churn Rate Slider */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '0.84rem', fontWeight: 500, color: '#8E8E93' }}>
-                      Estimated Monthly Churn
-                    </span>
-                    <strong style={{ fontSize: '0.95rem', color: '#EF4444' }}>
-                      {churnRate}%
-                    </strong>
-                  </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    step="0.5"
-                    value={churnRate}
-                    onChange={(e) => setChurnRate(Number(e.target.value))}
-                    style={{ width: '100%', accentColor: '#EF4444', cursor: 'pointer', border: 'none', outline: 'none' }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#52525B', marginTop: '4px' }}>
-                    <span>1.0%</span>
-                    <span>10.0%</span>
-                  </div>
-                </div>
-
-                {/* Expansion Opportunity Slider */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '0.84rem', fontWeight: 500, color: '#8E8E93' }}>
-                      Expansion Target Opportunity
-                    </span>
-                    <strong style={{ fontSize: '0.95rem', color: '#F6C878' }}>
-                      +{expansionRate}%
-                    </strong>
-                  </div>
-                  <input
-                    type="range"
-                    min="5"
-                    max="40"
-                    step="1"
-                    value={expansionRate}
-                    onChange={(e) => setExpansionRate(Number(e.target.value))}
-                    style={{ width: '100%', accentColor: '#F6C878', cursor: 'pointer', border: 'none', outline: 'none' }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#52525B', marginTop: '4px' }}>
-                    <span>5%</span>
-                    <span>40%</span>
-                  </div>
-                </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {TASK_TYPES.map((t) => {
+                  const isActive = t.task === selectedTask;
+                  return (
+                    <button
+                      key={t.task}
+                      onClick={() => setSelectedTask(t.task)}
+                      style={{
+                        padding: '7px 14px',
+                        borderRadius: '9999px',
+                        border: 'none',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        fontFamily: 'var(--font-mono)',
+                        transition: 'all 0.2s ease',
+                        background: isActive ? '#FFFFFF' : 'rgba(255, 255, 255, 0.04)',
+                        color: isActive ? '#000000' : '#8E8E93',
+                      }}
+                    >
+                      {t.task}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Right Projected Impact Panel (No outline) */}
+            {/* Right Routing Result Panel (No outline) */}
             <div
               style={{
                 borderRadius: '18px',
@@ -195,7 +176,7 @@ export const InteractiveDemo: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
                 <Sparkles size={16} color="#F6C878" />
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Projected Annual Value Unlock
+                  Routes to
                 </span>
               </div>
 
@@ -208,21 +189,21 @@ export const InteractiveDemo: React.FC = () => {
                   marginBottom: '10px',
                 }}
               >
-                +${totalGain.toLocaleString()} <span style={{ fontSize: '0.9rem', color: '#71717A', fontWeight: 500 }}>/yr</span>
+                {pool.pool}
               </div>
 
               <p style={{ fontSize: '0.84rem', color: '#8E8E93', lineHeight: '1.5', marginBottom: '22px' }}>
-                Estimated revenue improvement combining automated retention triggers and proactive account expansion suggestions.
+                Ordering inside a pool is a preference order, and the chain ends at the local adapter so fallback always terminates on-machine.
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.03)', border: 'none' }}>
-                  <span style={{ fontSize: '0.8rem', color: '#8E8E93' }}>Annual Expansion ARR:</span>
-                  <strong style={{ fontSize: '0.84rem', color: '#F6C878' }}>+${calculatedExpansion.toLocaleString()}</strong>
+                  <span style={{ fontSize: '0.8rem', color: '#8E8E93' }}>Concurrency limit:</span>
+                  <strong style={{ fontSize: '0.84rem', color: '#F6C878' }}>{pool.limit}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', border: 'none' }}>
-                  <span style={{ fontSize: '0.8rem', color: '#8E8E93' }}>Retained At-Risk Revenue:</span>
-                  <strong style={{ fontSize: '0.84rem', color: '#10B981' }}>+${savedFromChurn.toLocaleString()}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.03)', border: 'none' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#8E8E93' }}>Candidate order:</span>
+                  <strong style={{ fontSize: '0.78rem', color: '#FFFFFF', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{pool.candidates}</strong>
                 </div>
               </div>
 
@@ -244,7 +225,7 @@ export const InteractiveDemo: React.FC = () => {
                   gap: '6px',
                 }}
               >
-                <span>Unlock Full Growth Model</span>
+                <span>Generate your first persona</span>
                 <ArrowRight size={15} color="#000000" />
               </button>
             </div>

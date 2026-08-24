@@ -12,24 +12,24 @@ import {
 export const ProblemSection: React.FC = () => {
   const problems = [
     {
-      icon: <FileSpreadsheet size={18} color="#EF4444" />,
-      title: 'Scattered Spreadsheets & Dashboards',
-      description: 'Data locked in 12 different SaaS apps, CRM tables, and outdated CSV exports.',
-    },
-    {
-      icon: <AlertOctagon size={18} color="#EF4444" />,
-      title: 'Late Warnings on Lost Revenue',
-      description: 'Discovering customer churn and margin decline weeks after it happened.',
+      icon: <Hourglass size={18} color="#EF4444" />,
+      title: 'Real user research is slow and expensive',
+      description: 'Recruiting, scheduling, and running interviews takes weeks before you learn anything directional.',
     },
     {
       icon: <HelpCircle size={18} color="#EF4444" />,
-      title: 'Too Many Charts, Zero Direction',
-      description: 'Endless analytics graphs that show numbers but never explain what decision to make next.',
+      title: 'LLM personas drift between turns',
+      description: 'Rebuild the persona on every turn and its identity quietly changes underneath the conversation.',
     },
     {
-      icon: <Hourglass size={18} color="#EF4444" />,
-      title: 'Slow Decision Cycles',
-      description: 'Wasting dozens of hours every month manually compiling reports for executive meetings.',
+      icon: <FileSpreadsheet size={18} color="#EF4444" />,
+      title: 'Ungrounded personas invent their evidence',
+      description: 'A model asked to justify an attribute will happily fabricate a citation for it.',
+    },
+    {
+      icon: <AlertOctagon size={18} color="#EF4444" />,
+      title: 'Free provider tiers are unreliable',
+      description: 'Rate limits, timeouts, and models disappearing mid-request break a naive single-provider setup.',
     },
   ];
 
@@ -70,7 +70,7 @@ export const ProblemSection: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            The Operational Bottleneck
+            What Makes Synthetic Personas Hard
           </div>
 
           <h2
@@ -82,14 +82,14 @@ export const ProblemSection: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            Your business already has the data.{' '}
+            Asking a model for a persona is easy.{' '}
             <span className="text-gradient-red">
-              You just can’t act on it in time.
+              Getting a stable, grounded one is not.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            Most companies operate with blind spots because data is fragmented across separate tools, unaligned teams, and delayed reporting cycles.
+            A persona is only useful if it stays the same person across a conversation and if you can tell which of its traits are backed by evidence.
           </p>
         </div>
 
@@ -128,7 +128,7 @@ export const ProblemSection: React.FC = () => {
                 <XCircle size={18} color="#EF4444" />
               </div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
-                The Fragmented Reality
+                The Unguarded Approach
               </h3>
             </div>
 
@@ -185,20 +185,20 @@ export const ProblemSection: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               {[
                 {
-                  title: 'Unified Operational Graph',
-                  desc: 'All billing, product activity, and customer behavior reconciled into a single source of truth.',
+                  title: 'An immutable identity card',
+                  desc: 'The persona is never rebuilt between turns. The identity card is byte-identical on every turn, and a test enforces that.',
                 },
                 {
-                  title: 'Autonomous Anomaly & Risk Alerts',
-                  desc: 'Immediate notifications when key metrics diverge, with root causes pre-diagnosed.',
+                  title: 'Provenance enforced in code',
+                  desc: 'Fabricated citations are stripped and the attribute is downgraded. A class can only ever move down, never up.',
                 },
                 {
-                  title: 'Decision Intelligence, Not Just Graphs',
-                  desc: 'Clear, prioritized recommendations with verified evidence and simulated outcomes.',
+                  title: 'Deterministic consistency rules',
+                  desc: 'Occupation against minimum plausible age, income markers against luxury markers, location against timezone. Errors block storage.',
                 },
                 {
-                  title: 'Instant Execution Playbooks',
-                  desc: 'Turn insights into action with 1-click workflows for sales, retention, and growth.',
+                  title: 'A closed failure taxonomy',
+                  desc: 'Fourteen failure kinds, each with one policy — retry, advance, or cool the route — and every pool ends at a local model.',
                 },
               ].map((adv, idx) => (
                 <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>

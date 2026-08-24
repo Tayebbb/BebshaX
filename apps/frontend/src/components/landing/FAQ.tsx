@@ -6,24 +6,28 @@ export const FAQ: React.FC = () => {
 
   const faqs = [
     {
-      q: 'How does BebshaX differ from standard dashboard tools like PowerBI or Looker?',
-      a: 'Standard business intelligence tools are passive query engines that display whatever charts you configure. BebshaX is a proactive decision intelligence platform: it autonomously monitors your unified data graph, investigates root causes when anomalies happen, and generates ready-to-execute operational playbooks with measured revenue impact.',
+      q: 'What is a synthetic persona in BebshaX?',
+      a: 'It is a generated profile of a plausible customer for a business you describe — name, age, occupation, location and behavioural attributes — that you can then interview in a multi-turn conversation. The persona is never rebuilt between turns: the identity card is byte-identical on every turn, and a test enforces that.',
     },
     {
-      q: 'How long does it take to connect our data sources?',
-      a: 'Most teams are up and running in under 3 minutes. BebshaX offers pre-built connectors for Stripe, HubSpot, PostgreSQL, Snowflake, Shopify, Segment, and standard webhook endpoints with automatic schema mapping and TLS 1.3 encryption.',
+      q: 'What does “evidence-grounded” actually mean here?',
+      a: 'Every attribute carries exactly one of three provenance classes. OBSERVED means it is backed by a retrieved record from a public research dataset. INFERRED and SYNTHETIC mean it is not. Evidence retrieval is idf-weighted lexical retrieval over preprocessed dataset records, and provenance is enforced in code: fabricated citations are stripped and the attribute is downgraded. A class can only ever be downgraded, never upgraded.',
     },
     {
-      q: 'What is the "Evidence-Grounded Intelligence" model?',
-      a: 'Every insight and recommendation produced by BebshaX is deterministically cited with the exact underlying event rows, timestamps, and statistical confidence intervals. There are no unverifiable black-box guesses.',
+      q: 'What happens when a provider fails or a context is too large?',
+      a: 'Failures are classified into a closed set of 14 kinds, each with one policy: retry the same route once, advance to the next candidate, or put the route on a 60-second cooldown per provider and model. Context is never truncated to fit a smaller model — if nothing in the pool can hold the request, it fails explicitly with ContextWindowExceeded. Low answer quality is never treated as an infrastructure failure; quality belongs to the evaluation layer.',
     },
     {
-      q: 'Can we simulate decisions before deploying them live?',
-      a: 'Yes. BebshaX includes a built-in what-if simulation sandbox that models the expected revenue, churn, and operational impacts of pricing updates, quota changes, or marketing spend reallocation before you commit capital.',
+      q: 'Do we need to connect any of our own data?',
+      a: 'No. The input is a business name, description, industry and target market, plus an optional audience segment and optional generation hints. That is all. There is no data connection of any kind.',
     },
     {
-      q: 'Is my business data secure and private?',
-      a: 'Absolutely. BebshaX enforces end-to-end data encryption in transit and at rest, SOC2-compliant access controls, and role-based permissions. We never train public foundation models on your proprietary company data.',
+      q: 'Are models fine-tuned on the datasets?',
+      a: 'No, never. Datasets are used for grounding and evaluation only — that is an explicit project rule. The real datasets include PersonaHub, Google Synthetic-Persona-Chat, EmpatheticDialogues, an Amazon Reviews slice, MMLU and GSM8K micro slices, RouterArena and xRouteBench. Setup is one command, idempotent, checksummed and license-verified.',
+    },
+    {
+      q: 'What does it cost to run?',
+      a: 'BebshaX runs on legitimately accessed free LLM provider tiers. Zero API keys is a supported configuration, because the keyless providers work out of the box. Every pool ends at a local Ollama model, so the fallback chain terminates on your own machine.',
     },
   ];
 
@@ -87,7 +91,7 @@ export const FAQ: React.FC = () => {
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            Have more questions? Reach out to our technical team anytime.
+            What the system does, and what it deliberately does not do.
           </p>
         </div>
 

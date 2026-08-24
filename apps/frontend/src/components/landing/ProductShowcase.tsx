@@ -11,36 +11,36 @@ import {
 } from 'lucide-react';
 
 export const ProductShowcase: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'cockpit' | 'engine' | 'playbooks' | 'attribution'>('cockpit');
+  const [activeTab, setActiveTab] = useState<'personas' | 'interviews' | 'memory' | 'telemetry'>('personas');
 
   const tabs = [
     {
-      id: 'cockpit' as const,
-      label: 'Executive Cockpit',
+      id: 'personas' as const,
+      label: 'Personas',
       icon: <LayoutDashboard size={16} />,
-      headline: 'Holistic cross-departmental operations in real-time.',
-      description: 'Zero data silos. Monitor revenue health, churn risk, customer lifetime value, and support bottlenecks from a unified executive view.',
+      headline: 'Every attribute carries the class that earned it.',
+      description: 'Attributes backed by a retrieved dataset record are OBSERVED. The rest are INFERRED or SYNTHETIC. Fabricated citations are stripped in code and the attribute is downgraded.',
     },
     {
-      id: 'engine' as const,
-      label: 'Diagnostic Engine',
+      id: 'interviews' as const,
+      label: 'Interviews',
       icon: <Cpu size={16} />,
-      headline: 'Autonomous anomaly detection and root-cause tracing.',
-      description: 'When metrics shift, BebshaX does not just send a graph—it investigates underlying data layers and isolates the precise causal drivers.',
+      headline: 'The same person on turn one and turn twenty.',
+      description: 'The persona is never rebuilt between turns. Each turn recomposes the immutable identity card, the business context, the objective, retrieved memories, evidence themes, and the full history.',
     },
     {
-      id: 'playbooks' as const,
-      label: 'Action Playbooks',
+      id: 'memory' as const,
+      label: 'Memory',
       icon: <Workflow size={16} />,
-      headline: 'Prioritized playbooks tailored to your business model.',
-      description: 'Convert diagnostic intelligence into clear, assignable action items with measured revenue impacts and 1-click execution workflows.',
+      headline: 'A pgvector memory stream with three kinds.',
+      description: 'Semantic, episodic and reflection memories, scored by similarity, recency and importance. A reflection pass condenses them into higher-level items.',
     },
     {
-      id: 'attribution' as const,
-      label: 'Predictive Forecaster',
+      id: 'telemetry' as const,
+      label: 'Telemetry',
       icon: <Target size={16} />,
-      headline: 'Simulate business decisions before you spend budget.',
-      description: 'Run what-if scenario models on pricing changes, marketing budget reallocations, and sales headcount with evidence-backed certainty.',
+      headline: 'Every request records the route it actually took.',
+      description: 'A provenance record per request: provider, model, latency, failure kind, fallback reason, and the routing path across the pool.',
     },
   ];
 
@@ -83,7 +83,7 @@ export const ProductShowcase: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            Product Architecture
+            The Console
           </div>
 
           <h2
@@ -95,14 +95,14 @@ export const ProductShowcase: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            Everything important.{' '}
+            Four tabs.{' '}
             <span className="text-gradient-blue">
-              In one intelligent view.
+              One research loop.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            Explore the four core modules powering the BebshaX continuous intelligence engine.
+            Generate personas, interview them, inspect what they remember, and read the routing behind every call.
           </p>
         </div>
 
@@ -195,7 +195,7 @@ export const ProductShowcase: React.FC = () => {
                 }}
               >
                 <Sparkles size={13} color="#F6C878" />
-                <span>MODULE ACTIVE</span>
+                <span>CONSOLE TAB</span>
               </div>
 
               <h3
@@ -224,9 +224,9 @@ export const ProductShowcase: React.FC = () => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '28px' }}>
                 {[
-                  'Instant synchronization across all linked cloud databases',
-                  'Grounded in verifiable business event telemetry',
-                  'Export-ready presentation cards for stakeholders',
+                  'Every LLM call declares an explicit task type',
+                  'Grounded in preprocessed public research datasets',
+                  'Context is never truncated to fit a smaller model',
                 ].map((item, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div
@@ -264,7 +264,7 @@ export const ProductShowcase: React.FC = () => {
                     outline: 'none',
                   }}
                 >
-                  <span>Interactive Sandbox</span>
+                  <span>Try the routing map</span>
                   <ArrowRight size={14} color="#000000" />
                 </a>
               </div>
@@ -288,61 +288,59 @@ export const ProductShowcase: React.FC = () => {
                   </span>
                 </div>
                 <span style={{ fontSize: '0.68rem', color: '#71717A', fontWeight: 500 }}>
-                  Live sync
+                  Example output
                 </span>
               </div>
 
-              {/* Module-Specific Dynamic Visuals */}
-              {activeTab === 'cockpit' && (
+              {/* Tab-Specific Dynamic Visuals */}
+              {activeTab === 'personas' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ padding: '14px', borderRadius: '10px', background: '#0D0D11', border: 'none' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#8E8E93' }}>Net Expansion Velocity</span>
-                      <span style={{ fontSize: '0.75rem', color: '#F6C878', fontWeight: 700 }}>+23.4% YoY</span>
+                      <span style={{ fontSize: '0.75rem', color: '#8E8E93' }}>Reorders supplies monthly</span>
+                      <span style={{ fontSize: '0.72rem', color: '#34D399', fontWeight: 700 }}>OBSERVED</span>
                     </div>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#FFFFFF' }}>$2.84M</div>
+                    <div style={{ fontSize: '0.72rem', color: '#52525B' }}>Backed by a retrieved dataset record</div>
                   </div>
 
                   <div style={{ padding: '14px', borderRadius: '10px', background: '#0D0D11', border: 'none' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#8E8E93' }}>Customer Health Index</span>
-                      <span style={{ fontSize: '0.75rem', color: '#10B981', fontWeight: 700 }}>98.2 / 100</span>
+                      <span style={{ fontSize: '0.75rem', color: '#8E8E93' }}>Prefers written follow-up</span>
+                      <span style={{ fontSize: '0.72rem', color: '#93C5FD', fontWeight: 700 }}>INFERRED</span>
                     </div>
-                    <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden', marginTop: '6px' }}>
-                      <div style={{ width: '92%', height: '100%', background: '#F6C878' }} />
-                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#52525B' }}>Citation stripped, class downgraded</div>
                   </div>
                 </div>
               )}
 
-              {activeTab === 'engine' && (
+              {activeTab === 'interviews' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#F87171', fontWeight: 700, fontSize: '0.78rem', marginBottom: '2px' }}>
-                      <AlertCircle size={13} /> Anomaly Detected
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#A1A1AA' }}>
-                      Enterprise churn probability spiked +14% after API rate limit policy change.
-                    </div>
-                  </div>
-
                   <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', border: 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#93C5FD', fontWeight: 700, fontSize: '0.78rem', marginBottom: '2px' }}>
-                      <Sparkles size={13} /> Root Cause Isolated
+                      <Sparkles size={13} /> Composed per turn
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#A1A1AA' }}>
-                      Primary driver: 22 high-volume integration endpoints exceeding tier limits without warning.
+                      Identity card + business context + objective + retrieved memories + evidence themes + full history.
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#F87171', fontWeight: 700, fontSize: '0.78rem', marginBottom: '2px' }}>
+                      <AlertCircle size={13} /> Too large to compose
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#A1A1AA' }}>
+                      The turn fails explicitly rather than truncating the persona.
                     </div>
                   </div>
                 </div>
               )}
 
-              {activeTab === 'playbooks' && (
+              {activeTab === 'memory' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {[
-                    { name: 'Tier Cap Concierge Outreach', impact: '+$42.5k ARR', time: '5 min setup' },
-                    { name: 'Onboarding Friction Email Nudge', impact: '+8.4% conversion', time: '1-click deploy' },
-                    { name: 'Self-Serve Quota Adjustment', impact: '-18% support load', time: 'Automated' },
+                    { name: 'Cosine similarity', impact: '0.60', time: 'Against the query embedding' },
+                    { name: 'Recency', impact: '0.25', time: '48-hour half-life' },
+                    { name: 'Importance', impact: '0.15', time: 'Assigned when the memory is written' },
                   ].map((p, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: '#0D0D11', border: 'none' }}>
                       <div>
@@ -357,18 +355,22 @@ export const ProductShowcase: React.FC = () => {
                 </div>
               )}
 
-              {activeTab === 'attribution' && (
+              {activeTab === 'telemetry' && (
                 <div style={{ padding: '14px', borderRadius: '10px', background: '#0D0D11', border: 'none' }}>
                   <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#FFFFFF', marginBottom: '6px' }}>
-                    Scenario Simulation: +15% Expansion Pricing
+                    Provenance record for this request
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#8E8E93' }}>Projected Revenue:</span>
-                    <strong style={{ color: '#F6C878' }}>+$184,200</strong>
+                    <span style={{ fontSize: '0.75rem', color: '#8E8E93' }}>Task type:</span>
+                    <strong style={{ color: '#F6C878' }}>PERSONA_INTERVIEW</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#8E8E93' }}>Pool:</span>
+                    <strong style={{ color: '#FFFFFF' }}>conversation</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#8E8E93' }}>Expected Churn Impact:</span>
-                    <strong style={{ color: '#10B981' }}>&lt; 0.4%</strong>
+                    <span style={{ fontSize: '0.75rem', color: '#8E8E93' }}>Recorded per attempt:</span>
+                    <strong style={{ color: '#FFFFFF' }}>provider, model, latency, failure kind</strong>
                   </div>
                 </div>
               )}

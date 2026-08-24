@@ -1,18 +1,25 @@
 import React, { useState } from 'react';
 import {
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
-  ArrowUpRight,
+  ShieldCheck,
   Sparkles,
-  Zap,
   Search,
   RefreshCw,
 } from 'lucide-react';
 
+const PROVENANCE_STYLES: Record<string, { bg: string; fg: string }> = {
+  OBSERVED: { bg: 'rgba(16, 185, 129, 0.12)', fg: '#34D399' },
+  INFERRED: { bg: 'rgba(59, 130, 246, 0.12)', fg: '#93C5FD' },
+  SYNTHETIC: { bg: 'rgba(246, 200, 120, 0.12)', fg: '#F6C878' },
+};
+
 export const HeroDashboardPreview: React.FC = () => {
-  const [activeMetricTab, setActiveMetricTab] = useState<'revenue' | 'velocity' | 'retention'>('revenue');
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+
+  const attributes = [
+    { label: 'Reorders office supplies on a monthly cycle', klass: 'OBSERVED' },
+    { label: 'Prefers written follow-up over phone calls', klass: 'INFERRED' },
+    { label: 'Trials new tools with a small team first', klass: 'SYNTHETIC' },
+  ];
 
   return (
     <div
@@ -38,7 +45,7 @@ export const HeroDashboardPreview: React.FC = () => {
         }}
       />
 
-      {/* Main Container Minimalist Command Center (No outer box outline) */}
+      {/* Main Container Minimalist Console (No outer box outline) */}
       <div
         style={{
           position: 'relative',
@@ -67,7 +74,7 @@ export const HeroDashboardPreview: React.FC = () => {
             <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#F59E0B' }} />
             <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#10B981' }} />
             <div style={{ marginLeft: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', color: '#71717A', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>bebshax.cloud/live/operations-hq</span>
+              <span style={{ fontSize: '0.8rem', color: '#71717A', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>bebshax / personas</span>
               <span
                 style={{
                   fontSize: '0.62rem',
@@ -85,7 +92,7 @@ export const HeroDashboardPreview: React.FC = () => {
                 }}
               >
                 <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#60A5FA' }} />
-                STREAM ACTIVE
+                EXAMPLE OUTPUT
               </span>
             </div>
           </div>
@@ -106,7 +113,7 @@ export const HeroDashboardPreview: React.FC = () => {
               }}
             >
               <Search size={13} color="#A1A1AA" />
-              <span>Filter telemetry...</span>
+              <span>Filter personas...</span>
             </div>
             <button
               style={{
@@ -126,119 +133,44 @@ export const HeroDashboardPreview: React.FC = () => {
           </div>
         </div>
 
-        {/* Dashboard Grid Content */}
+        {/* Console Grid Content */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '14px' }}>
-          
-          {/* Top KPI Cards Row (No Outlines) */}
+
+          {/* Persona Identity Card */}
           <div
             style={{
-              gridColumn: 'span 4',
-              background: activeMetricTab === 'revenue' ? '#14141A' : '#0D0D11',
+              gridColumn: 'span 12',
+              background: '#0D0D11',
               border: 'none',
               outline: 'none',
               borderRadius: '14px',
               padding: '16px',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
             }}
-            onClick={() => setActiveMetricTab('revenue')}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.78rem', color: '#8E8E93', fontWeight: 500 }}>Monthly Run Rate</span>
+              <span style={{ fontSize: '0.78rem', color: '#8E8E93', fontWeight: 500 }}>Identity card</span>
               <span
                 style={{
                   fontSize: '0.72rem',
                   color: '#F6C878',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '2px',
+                  gap: '4px',
                   fontWeight: 700,
                 }}
               >
-                <TrendingUp size={13} /> +18.4%
+                <ShieldCheck size={13} /> Byte-identical on every turn
               </span>
             </div>
             <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.02em' }}>
-              $148,920
+              Amara Osei
             </div>
             <div style={{ fontSize: '0.72rem', color: '#52525B', marginTop: '4px' }}>
-              vs $125,780 previous month
+              34 · Office manager · Manchester, UK
             </div>
           </div>
 
-          <div
-            style={{
-              gridColumn: 'span 4',
-              background: activeMetricTab === 'velocity' ? '#14141A' : '#0D0D11',
-              border: 'none',
-              outline: 'none',
-              borderRadius: '14px',
-              padding: '16px',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onClick={() => setActiveMetricTab('velocity')}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.78rem', color: '#8E8E93', fontWeight: 500 }}>Operational Health</span>
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  color: '#10B981',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '2px',
-                  fontWeight: 700,
-                }}
-              >
-                <Zap size={13} color="#10B981" /> OPTIMAL
-              </span>
-            </div>
-            <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.02em' }}>
-              96.4 <span style={{ fontSize: '0.9rem', color: '#71717A', fontWeight: 500 }}>/ 100</span>
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#52525B', marginTop: '4px' }}>
-              0 critical anomalies detected
-            </div>
-          </div>
-
-          <div
-            style={{
-              gridColumn: 'span 4',
-              background: activeMetricTab === 'retention' ? '#14141A' : '#0D0D11',
-              border: 'none',
-              outline: 'none',
-              borderRadius: '14px',
-              padding: '16px',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onClick={() => setActiveMetricTab('retention')}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.78rem', color: '#8E8E93', fontWeight: 500 }}>Decision Velocity</span>
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  color: '#60A5FA',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '2px',
-                  fontWeight: 700,
-                }}
-              >
-                <ArrowUpRight size={13} /> 3.2×
-              </span>
-            </div>
-            <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.02em' }}>
-              4.2 hrs <span style={{ fontSize: '0.8rem', color: '#71717A', fontWeight: 500 }}>median</span>
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#52525B', marginTop: '4px' }}>
-              Down from 14.8 hrs manual
-            </div>
-          </div>
-
-          {/* Middle Main Chart Area (No Outlines) */}
+          {/* Attribute Provenance Rows (No Outlines) */}
           <div
             style={{
               gridColumn: 'span 8',
@@ -252,99 +184,57 @@ export const HeroDashboardPreview: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div>
                 <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#FFFFFF' }}>
-                  Unified Intelligence Stream & Growth Forecast
+                  Attributes and their provenance
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#71717A' }}>
-                  Continuous multi-channel sync (CRM, Billing, Product Usage, User Feedback)
+                  Every attribute carries exactly one class. Classes can only be downgraded, never upgraded.
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <span style={{ padding: '3px 8px', fontSize: '0.68rem', background: 'rgba(59, 130, 246, 0.15)', color: '#93C5FD', borderRadius: '4px', fontWeight: 700, border: 'none' }}>
-                  Realtime
-                </span>
-                <span style={{ padding: '3px 8px', fontSize: '0.68rem', background: 'rgba(255, 255, 255, 0.04)', color: '#71717A', borderRadius: '4px', fontWeight: 600, border: 'none' }}>
-                  30D
+                  Example output
                 </span>
               </div>
             </div>
 
-            {/* Custom SVG Data Visualization Chart */}
-            <div style={{ height: '160px', position: 'relative', width: '100%' }}>
-              <svg viewBox="0 0 500 160" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                <defs>
-                  <linearGradient id="blueAreaDarkMinimal" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.35" />
-                    <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.0" />
-                  </linearGradient>
-                  <linearGradient id="skyAreaDarkMinimal" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#F6C878" stopOpacity="0.20" />
-                    <stop offset="100%" stopColor="#F6C878" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-
-                {/* Horizontal Grid lines */}
-                <line x1="0" y1="30" x2="500" y2="30" stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="3 3" />
-                <line x1="0" y1="75" x2="500" y2="75" stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="3 3" />
-                <line x1="0" y1="120" x2="500" y2="120" stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="3 3" />
-
-                {/* Secondary Baseline Wave */}
-                <path
-                  d="M 0 130 Q 80 110 160 115 T 320 90 T 500 70 L 500 160 L 0 160 Z"
-                  fill="url(#skyAreaDarkMinimal)"
-                />
-                <path
-                  d="M 0 130 Q 80 110 160 115 T 320 90 T 500 70"
-                  fill="none"
-                  stroke="#F6C878"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 4"
-                />
-
-                {/* Primary Growth Wave */}
-                <path
-                  d="M 0 115 Q 70 100 140 85 T 280 60 T 420 35 T 500 20 L 500 160 L 0 160 Z"
-                  fill="url(#blueAreaDarkMinimal)"
-                />
-                <path
-                  d="M 0 115 Q 70 100 140 85 T 280 60 T 420 35 T 500 20"
-                  fill="none"
-                  stroke="#60A5FA"
-                  strokeWidth="2.5"
-                />
-
-                {/* Highlight Nodes */}
-                <circle cx="280" cy="60" r="4" fill="#60A5FA" stroke="#000000" strokeWidth="2" />
-                <circle cx="420" cy="35" r="4" fill="#F6C878" stroke="#000000" strokeWidth="2" />
-                <circle cx="500" cy="20" r="5" fill="#93C5FD" stroke="#000000" strokeWidth="2" />
-              </svg>
-
-              {/* Floating Insight Tooltip on Chart */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '10px',
-                  right: '65px',
-                  background: '#15151D',
-                  border: 'none',
-                  outline: 'none',
-                  borderRadius: '8px',
-                  padding: '6px 12px',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
-              >
-                <Sparkles size={14} color="#F6C878" />
-                <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#FFFFFF' }}>Peak Expansion Cohort</div>
-                  <div style={{ fontSize: '0.65rem', color: '#F6C878', fontWeight: 600 }}>+$23.1k opportunity identified</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {attributes.map((attr, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '13px 14px',
+                    borderRadius: '10px',
+                    background: '#040406',
+                    border: 'none',
+                    outline: 'none',
+                  }}
+                >
+                  <span style={{ fontSize: '0.8rem', color: '#D4D4D8' }}>{attr.label}</span>
+                  <span
+                    style={{
+                      fontSize: '0.66rem',
+                      fontWeight: 800,
+                      letterSpacing: '0.06em',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      whiteSpace: 'nowrap',
+                      background: PROVENANCE_STYLES[attr.klass].bg,
+                      color: PROVENANCE_STYLES[attr.klass].fg,
+                      border: 'none',
+                    }}
+                  >
+                    {attr.klass}
+                  </span>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* Right Live Insights Stream (No Outlines) */}
+          {/* Right Routing Strip (No Outlines) */}
           <div
             style={{
               gridColumn: 'span 4',
@@ -363,12 +253,12 @@ export const HeroDashboardPreview: React.FC = () => {
             >
               <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Sparkles size={14} color="#F6C878" />
-                <span>Active Intelligence</span>
+                <span>Routing path</span>
               </div>
-              <span style={{ fontSize: '0.68rem', color: '#71717A', fontWeight: 600 }}>3 fresh</span>
+              <span style={{ fontSize: '0.68rem', color: '#71717A', fontWeight: 600 }}>per request</span>
             </div>
 
-            {/* Insight Card 1 */}
+            {/* Routing Card 1 */}
             <div
               onMouseEnter={() => setHoveredCard('c1')}
               onMouseLeave={() => setHoveredCard(null)}
@@ -381,21 +271,20 @@ export const HeroDashboardPreview: React.FC = () => {
                 transition: 'all 0.2s ease',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                <CheckCircle2 size={13} color="#10B981" />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#FFFFFF' }}>Revenue Expansion</span>
+              <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8E8E93', letterSpacing: '0.06em', marginBottom: '3px' }}>
+                TASK
               </div>
-              <p style={{ fontSize: '0.72rem', color: '#8E8E93', lineHeight: '1.4' }}>
-                High-value enterprise accounts increased usage by <strong style={{ color: '#F6C878' }}>24%</strong> this cycle.
+              <p style={{ fontSize: '0.74rem', color: '#FFFFFF', lineHeight: '1.4', fontFamily: 'var(--font-mono)' }}>
+                PERSONA_GENERATION
               </p>
             </div>
 
-            {/* Insight Card 2 */}
+            {/* Routing Card 2 */}
             <div
               onMouseEnter={() => setHoveredCard('c2')}
               onMouseLeave={() => setHoveredCard(null)}
               style={{
-                background: hoveredCard === 'c2' ? '#1F1418' : '#140D0F',
+                background: hoveredCard === 'c2' ? '#181822' : '#0D0D11',
                 border: 'none',
                 outline: 'none',
                 borderRadius: '10px',
@@ -403,16 +292,15 @@ export const HeroDashboardPreview: React.FC = () => {
                 transition: 'all 0.2s ease',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                <AlertTriangle size={13} color="#EF4444" />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#FFFFFF' }}>Retention Alert</span>
+              <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8E8E93', letterSpacing: '0.06em', marginBottom: '3px' }}>
+                POOL
               </div>
-              <p style={{ fontSize: '0.72rem', color: '#8E8E93', lineHeight: '1.4' }}>
-                Mid-market cohort showing 12% drop in weekly engagement.
+              <p style={{ fontSize: '0.74rem', color: '#FFFFFF', lineHeight: '1.4', fontFamily: 'var(--font-mono)' }}>
+                reasoning <span style={{ color: '#71717A' }}>· max 2 concurrent</span>
               </p>
             </div>
 
-            {/* Insight Card 3 */}
+            {/* Routing Card 3 */}
             <div
               onMouseEnter={() => setHoveredCard('c3')}
               onMouseLeave={() => setHoveredCard(null)}
@@ -425,12 +313,11 @@ export const HeroDashboardPreview: React.FC = () => {
                 transition: 'all 0.2s ease',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                <Zap size={13} color="#F6C878" />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#FFFFFF' }}>Playbook Suggested</span>
+              <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#8E8E93', letterSpacing: '0.06em', marginBottom: '3px' }}>
+                ATTEMPT CHAIN
               </div>
-              <p style={{ fontSize: '0.72rem', color: '#8E8E93', lineHeight: '1.4' }}>
-                Automate concierge follow-up for 18 at-risk accounts.
+              <p style={{ fontSize: '0.72rem', color: '#8E8E93', lineHeight: '1.5', fontFamily: 'var(--font-mono)' }}>
+                freellmpool → <strong style={{ color: '#F6C878', fontWeight: 600 }}>rate limited, route cooling 60s</strong> → freellmpool → ollama (local)
               </p>
             </div>
 

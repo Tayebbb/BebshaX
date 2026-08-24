@@ -37,7 +37,7 @@ export const HeroDashboardSection: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            Live Diagnostic Operations
+            The Console
           </div>
 
           <h2
@@ -49,18 +49,18 @@ export const HeroDashboardSection: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            Real-Time Unified{' '}
+            Personas, interviews, memory{' '}
             <span className="text-gradient-gold">
-              Intelligence Cockpit.
+              and the routing behind them.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            Continuous multi-channel sync diagnosing root causes and generating automated playbooks.
+            Read a persona attribute by attribute, see the class behind each one, and follow the exact route the request took to a provider.
           </p>
         </div>
 
-        {/* The Full Command Center Dashboard View Matching Image 2 */}
+        {/* Persona + Routing Console Preview */}
         <HeroDashboardPreview />
       </div>
     </section>

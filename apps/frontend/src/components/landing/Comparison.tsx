@@ -4,29 +4,34 @@ import { Check, X, Sparkles } from 'lucide-react';
 export const Comparison: React.FC = () => {
   const criteria = [
     {
-      feature: 'Root Cause Diagnosis',
-      bebshax: 'Automated telemetry trace + causal attribution',
-      traditional: 'Manual CSV queries & fragmented guess-work',
+      feature: 'Context handling',
+      bebshax: 'Never truncated — explicit ContextWindowExceeded when nothing fits',
+      traditional: 'Silently trimmed or dropped to fit the model in hand',
     },
     {
-      feature: 'Action Playbooks',
-      bebshax: 'Pre-configured 1-click execution workflows',
-      traditional: 'Static PDF reports & unfollowed Slack memos',
+      feature: 'Failure handling',
+      bebshax: '14 classified kinds, one policy each: retry, advance, or cool the route',
+      traditional: 'One error path — raise it, or blindly try the next key',
     },
     {
-      feature: 'Simulation & What-If',
-      bebshax: 'Predictive Monte-Carlo scenario modeling',
-      traditional: 'Historical reporting only (backward-looking)',
+      feature: 'Route cooldown',
+      bebshax: '60 seconds per provider and model, skipped then returned automatically',
+      traditional: 'Rate-limited routes stay in rotation and keep failing',
     },
     {
-      feature: 'Provenance & Evidence',
-      bebshax: 'Cites exact event rows & confidence intervals',
-      traditional: 'Opaque metrics with unverifiable aggregation',
+      feature: 'Provenance',
+      bebshax: 'Per attempt: provider, model, latency, failure kind, fallback reason, routing path',
+      traditional: 'No record of which provider answered or why',
     },
     {
-      feature: 'Setup Time',
-      bebshax: '< 3 minutes (Zero data engineering required)',
-      traditional: '3 to 6 months custom data pipeline builds',
+      feature: 'Identity stability',
+      bebshax: 'Byte-identical identity card on every interview turn',
+      traditional: 'Persona rebuilt per turn and free to drift',
+    },
+    {
+      feature: 'Local fallback',
+      bebshax: 'Every pool terminates on-machine; the emergency pool is local-first',
+      traditional: 'Nothing left to try once the remote tier is exhausted',
     },
   ];
 
@@ -67,7 +72,7 @@ export const Comparison: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            Competitive Matrix
+            The Policy Layer
           </div>
 
           <h2
@@ -79,14 +84,14 @@ export const Comparison: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            Why high-growth teams{' '}
+            One key and a retry loop{' '}
             <span className="text-gradient-blue">
-              switch to BebshaX.
+              is not a routing layer.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            Compare legacy business intelligence approaches against BebshaX’s unified intelligence engine.
+            What changes when the fallback path is a data table of pools and policies instead of a try/except around a single provider.
           </p>
         </div>
 
@@ -120,11 +125,11 @@ export const Comparison: React.FC = () => {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Sparkles size={16} color="#F6C878" />
-                      <span>BebshaX Intelligence</span>
+                      <span>BebshaX policy layer</span>
                     </div>
                   </th>
                   <th style={{ padding: '20px 24px', fontSize: '0.84rem', color: '#8E8E93', fontWeight: 500, width: '34%' }}>
-                    Legacy Dashboards & Spreadsheets
+                    A single free API key, or naive round-robin rotation
                   </th>
                 </tr>
               </thead>

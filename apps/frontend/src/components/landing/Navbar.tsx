@@ -157,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             onClick={() => scrollToSection('product')}
             className="nav-link-btn"
           >
-            Product
+            Console
           </button>
 
           {/* Solutions Dropdown Menu */}
@@ -173,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                 color: solutionsDropdownOpen ? '#FFFFFF' : 'var(--text-secondary)',
               }}
             >
-              <span>Solutions</span>
+              <span>Who It Is For</span>
               <ChevronDown
                 size={13}
                 style={{
@@ -206,13 +206,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                 {/* Column 1: Industries */}
                 <div>
                   <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
-                    INDUSTRIES
+                    AUDIENCES
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
-                      { title: 'SaaS & Cloud', desc: 'Predictive cohort & churn intelligence', icon: <Layers size={14} color="#F6C878" /> },
-                      { title: 'Agencies & Consultancies', desc: 'Evidence-grounded strategy deliverables', icon: <Briefcase size={14} color="#F6C878" /> },
-                      { title: 'Commerce & Retail', desc: 'Basket size & checkout optimization', icon: <Building2 size={14} color="#F6C878" /> },
+                      { title: 'Founders', desc: 'Interview a persona before you build', icon: <Briefcase size={14} color="#F6C878" /> },
+                      { title: 'Product & UX research', desc: 'Directional input with labelled attributes', icon: <Layers size={14} color="#F6C878" /> },
+                      { title: 'Researchers & students', desc: 'A testbed for multi-model routing', icon: <Building2 size={14} color="#F6C878" /> },
                     ].map((item, i) => (
                       <div
                         key={i}
@@ -250,13 +250,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                 {/* Column 2: Use Cases */}
                 <div>
                   <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
-                    USE CASES
+                    THE LOOP
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
-                      { title: 'Discover & Map', desc: 'Map hidden operational friction & bottlenecks', icon: <Search size={14} color="#3B82F6" /> },
-                      { title: 'Validate & Simulate', desc: 'Test business bets before spending', icon: <Lightbulb size={14} color="#3B82F6" /> },
-                      { title: 'Automate Playbooks', desc: 'Execute multi-step tactical workflows', icon: <Zap size={14} color="#3B82F6" /> },
+                      { title: 'Describe a business', desc: 'Name, industry, target market — no data connection', icon: <Search size={14} color="#3B82F6" /> },
+                      { title: 'Generate a persona', desc: 'Grounded, with a class on every attribute', icon: <Lightbulb size={14} color="#3B82F6" /> },
+                      { title: 'Interview it', desc: 'Multi-turn, same identity card every turn', icon: <Zap size={14} color="#3B82F6" /> },
                     ].map((item, i) => (
                       <div
                         key={i}
@@ -304,13 +304,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             onClick={() => scrollToSection('intelligence')}
             className="nav-link-btn"
           >
-            Intelligence
+            Routing
           </button>
           <button
             onClick={() => scrollToSection('demo')}
             className="nav-link-btn"
           >
-            Live Demo
+            Task Map
           </button>
           <button
             onClick={() => scrollToSection('faq')}
@@ -539,13 +539,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             onClick={() => scrollToSection('product')}
             className="mobile-nav-btn"
           >
-            Product
+            Console
           </button>
           <button
             onClick={() => scrollToSection('solutions')}
             className="mobile-nav-btn"
           >
-            Solutions
+            Who It Is For
           </button>
           <button
             onClick={() => scrollToSection('how-it-works')}
@@ -557,13 +557,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             onClick={() => scrollToSection('intelligence')}
             className="mobile-nav-btn"
           >
-            Intelligence
+            Routing
           </button>
           <button
             onClick={() => scrollToSection('demo')}
             className="mobile-nav-btn"
           >
-            Live Demo
+            Task Map
           </button>
           <button
             onClick={() => scrollToSection('faq')}

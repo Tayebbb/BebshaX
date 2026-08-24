@@ -4,37 +4,29 @@ import { Database, Eye, Zap, Clock } from 'lucide-react';
 export const TrustMetrics: React.FC = () => {
   const metrics = [
     {
-      value: '10K+',
-      label: 'Businesses Analyzed',
-      description: 'Operations modeled across retail, SaaS, logistics, and fintech.',
+      value: '7',
+      label: 'Routing pools',
+      description: 'Sixteen fixed task types map onto reasoning, conversation, long_context, structured, fast, local and emergency.',
       icon: <Database size={20} color="#FFFFFF" />,
     },
     {
-      value: '98%',
-      label: 'Data Visibility',
-      description: 'Silos eliminated by consolidating all business streams into one view.',
+      value: '3',
+      label: 'Provenance classes',
+      description: 'Every persona attribute is OBSERVED, INFERRED or SYNTHETIC. Classes are enforced in code and only ever downgraded.',
       icon: <Eye size={20} color="#FFFFFF" />,
     },
     {
-      value: '3.2×',
-      label: 'Faster Decision Making',
-      description: 'Average speedup in identifying and executing operational playbooks.',
+      value: '14',
+      label: 'Failure kinds',
+      description: 'A closed taxonomy. Each kind has one policy: retry the route once, advance to the next candidate, or cool the route.',
       icon: <Zap size={20} color="#F6C878" />,
     },
     {
-      value: '24/7',
-      label: 'Continuous Monitoring',
-      description: 'Autonomous health checks alerting you before revenue leaks occur.',
+      value: '0',
+      label: 'API keys to start',
+      description: 'Keyless free provider tiers work out of the box, and every pool terminates at a local Ollama model.',
       icon: <Clock size={20} color="#FFFFFF" />,
     },
-  ];
-
-  const partners = [
-    'NEXUS LOGISTICS',
-    'APEX GLOBAL',
-    'VELOCITY RETAIL',
-    'CLOUDSTACK',
-    'SYNAPSE CAPITAL',
   ];
 
   return (
@@ -59,7 +51,6 @@ export const TrustMetrics: React.FC = () => {
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
             gap: '16px',
-            marginBottom: '48px',
           }}
         >
           {metrics.map((m, idx) => (
@@ -128,51 +119,6 @@ export const TrustMetrics: React.FC = () => {
               </div>
             </div>
           ))}
-        </div>
-
-        {/* Partner Logos Bar (Minimal, no harsh outline) */}
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '24px',
-          }}
-        >
-          <p
-            style={{
-              fontSize: '0.72rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-              color: '#71717A',
-              marginBottom: '18px',
-            }}
-          >
-            TRUSTED BY FORWARD-THINKING LEADERSHIP TEAMS
-          </p>
-
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '40px',
-            }}
-          >
-            {partners.map((p, i) => (
-              <span
-                key={i}
-                style={{
-                  fontSize: '0.84rem',
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  color: '#52525B',
-                }}
-              >
-                {p}
-              </span>
-            ))}
-          </div>
         </div>
       </div>
     </section>

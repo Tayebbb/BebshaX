@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { useNavigation } from '../../context/NavigationContext';
 
@@ -8,12 +8,6 @@ interface FinalCTAProps {
 
 export const FinalCTA: React.FC<FinalCTAProps> = () => {
   const { navigate } = useNavigation();
-  const [email, setEmail] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    navigate('/auth/signup');
-  };
 
   return (
     <section
@@ -48,7 +42,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = () => {
             alignItems: 'center',
           }}
         >
-          {/* Left Column: Heading + Email Input */}
+          {/* Left Column: Heading + CTA */}
           <div style={{ maxWidth: '540px', zIndex: 1 }}>
             <p
               style={{
@@ -58,7 +52,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = () => {
                 fontWeight: 500,
               }}
             >
-              Stretched thin by fragmented data?
+              No API keys, no data connection, no fine-tuning.
             </p>
 
             <h2
@@ -71,63 +65,33 @@ export const FinalCTA: React.FC<FinalCTAProps> = () => {
                 marginBottom: '36px',
               }}
             >
-              Get started today.
+              Describe a business. Meet its personas.
             </h2>
 
-            {/* Email Signup Form Box (No harsh borders) */}
-            <form
-              onSubmit={handleSubmit}
+            <button
+              onClick={() => navigate('/auth/signup')}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: '#121218',
+                padding: '13px 28px',
+                borderRadius: '9999px',
+                background: '#FFFFFF',
+                color: '#000000',
                 border: 'none',
                 outline: 'none',
-                borderRadius: '9999px',
-                padding: '6px 6px 6px 20px',
-                maxWidth: '440px',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                whiteSpace: 'nowrap',
+                transition: 'background 0.2s ease',
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#E4E4E7')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
             >
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email address"
-                style={{
-                  flex: 1,
-                  background: 'none',
-                  border: 'none',
-                  outline: 'none',
-                  color: '#FFFFFF',
-                  fontSize: '0.9rem',
-                  fontFamily: 'inherit',
-                }}
-              />
-              <button
-                type="submit"
-                style={{
-                  padding: '10px 22px',
-                  borderRadius: '9999px',
-                  background: '#FFFFFF',
-                  color: '#000000',
-                  border: 'none',
-                  outline: 'none',
-                  fontSize: '0.86rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  whiteSpace: 'nowrap',
-                  transition: 'background 0.2s ease',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#E4E4E7')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
-              >
-                <span>Try Free</span>
-                <ArrowRight size={14} color="#000000" />
-              </button>
-            </form>
+              <span>Create your account</span>
+              <ArrowRight size={15} color="#000000" />
+            </button>
           </div>
 
           {/* Right Column: Isometric Geometric Art with Emerald/Gold Backlight */}

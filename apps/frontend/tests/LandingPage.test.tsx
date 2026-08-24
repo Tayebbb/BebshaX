@@ -7,39 +7,39 @@ describe('BebshaX Premium Landing Page', () => {
     render(<App />);
 
     expect(
-      screen.getByText(/Simulate every decision\./i)
+      screen.getByText(/Generate evidence-grounded personas\./i)
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText(/Scale with certainty\./i)
+      screen.getByText(/Then interview them\./i)
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText(/Autonomous Decision Intelligence/i)
+      screen.getByText('Synthetic Persona Research')
     ).toBeInTheDocument();
   });
 
   it('renders all key landing sections and metrics', () => {
     render(<App />);
 
-    // Trust metrics
-    expect(screen.getByText(/Businesses Analyzed/i)).toBeInTheDocument();
-    expect(screen.getByText(/Data Visibility/i)).toBeInTheDocument();
-    expect(screen.getByText(/Faster Decision Making/i)).toBeInTheDocument();
+    // Capability metrics
+    expect(screen.getByText('Routing pools')).toBeInTheDocument();
+    expect(screen.getByText('Provenance classes')).toBeInTheDocument();
+    expect(screen.getByText('Failure kinds')).toBeInTheDocument();
 
     // Problem section
     expect(
-      screen.getByText(/Your business already has the data\./i)
+      screen.getByText(/Asking a model for a persona is easy\./i)
     ).toBeInTheDocument();
 
     // How it works
     expect(
-      screen.getByText(/From scattered data to/i)
+      screen.getByText(/From a business description to/i)
     ).toBeInTheDocument();
 
-    // Product showcase
+    // Console showcase
     expect(
-      screen.getByText(/Everything important\./i)
+      screen.getByText(/Four tabs\./i)
     ).toBeInTheDocument();
 
     // FAQ section

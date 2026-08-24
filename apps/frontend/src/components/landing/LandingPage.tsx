@@ -12,7 +12,6 @@ import { FeatureGrid } from './FeatureGrid';
 import { Comparison } from './Comparison';
 import { InteractiveDemo } from './InteractiveDemo';
 import { UseCases } from './UseCases';
-import { Testimonials } from './Testimonials';
 import { FAQ } from './FAQ';
 import { FinalCTA } from './FinalCTA';
 import { Footer } from './Footer';
@@ -56,7 +55,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenApp, onOpenAuth 
         <Comparison />
         <InteractiveDemo />
         <UseCases />
-        <Testimonials />
         <FAQ />
         <FinalCTA onOpenApp={onOpenApp} />
       </main>

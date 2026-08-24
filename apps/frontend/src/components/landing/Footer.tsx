@@ -3,73 +3,44 @@ import React from 'react';
 export const Footer: React.FC = () => {
   const columns = [
     {
-      title: 'COMPANY',
-      links: [
-        { label: 'Home', href: '#' },
-        { label: 'Our Methodology', href: '#how-it-works' },
-        { label: 'Pricing', href: '#demo' },
-      ],
-    },
-    {
       title: 'PRODUCT',
       links: [
-        { label: 'Executive Cockpit', href: '#product' },
-        { label: 'Diagnostic Engine', href: '#product' },
-        { label: 'Action Playbooks', href: '#product' },
+        { label: 'Home', href: '#' },
+        { label: 'The Console', href: '#product' },
+        { label: 'How It Works', href: '#how-it-works' },
+        { label: 'Capabilities', href: '#features' },
       ],
     },
     {
-      title: 'USE CASES',
+      title: 'ROUTING',
       links: [
-        { label: 'Discover', href: '#solutions' },
-        { label: 'Test', href: '#solutions' },
-        { label: 'Validate', href: '#solutions' },
+        { label: 'Task to Pool Map', href: '#demo' },
+        { label: 'Failure Taxonomy', href: '#intelligence' },
+        { label: 'Local Fallback', href: '#features' },
+        { label: 'Policy Layer', href: '#comparison' },
       ],
     },
     {
-      title: 'SOLUTION',
+      title: 'WHO IT IS FOR',
       links: [
-        { label: 'Agencies', href: '#solutions' },
-        { label: 'SaaS Teams', href: '#solutions' },
-        { label: 'Growth Marketers', href: '#solutions' },
-        { label: 'Consultants & Individuals', href: '#solutions' },
-        { label: 'Healthcare', href: '#solutions' },
-        { label: 'Ecommerce', href: '#solutions' },
-        { label: 'Consumer Goods', href: '#solutions' },
-        { label: 'Concept Testing', href: '#solutions' },
+        { label: 'Founders', href: '#solutions' },
+        { label: 'Product & UX Research', href: '#solutions' },
+        { label: 'Researchers & Students', href: '#solutions' },
+        { label: 'Teams With No API Budget', href: '#solutions' },
       ],
     },
     {
-      title: 'COMPARE',
+      title: 'GROUNDING',
       links: [
-        { label: 'vs Traditional BI', href: '#comparison' },
-        { label: 'vs Static Dashboards', href: '#comparison' },
-        { label: 'vs Spreadsheets', href: '#comparison' },
-        { label: 'vs Manual Reports', href: '#comparison' },
-        { label: 'vs Blackbox AI', href: '#comparison' },
+        { label: 'Provenance Classes', href: '#product' },
+        { label: 'Consistency Rules', href: '#problem' },
+        { label: 'Dataset Sources', href: '#intelligence' },
       ],
     },
     {
-      title: 'RESEARCH',
+      title: 'ANSWERS',
       links: [
-        { label: 'Download Pre-print', href: '#' },
-        { label: 'Validation Data', href: '#intelligence' },
-        { label: 'Evidence Protocol', href: '#intelligence' },
-      ],
-    },
-    {
-      title: 'LEGAL',
-      links: [
-        { label: 'Terms', href: '#' },
-        { label: 'Privacy', href: '#' },
-      ],
-    },
-    {
-      title: 'CONNECT',
-      links: [
-        { label: 'X (Twitter)', href: 'https://twitter.com' },
-        { label: 'LinkedIn', href: 'https://linkedin.com' },
-        { label: 'Book a Demo', href: '#demo' },
+        { label: 'FAQ', href: '#faq' },
       ],
     },
   ];
@@ -201,10 +172,10 @@ export const Footer: React.FC = () => {
             color: '#52525B',
           }}
         >
-          <div>© {new Date().getFullYear()} BebshaX Inc. All rights reserved.</div>
+          <div>© {new Date().getFullYear()} BebshaX. Evidence-grounded synthetic personas, interviewed over routed free LLM tiers.</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }} />
-            <span style={{ color: '#71717A' }}>All systems operational</span>
+            <span style={{ color: '#71717A' }}>Local model as final fallback</span>
           </div>
         </div>
       </div>

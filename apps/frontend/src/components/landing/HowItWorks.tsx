@@ -14,30 +14,30 @@ export const HowItWorks: React.FC = () => {
   const steps = [
     {
       num: '01',
-      title: 'Connect your business',
-      subtitle: 'Seamless ingestion in under 3 minutes',
+      title: 'Describe your business',
+      subtitle: 'No data connection required',
       description:
-        'Connect your existing tools—Stripe, HubSpot, PostgreSQL, Shopify, Google Analytics, and custom APIs—without complex data engineering pipelines.',
+        'Give BebshaX a name, a description, an industry, and a target market. Add an optional audience segment and optional generation hints. That is the entire input.',
       icon: <Link2 size={22} color="#FFFFFF" />,
-      features: ['Pre-built SaaS & DB connectors', 'Encrypted TLS 1.3 transfer', 'Automatic schema mapping'],
+      features: ['Name, description, industry, target market', 'Optional audience segment', 'Optional generation hints'],
     },
     {
       num: '02',
-      title: 'Understand what matters',
-      subtitle: 'Autonomous intelligence & root cause analysis',
+      title: 'Generate a grounded persona',
+      subtitle: 'Evidence, provenance, then consistency rules',
       description:
-        'BebshaX continuously monitors data streams, connects related signals, spots emerging opportunities, and diagnoses why key metrics are changing.',
+        'Evidence retrieval runs over preprocessed public dataset records, the persona is generated, provenance is enforced in code, and deterministic consistency rules run before storage. One refinement attempt is allowed — after that, generation fails with the list of violations.',
       icon: <BrainCircuit size={22} color="#F6C878" />,
-      features: ['Real-time anomaly detection', 'Evidence-grounded explanations', 'Multi-channel attribution'],
+      features: ['idf-weighted lexical evidence retrieval', 'OBSERVED, INFERRED or SYNTHETIC per attribute', 'One refinement attempt, then explicit failure'],
     },
     {
       num: '03',
-      title: 'Take confident action',
-      subtitle: 'Prioritized playbooks with measured impact',
+      title: 'Interview the persona',
+      subtitle: 'Multi-turn, with the same person every turn',
       description:
-        'Get clear, step-by-step playbooks for your team. Deploy automated workflows, run targeted campaigns, or adjust pricing based on verified evidence.',
+        'Each turn recomposes the immutable identity card, the business context, the interview objective, retrieved memories, evidence themes, and the full conversation history. Every exchange is written back as an episodic memory.',
       icon: <Rocket size={22} color="#FFFFFF" />,
-      features: ['Ready-to-deploy action playbooks', 'Simulated outcome forecasts', 'Live ROI & velocity tracking'],
+      features: ['Byte-identical identity card on every turn', 'Top 4 memories retrieved per turn', 'Context is never truncated to fit'],
     },
   ];
 
@@ -90,14 +90,14 @@ export const HowItWorks: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            From scattered data to{' '}
+            From a business description to{' '}
             <span className="text-gradient-blue">
-              decisive action.
+              an interview.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
-            BebshaX bridges the gap between raw data collection and strategic execution in three simple steps.
+            Three steps, and no data connection at any point in them.
           </p>
         </div>
 
