@@ -94,7 +94,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       expect(screen.getAllByText(/UNIVERSITY STUDENT/i)[0]).toBeInTheDocument();
       expect(screen.getAllByText(/COLLEGE APPLICANT/i)[0]).toBeInTheDocument();
       expect(screen.getAllByText(/BUSY HIGH SCHOOLER/i)[0]).toBeInTheDocument();
-      expect(screen.getAllByText(/Ready to generate personas/i)[0]).toBeInTheDocument();
+      expect(screen.getByText(/Persona Panel Configured/i)).toBeInTheDocument();
     });
 
     // Click Generate Personas -> Advances to Step 2 (Personas)

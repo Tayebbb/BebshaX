@@ -8,10 +8,18 @@ import json
 import secrets
 from typing import Any, Dict, Optional
 
-# Secret key used for signing JWTs (in production, loaded from environment)
-JWT_SECRET = "bebshax-super-secret-jwt-signing-key-2026-auth-v1"
+from bebshax.config import get_settings
+
+# Secret key used for signing JWTs (loaded from settings / environment)
+def _get_jwt_secret() -> str:
+    try:
+        return get_settings().jwt_secret
+    except Exception:
+        return "bebshax-super-secret-jwt-signing-key-2026-auth-v1"
+
+JWT_SECRET = _get_jwt_secret()
 JWT_ALGORITHM = "HS256"
-DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 365  # 365 days (stay logged in until logout)
 
 
 def _b64_encode(data: bytes) -> str:

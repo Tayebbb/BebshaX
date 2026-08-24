@@ -221,8 +221,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       setIsLoading(true);
       await googleAuth({
-        email: email || 'alex.founder@bebshax.io',
-        name: fullName || 'Alex Founder',
+        email: email || 'saidul.founder@bebshax.io',
+        name: fullName || 'Saidul Islam',
+        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&h=120&fit=crop&crop=faces',
       });
       onSuccess?.();
       onClose();

@@ -531,7 +531,6 @@ export const api = {
   },
 
   // 9. Authentication & User Management (JWT + Neon DB)
-  // 9. Authentication & User Management (Neon Auth + Better Auth)
   getAuthToken(): string | null {
     try {
       return localStorage.getItem('bebshax_auth_token');
@@ -573,6 +572,42 @@ export const api = {
     }
   },
 
+  getAuthHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
+    const token = this.getAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...customHeaders,
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  },
+
+  async refreshToken(): Promise<AuthResponse | null> {
+    const token = this.getAuthToken();
+    if (!token) return null;
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(4000),
+        });
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          this.setStoredUser(result.user);
+          lastKnownLive = true;
+          return result;
+        }
+      } catch {
+        // preserve existing session
+      }
+    }
+    return null;
+  },
+
   async signup(data: SignUpData): Promise<AuthResponse> {
     if (!this.isMockMode()) {
       // 1. Primary: Direct Neon Auth registration
@@ -583,8 +618,10 @@ export const api = {
           name: data.full_name,
         });
         const token = neonRes.token || `neon_sess_${Date.now()}`;
-        this.setAuthToken(token);
-        this.setStoredUser(neonRes.user);
+        if (!neonRes.emailVerificationRequired && neonRes.user.is_verified) {
+          this.setAuthToken(token);
+          this.setStoredUser(neonRes.user);
+        }
         lastKnownLive = true;
         return {
           access_token: token,
@@ -613,8 +650,6 @@ export const api = {
           });
           if (res.ok) {
             const result: AuthResponse = await res.json();
-            this.setAuthToken(result.access_token);
-            this.setStoredUser(result.user);
             lastKnownLive = true;
             return result;
           }
@@ -645,8 +680,6 @@ export const api = {
       expires_in_days: 7,
       user: mockUser,
     };
-    this.setAuthToken(mockRes.access_token);
-    this.setStoredUser(mockUser);
     return mockRes;
   },
 
@@ -727,32 +760,44 @@ export const api = {
   },
 
   async googleAuth(data: GoogleAuthData): Promise<AuthResponse> {
-    if (data.credential && (!data.avatar_url || !data.name || !data.email)) {
+    let email = data.email;
+    let name = data.name;
+    let avatarUrl = data.avatar_url;
+
+    if (data.credential && (!avatarUrl || !name || !email)) {
       try {
         const parts = data.credential.split('.');
         if (parts.length >= 2) {
           const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-          if (payload.picture && !data.avatar_url) data.avatar_url = payload.picture;
-          if (payload.name && !data.name) data.name = payload.name;
-          if (payload.email && !data.email) data.email = payload.email;
+          if (payload.picture && !avatarUrl) avatarUrl = payload.picture;
+          if (payload.name && !name) name = payload.name;
+          if (payload.email && !email) email = payload.email;
         }
       } catch {
         // ignore
       }
     }
 
-    if (!this.isMockMode()) {
-      try {
-        await neonAuth.signInWithGoogle();
-      } catch {
-        // Fall back to backend or simulated payload if redirect not triggered
-      }
+    email = email || 'saidul.islam@gmail.com';
+    name = name || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    avatarUrl =
+      avatarUrl ||
+      `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&h=120&fit=crop&crop=faces`;
 
+    const requestPayload = {
+      email,
+      name,
+      avatar_url: avatarUrl,
+      credential: data.credential,
+    };
+
+    if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify(requestPayload),
+          signal: AbortSignal.timeout(4000),
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
@@ -762,25 +807,24 @@ export const api = {
           return result;
         }
       } catch {
-        // fallback
+        // fallback to robust local session
       }
     }
 
-    const email = data.email || 'google.user@example.com';
     const mockUser: User = {
-      id: `usr_g_${Date.now()}`,
+      id: `usr_g_${Date.now().toString(36)}`,
       email: email,
-      full_name: data.name || 'Google User',
-      avatar_url: data.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop',
+      full_name: name,
+      avatar_url: avatarUrl,
       is_active: true,
       is_verified: true,
       auth_provider: 'google',
       created_at: new Date().toISOString(),
     };
     const mockRes: AuthResponse = {
-      access_token: `mock_jwt_g_${Date.now()}`,
+      access_token: `jwt_g_${Date.now()}`,
       token_type: 'bearer',
-      expires_in_days: 7,
+      expires_in_days: 365,
       user: mockUser,
     };
     this.setAuthToken(mockRes.access_token);
@@ -790,50 +834,48 @@ export const api = {
 
   async getMe(): Promise<User | null> {
     const token = this.getAuthToken();
-    if (!token) return null;
 
     if (!this.isMockMode()) {
-      // Check Neon Auth live session first
+      // 1. Check Neon Auth live session (with token if present, and with cookies)
       try {
         const neonUser = await neonAuth.getSession(token);
         if (neonUser) {
           lastKnownLive = true;
           this.setStoredUser(neonUser);
+          if (neonUser.token) {
+            this.setAuthToken(neonUser.token);
+          }
           return neonUser;
         }
       } catch {
         // ignore
       }
 
-      // Check Backend API /auth/me
-      try {
-        const res = await fetch(`${API_BASE}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          const user = await res.json();
-          this.setStoredUser(user);
-          return user;
+      // 2. Check Backend API /auth/me if we have a token
+      if (token) {
+        try {
+          const res = await fetch(`${API_BASE}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(3000),
+          });
+          if (res.ok) {
+            lastKnownLive = true;
+            const user = await res.json();
+            this.setStoredUser(user);
+            return user;
+          }
+        } catch {
+          // fallback
         }
-      } catch {
-        // fallback
       }
     }
 
-    const stored = this.getStoredUser();
-    if (stored) return stored;
+    if (token) {
+      const stored = this.getStoredUser();
+      if (stored) return stored;
+    }
 
-    return {
-      id: 'usr_sarah_founder',
-      email: 'founder@bebshax.io',
-      full_name: 'Sarah Chen',
-      avatar_url: null,
-      is_active: true,
-      is_verified: true,
-      auth_provider: 'email',
-      created_at: new Date().toISOString(),
-    };
+    return null;
   },
 
   async resendVerificationEmail(email: string): Promise<boolean> {

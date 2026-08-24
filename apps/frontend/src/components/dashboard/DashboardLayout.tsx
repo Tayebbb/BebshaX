@@ -3,7 +3,7 @@ import {
   PenSquare,
   LayoutGrid,
   Contact2,
-  Building2,
+  Cpu,
   ChevronDown,
   ChevronRight,
   PanelLeft,
@@ -16,12 +16,12 @@ import { NewStudyView } from './views/NewStudyView';
 import { StudiesDashboardView } from './views/StudiesDashboardView';
 import { PersonaLibraryView } from './views/PersonaLibraryView';
 import { StudyWorkflowView } from './views/StudyWorkflowView';
-import { OrganisationView } from './views/OrganisationView';
+import { ModelRouterView } from './views/ModelRouterView';
 import { StudyType, Study } from '../../types';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 
-export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'organisation' | 'study-workflow';
+export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'router' | 'study-workflow';
 
 interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
@@ -35,8 +35,8 @@ const parseDashboardPath = (path: string): {
   if (path.startsWith('/persona-library') || path.startsWith('/personas')) {
     return { tab: 'personas' };
   }
-  if (path.startsWith('/organisation') || path.startsWith('/organization') || path.startsWith('/settings')) {
-    return { tab: 'organisation' };
+  if (path.startsWith('/router') || path.startsWith('/provenance') || path.startsWith('/routes') || path.startsWith('/models')) {
+    return { tab: 'router' };
   }
   if (path.startsWith('/dashboard')) {
     return { tab: 'dashboard' };
@@ -112,7 +112,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     if (tab === 'new-study') navigate('/create-study');
     else if (tab === 'dashboard') navigate('/dashboard');
     else if (tab === 'personas') navigate('/persona-library');
-    else if (tab === 'organisation') navigate('/organisation');
+    else if (tab === 'router') navigate('/router');
     else if (tab === 'study-workflow') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
   };
 
@@ -178,9 +178,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       icon: <Contact2 size={16} />,
     },
     {
-      id: 'organisation' as DashboardTab,
-      label: 'Organisation',
-      icon: <Building2 size={16} />,
+      id: 'router' as DashboardTab,
+      label: 'Model Router',
+      icon: <Cpu size={16} />,
     },
   ];
 
@@ -415,40 +415,49 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               alignItems: 'center',
               gap: '10px',
               justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
-              padding: isSidebarCollapsed ? '8px 0' : '8px 10px',
+              padding: isSidebarCollapsed ? '8px 0' : '8px 12px',
               borderRadius: '12px',
-              background: 'rgba(255, 255, 255, 0.025)',
-              border: '1px solid rgba(255, 255, 255, 0.06)',
+              background: showUserMenu ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+              border: 'none',
+              outline: 'none',
               cursor: 'pointer',
+              transition: 'background 0.15s ease',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px', minWidth: 0 }}>
               {/* User Avatar (Real Google Avatar or Initial Gradient) */}
               {user?.avatar_url ? (
                 <img
                   src={user.avatar_url}
                   alt={displayName}
+                  referrerPolicy="no-referrer"
                   style={{
-                    width: '28px',
-                    height: '28px',
+                    width: '30px',
+                    height: '30px',
                     borderRadius: '50%',
                     objectFit: 'cover',
-                    border: '1px solid rgba(246, 200, 120, 0.4)',
+                    border: 'none',
+                    outline: 'none',
+                    flexShrink: 0,
+                  }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
                   }}
                 />
               ) : (
                 <div
                   style={{
-                    width: '28px',
-                    height: '28px',
+                    width: '30px',
+                    height: '30px',
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
-                    color: '#FFFFFF',
+                    background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
+                    color: '#080909',
                     fontWeight: 700,
-                    fontSize: '0.75rem',
+                    fontSize: '0.8rem',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    flexShrink: 0,
                   }}
                 >
                   {displayName.charAt(0)}
@@ -462,6 +471,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     fontWeight: 600,
                     color: '#FFFFFF',
                     letterSpacing: '0.02em',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                   }}
                 >
                   {displayName}
@@ -473,15 +485,16 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               <span
                 style={{
                   fontSize: '0.7rem',
-                  fontWeight: 700,
-                  color: '#F6C878',
-                  background: 'rgba(246, 200, 120, 0.12)',
-                  border: '1px solid rgba(246, 200, 120, 0.25)',
-                  padding: '2px 6px',
+                  fontWeight: 600,
+                  color: '#10B981',
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  border: 'none',
+                  outline: 'none',
+                  padding: '2px 7px',
                   borderRadius: '6px',
                 }}
               >
-                1 left
+                Free Tier
               </span>
             )}
           </div>
@@ -494,12 +507,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 bottom: '100%',
                 left: 0,
                 marginBottom: '8px',
-                width: isSidebarCollapsed ? '210px' : '100%',
-                background: '#121315',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '12px',
+                width: isSidebarCollapsed ? '220px' : '100%',
+                background: '#141619',
+                border: 'none',
+                outline: 'none',
+                borderRadius: '14px',
                 padding: '8px',
-                boxShadow: '0 12px 30px rgba(0, 0, 0, 0.65)',
+                boxShadow: '0 16px 40px rgba(0, 0, 0, 0.85)',
                 zIndex: 50,
               }}
             >
@@ -507,23 +521,29 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               <div
                 style={{
                   padding: '6px 8px 10px 8px',
-                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
                   marginBottom: '6px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
+                  gap: '9px',
                 }}
               >
                 {user?.avatar_url ? (
                   <img
                     src={user.avatar_url}
                     alt={displayName}
+                    referrerPolicy="no-referrer"
                     style={{
                       width: '32px',
                       height: '32px',
                       borderRadius: '50%',
                       objectFit: 'cover',
-                      border: '1px solid rgba(246, 200, 120, 0.4)',
+                      border: 'none',
+                      outline: 'none',
+                      flexShrink: 0,
+                    }}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
                     }}
                   />
                 ) : (
@@ -532,13 +552,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                       width: '32px',
                       height: '32px',
                       borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
-                      color: '#FFFFFF',
+                      background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
+                      color: '#080909',
                       fontWeight: 700,
-                      fontSize: '0.8rem',
+                      fontSize: '0.82rem',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      flexShrink: 0,
                     }}
                   >
                     {displayName.charAt(0)}
@@ -547,7 +568,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                   <span
                     style={{
-                      fontSize: '0.82rem',
+                      fontSize: '0.84rem',
                       fontWeight: 600,
                       color: '#FFFFFF',
                       whiteSpace: 'nowrap',
@@ -560,7 +581,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   <span
                     style={{
                       fontSize: '0.72rem',
-                      color: '#8A909A',
+                      color: '#9CA3AF',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -586,12 +607,16 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     padding: '8px 10px',
                     background: 'transparent',
                     border: 'none',
+                    outline: 'none',
                     color: '#FFFFFF',
                     fontSize: '0.82rem',
                     textAlign: 'left',
                     cursor: 'pointer',
                     borderRadius: '8px',
+                    transition: 'background 0.15s ease',
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
                   <Globe size={14} /> Marketing Site
                 </button>
@@ -601,6 +626,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 onClick={() => {
                   setShowUserMenu(false);
                   logout();
+                  if (onOpenLandingPage) {
+                    onOpenLandingPage();
+                  } else {
+                    navigate('/');
+                  }
                 }}
                 style={{
                   width: '100%',
@@ -610,12 +640,17 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   padding: '8px 10px',
                   background: 'transparent',
                   border: 'none',
+                  outline: 'none',
                   color: '#EF4444',
                   fontSize: '0.82rem',
+                  fontWeight: 500,
                   textAlign: 'left',
                   cursor: 'pointer',
                   borderRadius: '8px',
+                  transition: 'background 0.15s ease',
                 }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
                 <LogOut size={14} /> Sign Out
               </button>
@@ -671,7 +706,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           />
         )}
 
-        {activeTab === 'organisation' && <OrganisationView />}
+        {activeTab === 'router' && <ModelRouterView />}
 
         {activeTab === 'study-workflow' && (
           <StudyWorkflowView

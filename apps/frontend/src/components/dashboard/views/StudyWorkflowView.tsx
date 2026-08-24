@@ -571,7 +571,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       {/* Header Stepper Navigation (Matches Reference Design) */}
       <header
         style={{
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          border: 'none',
+          outline: 'none',
           padding: '14px 32px',
           display: 'flex',
           alignItems: 'center',
@@ -2374,62 +2375,6 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           </div>
         )}
       </div>
-
-      {/* Floating Action Banner when on Step 1 Role Selection */}
-      {currentStep === 1 && showRoleSelection && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(18, 20, 20, 0.96)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
-            padding: '12px 24px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '28px',
-            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05)',
-            backdropFilter: 'blur(20px)',
-            zIndex: 40,
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>Ready to generate personas</span>
-              <span>🥳</span>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#9CA3AF' }}>
-              Your report is just 2 steps away
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleGeneratePersonas}
-            style={{
-              background: '#F6C878',
-              color: '#080909',
-              border: 'none',
-              borderRadius: '10px',
-              padding: '10px 20px',
-              fontSize: '0.86rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              transition: 'transform 0.15s ease, background 0.15s ease',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.03)')}
-            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-          >
-            <span>Generate Personas</span>
-            <ArrowRight size={15} strokeWidth={2.5} />
-          </button>
-        </div>
-      )}
 
       {/* Floating Action Banner when on Step 2 (Personas) */}
       {currentStep === 2 && (

@@ -224,3 +224,15 @@ async def google_auth(
 async def get_me(current_user: Users = Depends(get_current_user)):
     """Retrieve current logged-in user profile."""
     return _serialize_user(current_user)
+
+
+@auth_router.post("/refresh", response_model=AuthResponse)
+async def refresh_token(current_user: Users = Depends(get_current_user)):
+    """Refresh a valid access token and return a new persistent JWT session."""
+    token = create_access_token(
+        data={"sub": current_user.id, "email": current_user.email, "name": current_user.full_name}
+    )
+    return AuthResponse(
+        access_token=token,
+        user=_serialize_user(current_user),
+    )

@@ -260,7 +260,9 @@ export const neonAuth = {
     return true;
   },
 
-  async getSession(token?: string | null): Promise<User | null> {
+  async getSession(
+    token?: string | null
+  ): Promise<(User & { token?: string | null }) | null> {
     try {
       const headers: Record<string, string> = {};
       if (token) {
@@ -276,7 +278,11 @@ export const neonAuth = {
       if (res.ok) {
         const data = await res.json();
         if (data?.user) {
-          return mapNeonUserToAppUser(data.user);
+          const appUser = mapNeonUserToAppUser(data.user);
+          return {
+            ...appUser,
+            token: data?.session?.token || data?.token || token || null,
+          };
         }
       }
     } catch {

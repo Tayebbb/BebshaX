@@ -42,7 +42,7 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
     expect(screen.getByText('Pricing & WTP')).toBeInTheDocument();
   });
 
-  it('navigates to Dashboard / Studies view showing trial status banner and demo study', async () => {
+  it('navigates to Dashboard / Studies view showing BebshaX research hub banner and demo study', async () => {
     renderDashboard();
 
     // Click on Dashboard tab in sidebar
@@ -51,7 +51,8 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /^Studies$/i })).toBeInTheDocument();
-      expect(screen.getByText('1 study done — 1 left on your trial')).toBeInTheDocument();
+      expect(screen.getByText('Synthetic Research Hub · Zero API Budget')).toBeInTheDocument();
+      expect(screen.getByText('222 Free Routes')).toBeInTheDocument();
       expect(screen.getAllByText('Brand Messaging Discovery').length).toBeGreaterThan(0);
       expect(screen.getByText('DEMO STUDY')).toBeInTheDocument();
       expect(screen.getAllByText('Price Tracker Demand').length).toBeGreaterThan(0);
@@ -72,15 +73,15 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
     });
   });
 
-  it('navigates to Organisation view showing FreeLLMpool active provider routes', async () => {
+  it('navigates to Model Router view showing FreeLLMpool active provider routes and telemetry', async () => {
     renderDashboard();
 
-    // Click on Organisation tab in sidebar
-    const orgTab = screen.getByRole('button', { name: /Organisation/i });
-    fireEvent.click(orgTab);
+    // Click on Model Router tab in sidebar
+    const routerTab = screen.getByRole('button', { name: /Model Router/i });
+    fireEvent.click(routerTab);
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Organisation & Routing Architecture/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Model Router & Telemetry/i })).toBeInTheDocument();
       expect(screen.getByText('Live Provider Health Matrix')).toBeInTheDocument();
       expect(screen.getByText('222 Free Model Routes')).toBeInTheDocument();
     });
