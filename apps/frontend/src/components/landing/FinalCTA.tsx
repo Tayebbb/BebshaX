@@ -1,13 +1,23 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
 
 interface FinalCTAProps {
   onOpenApp?: () => void;
 }
 
-export const FinalCTA: React.FC<FinalCTAProps> = () => {
+export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
+  const { isAuthenticated } = useAuth();
   const { navigate } = useNavigation();
+
+  const handlePrimaryAction = () => {
+    if (isAuthenticated) {
+      onOpenApp?.();
+      return;
+    }
+    navigate('/auth/signup');
+  };
 
   return (
     <section
@@ -69,7 +79,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = () => {
             </h2>
 
             <button
-              onClick={() => navigate('/auth/signup')}
+              onClick={handlePrimaryAction}
               style={{
                 padding: '13px 28px',
                 borderRadius: '9999px',
@@ -89,7 +99,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = () => {
               onMouseEnter={(e) => (e.currentTarget.style.background = '#E4E4E7')}
               onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
             >
-              <span>Create your account</span>
+              <span>{isAuthenticated ? 'Launch Console' : 'Create your account'}</span>
               <ArrowRight size={15} color="#000000" />
             </button>
           </div>

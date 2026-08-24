@@ -53,7 +53,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenApp, onOpenAuth 
         <IntelligenceSection />
         <FeatureGrid />
         <Comparison />
-        <InteractiveDemo />
+        <InteractiveDemo onOpenApp={onOpenApp} />
         <UseCases />
         <FAQ />
         <FinalCTA onOpenApp={onOpenApp} />

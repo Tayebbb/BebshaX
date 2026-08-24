@@ -4,7 +4,12 @@ import {
   Sparkles,
   ArrowRight,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
+
+interface InteractiveDemoProps {
+  onOpenApp?: () => void;
+}
 
 interface PoolInfo {
   pool: string;
@@ -40,12 +45,21 @@ const TASK_TYPES: { task: string; pool: keyof typeof POOLS }[] = [
   { task: 'EMERGENCY_FALLBACK', pool: 'emergency' },
 ];
 
-export const InteractiveDemo: React.FC = () => {
+export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) => {
+  const { isAuthenticated } = useAuth();
   const { navigate } = useNavigation();
   const [selectedTask, setSelectedTask] = useState<string>('PERSONA_GENERATION');
 
   const current = TASK_TYPES.find((t) => t.task === selectedTask)!;
   const pool = POOLS[current.pool];
+
+  const handlePrimaryAction = () => {
+    if (isAuthenticated) {
+      onOpenApp?.();
+      return;
+    }
+    navigate('/auth/signup');
+  };
 
   return (
     <section
@@ -208,7 +222,7 @@ export const InteractiveDemo: React.FC = () => {
               </div>
 
               <button
-                onClick={() => navigate('/auth/signup')}
+                onClick={handlePrimaryAction}
                 className="primary-hero-btn"
                 style={{
                   width: '100%',
@@ -225,7 +239,7 @@ export const InteractiveDemo: React.FC = () => {
                   gap: '6px',
                 }}
               >
-                <span>Generate your first persona</span>
+                <span>{isAuthenticated ? 'Launch Console' : 'Generate your first persona'}</span>
                 <ArrowRight size={15} color="#000000" />
               </button>
             </div>

@@ -1,13 +1,22 @@
 import React from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
 
 interface HeroProps {
   onOpenApp?: () => void;
-  onExploreDemo?: () => void;
 }
 
-export const Hero: React.FC<HeroProps> = () => {
+export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
+  const { isAuthenticated } = useAuth();
   const { navigate } = useNavigation();
+
+  const handlePrimaryAction = () => {
+    if (isAuthenticated) {
+      onOpenApp?.();
+      return;
+    }
+    navigate('/auth/signup');
+  };
 
   return (
     <section
@@ -127,7 +136,7 @@ export const Hero: React.FC<HeroProps> = () => {
 
         {/* Single Glowing Gold Pill Button */}
         <button
-          onClick={() => navigate('/auth/signup')}
+          onClick={handlePrimaryAction}
           style={{
             padding: '13px 32px',
             fontSize: '0.96rem',
@@ -152,7 +161,7 @@ export const Hero: React.FC<HeroProps> = () => {
             e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
-          Generate your first persona
+          {isAuthenticated ? 'Launch Console' : 'Generate your first persona'}
         </button>
       </div>
 
