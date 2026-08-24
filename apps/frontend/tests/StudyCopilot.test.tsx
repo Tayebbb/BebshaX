@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { StudyWorkflowView } from '../src/components/dashboard/views/StudyWorkflowView';
@@ -36,13 +35,13 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       )
     ).toBeInTheDocument();
 
-    // Assistant response explaining User Interviews and asking about location
+    // Assistant response explaining User Interviews and asking about target users
     await waitFor(() => {
       expect(
-        screen.getByText(/I think I've got it — you want to find out whether/i)
+        screen.getByText(/Got it — you're exploring a(n)? education or student-focused product/i)
       ).toBeInTheDocument();
       expect(
-        screen.getByText(/Do you want to focus the research on (students|users) in a specific country/i)
+        screen.getByText(/What level of students/i)
       ).toBeInTheDocument();
     });
   });
@@ -54,7 +53,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
 
     await waitFor(() => {
       expect(
-        screen.getByText(/I think I've got it — you want to find out whether students/i)
+        screen.getByText(/Got it — you're exploring a(n)? education or student-focused product/i)
       ).toBeInTheDocument();
     });
 
@@ -67,7 +66,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     await waitFor(() => {
       expect(screen.getByText('specifically for bangladeshi students')).toBeInTheDocument();
       expect(
-        screen.getByText(/Any preferences for the students' age range or level/i)
+        screen.getByText(/Is this B2C for students directly/i)
       ).toBeInTheDocument();
     });
 
@@ -81,7 +80,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     await waitFor(() => {
       expect(screen.getByText('RESEARCH GOAL')).toBeInTheDocument();
       expect(
-        screen.getByText(/You want to research whether Bangladeshi students would actually want a study planner/i)
+        screen.getByText(/Validate whether your education or student-focused product solves a genuine need/i)
       ).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Approve/i })).toBeInTheDocument();
     });

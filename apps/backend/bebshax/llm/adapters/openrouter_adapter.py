@@ -114,6 +114,10 @@ class OpenRouterAdapter(ProviderAdapter):
         t0 = time.perf_counter()
         try:
             resp = await client.post(OPENROUTER_ENDPOINT, json=payload, headers=headers)
+            if resp.status_code == 400 and "response_format" in payload:
+                # Some models reject response_format; retry without it (prompt already demands JSON)
+                retry_payload = {k: v for k, v in payload.items() if k != "response_format"}
+                resp = await client.post(OPENROUTER_ENDPOINT, json=retry_payload, headers=headers)
         except httpx.TimeoutException as exc:
             raise AttemptFailed(FailureKind.TIMEOUT, PROVIDER, candidate.model, str(exc)) from exc
         except httpx.TransportError as exc:

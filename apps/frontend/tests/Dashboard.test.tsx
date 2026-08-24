@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { DashboardLayout } from '../src/components/dashboard/DashboardLayout';
@@ -30,7 +29,7 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
     expect(screen.getByText(/Good (morning|afternoon|evening)/i)).toBeInTheDocument();
     expect(screen.getByText('What do you want to find out?')).toBeInTheDocument();
     expect(
-      screen.getByPlaceholderText('Should we lead with pricing or with the product story?')
+      screen.getByPlaceholderText(/Describe your business idea|Should we lead/i)
     ).toBeInTheDocument();
   });
 
@@ -38,9 +37,9 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
     renderDashboard();
 
     expect(screen.getByText('User Interviews')).toBeInTheDocument();
-    expect(screen.getByText('Landing Page Test')).toBeInTheDocument();
+    expect(screen.getByText('Concept & Demand')).toBeInTheDocument();
     expect(screen.getByText('Message Testing')).toBeInTheDocument();
-    expect(screen.getByText('A/B Test')).toBeInTheDocument();
+    expect(screen.getByText('Pricing & WTP')).toBeInTheDocument();
   });
 
   it('navigates to Dashboard / Studies view showing trial status banner and demo study', async () => {
@@ -90,7 +89,7 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
   it('initiates study workflow from New Study prompt and moves through steps', async () => {
     renderDashboard();
 
-    const input = screen.getByPlaceholderText('Should we lead with pricing or with the product story?');
+    const input = screen.getByPlaceholderText(/Describe your business idea|Should we lead/i);
     fireEvent.change(input, { target: { value: 'Test pricing sensitivity' } });
 
     const userInterviewsCard = screen.getByText('User Interviews');

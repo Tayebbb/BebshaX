@@ -14,7 +14,6 @@ const AppContent: React.FC = () => {
   const [authInitialView, setAuthInitialView] = useState<
     'signin' | 'signup-options' | 'signup-email'
   >('signin');
-  const [showLandingPreview, setShowLandingPreview] = useState<boolean>(false);
 
   const { isAuthenticated } = useAuth();
   const { currentPath, navigate } = useNavigation();

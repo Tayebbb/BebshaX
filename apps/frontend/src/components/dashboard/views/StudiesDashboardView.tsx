@@ -2,16 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   Search,
   Plus,
-  Sparkles,
-  CheckCircle2,
-  Clock,
   MoreVertical,
   ArrowUpRight,
   FlaskConical,
   FileText,
   Trash2,
 } from 'lucide-react';
-import { Study, StudyStatus } from '../../../types';
+import { Study } from '../../../types';
 import { api } from '../../../services/api';
 
 interface StudiesDashboardViewProps {

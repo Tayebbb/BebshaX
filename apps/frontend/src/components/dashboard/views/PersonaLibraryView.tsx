@@ -1,16 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Users,
   Search,
   Plus,
-  Sparkles,
-  ShieldCheck,
-  Brain,
   MessageSquare,
-  ChevronRight,
-  Filter,
-  Layers,
-  Award,
 } from 'lucide-react';
 import { Persona } from '../../../types';
 import { api } from '../../../services/api';
@@ -24,7 +16,6 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 }) => {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIndustry, setSelectedIndustry] = useState<string>('all');
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [targetSegment, setTargetSegment] = useState('');
@@ -269,7 +260,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   gap: '14px',
                   transition: 'all 0.2s ease',
                   position: 'relative',
+                  cursor: 'pointer',
                 }}
+                onClick={() => setSelectedPersona(persona)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = 'rgba(246, 200, 120, 0.35)';
                   e.currentTarget.style.transform = 'translateY(-2px)';

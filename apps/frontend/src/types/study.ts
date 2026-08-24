@@ -45,6 +45,7 @@ export interface StudyInterview {
 
 export interface Study {
   id: string;
+  user_id?: string;
   title: string;
   type: StudyType;
   goal?: ResearchGoal;
@@ -60,6 +61,19 @@ export interface Study {
   step?: number; // 1: Context, 2: Personas, 3: Script, 4: Interviews, 5: Report
   interviews?: StudyInterview[];
   report?: StudyReport;
+  copilot_messages?: Array<{
+    id?: string;
+    role: 'user' | 'assistant';
+    content?: string;
+    text?: string;
+    timestamp?: string;
+    isGoalCard?: boolean;
+    goalCardData?: any;
+    options?: string[];
+  }>;
+  suggested_roles?: PersonaRoleSuggestion[];
+  script_questions?: string[];
+  personas_data?: any[];
 }
 
 export interface PersonaRoleSuggestion {

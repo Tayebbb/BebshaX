@@ -1,15 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   Building2,
-  Users,
   Shield,
-  Zap,
   Activity,
   Cpu,
-  Key,
-  Database,
-  CheckCircle2,
-  Sparkles,
 } from 'lucide-react';
 import { RoutesStatusResponse, ProvenanceRecord } from '../../../types';
 import { api } from '../../../services/api';

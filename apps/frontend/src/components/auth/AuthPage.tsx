@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   KeyRound,
   ShieldCheck,
-  RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
