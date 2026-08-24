@@ -1,0 +1,243 @@
+"""FastAPI routes for research studies and persona library audience persistence."""
+
+from datetime import datetime, timezone
+import uuid
+from typing import Any, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
+from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bebshax.db.models import Studies, SavedAudiences
+
+router = APIRouter(tags=["studies"])
+
+
+class StudyCreateRequest(BaseModel):
+    id: Optional[str] = None
+    title: str = Field(..., min_length=1, max_length=256)
+    type: str = "interviews"
+    goal: str = "demand_validation"
+    prompt: Optional[str] = None
+    status: str = "draft"
+    step: int = 1
+    persona_count: int = 0
+    persona_ids: list[str] = Field(default_factory=list)
+    suggested_roles: list[dict[str, Any]] = Field(default_factory=list)
+    script_questions: list[str] = Field(default_factory=list)
+    findings: Optional[dict[str, Any]] = None
+    is_demo: bool = False
+    duration_text: Optional[str] = None
+
+
+class StudyUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    type: Optional[str] = None
+    goal: Optional[str] = None
+    prompt: Optional[str] = None
+    status: Optional[str] = None
+    step: Optional[int] = None
+    persona_count: Optional[int] = None
+    persona_ids: Optional[list[str]] = None
+    suggested_roles: Optional[list[dict[str, Any]]] = None
+    script_questions: Optional[list[str]] = None
+    findings: Optional[dict[str, Any]] = None
+    is_demo: Optional[bool] = None
+    duration_text: Optional[str] = None
+
+
+class AudienceCreateRequest(BaseModel):
+    id: Optional[str] = None
+    study_id: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=256)
+    description: Optional[str] = None
+    persona_ids: list[str] = Field(default_factory=list)
+    personas_payload: list[dict[str, Any]] = Field(default_factory=list)
+    role_distribution: dict[str, Any] = Field(default_factory=dict)
+
+
+def _serialize_study(s: Studies) -> dict[str, Any]:
+    return {
+        "id": s.id,
+        "user_id": s.user_id,
+        "title": s.title,
+        "type": s.type,
+        "goal": s.goal,
+        "prompt": s.prompt,
+        "status": s.status,
+        "step": s.step,
+        "persona_count": s.persona_count,
+        "persona_ids": s.persona_ids or [],
+        "suggested_roles": s.suggested_roles or [],
+        "script_questions": s.script_questions or [],
+        "findings": s.findings,
+        "is_demo": s.is_demo,
+        "duration_text": s.duration_text or "Just created • No personas yet",
+        "created_at": s.created_at.isoformat() if s.created_at else datetime.now(timezone.utc).isoformat(),
+        "updated_at": s.updated_at.isoformat() if s.updated_at else datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _serialize_audience(a: SavedAudiences) -> dict[str, Any]:
+    return {
+        "id": a.id,
+        "user_id": a.user_id,
+        "study_id": a.study_id,
+        "name": a.name,
+        "description": a.description,
+        "persona_ids": a.persona_ids or [],
+        "personas_payload": a.personas_payload or [],
+        "role_distribution": a.role_distribution or {},
+        "created_at": a.created_at.isoformat() if a.created_at else datetime.now(timezone.utc).isoformat(),
+        "updated_at": a.updated_at.isoformat() if a.updated_at else datetime.now(timezone.utc).isoformat(),
+    }
+
+
+async def get_session(request: Request) -> AsyncSession:
+    sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
+    if not sessionmaker:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    async with sessionmaker() as session:
+        yield session
+
+
+@router.get("/studies", response_model=list[dict[str, Any]])
+async def list_studies(session: AsyncSession = Depends(get_session)) -> list[dict[str, Any]]:
+    """List all research studies ordered by creation time."""
+    result = await session.execute(select(Studies).order_by(Studies.created_at.desc()))
+    studies = list(result.scalars().all())
+    return [_serialize_study(s) for s in studies]
+
+
+@router.post("/studies", status_code=status.HTTP_201_CREATED)
+async def create_study(
+    payload: StudyCreateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Create a new research study draft."""
+    study_id = payload.id or f"study_{uuid.uuid4().hex[:16]}"
+    study = Studies(
+        id=study_id,
+        title=payload.title,
+        type=payload.type,
+        goal=payload.goal,
+        prompt=payload.prompt,
+        status=payload.status,
+        step=payload.step,
+        persona_count=payload.persona_count,
+        persona_ids=payload.persona_ids,
+        suggested_roles=payload.suggested_roles,
+        script_questions=payload.script_questions,
+        findings=payload.findings,
+        is_demo=payload.is_demo,
+        duration_text=payload.duration_text,
+    )
+    session.add(study)
+    await session.commit()
+    await session.refresh(study)
+    return _serialize_study(study)
+
+
+@router.get("/studies/{study_id}")
+async def get_study(
+    study_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Get research study details by ID."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    return _serialize_study(study)
+
+
+@router.patch("/studies/{study_id}")
+@router.put("/studies/{study_id}")
+async def update_study(
+    study_id: str,
+    payload: StudyUpdateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Update research study attributes (status, step, questions, personas, findings)."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        # Auto-create if not found to support seamless workflow initialization
+        study = Studies(
+            id=study_id,
+            title=payload.title or "Untitled Study",
+            type=payload.type or "interviews",
+            goal=payload.goal or "demand_validation",
+        )
+        session.add(study)
+
+    update_data = payload.dict(exclude_unset=True)
+    for field, val in update_data.items():
+        if val is not None and hasattr(study, field):
+            setattr(study, field, val)
+
+    study.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(study)
+    return _serialize_study(study)
+
+
+@router.delete("/studies/{study_id}")
+async def delete_study(
+    study_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Delete a research study."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    await session.delete(study)
+    await session.commit()
+    return {"success": True, "deleted_id": study_id}
+
+
+# ============================================================================
+# Persona Library: Saved Audiences Persistence
+# ============================================================================
+
+@router.get("/audiences", response_model=list[dict[str, Any]])
+async def list_saved_audiences(session: AsyncSession = Depends(get_session)) -> list[dict[str, Any]]:
+    """List all saved audiences in the persona library."""
+    result = await session.execute(select(SavedAudiences).order_by(SavedAudiences.created_at.desc()))
+    audiences = list(result.scalars().all())
+    return [_serialize_audience(a) for a in audiences]
+
+
+@router.post("/audiences", status_code=status.HTTP_201_CREATED)
+async def save_audience(
+    payload: AudienceCreateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Save an audience to the Persona Library."""
+    audience_id = payload.id or f"aud_{uuid.uuid4().hex[:16]}"
+    audience = SavedAudiences(
+        id=audience_id,
+        study_id=payload.study_id,
+        name=payload.name,
+        description=payload.description,
+        persona_ids=payload.persona_ids,
+        personas_payload=payload.personas_payload,
+        role_distribution=payload.role_distribution,
+    )
+    session.add(audience)
+    await session.commit()
+    await session.refresh(audience)
+    return _serialize_audience(audience)
+
+
+@router.delete("/audiences/{audience_id}")
+async def delete_audience(
+    audience_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Remove a saved audience from the Persona Library."""
+    audience = await session.get(SavedAudiences, audience_id)
+    if not audience:
+        raise HTTPException(status_code=404, detail=f"Audience '{audience_id}' not found")
+    await session.delete(audience)
+    await session.commit()
+    return {"success": True, "deleted_id": audience_id}

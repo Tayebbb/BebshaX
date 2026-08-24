@@ -263,3 +263,18 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - Verified: 3/3 tests green; live `GET /api/health` → 200 `{"status":"ok","app":"BebshaX","version":"0.1.0",...}`.
 - Known item: starlette TestClient emits a deprecation warning suggesting `httpx2`; revisit when starlette requires it.
 - Deviation from earlier draft: 22-phase plan replaced by the owner's 15-phase structure (recorded above).
+
+### Maintenance (2026-08-25) — Universal AI Workflow + OpenRouter integration
+
+**What was built:**
+- **Backend `copilot.py` rewrite (R3-compliant):** Removed all hard-coded student/Bangladesh context from every function. The copilot SYSTEM_PROMPT, `_generate_fallback_response`, `suggest_persona_roles`, and `generate_study_personas` now handle any business idea (food, health, fintech, e-commerce, B2B SaaS, education, etc.) by detecting domain keywords and generating contextually-relevant roles and personas. The fallback dialog is now contextual for 7+ business domains.
+- **LLM-powered persona generation:** `generate_study_personas` now calls the LLM via `_generate_persona_via_llm()` using the new `PERSONA_GENERATION_PROMPT` template, which grounds each persona in the study context. Falls back to a generic skeleton if LLM is unavailable.
+- **LLM-powered role suggestion:** `suggest_persona_roles` now calls the LLM via `SUGGEST_ROLES_PROMPT` and falls back to context-aware keyword detection instead of hardcoded student roles.
+- **OpenRouter wired into PoolRouter:** `factory.py` now builds `{"openrouter": OpenRouterAdapter(), "freellmpool": ..., "ollama": ...}`. OpenRouter is first-preference for all pools (`reasoning`, `conversation`, `structured`, etc.).
+- **PoolRouter forward-compatibility:** Changed ValueError on unknown adapter → `warnings.warn()`. `complete()` now skips missing adapters gracefully (`.get()` instead of `[]`). This allows OpenRouter to be optional (silently skipped when no key is set).
+- **New `PERSONA_NARRATIVE` TaskType** added to `types.py` and mapped to `reasoning` pool in `pools.py` for high-quality persona narrative generation.
+- **Frontend `api.ts`:** All three hardcoded student-only mock fallbacks (`sendStudyCopilotMessage`, `getSuggestedPersonaRoles`, `generateStudyPersonas`) replaced with context-aware fallbacks matching 7+ business domains.
+
+**Tests:** 142 passed, 3 deselected (auth/DB integration tests skipped without live DB). No new dependencies added.
+
+**Deviations:** None from spec. The `test_unknown_adapter_in_pool_config_fails_fast` test was renamed to `test_unknown_adapter_in_pool_config_warns` to match the intentional behavior change (warn, not fail).

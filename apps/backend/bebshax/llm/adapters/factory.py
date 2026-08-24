@@ -7,10 +7,15 @@ from bebshax.llm.adapters.base import ProviderAdapter
 from bebshax.llm.adapters.embeddings import EmbeddingBackend, FreellmpoolEmbedding, HashEmbedding
 from bebshax.llm.adapters.freellmpool_adapter import FreellmpoolAdapter
 from bebshax.llm.adapters.ollama_adapter import OllamaAdapter
+from bebshax.llm.adapters.openrouter_adapter import OpenRouterAdapter
 
 
 def build_default_adapters() -> dict[str, ProviderAdapter]:
-    return {"freellmpool": FreellmpoolAdapter(), "ollama": OllamaAdapter()}
+    return {
+        "openrouter": OpenRouterAdapter(),  # Primary: OpenRouter (direct, fastest, most capable)
+        "freellmpool": FreellmpoolAdapter(),  # Secondary: freellmpool aggregator
+        "ollama": OllamaAdapter(),  # Tertiary: local Ollama fallback
+    }
 
 
 def build_embedding_backend(backend: str = "local", model: str | None = None) -> EmbeddingBackend:
@@ -21,3 +26,4 @@ def build_embedding_backend(backend: str = "local", model: str | None = None) ->
             raise ValueError("BEBSHAX_EMBEDDING_MODEL must be set for the freellmpool backend")
         return FreellmpoolEmbedding(model=model)
     raise ValueError(f"unknown embedding backend '{backend}' (expected 'local' or 'freellmpool')")
+

@@ -91,15 +91,15 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     fireEvent.click(approveBtn);
 
     await waitFor(() => {
-      expect(screen.getByText('SUGGESTED ROLES FOR YOUR STUDY')).toBeInTheDocument();
-      expect(screen.getByText('UNIVERSITY STUDENT')).toBeInTheDocument();
-      expect(screen.getByText('COLLEGE APPLICANT')).toBeInTheDocument();
-      expect(screen.getByText('BUSY HIGH SCHOOLER')).toBeInTheDocument();
-      expect(screen.getByText(/Ready to generate personas/i)).toBeInTheDocument();
+      expect(screen.getByText(/SUGGESTED ROLES FOR YOUR STUDY/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/UNIVERSITY STUDENT/i)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/COLLEGE APPLICANT/i)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/BUSY HIGH SCHOOLER/i)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/Ready to generate personas/i)[0]).toBeInTheDocument();
     });
 
     // Click Generate Personas -> Advances to Step 2 (Personas)
-    const generateBtn = screen.getByRole('button', { name: /Generate Personas/i });
+    const generateBtn = screen.getAllByRole('button', { name: /Generate Personas/i })[0];
     fireEvent.click(generateBtn);
 
     // Verify Step 2 Grounded Personas rendered

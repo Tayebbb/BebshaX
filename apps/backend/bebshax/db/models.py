@@ -179,3 +179,63 @@ class Personas(Base):
 
     # Relationship
     business: Mapped[Businesses] = relationship("Businesses", back_populates="personas")
+
+
+class Studies(Base):
+    """Research study workflow state, questions, goal, and results."""
+
+    __tablename__ = "studies"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    type: Mapped[str] = mapped_column(String(64), default="interviews")
+    goal: Mapped[str] = mapped_column(String(64), default="demand_validation")
+    prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(64), default="draft")  # draft, in_progress, completed, archived
+    step: Mapped[int] = mapped_column(default=1)
+    persona_count: Mapped[int] = mapped_column(default=0)
+    persona_ids: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    suggested_roles: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    script_questions: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    findings: Mapped[Optional[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    is_demo: Mapped[bool] = mapped_column(default=False)
+    duration_text: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class SavedAudiences(Base):
+    """Reusable persona audience groups saved to the Persona Library."""
+
+    __tablename__ = "saved_audiences"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    study_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    persona_ids: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    personas_payload: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    role_distribution: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+

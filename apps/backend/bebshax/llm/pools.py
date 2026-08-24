@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from bebshax.llm.types import TaskType
 
+OPENROUTER = "openrouter"
 FREELLMPOOL = "freellmpool"
 OLLAMA = "ollama"
 
@@ -25,11 +26,11 @@ class PoolConfig(BaseModel):
 POOLS: dict[str, PoolConfig] = {
     p.name: p
     for p in [
-        PoolConfig(name="reasoning", adapters=[FREELLMPOOL, OLLAMA], max_concurrency=2),
-        PoolConfig(name="conversation", adapters=[FREELLMPOOL, OLLAMA], max_concurrency=5),
-        PoolConfig(name="long_context", adapters=[FREELLMPOOL, OLLAMA], max_concurrency=2),
-        PoolConfig(name="structured", adapters=[FREELLMPOOL, OLLAMA], max_concurrency=3),
-        PoolConfig(name="fast", adapters=[FREELLMPOOL, OLLAMA], max_concurrency=5),
+        PoolConfig(name="reasoning", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=2),
+        PoolConfig(name="conversation", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=5),
+        PoolConfig(name="long_context", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=2),
+        PoolConfig(name="structured", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=3),
+        PoolConfig(name="fast", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=5),
         PoolConfig(name="local", adapters=[OLLAMA], max_concurrency=2),
         PoolConfig(name="emergency", adapters=[OLLAMA, FREELLMPOOL], max_concurrency=2),
     ]
@@ -49,6 +50,7 @@ TASK_POOL_MAP: dict[TaskType, str] = {
     TaskType.CRITIC: "reasoning",
     TaskType.REPORT_GENERATION: "long_context",
     TaskType.STRUCTURED_OUTPUT: "structured",
+    TaskType.PERSONA_NARRATIVE: "reasoning",
     TaskType.BROWSER_AGENT: "structured",
     TaskType.TOOL_CALLING: "structured",
     TaskType.EMERGENCY_FALLBACK: "emergency",

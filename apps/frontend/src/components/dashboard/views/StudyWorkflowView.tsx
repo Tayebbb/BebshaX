@@ -41,6 +41,79 @@ interface StudyWorkflowViewProps {
   onStepChange?: (step: number) => void;
 }
 
+const DEFAULT_STUDENT_ROLES: PersonaRoleSuggestion[] = [
+  {
+    id: 'role_uni_student',
+    role: 'UNIVERSITY STUDENT',
+    description: 'Directly represents the primary target user for a study planner AI website in Bangladesh and can provide first-hand feedback on demand and pricing sensitivity.',
+    count: 3,
+    selected: true,
+  },
+  {
+    id: 'role_college_applicant',
+    role: 'COLLEGE APPLICANT',
+    description: 'Actively preparing for university entrance exams, this group faces unique planning pressures and can reveal willingness to pay for tools that support their study goals.',
+    count: 3,
+    selected: true,
+  },
+  {
+    id: 'role_high_schooler',
+    role: 'BUSY HIGH SCHOOLER',
+    description: 'Juggling heavy academic loads and extracurriculars, these students offer insight into daily pain points and real value perception for time management tools at a student-friendly price.',
+    count: 3,
+    selected: true,
+  },
+  {
+    id: 'role_private_tutor_student',
+    role: 'PRIVATE TUTOR STUDENT',
+    description: 'Engaged in additional study support, this profile can comment on the need for supplementary planning aids and evaluate if 250 taka/month fits their budget for academic resources.',
+    count: 0,
+    selected: false,
+  },
+  {
+    id: 'role_parental_planner',
+    role: 'PARENTAL PLANNER',
+    description: 'Represents parents who guide or organize their children\'s study schedules and may influence or directly pay for educational tools, providing insights on family budgeting and value.',
+    count: 0,
+    selected: false,
+  },
+  {
+    id: 'role_test_prep',
+    role: 'TEST PREP SEEKER',
+    description: 'Focused on standardized or competitive exams, these students are motivated by performance improvement and may see more value in specialized AI planning, informing demand and price limits.',
+    count: 0,
+    selected: false,
+  },
+  {
+    id: 'role_scholarship_aspirant',
+    role: 'SCHOLARSHIP ASPIRANT',
+    description: 'Highly goal-oriented, these students need detailed, efficient study plans and can indicate whether pricing aligns with their need for academic support.',
+    count: 0,
+    selected: false,
+  },
+  {
+    id: 'role_budget_learner',
+    role: 'BUDGET-CONSCIOUS LEARNER',
+    description: 'Represents students highly sensitive to price, who will help test the floor of acceptable monthly costs and highlight trade-offs between features and affordability.',
+    count: 0,
+    selected: false,
+  },
+  {
+    id: 'role_remote_student',
+    role: 'REMOTE STUDENT',
+    description: 'Studying from rural areas or at a distance, these users may have different access patterns and willingness to invest in digital tools, offering a contrast to urban peers.',
+    count: 0,
+    selected: false,
+  },
+  {
+    id: 'role_group_organizer',
+    role: 'STUDY GROUP ORGANIZER',
+    description: 'Manages schedules for collective learning, providing perspective on group adoption, potential for shared subscriptions, and broader acceptance of proposed pricing.',
+    count: 0,
+    selected: false,
+  },
+];
+
 export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   studyId,
   initialStep = 1,
@@ -51,27 +124,25 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
   const [study, setStudy] = useState<Study | null>(null);
-  const [selectedGoal, setSelectedGoal] = useState<ResearchGoal>('demand_validation');
-  const [promptInput, setPromptInput] = useState(initialPrompt);
+  const [selectedGoal, setSelectedGoal] = useState<string>('demand');
+  const [promptInput, setPromptInput] = useState<string>(initialPrompt);
+  const [questions, setQuestions] = useState<string[]>([
+    'How do you currently structure your weekly schedule and daily priorities?',
+    'What is your biggest frustration or source of anxiety with existing academic tools?',
+    'Would you pay 250 BDT/month for an intelligent study planner that adapts to your exam timetable?',
+    'What features would make this an indispensable daily habit rather than just another app?',
+  ]);
+  const [newQuestion, setNewQuestion] = useState<string>('');
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
-  const [questions, setQuestions] = useState<string[]>([
-    'How do you currently handle unexpected expenses or irregular income?',
-    'What is the biggest frustration with your existing financial management tools?',
-    'If an automated reserve saved 15% from payouts with a 1-tap unlock, what would keep you from using it?',
-  ]);
-  const [newQuestion, setNewQuestion] = useState('');
-
-  // Step 1 & 2: Personas & Roles States
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all');
   const [isGeneratingPersonas, setIsGeneratingPersonas] = useState<boolean>(false);
   const [generationProgress, setGenerationProgress] = useState<number>(0);
-  const [personaSearchQuery, setPersonaSearchQuery] = useState<string>('');
   const [viewingPersona, setViewingPersona] = useState<Persona | null>(null);
   const [showDidYouKnow, setShowDidYouKnow] = useState<boolean>(true);
-  const [savedAudiences, setSavedAudiences] = useState<boolean>(false);
+  const [savedAudiences, setSavedAudiences] = useState<string[]>([]);
 
-  // Step 1: LLM Study Design Copilot States & Role Selection
+  // Copilot Multi-turn Conversational States (Step 1)
   const [copilotMessages, setCopilotMessages] = useState<
     {
       id: string;
@@ -90,7 +161,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [isCopilotTyping, setIsCopilotTyping] = useState<boolean>(false);
   const [step1Prompt, setStep1Prompt] = useState<string>('');
   const [showRoleSelection, setShowRoleSelection] = useState<boolean>(false);
-  const [suggestedRoles, setSuggestedRoles] = useState<PersonaRoleSuggestion[]>([]);
+  const [suggestedRoles, setSuggestedRoles] = useState<PersonaRoleSuggestion[]>(DEFAULT_STUDENT_ROLES);
 
   // Live Interview Simulation States (Step 4)
   const [activeInterviewPersonaId, setActiveInterviewPersonaId] = useState<string>('per_sarah_01');
@@ -106,6 +177,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   };
 
   const fetchCopilotTurn = async (history: { role: 'user' | 'assistant'; content: string }[]) => {
+    // Guard: don't fire a second call if one is already in flight
+    if (isCopilotTyping) return;
     setIsCopilotTyping(true);
     try {
       const res = await api.sendStudyCopilotMessage(history, initialType, studyId);
@@ -142,29 +215,38 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     setStep1Prompt('');
     setPromptInput('');
 
-    setCopilotMessages((prev) => {
-      const updatedHistory = [...prev, userMsg];
-      fetchCopilotTurn(
-        updatedHistory.map((m) => ({
-          role: m.role,
-          content: m.content,
-        }))
-      );
-      return updatedHistory;
-    });
+    // Build history synchronously — do NOT call fetchCopilotTurn inside the
+    // setState updater; React StrictMode double-invokes updaters which would
+    // trigger two API calls and render two identical responses.
+    const updatedHistory = [...copilotMessages, userMsg];
+    setCopilotMessages(updatedHistory);
+    fetchCopilotTurn(
+      updatedHistory.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
+    );
   };
 
   const handleApproveGoal = async (summary?: string) => {
-    if (study) {
-      api.updateStudy(study.id, {
-        prompt: summary || promptInput,
-      });
-    }
-    if (suggestedRoles.length === 0) {
-      const roles = await api.getSuggestedPersonaRoles(summary || promptInput || 'Bangladeshi student study planner');
-      setSuggestedRoles(roles);
-    }
     setShowRoleSelection(true);
+    if (suggestedRoles.length === 0) {
+      try {
+        const roles = await api.getSuggestedPersonaRoles(summary || promptInput || 'Bangladeshi student study planner');
+        if (roles && roles.length > 0) setSuggestedRoles(roles);
+      } catch {
+        // ignore
+      }
+    }
+    if (study) {
+      try {
+        api.updateStudy(study.id, {
+          prompt: summary || promptInput,
+        });
+      } catch {
+        // ignore
+      }
+    }
   };
 
   const handleToggleRole = (roleId: string) => {
@@ -605,7 +687,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                             alignItems: 'center',
                             gap: '12px',
                             flexShrink: 0,
-                            paddingLeft: '12px',
+                            paddingLeft: '18px',
+                            borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
                           }}
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -666,6 +749,58 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Floating Bottom Action Banner */}
+                <div
+                  style={{
+                    position: 'sticky',
+                    bottom: '24px',
+                    margin: '18px auto 0 auto',
+                    width: '100%',
+                    maxWidth: '680px',
+                    background: '#141719',
+                    border: '1px solid rgba(246, 200, 120, 0.4)',
+                    borderRadius: '16px',
+                    padding: '12px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '16px',
+                    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.65)',
+                    zIndex: 20,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#FFFFFF' }}>
+                      Ready to generate personas 🥳
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>
+                      Your report is just 2 steps away
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleGeneratePersonas}
+                    style={{
+                      background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
+                      color: '#080909',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '8px 18px',
+                      fontSize: '0.86rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 14px rgba(246, 200, 120, 0.25)',
+                    }}
+                  >
+                    <span>Generate Personas</span>
+                    <ArrowRight size={15} strokeWidth={2.5} />
+                  </button>
                 </div>
               </div>
             ) : (

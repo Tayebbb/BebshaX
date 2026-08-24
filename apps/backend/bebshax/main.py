@@ -13,11 +13,15 @@ from bebshax.api.health import router as health_router
 from bebshax.api.interviews import router as interviews_router
 from bebshax.api.personas import router as personas_router
 from bebshax.api.routes import router as routes_router
+from bebshax.api.studies import router as studies_router
+from bebshax.auth.models import Users
 from bebshax.config import get_settings
 from bebshax.db.engine import create_async_sessionmaker, create_engine
+from bebshax.db.models import Base, Businesses, LLMRequests, ModelRegistry, Personas, SavedAudiences, Studies
 from bebshax.db.seed import seed_demo_data
 from bebshax.db.sink import ProvenanceSink
 from bebshax.interview.engine import InterviewEngine
+from bebshax.interview.orm import Conversations, ConversationTurns
 from bebshax.llm.adapters.factory import (
     build_default_adapters,
     build_embedding_backend,
@@ -26,6 +30,7 @@ from bebshax.llm.router import PoolRouter
 from bebshax.memory.service import MemoryService
 from bebshax.persona.evidence import EvidenceStore
 from bebshax.persona.generation import PersonaEngine
+from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
 
 
 @asynccontextmanager
@@ -52,8 +57,10 @@ async def _lifespan(app: FastAPI):
         llm_router, sessionmaker_, memory=app.state.memory_service
     )
 
-    # Seed demo data if database is reachable
+    # Initialize tables and seed demo data if database is reachable
     try:
+        async with db_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
         await seed_demo_data(sessionmaker_)
     except Exception:
         pass  # best-effort on startup
@@ -84,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(personas_router, prefix="/api")
     app.include_router(interviews_router, prefix="/api")
     app.include_router(copilot_router, prefix="/api")
+    app.include_router(studies_router, prefix="/api")
     app.include_router(evaluation_router, prefix="/api")
     return app
 

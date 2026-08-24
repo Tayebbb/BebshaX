@@ -50,7 +50,11 @@ class PoolRouter(LLMService):
         for pool in self._pools.values():
             unknown = [name for name in pool.adapters if name not in adapters]
             if unknown:
-                raise ValueError(f"pool '{pool.name}' references unknown adapter(s): {unknown}")
+                import warnings
+                warnings.warn(
+                    f"pool '{pool.name}' references adapter(s) not in adapters dict: {unknown} — they will be skipped",
+                    stacklevel=2,
+                )
         self._semaphores = {
             name: asyncio.Semaphore(p.max_concurrency) for name, p in self._pools.items()
         }
@@ -84,7 +88,9 @@ class PoolRouter(LLMService):
             async with self._semaphores[pool_name]:
                 entries: list[Entry] = []
                 for adapter_name in pool.adapters:
-                    adapter = self._adapters[adapter_name]
+                    adapter = self._adapters.get(adapter_name)
+                    if adapter is None:
+                        continue  # adapter not configured (e.g., openrouter key not set)
                     for cand in await adapter.candidates():
                         entries.append((adapter, cand))
                 if self._ranker is not None:

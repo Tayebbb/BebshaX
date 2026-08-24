@@ -1,0 +1,30 @@
+# Custom provider overrides for freellmpool
+# Configures OpenRouter with free and high-throughput models
+
+[[provider]]
+id = "openrouter"
+label = "OpenRouter"
+adapter = "openai"
+base_url = "https://openrouter.ai/api/v1"
+key_env = "OPENROUTER_API_KEY"
+auth = "bearer"
+
+[[provider.models]]
+name = "meta-llama/llama-3.3-70b-instruct:free"
+rpd = 1000
+enabled = true
+
+[[provider.models]]
+name = "deepseek/deepseek-r1:free"
+rpd = 1000
+enabled = true
+
+[[provider.models]]
+name = "google/gemini-2.0-flash-exp:free"
+rpd = 1000
+enabled = true
+
+[[provider.models]]
+name = "nvidia/nemotron-3.5-lightning:free"
+rpd = 1000
+enabled = true

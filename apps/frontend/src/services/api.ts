@@ -880,10 +880,35 @@ export const api = {
 
   // 10. Research Studies Management (New Study, Dashboard, Workflows)
   async getStudies(): Promise<Study[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            lastKnownLive = true;
+            return data;
+          }
+        }
+      } catch {
+        // fallback
+      }
+    }
     return [...mockStore.studies];
   },
 
   async getStudyById(id: string): Promise<Study | null> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${id}`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        // fallback
+      }
+    }
     const study = mockStore.studies.find((s) => s.id === id);
     return study ? { ...study } : null;
   },
@@ -893,8 +918,27 @@ export const api = {
   },
 
   async createStudy(studyData: Partial<Study>): Promise<Study> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(studyData),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          const created = await res.json();
+          mockStore.studies.unshift(created);
+          return created;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
     const newStudy: Study = {
-      id: `study_${Date.now()}`,
+      id: studyData.id || `study_${Date.now()}`,
       title: studyData.title || 'Untitled Study',
       type: studyData.type || 'interviews',
       goal: studyData.goal || 'demand_validation',
@@ -914,9 +958,30 @@ export const api = {
   },
 
   async updateStudy(id: string, updates: Partial<Study>): Promise<Study> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          const updated = await res.json();
+          const index = mockStore.studies.findIndex((s) => s.id === id);
+          if (index !== -1) mockStore.studies[index] = updated;
+          return updated;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
     const index = mockStore.studies.findIndex((s) => s.id === id);
     if (index === -1) {
-      throw new Error(`Study with id ${id} not found`);
+      const created = await this.createStudy({ id, ...updates });
+      return created;
     }
     const updated = {
       ...mockStore.studies[index],
@@ -925,6 +990,66 @@ export const api = {
     };
     mockStore.studies[index] = updated;
     return updated;
+  },
+
+  async deleteStudy(id: string): Promise<boolean> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${id}`, {
+          method: 'DELETE',
+          signal: AbortSignal.timeout(4000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+        }
+      } catch {
+        // fallback
+      }
+    }
+    mockStore.studies = mockStore.studies.filter((s) => s.id !== id);
+    return true;
+  },
+
+  async saveAudience(data: {
+    name: string;
+    study_id?: string;
+    description?: string;
+    persona_ids: string[];
+    personas_payload?: any[];
+    role_distribution?: Record<string, number>;
+  }): Promise<{ id: string; name: string }> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/audiences`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        // fallback
+      }
+    }
+    return { id: `aud_${Date.now()}`, name: data.name };
+  },
+
+  async getSavedAudiences(): Promise<any[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/audiences`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        // fallback
+      }
+    }
+    return [];
   },
 
   // 11. Study Design Copilot (Conversational LLM Workflow Initiation)
@@ -964,114 +1089,118 @@ export const api = {
       }
     }
 
-    const defaultStudentRoles: PersonaRoleSuggestion[] = [
-      {
-        id: 'role_uni_student',
-        role: 'UNIVERSITY STUDENT',
-        description: 'Directly represents the primary target user for a study planner AI website in Bangladesh and can provide first-hand feedback on demand and pricing sensitivity.',
-        count: 3,
-        selected: true,
-      },
-      {
-        id: 'role_college_applicant',
-        role: 'COLLEGE APPLICANT',
-        description: 'Actively preparing for university entrance exams, this group faces unique planning pressures and can reveal willingness to pay for tools that support their study goals.',
-        count: 3,
-        selected: true,
-      },
-      {
-        id: 'role_high_schooler',
-        role: 'BUSY HIGH SCHOOLER',
-        description: 'Juggling heavy academic loads and extracurriculars, these students offer insight into daily pain points and real value perception for time management tools at a student-friendly price.',
-        count: 3,
-        selected: true,
-      },
-      {
-        id: 'role_private_tutor_student',
-        role: 'PRIVATE TUTOR STUDENT',
-        description: 'Engaged in additional study support, this profile can comment on the need for supplementary planning aids and evaluate if 250 taka/month fits their budget for academic resources.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_parental_planner',
-        role: 'PARENTAL PLANNER',
-        description: 'Represents parents who guide or organize their children\'s study schedules and may influence or directly pay for educational tools, providing insights on family budgeting and value.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_test_prep',
-        role: 'TEST PREP SEEKER',
-        description: 'Focused on standardized or competitive exams, these students are motivated by performance improvement and may see more value in specialized AI planning, informing demand and price limits.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_scholarship_aspirant',
-        role: 'SCHOLARSHIP ASPIRANT',
-        description: 'Highly goal-oriented, these students need detailed, efficient study plans and can indicate whether pricing aligns with their need for academic support.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_budget_learner',
-        role: 'BUDGET-CONSCIOUS LEARNER',
-        description: 'Represents students highly sensitive to price, who will help test the floor of acceptable monthly costs and highlight trade-offs between features and affordability.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_remote_student',
-        role: 'REMOTE STUDENT',
-        description: 'Studying from rural areas or at a distance, these users may have different access patterns and willingness to invest in digital tools, offering a contrast to urban peers.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_group_organizer',
-        role: 'STUDY GROUP ORGANIZER',
-        description: 'Manages schedules for collective learning, providing perspective on group adoption, potential for shared subscriptions, and broader acceptance of proposed pricing.',
-        count: 0,
-        selected: false,
-      },
-    ];
-
     const userTurns = messages.filter((m) => m.role === 'user');
     const turnCount = userTurns.length;
     const firstText = userTurns[0]?.content || '';
     const lastText = userTurns[userTurns.length - 1]?.content || '';
+    const combinedText = (firstText + ' ' + lastText).toLowerCase();
 
-    const hasPricing = /taka|\$|price|cost|month|plan|250/i.test(firstText + ' ' + lastText);
-    const hasStudents = /student|school|college|university|study planner/i.test(firstText + ' ' + lastText);
+    const hasPricing = /price|cost|month|subscription|plan|\$|taka|€|£|free/.test(combinedText);
+    const hasStudents = /student|school|college|university|study/.test(combinedText);
+    const hasFood = /food|restaurant|delivery|meal|eat|chef|recipe|cuisine/.test(combinedText);
+    const hasHealth = /health|fitness|gym|workout|diet|wellness|doctor|medical/.test(combinedText);
+    const hasFintech = /payment|bank|finance|loan|invest|money|wallet|crypto/.test(combinedText);
+    const hasEcommerce = /shop|sell|buy|store|marketplace|ecommerce|fashion/.test(combinedText);
+    const hasB2B = /saas|enterprise|team|office|workflow|productivity|b2b|business tool/.test(combinedText);
+
+    let productType = 'product or service';
+    let audienceQ = 'Who is your primary target user — what\'s their age range, lifestyle, or professional context? And what geography are you launching in first?';
+    let followupQ = 'What\'s the core problem you\'re solving for them, and what\'s the price point or business model you\'re validating?';
+    let roles: PersonaRoleSuggestion[] = [];
+
+    if (hasFood) {
+      productType = 'food or restaurant service';
+      audienceQ = 'Who are the primary customers — home cooks, busy professionals, or families? And what region or city are you targeting first?';
+      followupQ = 'What\'s the main value proposition — convenience, cost savings, or quality? And what price point are you considering?';
+      roles = [
+        { id: 'role_busy_professional', role: 'BUSY PROFESSIONAL', description: 'Time-pressed professional who values convenience over price — core paying customer.', count: 3, selected: true },
+        { id: 'role_home_cook', role: 'HOME COOK', description: 'Cooking enthusiast who compares against cooking at home — key value benchmark.', count: 3, selected: true },
+        { id: 'role_family_planner', role: 'FAMILY MEAL PLANNER', description: 'Parent managing family nutrition and budget — represents group/family subscription potential.', count: 3, selected: true },
+        { id: 'role_health_conscious', role: 'HEALTH-CONSCIOUS EATER', description: 'Health-focused user with dietary needs — tests premium tier demands.', count: 0, selected: false },
+        { id: 'role_deal_hunter', role: 'DEAL HUNTER', description: 'Value-maximizer who compares cost per meal — tests pricing floor.', count: 0, selected: false },
+      ];
+    } else if (hasHealth) {
+      productType = 'health & wellness product';
+      audienceQ = 'Who is your primary user — fitness enthusiasts, people with health conditions, or a broader wellness audience?';
+      followupQ = 'Is this B2C or B2B (gyms, clinics)? And what\'s the rough price point?';
+      roles = [
+        { id: 'role_fitness_enthusiast', role: 'FITNESS ENTHUSIAST', description: 'Regular gym-goer — primary power user who validates core features.', count: 3, selected: true },
+        { id: 'role_wellness_beginner', role: 'WELLNESS BEGINNER', description: 'Person starting their health journey — tests onboarding and motivational hooks.', count: 3, selected: true },
+        { id: 'role_chronic_user', role: 'CHRONIC CONDITION USER', description: 'Person managing a health condition — tests specialized depth and accuracy.', count: 3, selected: true },
+        { id: 'role_time_poor', role: 'TIME-POOR PROFESSIONAL', description: 'High-income, low-time user — validates premium tier.', count: 0, selected: false },
+        { id: 'role_skeptic', role: 'HEALTH APP SKEPTIC', description: 'Person who tried and failed at health apps — reveals key churn drivers.', count: 0, selected: false },
+      ];
+    } else if (hasFintech) {
+      productType = 'fintech product';
+      audienceQ = 'Who is your primary user — individuals, small businesses, or enterprises? And what geography are you targeting?';
+      followupQ = 'What financial problem are you solving — payments, savings, credit, or investments?';
+      roles = [
+        { id: 'role_early_adopter', role: 'EARLY ADOPTER PRO', description: 'Tech-savvy individual comfortable with financial apps — validates core assumptions.', count: 3, selected: true },
+        { id: 'role_small_biz', role: 'SMALL BUSINESS OWNER', description: 'SMB operator managing cash flow — high-value B2B2C segment.', count: 3, selected: true },
+        { id: 'role_underbanked', role: 'UNDERBANKED USER', description: 'Person with limited banking access — tests financial inclusion positioning.', count: 3, selected: true },
+        { id: 'role_security_skeptic', role: 'SECURITY SKEPTIC', description: 'Privacy-first user — reveals trust barriers.', count: 0, selected: false },
+        { id: 'role_high_net', role: 'HIGH NET WORTH USER', description: 'Affluent user with complex needs — tests premium ceiling.', count: 0, selected: false },
+      ];
+    } else if (hasEcommerce) {
+      productType = 'e-commerce or marketplace';
+      audienceQ = 'Who are your primary buyers — consumers or businesses? And what product category are you focused on?';
+      followupQ = 'Are you a marketplace or direct retailer? And what\'s the target geography and price range?';
+      roles = [
+        { id: 'role_impulse_buyer', role: 'IMPULSE BUYER', description: 'Discovery-driven shopper — tests conversion and merchandising.', count: 3, selected: true },
+        { id: 'role_research_first', role: 'RESEARCH-FIRST BUYER', description: 'Methodical shopper — tests trust signals and pricing clarity.', count: 3, selected: true },
+        { id: 'role_loyal_repeater', role: 'LOYAL REPEATER', description: 'Returning customer — tests retention and loyalty programs.', count: 3, selected: true },
+        { id: 'role_deal_hunter', role: 'DEAL HUNTER', description: 'Discount-motivated buyer — tests pricing floor.', count: 0, selected: false },
+        { id: 'role_premium_seeker', role: 'PREMIUM SEEKER', description: 'Quality-over-price buyer — tests premium positioning.', count: 0, selected: false },
+      ];
+    } else if (hasB2B) {
+      productType = 'B2B SaaS or business tool';
+      audienceQ = 'What size companies are you targeting — SMBs, mid-market, or enterprise? And what industry does this serve?';
+      followupQ = 'What is the primary workflow or problem being solved? And what\'s your pricing model?';
+      roles = [
+        { id: 'role_decision_maker', role: 'BUDGET DECISION MAKER', description: 'Manager who approves tool purchases — validates ROI narrative.', count: 3, selected: true },
+        { id: 'role_power_user', role: 'DAILY POWER USER', description: 'Individual contributor using the tool most — validates UX depth.', count: 3, selected: true },
+        { id: 'role_it_eval', role: 'IT SECURITY EVALUATOR', description: 'Tech gatekeeping role — tests compliance and integration.', count: 3, selected: true },
+        { id: 'role_champion', role: 'INTERNAL CHAMPION', description: 'Early adopter who advocates internally — tests viral mechanics.', count: 0, selected: false },
+        { id: 'role_resistant', role: 'CHANGE-RESISTANT USER', description: 'Employee reluctant to adopt — reveals adoption barriers.', count: 0, selected: false },
+      ];
+    } else if (hasStudents) {
+      productType = 'education or student-focused product';
+      audienceQ = 'What level of students — K-12, university, or professional learners? And what geography?';
+      followupQ = 'Is this B2C for students directly, or B2B (schools/universities)? And what\'s the price point?';
+      roles = [
+        { id: 'role_uni_student', role: 'UNIVERSITY STUDENT', description: 'Core target user — validates product-market fit and willingness to pay.', count: 3, selected: true },
+        { id: 'role_college_applicant', role: 'COLLEGE APPLICANT', description: 'High-stakes test-taker — validates premium tier and urgency.', count: 3, selected: true },
+        { id: 'role_high_schooler', role: 'BUSY HIGH SCHOOLER', description: 'Time-pressed student — tests core value delivery.', count: 3, selected: true },
+        { id: 'role_parental_buyer', role: 'PARENTAL BUYER', description: 'Parent paying for child\'s tools — validates pricing framing and trust.', count: 0, selected: false },
+        { id: 'role_budget_student', role: 'BUDGET-CONSCIOUS STUDENT', description: 'Price-sensitive student — tests pricing floor and free tier.', count: 0, selected: false },
+      ];
+    } else {
+      roles = [
+        { id: 'role_primary', role: 'PRIMARY USER', description: 'Core target user — validates product-market fit and core value proposition.', count: 3, selected: true },
+        { id: 'role_early_adopter', role: 'EARLY ADOPTER', description: 'Tech-forward user open to new solutions — validates initial demand.', count: 3, selected: true },
+        { id: 'role_price_conscious', role: 'PRICE-CONSCIOUS USER', description: 'Budget-sensitive potential customer — validates pricing model.', count: 3, selected: true },
+        { id: 'role_skeptic', role: 'SKEPTICAL NON-USER', description: 'Person using a competitor — reveals switching barriers.', count: 0, selected: false },
+        { id: 'role_power_user', role: 'POWER USER', description: 'Heavy user who needs advanced features — validates depth.', count: 0, selected: false },
+      ];
+    }
 
     if (turnCount === 1) {
       return {
-        reply: `I think I've got it — you want to find out whether ${
-          hasStudents ? 'students' : 'target users'
-        } would actually want ${
-          hasStudents ? 'an AI study planner website' : 'this product'
-        } and whether ${
-          hasPricing ? '250 taka a month' : 'the pricing'
-        } feels reasonable, and that is a User Interviews study. ${
-          hasPricing
-            ? "Pricing like this usually needs discussion, not just a quick reaction, so this is the best way to hear what students value, what would hold them back, and whether the plan feels worth paying for; here's the study I'd run:"
-            : 'Deep exploratory interviews will uncover mental models and frictions.'
-        }\n\nDo you want to focus the research on students in a specific country/city (e.g., Bangladesh), or is location not important for you? (No preference is totally fine.)`,
+        reply: `I've identified your idea — you want to validate your ${productType} and understand how target users would respond to it${hasPricing ? ' at your target price point' : ''}. A User Interviews study is the right approach here — deep conversations will uncover mental models, current frustrations, and real willingness to pay.\n\n${audienceQ}`,
         suggested_study_type: 'interviews',
         is_ready_for_approval: false,
         research_goal_card: null,
         suggested_roles: [],
-        served_by: 'FreeLLMpool/qwen3.5',
+        served_by: 'bebshax/copilot-engine',
       };
     } else if (turnCount === 2) {
       return {
-        reply: "Any preferences for the students' age range or level (e.g., SSC/HSC, university), or should we include Bangladeshi students broadly? (No preference is fine.)",
+        reply: followupQ,
         suggested_study_type: 'interviews',
         is_ready_for_approval: false,
         research_goal_card: null,
         suggested_roles: [],
-        served_by: 'FreeLLMpool/qwen3.5',
+        served_by: 'bebshax/copilot-engine',
       };
     } else {
       return {
@@ -1080,12 +1209,12 @@ export const api = {
         is_ready_for_approval: true,
         research_goal_card: {
           title: 'RESEARCH GOAL',
-          summary: `You want to research whether Bangladeshi students would actually want a study planner AI website and whether they'd be willing to pay 250 taka per month for a basic plan, so you can decide whether to build it and how to price it. Your target audience is Bangladeshi students broadly, with no specific age/level requirements. Does this capture what you're looking for?`,
-          target_audience: 'Bangladeshi students broadly (all levels)',
-          core_hypothesis: 'Demand and willingness to pay 250 taka/month for basic AI planner',
+          summary: `You want to validate whether your ${productType} solves a real problem for your target users and whether they would adopt it${hasPricing ? ' at your target price point' : ' as part of their routine'}, so you can make a confident build or no-build decision. The research will uncover user motivations, current frustrations, key objections, and willingness to pay. Does this capture what you're looking for?`,
+          target_audience: `Target users of the ${productType}`,
+          core_hypothesis: `Demand and product-market fit for the ${productType}`,
         },
-        suggested_roles: defaultStudentRoles,
-        served_by: 'FreeLLMpool/qwen3.5',
+        suggested_roles: roles,
+        served_by: 'bebshax/copilot-engine',
       };
     }
   },
@@ -1105,77 +1234,59 @@ export const api = {
         // fallback
       }
     }
+    // Context-aware fallback: derive roles from the study prompt
+    const promptLower = studyPrompt.toLowerCase();
+    if (/food|restaurant|delivery|meal|eat/.test(promptLower)) {
+      return [
+        { id: 'role_busy_professional', role: 'BUSY PROFESSIONAL', description: 'Time-pressed professional — core convenience-driven paying customer.', count: 3, selected: true },
+        { id: 'role_home_cook', role: 'HOME COOK', description: 'Cooking enthusiast — key value-vs-cooking-at-home benchmark.', count: 3, selected: true },
+        { id: 'role_family_planner', role: 'FAMILY MEAL PLANNER', description: 'Parent managing family nutrition — represents group/family segment.', count: 3, selected: true },
+        { id: 'role_health_conscious', role: 'HEALTH-CONSCIOUS EATER', description: 'Dietary-needs user — tests premium tier.', count: 0, selected: false },
+        { id: 'role_deal_hunter', role: 'DEAL HUNTER', description: 'Value-seeker — tests pricing floor.', count: 0, selected: false },
+      ];
+    } else if (/health|fitness|gym|wellness|doctor/.test(promptLower)) {
+      return [
+        { id: 'role_fitness_enthusiast', role: 'FITNESS ENTHUSIAST', description: 'Regular exerciser — validates core features.', count: 3, selected: true },
+        { id: 'role_wellness_beginner', role: 'WELLNESS BEGINNER', description: 'Person starting health journey — tests onboarding.', count: 3, selected: true },
+        { id: 'role_chronic_user', role: 'CHRONIC CONDITION USER', description: 'Managing health condition — tests specialized depth.', count: 3, selected: true },
+        { id: 'role_skeptic', role: 'HEALTH APP SKEPTIC', description: 'Failed at health apps before — reveals churn drivers.', count: 0, selected: false },
+      ];
+    } else if (/payment|bank|finance|loan|invest|wallet|crypto/.test(promptLower)) {
+      return [
+        { id: 'role_early_adopter', role: 'EARLY ADOPTER PRO', description: 'Tech-savvy financial app user — validates core assumptions.', count: 3, selected: true },
+        { id: 'role_small_biz', role: 'SMALL BUSINESS OWNER', description: 'SMB managing cash flow — high-value segment.', count: 3, selected: true },
+        { id: 'role_underbanked', role: 'UNDERBANKED USER', description: 'Limited banking access — tests inclusion positioning.', count: 3, selected: true },
+        { id: 'role_security_skeptic', role: 'SECURITY SKEPTIC', description: 'Privacy-first user — reveals trust barriers.', count: 0, selected: false },
+      ];
+    } else if (/shop|sell|buy|store|marketplace|ecommerce|fashion/.test(promptLower)) {
+      return [
+        { id: 'role_impulse_buyer', role: 'IMPULSE BUYER', description: 'Discovery-driven shopper — tests conversion.', count: 3, selected: true },
+        { id: 'role_research_first', role: 'RESEARCH-FIRST BUYER', description: 'Methodical shopper — tests trust and clarity.', count: 3, selected: true },
+        { id: 'role_loyal_repeater', role: 'LOYAL REPEATER', description: 'Returning customer — tests retention.', count: 3, selected: true },
+        { id: 'role_premium_seeker', role: 'PREMIUM SEEKER', description: 'Quality-over-price buyer — tests premium positioning.', count: 0, selected: false },
+      ];
+    } else if (/saas|enterprise|team|workflow|b2b|productivity/.test(promptLower)) {
+      return [
+        { id: 'role_decision_maker', role: 'BUDGET DECISION MAKER', description: 'Manager who approves purchases — validates ROI.', count: 3, selected: true },
+        { id: 'role_power_user', role: 'DAILY POWER USER', description: 'Heavy user — validates UX depth.', count: 3, selected: true },
+        { id: 'role_it_eval', role: 'IT SECURITY EVALUATOR', description: 'Tech gatekeeping — tests compliance.', count: 3, selected: true },
+        { id: 'role_resistant', role: 'CHANGE-RESISTANT USER', description: 'Reluctant adopter — reveals barriers.', count: 0, selected: false },
+      ];
+    } else if (/student|school|college|university|study/.test(promptLower)) {
+      return [
+        { id: 'role_uni_student', role: 'UNIVERSITY STUDENT', description: 'Core user — validates product-market fit.', count: 3, selected: true },
+        { id: 'role_college_applicant', role: 'COLLEGE APPLICANT', description: 'High-stakes test-taker — validates premium tier.', count: 3, selected: true },
+        { id: 'role_high_schooler', role: 'BUSY HIGH SCHOOLER', description: 'Time-pressed student — tests core value delivery.', count: 3, selected: true },
+        { id: 'role_parental_buyer', role: 'PARENTAL BUYER', description: 'Parent paying for child — validates pricing framing.', count: 0, selected: false },
+      ];
+    }
+    // Generic fallback
     return [
-      {
-        id: 'role_uni_student',
-        role: 'UNIVERSITY STUDENT',
-        description: 'Directly represents the primary target user for a study planner AI website in Bangladesh and can provide first-hand feedback on demand and pricing sensitivity.',
-        count: 3,
-        selected: true,
-      },
-      {
-        id: 'role_college_applicant',
-        role: 'COLLEGE APPLICANT',
-        description: 'Actively preparing for university entrance exams, this group faces unique planning pressures and can reveal willingness to pay for tools that support their study goals.',
-        count: 3,
-        selected: true,
-      },
-      {
-        id: 'role_high_schooler',
-        role: 'BUSY HIGH SCHOOLER',
-        description: 'Juggling heavy academic loads and extracurriculars, these students offer insight into daily pain points and real value perception for time management tools at a student-friendly price.',
-        count: 3,
-        selected: true,
-      },
-      {
-        id: 'role_private_tutor_student',
-        role: 'PRIVATE TUTOR STUDENT',
-        description: 'Engaged in additional study support, this profile can comment on the need for supplementary planning aids and evaluate if 250 taka/month fits their budget for academic resources.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_parental_planner',
-        role: 'PARENTAL PLANNER',
-        description: 'Represents parents who guide or organize their children\'s study schedules and may influence or directly pay for educational tools, providing insights on family budgeting and value.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_test_prep',
-        role: 'TEST PREP SEEKER',
-        description: 'Focused on standardized or competitive exams, these students are motivated by performance improvement and may see more value in specialized AI planning, informing demand and price limits.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_scholarship_aspirant',
-        role: 'SCHOLARSHIP ASPIRANT',
-        description: 'Highly goal-oriented, these students need detailed, efficient study plans and can indicate whether pricing aligns with their need for academic support.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_budget_learner',
-        role: 'BUDGET-CONSCIOUS LEARNER',
-        description: 'Represents students highly sensitive to price, who will help test the floor of acceptable monthly costs and highlight trade-offs between features and affordability.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_remote_student',
-        role: 'REMOTE STUDENT',
-        description: 'Studying from rural areas or at a distance, these users may have different access patterns and willingness to invest in digital tools, offering a contrast to urban peers.',
-        count: 0,
-        selected: false,
-      },
-      {
-        id: 'role_group_organizer',
-        role: 'STUDY GROUP ORGANIZER',
-        description: 'Manages schedules for collective learning, providing perspective on group adoption, potential for shared subscriptions, and broader acceptance of proposed pricing.',
-        count: 0,
-        selected: false,
-      },
+      { id: 'role_primary', role: 'PRIMARY USER', description: 'Core target user — validates product-market fit.', count: 3, selected: true },
+      { id: 'role_early_adopter', role: 'EARLY ADOPTER', description: 'Forward-thinking user — validates initial demand.', count: 3, selected: true },
+      { id: 'role_price_conscious', role: 'PRICE-CONSCIOUS USER', description: 'Budget-sensitive — validates pricing strategy.', count: 3, selected: true },
+      { id: 'role_skeptic', role: 'SKEPTICAL USER', description: 'Using a competitor — reveals switching barriers.', count: 0, selected: false },
+      { id: 'role_power_user', role: 'POWER USER', description: 'Heavy user — validates feature depth.', count: 0, selected: false },
     ];
   },
 
