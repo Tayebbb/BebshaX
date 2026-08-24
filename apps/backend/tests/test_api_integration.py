@@ -174,3 +174,62 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
     assert tr_res.status_code == 200
     turns = tr_res.json()["turns"]
     assert len(turns) == 2
+
+
+async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
+    # 1. Create study for User A
+    s1_resp = api_test_app.post(
+        "/api/studies",
+        json={
+            "user_id": "usr_alice",
+            "title": "Alice's Grocery Delivery Demand Study",
+            "type": "interviews",
+            "goal": "demand_validation",
+            "persona_count": 2,
+        },
+    )
+    assert s1_resp.status_code == 201
+    s1 = s1_resp.json()
+    assert s1["user_id"] == "usr_alice"
+    assert s1["title"] == "Alice's Grocery Delivery Demand Study"
+
+    # 2. Create study for User B
+    s2_resp = api_test_app.post(
+        "/api/studies",
+        json={
+            "user_id": "usr_bob",
+            "title": "Bob's Fintech Card Study",
+            "type": "concept_test",
+            "goal": "feature_feedback",
+            "persona_count": 3,
+        },
+    )
+    assert s2_resp.status_code == 201
+    s2 = s2_resp.json()
+    assert s2["user_id"] == "usr_bob"
+
+    # 3. List studies filtered by User A
+    alice_studies = api_test_app.get("/api/studies?user_id=usr_alice").json()
+    assert any(s["id"] == s1["id"] for s in alice_studies)
+    assert not any(s["id"] == s2["id"] for s in alice_studies)
+
+    # 4. List studies filtered by User B
+    bob_studies = api_test_app.get("/api/studies?user_id=usr_bob").json()
+    assert any(s["id"] == s2["id"] for s in bob_studies)
+    assert not any(s["id"] == s1["id"] for s in bob_studies)
+
+    # 5. Update study
+    patch_resp = api_test_app.patch(
+        f"/api/studies/{s1['id']}",
+        json={"status": "in_progress", "step": 3},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["status"] == "in_progress"
+    assert patch_resp.json()["step"] == 3
+    assert patch_resp.json()["user_id"] == "usr_alice"
+
+    # 6. Delete study
+    del_resp = api_test_app.delete(f"/api/studies/{s1['id']}")
+    assert del_resp.status_code == 200
+    assert del_resp.json()["success"] is True
+

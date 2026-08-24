@@ -6,9 +6,11 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bebshax.auth.models import Users
+from bebshax.api.auth import get_optional_current_user
 from bebshax.db.models import Studies, SavedAudiences
 
 router = APIRouter(tags=["studies"])
@@ -16,6 +18,7 @@ router = APIRouter(tags=["studies"])
 
 class StudyCreateRequest(BaseModel):
     id: Optional[str] = None
+    user_id: Optional[str] = None
     title: str = Field(..., min_length=1, max_length=256)
     type: str = "interviews"
     goal: str = "demand_validation"
@@ -32,6 +35,7 @@ class StudyCreateRequest(BaseModel):
 
 
 class StudyUpdateRequest(BaseModel):
+    user_id: Optional[str] = None
     title: Optional[str] = None
     type: Optional[str] = None
     goal: Optional[str] = None
@@ -49,6 +53,7 @@ class StudyUpdateRequest(BaseModel):
 
 class AudienceCreateRequest(BaseModel):
     id: Optional[str] = None
+    user_id: Optional[str] = None
     study_id: Optional[str] = None
     name: str = Field(..., min_length=1, max_length=256)
     description: Optional[str] = None
@@ -103,9 +108,20 @@ async def get_session(request: Request) -> AsyncSession:
 
 
 @router.get("/studies", response_model=list[dict[str, Any]])
-async def list_studies(session: AsyncSession = Depends(get_session)) -> list[dict[str, Any]]:
-    """List all research studies ordered by creation time."""
-    result = await session.execute(select(Studies).order_by(Studies.created_at.desc()))
+async def list_studies(
+    user_id: Optional[str] = None,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict[str, Any]]:
+    """List research studies filtered for the current user (and public demo studies)."""
+    effective_user_id = (current_user.id if current_user else None) or user_id
+    if effective_user_id:
+        stmt = select(Studies).where(
+            or_(Studies.user_id == effective_user_id, Studies.is_demo == True)
+        ).order_by(Studies.created_at.desc())
+    else:
+        stmt = select(Studies).order_by(Studies.created_at.desc())
+    result = await session.execute(stmt)
     studies = list(result.scalars().all())
     return [_serialize_study(s) for s in studies]
 
@@ -113,12 +129,15 @@ async def list_studies(session: AsyncSession = Depends(get_session)) -> list[dic
 @router.post("/studies", status_code=status.HTTP_201_CREATED)
 async def create_study(
     payload: StudyCreateRequest,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Create a new research study draft."""
+    """Create a new research study draft for the user."""
     study_id = payload.id or f"study_{uuid.uuid4().hex[:16]}"
+    study_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
     study = Studies(
         id=study_id,
+        user_id=study_user_id,
         title=payload.title,
         type=payload.type,
         goal=payload.goal,
@@ -142,6 +161,7 @@ async def create_study(
 @router.get("/studies/{study_id}")
 async def get_study(
     study_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Get research study details by ID."""
@@ -156,21 +176,29 @@ async def get_study(
 async def update_study(
     study_id: str,
     payload: StudyUpdateRequest,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Update research study attributes (status, step, questions, personas, findings)."""
     study = await session.get(Studies, study_id)
     if not study:
         # Auto-create if not found to support seamless workflow initialization
+        study_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
         study = Studies(
             id=study_id,
+            user_id=study_user_id,
             title=payload.title or "Untitled Study",
             type=payload.type or "interviews",
             goal=payload.goal or "demand_validation",
         )
         session.add(study)
+    else:
+        if current_user and not study.user_id:
+            study.user_id = current_user.id
+        elif payload.user_id and not study.user_id:
+            study.user_id = payload.user_id
 
-    update_data = payload.dict(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True)
     for field, val in update_data.items():
         if val is not None and hasattr(study, field):
             setattr(study, field, val)
@@ -184,6 +212,7 @@ async def update_study(
 @router.delete("/studies/{study_id}")
 async def delete_study(
     study_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Delete a research study."""
@@ -200,9 +229,20 @@ async def delete_study(
 # ============================================================================
 
 @router.get("/audiences", response_model=list[dict[str, Any]])
-async def list_saved_audiences(session: AsyncSession = Depends(get_session)) -> list[dict[str, Any]]:
-    """List all saved audiences in the persona library."""
-    result = await session.execute(select(SavedAudiences).order_by(SavedAudiences.created_at.desc()))
+async def list_saved_audiences(
+    user_id: Optional[str] = None,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict[str, Any]]:
+    """List all saved audiences in the persona library for the user."""
+    effective_user_id = (current_user.id if current_user else None) or user_id
+    if effective_user_id:
+        stmt = select(SavedAudiences).where(
+            or_(SavedAudiences.user_id == effective_user_id, SavedAudiences.user_id == None)
+        ).order_by(SavedAudiences.created_at.desc())
+    else:
+        stmt = select(SavedAudiences).order_by(SavedAudiences.created_at.desc())
+    result = await session.execute(stmt)
     audiences = list(result.scalars().all())
     return [_serialize_audience(a) for a in audiences]
 
@@ -210,12 +250,15 @@ async def list_saved_audiences(session: AsyncSession = Depends(get_session)) -> 
 @router.post("/audiences", status_code=status.HTTP_201_CREATED)
 async def save_audience(
     payload: AudienceCreateRequest,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Save an audience to the Persona Library."""
     audience_id = payload.id or f"aud_{uuid.uuid4().hex[:16]}"
+    aud_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
     audience = SavedAudiences(
         id=audience_id,
+        user_id=aud_user_id,
         study_id=payload.study_id,
         name=payload.name,
         description=payload.description,
@@ -232,6 +275,7 @@ async def save_audience(
 @router.delete("/audiences/{audience_id}")
 async def delete_audience(
     audience_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Remove a saved audience from the Persona Library."""

@@ -25,11 +25,18 @@ export const AnimatedBackground: React.FC = () => {
   useEffect(() => {
     let checkCount = 0;
     const maxChecks = 30;
-    let animFrameId: number;
+    let animFrameId: number | null = null;
     let time = 0;
     let userMouseX = typeof window !== 'undefined' ? window.innerWidth / 2 : 500;
     let userMouseY = typeof window !== 'undefined' ? window.innerHeight / 2 : 400;
     let hasUserMoved = false;
+    let isVisible = true;
+    let isIntersecting = true;
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const handleWindowMouseMove = (e: MouseEvent) => {
       userMouseX = e.clientX;
@@ -39,7 +46,18 @@ export const AnimatedBackground: React.FC = () => {
 
     window.addEventListener('mousemove', handleWindowMouseMove, { passive: true });
 
-    const startContinuousMotionLoop = () => {
+    const stopMotionLoop = () => {
+      if (animFrameId !== null) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+    };
+
+    const startMotionLoop = () => {
+      if (prefersReducedMotion || !isVisible || !isIntersecting || animFrameId !== null) {
+        return;
+      }
+
       const step = () => {
         time += 0.02;
 
@@ -72,6 +90,41 @@ export const AnimatedBackground: React.FC = () => {
       animFrameId = requestAnimationFrame(step);
     };
 
+    // Pause animation when tab is inactive or hidden
+    const handleVisibilityChange = () => {
+      isVisible = !document.hidden;
+      if (isVisible && isIntersecting) {
+        if (vantaEffectRef.current?.p5?.loop) {
+          try { vantaEffectRef.current.p5.loop(); } catch {}
+        }
+        startMotionLoop();
+      } else {
+        stopMotionLoop();
+        if (vantaEffectRef.current?.p5?.redraw) {
+          // keep static frame
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Pause animation when hero background is scrolled out of viewport
+    let observer: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== 'undefined' && vantaRef.current) {
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          isIntersecting = entry.isIntersecting;
+          if (isIntersecting && isVisible) {
+            startMotionLoop();
+          } else {
+            stopMotionLoop();
+          }
+        },
+        { threshold: 0.05 }
+      );
+      observer.observe(vantaRef.current);
+    }
+
     const initVanta = () => {
       if (!vantaRef.current) return;
 
@@ -83,8 +136,8 @@ export const AnimatedBackground: React.FC = () => {
 
           vantaEffectRef.current = window.VANTA.TOPOLOGY({
             el: vantaRef.current,
-            mouseControls: true,
-            touchControls: true,
+            mouseControls: !prefersReducedMotion,
+            touchControls: !prefersReducedMotion,
             gyroControls: false,
             minHeight: 200.0,
             minWidth: 200.0,
@@ -95,11 +148,11 @@ export const AnimatedBackground: React.FC = () => {
           });
 
           // Ensure p5 rendering loop stays unpaused
-          if (vantaEffectRef.current?.p5?.loop) {
+          if (!prefersReducedMotion && vantaEffectRef.current?.p5?.loop) {
             vantaEffectRef.current.p5.loop();
           }
 
-          startContinuousMotionLoop();
+          startMotionLoop();
         } catch (e) {
           console.warn('Vanta Topology initialization deferred:', e);
         }
@@ -113,9 +166,11 @@ export const AnimatedBackground: React.FC = () => {
 
     return () => {
       window.removeEventListener('mousemove', handleWindowMouseMove);
-      if (animFrameId) {
-        cancelAnimationFrame(animFrameId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (observer) {
+        observer.disconnect();
       }
+      stopMotionLoop();
       if (vantaEffectRef.current && typeof vantaEffectRef.current.destroy === 'function') {
         vantaEffectRef.current.destroy();
         vantaEffectRef.current = null;

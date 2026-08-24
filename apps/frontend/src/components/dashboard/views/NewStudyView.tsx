@@ -179,53 +179,6 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
           <ArrowUp size={19} strokeWidth={2.5} />
         </button>
       </form>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          marginBottom: '28px',
-          maxWidth: '1040px',
-        }}
-      >
-        <span style={{ fontSize: '0.78rem', color: '#6B7280', marginRight: '4px' }}>Try exploring:</span>
-        {[
-          { label: 'NovaFlow: Gig Worker FinTech', text: 'NovaFlow Financial: Automated micro-tax withholding and vehicle repair reserves for rideshare and delivery couriers.' },
-          { label: 'DevFlow: Zero-Latency API Studio', text: 'DevFlow: AI-assisted API development studio with local mock environments and automated schema validation.' },
-          { label: 'EduPulse: Adaptive AI Study Planner', text: 'EduPulse: Intelligent adaptive study planner for university and college applicants with exam schedule sync.' },
-          { label: 'HealthTrack: Chronic Care SaaS', text: 'HealthTrack: Remote patient monitoring platform for chronic care clinics and independent practitioners.' },
-        ].map((chip) => (
-          <button
-            key={chip.label}
-            type="button"
-            onClick={() => setPrompt(chip.text)}
-            style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.07)',
-              borderRadius: '20px',
-              padding: '5px 12px',
-              fontSize: '0.76rem',
-              color: '#9CA3AF',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#F6C878';
-              e.currentTarget.style.borderColor = 'rgba(246, 200, 120, 0.3)';
-              e.currentTarget.style.background = 'rgba(246, 200, 120, 0.05)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#9CA3AF';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.07)';
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
-            }}
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
 
       {/* 4 Study Type Quick Select Cards in One Single Line */}
       <div

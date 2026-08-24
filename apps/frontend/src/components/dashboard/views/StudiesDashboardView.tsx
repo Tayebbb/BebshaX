@@ -4,7 +4,6 @@ import {
   Plus,
   MoreVertical,
   ArrowUpRight,
-  FlaskConical,
   FileText,
   Trash2,
 } from 'lucide-react';
@@ -85,84 +84,6 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
         width: '100%',
       }}
     >
-      {/* Top Banner: BebshaX Zero-Budget Intelligence Overview */}
-      <div
-        style={{
-          background:
-            'linear-gradient(135deg, rgba(30, 26, 15, 0.7) 0%, rgba(16, 20, 18, 0.7) 100%)',
-          border: '1px solid rgba(246, 200, 120, 0.2)',
-          borderRadius: '16px',
-          padding: '18px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '36px',
-          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(246, 200, 120, 0.12)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
-            style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '12px',
-              background: 'rgba(246, 200, 120, 0.12)',
-              color: '#F6C878',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <FlaskConical size={20} />
-          </div>
-          <div>
-            <div style={{ fontWeight: 600, color: '#FFFFFF', fontSize: '0.95rem' }}>
-              Synthetic Research Hub · Zero API Budget
-            </div>
-            <div style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>
-              Multi-model routing active with FreeLLMpool & local Ollama reliability fallback.
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.82rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10B981' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981' }} />
-              <span>222 Free Routes</span>
-            </div>
-            <div style={{ color: '#9CA3AF' }}>•</div>
-            <div style={{ color: '#F6C878' }}>
-              <span>Local Fallback Ready</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onCreateStudy}
-            style={{
-              background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
-              border: 'none',
-              color: '#080909',
-              borderRadius: '10px',
-              padding: '8px 16px',
-              fontSize: '0.82rem',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(246, 200, 120, 0.25)',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            New Study <ArrowUpRight size={14} />
-          </button>
-        </div>
-      </div>
-
       {/* Main Studies Header */}
       <div
         style={{

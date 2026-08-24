@@ -47,7 +47,11 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid #F6C878;
+  outline-offset: 2px;
 }
 
 html {
