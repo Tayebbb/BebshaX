@@ -98,3 +98,4 @@ Detailed deliverables/exit criteria: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMEN
 | What's the plan / what changed?          | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) (implementation log at the bottom) |
 | Why these OSS choices / hardware limits? | [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md)                            |
 | How does routing work / provider config? | [docs/ROUTING.md](docs/ROUTING.md)                                                            |
+| Who fixes which audit finding?           | [docs/AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md)                                        |
