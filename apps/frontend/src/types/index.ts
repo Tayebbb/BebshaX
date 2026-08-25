@@ -204,4 +204,5 @@ export interface EvaluationMetrics {
 }
 
 export * from './study';
+export * from './evidence';
 

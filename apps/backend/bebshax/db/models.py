@@ -7,10 +7,12 @@ sqlite/postgres timezone consistency during testing.
 from datetime import datetime, timezone
 from typing import Optional
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from bebshax.llm.adapters.embeddings import CANONICAL_DIM
 from bebshax.llm.failures import FailureKind
 from bebshax.llm.types import TaskType
 
@@ -313,5 +315,104 @@ class DatasetPersonaRuns(Base):
         JSON().with_variant(JSONB, "postgresql"), default=list
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class ResearchRuns(Base):
+    """Audit and lifecycle record for a study research execution."""
+
+    __tablename__ = "research_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    study_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(64), default="pending")  # pending, generating_queries, collecting_sources, processing_chunks, extracting_evidence, completed, failed
+    query_count: Mapped[int] = mapped_column(default=0)
+    source_count: Mapped[int] = mapped_column(default=0)
+    claim_count: Mapped[int] = mapped_column(default=0)
+    queries: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class EvidenceSources(Base):
+    """External research sources discovered or uploaded for a study."""
+
+    __tablename__ = "evidence_sources"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    study_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(64), default="web")  # web, reddit, review, report, upload
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    publisher: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    relevance_score: Mapped[float] = mapped_column(Float, default=0.8)
+    status: Mapped[str] = mapped_column(String(64), default="processed")  # discovered, processed, failed
+    metadata_payload: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class EvidenceChunks(Base):
+    """Text chunks with pgvector embeddings for semantic retrieval."""
+
+    __tablename__ = "evidence_chunks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(64), index=True)
+    study_id: Mapped[str] = mapped_column(String(64), index=True)
+    chunk_index: Mapped[int] = mapped_column(default=0)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(
+        JSON().with_variant(Vector(CANONICAL_DIM), "postgresql")
+    )
+    embedding_space: Mapped[str] = mapped_column(String(64), index=True)
+    metadata_payload: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class EvidenceClaims(Base):
+    """Structured empirical claims extracted from evidence chunks with provenance."""
+
+    __tablename__ = "evidence_claims"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    study_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    claim_text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(64), default="supported")  # supported, inference, unsupported
+    category: Mapped[str] = mapped_column(String(64), default="general")  # problem, competition, pricing, behavior, complaints, general
+    confidence: Mapped[float] = mapped_column(Float, default=0.75)
+    supporting_source_ids: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    supporting_chunk_ids: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    contradicting_source_ids: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
 
 

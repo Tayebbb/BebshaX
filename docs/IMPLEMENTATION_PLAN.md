@@ -390,4 +390,41 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 **Tests:** 11/11 frontend test suites passed (50/50 tests green); 156/156 backend pytest tests green.
 
+### Part 2 (2026-08-26) — Evidence & Research Engine
+
+**What was built:**
+
+- **Database Models & Alembic Migration (`apps/backend/bebshax/db/models.py` & Alembic):**
+  - Added 4 ORM models: `ResearchRuns`, `EvidenceSources`, `EvidenceChunks`, and `EvidenceClaims`.
+  - Configured 384-dimensional vector embedding column on `evidence_chunks` with PostgreSQL `Vector(384)` and HNSW cosine distance index.
+  - Generated and applied Alembic migration `f5e32fddb1b9_add_research_runs_evidence_sources_.py` to head on Neon PostgreSQL.
+- **Research Engine Package (`apps/backend/bebshax/research/`):**
+  - `query_generator.py`: Generates targeted research queries across Problem, Competition, Pricing, Behavior, and Complaints using `LLMService` (`TaskType.STRUCTURED_OUTPUT`) with deterministic fallback.
+  - `search_provider.py`: Pluggable search source provider with curated empirical knowledge bases (student habits, survey spending, competitor reviews, tech culture in Dhaka/Chittagong) and deterministic deduplication via canonical URL normalization and content hash.
+  - `chunker.py`: Sanitizes HTML/scripts and segments text into sentence-boundary preserved chunks (~400 chars with 40 char overlap).
+  - `vector_search.py`: Generates 384-dim normalized embeddings using `HashEmbedding` / `FreellmpoolEmbedding` and performs cosine similarity queries (PostgreSQL native `vector_cosine_ops` with Python fallback for in-memory SQLite unit tests).
+  - `claim_extractor.py`: Extracts structured claims using `LLMService` (`TaskType.EVIDENCE_EXTRACTION` & `TaskType.EVIDENCE_CLASSIFICATION`) and classifies into empirical statuses:
+    - **GREEN (Evidence-supported)**: Direct citation and high confidence score.
+    - **AMBER (Model inference)**: Plausible extrapolation flagged for interview exploration.
+    - **RED (Unsupported assumption)**: Contradicted or unverified assumption; never silently promoted to evidence.
+  - `service.py`: Orchestrates full research runs, streams state transitions, and computes evidence summary metrics (coverage %, supported %, inferred %, unverified %, source & claim counts).
+- **FastAPI Evidence REST Router (`apps/backend/bebshax/api/evidence.py` & `main.py`):**
+  - Endpoints: `POST /api/studies/{id}/research`, `GET /api/studies/{id}/research`, `GET /api/studies/{id}/research/{run_id}`, `GET /api/studies/{id}/evidence/summary`, `GET /api/studies/{id}/evidence/sources`, `GET /api/studies/{id}/evidence/sources/{id}`, `GET /api/studies/{id}/evidence/claims`, `GET /api/studies/{id}/evidence/claims/{id}`, `POST /api/studies/{id}/evidence/search`.
+  - Strict caller ownership and isolation checks on all routes.
+- **Frontend Evidence Laboratory (`apps/frontend/`):**
+  - Defined TypeScript types in `types/evidence.ts` and exported in `types/index.ts`.
+  - Added API client methods and mock store support in `services/api.ts` and `mocks/fixtures.ts`.
+  - Created `EvidenceLaboratoryView.tsx`:
+    - Top metrics banner: Evidence Coverage meter, Supported % (Green), Inferred % (Amber), Unverified % (Red), Total Sources and Total Claims.
+    - "Run Research" primary action with interactive multi-step progress stepper (Idle -> Generating Queries -> Searching Sources -> Processing Chunks -> Extracting Claims -> Complete).
+    - Tabs: Key Claims (with status filter pills, category filters, search input, confidence meters, supporting source chips), Sources & Chunks (type filters, relevance scores, publisher badges, direct URLs), and Research History.
+    - Claim Provenance Modal: "Why does BebshaX evaluate this as [Status]?", full quote excerpts from supporting chunks, similarity scores, publisher metadata, and counter-evidence.
+  - Updated `DashboardLayout.tsx` and `StudyWorkflowView.tsx` with seamless Evidence Laboratory navigation (`/research/:id/evidence` route).
+- **Automated Tests (`test_evidence_engine.py` & `EvidenceLaboratory.test.tsx`):**
+  - Backend tests: text cleaning, URL normalization, hash deduplication, query generation, 384-dim embeddings, pgvector retrieval, claim extraction, status classification, API lifecycle, and user isolation.
+  - Frontend tests: coverage rendering, research runner, filter pills, search input, claim provenance modal opening/closing, and source repository tab.
+
+**Tests:** 12/12 frontend test suites passed (55/55 tests green); 160/160 backend pytest tests green.
+
+
 

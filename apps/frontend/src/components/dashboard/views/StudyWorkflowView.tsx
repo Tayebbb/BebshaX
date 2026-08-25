@@ -21,7 +21,9 @@ import {
   Search,
   X,
   RefreshCw,
+  Database,
 } from 'lucide-react';
+import { useNavigation } from '../../../context/NavigationContext';
 import { Study, ResearchGoal, StudyType, Persona, ConversationTurn, PersonaRoleSuggestion } from '../../../types';
 import { api } from '../../../services/api';
 
@@ -115,6 +117,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   onExit,
   onStepChange,
 }) => {
+  const { navigate } = useNavigation();
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
   const [study, setStudy] = useState<Study | null>(null);
   const [selectedGoal, setSelectedGoal] = useState<string>('demand');
@@ -727,23 +730,47 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           })}
         </div>
 
-        {/* Exit Button */}
-        <button
-          type="button"
-          onClick={onExit}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#9CA3AF',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '0.84rem',
-            cursor: 'pointer',
-          }}
-        >
-          <LogOut size={15} /> Exit
-        </button>
+        {/* Header Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            type="button"
+            onClick={() => navigate(`/research/${studyId || 'default'}/evidence`)}
+            style={{
+              background: 'rgba(99, 102, 241, 0.12)',
+              border: '1px solid rgba(99, 102, 241, 0.3)',
+              color: '#818CF8',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.18s ease',
+            }}
+          >
+            <Database size={14} /> Evidence Lab
+          </button>
+
+          {/* Exit Button */}
+          <button
+            type="button"
+            onClick={onExit}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#9CA3AF',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.84rem',
+              cursor: 'pointer',
+            }}
+          >
+            <LogOut size={15} /> Exit
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}

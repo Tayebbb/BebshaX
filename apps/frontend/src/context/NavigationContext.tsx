@@ -45,7 +45,14 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
 export const useNavigation = (): NavigationContextType => {
   const context = useContext(NavigationContext);
   if (!context) {
-    throw new Error('useNavigation must be used within a NavigationProvider');
+    return {
+      currentPath: typeof window !== 'undefined' ? window.location.pathname || '/' : '/',
+      navigate: (path: string) => {
+        if (typeof window !== 'undefined') {
+          window.history.pushState({}, '', path);
+        }
+      },
+    };
   }
   return context;
 };

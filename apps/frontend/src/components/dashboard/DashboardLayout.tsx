@@ -18,11 +18,12 @@ import { PersonaLibraryView } from './views/PersonaLibraryView';
 import { StudyWorkflowView } from './views/StudyWorkflowView';
 import { ModelRouterView } from './views/ModelRouterView';
 import { DatasetSourcesView } from './views/DatasetSourcesView';
+import { EvidenceLaboratoryView } from './views/EvidenceLaboratoryView';
 import { StudyType, Study } from '../../types';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 
-export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'datasets' | 'router' | 'study-workflow';
+export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'datasets' | 'router' | 'study-workflow' | 'evidence';
 
 interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
@@ -33,6 +34,11 @@ const parseDashboardPath = (path: string): {
   studyId?: string;
   step?: number;
 } => {
+  if (path.includes('/evidence') || path.startsWith('/evidence')) {
+    const parts = path.split('/').filter(Boolean);
+    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    return { tab: 'evidence', studyId };
+  }
   if (path.startsWith('/dataset') || path.startsWith('/data-sources')) {
     return { tab: 'datasets' };
   }
@@ -737,6 +743,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             initialPrompt={initialWorkflowPrompt}
             onStepChange={handleStepChange}
             onExit={() => navigate('/dashboard')}
+          />
+        )}
+
+        {activeTab === 'evidence' && (
+          <EvidenceLaboratoryView
+            studyId={activeStudyId || 'study_default'}
+            onBack={() => navigate('/dashboard')}
           />
         )}
       </main>

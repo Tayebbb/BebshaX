@@ -11,6 +11,12 @@ import {
   RoutesStatusResponse,
   Study,
   StudyType,
+  EvidenceSource,
+  EvidenceClaim,
+  EvidenceSummary,
+  ResearchRun,
+  ClaimDetail,
+  SourceDetail,
 } from '../types';
 import {
   AuthResponse,
@@ -35,6 +41,8 @@ import {
   mockProvenanceRecords,
   mockRoutesStatus,
   mockStudies,
+  mockEvidenceSources,
+  mockEvidenceClaims,
 } from '../mocks/fixtures';
 import { neonAuth } from './neonAuth';
 
@@ -49,6 +57,9 @@ class MockStore {
   provenance: ProvenanceRecord[] = [];
   studies: Study[] = [];
   datasets: DatasetSource[] = [];
+  sources: EvidenceSource[] = [];
+  claims: EvidenceClaim[] = [];
+  researchRuns: ResearchRun[] = [];
 
   constructor() {
     this.reset();
@@ -62,6 +73,9 @@ class MockStore {
     this.provenance = JSON.parse(JSON.stringify(mockProvenanceRecords));
     this.studies = JSON.parse(JSON.stringify(mockStudies));
     this.datasets = JSON.parse(JSON.stringify(mockDatasets));
+    this.sources = JSON.parse(JSON.stringify(mockEvidenceSources));
+    this.claims = JSON.parse(JSON.stringify(mockEvidenceClaims));
+    this.researchRuns = [];
   }
 }
 
@@ -2794,6 +2808,307 @@ export const api = {
       verified_response: 'BebshaX OpenRouter connection successful.',
     };
   },
+
+  // -------------------------------------------------------------
+  // Evidence & Research Engine API Methods
+  // -------------------------------------------------------------
+  async startResearch(studyId: string): Promise<ResearchRun> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/research`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    const mockRun: ResearchRun = {
+      id: `run_${Date.now()}`,
+      study_id: studyId,
+      status: 'completed',
+      query_count: 5,
+      source_count: mockStore.sources.length,
+      claim_count: mockStore.claims.length,
+      queries: [
+        'student study planner pain points Bangladesh',
+        'monthly subscription affordability Dhaka students',
+        'AI study tools competitor retention complaints',
+        'exam preparation coaching habits bKash payments',
+      ],
+      started_at: new Date(Date.now() - 4000).toISOString(),
+      completed_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+    mockStore.researchRuns.unshift(mockRun);
+    return mockRun;
+  },
+
+  async getResearchRuns(studyId: string): Promise<ResearchRun[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/research`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return mockStore.researchRuns.filter((r) => r.study_id === studyId || r.study_id === 'study_default');
+  },
+
+  async getResearchRun(studyId: string, runId: string): Promise<ResearchRun> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/research/${runId}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    const found = mockStore.researchRuns.find((r) => r.id === runId);
+    if (found) return found;
+    return {
+      id: runId,
+      study_id: studyId,
+      status: 'completed',
+      query_count: 5,
+      source_count: 4,
+      claim_count: 5,
+      queries: ['student study planner pain points', 'bKash payment willingess'],
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+  },
+
+  async getEvidenceSummary(studyId: string): Promise<EvidenceSummary> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/summary`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    const claims = mockStore.claims;
+    const supported = claims.filter((c) => c.status === 'supported').length;
+    const inferred = claims.filter((c) => c.status === 'inference').length;
+    const unsupported = claims.filter((c) => c.status === 'unsupported').length;
+    const total = claims.length || 1;
+
+    return {
+      study_id: studyId,
+      research_status: 'completed',
+      evidence_coverage: Math.round((supported / total) * 100),
+      supported_pct: Math.round((supported / total) * 100),
+      inferred_pct: Math.round((inferred / total) * 100),
+      unsupported_pct: Math.round((unsupported / total) * 100),
+      supported_count: supported,
+      inferred_count: inferred,
+      unsupported_count: unsupported,
+      total_claims: claims.length,
+      total_sources: mockStore.sources.length,
+      latest_run: {
+        id: 'run_latest',
+        status: 'completed',
+        query_count: 5,
+        source_count: mockStore.sources.length,
+        claim_count: claims.length,
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      },
+    };
+  },
+
+  async getEvidenceSources(
+    studyId: string,
+    params?: { source_type?: string; search?: string }
+  ): Promise<EvidenceSource[]> {
+    if (!this.isMockMode()) {
+      try {
+        const queryParams = new URLSearchParams();
+        if (params?.source_type) queryParams.set('source_type', params.source_type);
+        if (params?.search) queryParams.set('search', params.search);
+        const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/sources${qs}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    let results = [...mockStore.sources];
+    if (params?.source_type && params.source_type !== 'all') {
+      results = results.filter((s) => s.source_type === params.source_type);
+    }
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      results = results.filter(
+        (s) => s.title.toLowerCase().includes(q) || s.content.toLowerCase().includes(q) || s.publisher.toLowerCase().includes(q)
+      );
+    }
+    return results;
+  },
+
+  async getEvidenceSourceDetail(studyId: string, sourceId: string): Promise<SourceDetail> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/sources/${sourceId}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    const source = mockStore.sources.find((s) => s.id === sourceId) || mockStore.sources[0];
+    return {
+      ...source,
+      chunks: [
+        {
+          id: `chk_${source.id}_0`,
+          chunk_index: 0,
+          content: source.content,
+          created_at: new Date().toISOString(),
+        },
+      ],
+    };
+  },
+
+  async getEvidenceClaims(
+    studyId: string,
+    params?: { status?: string; category?: string; search?: string }
+  ): Promise<EvidenceClaim[]> {
+    if (!this.isMockMode()) {
+      try {
+        const queryParams = new URLSearchParams();
+        if (params?.status) queryParams.set('status', params.status);
+        if (params?.category) queryParams.set('category', params.category);
+        if (params?.search) queryParams.set('search', params.search);
+        const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/claims${qs}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    let results = [...mockStore.claims];
+    if (params?.status && params.status !== 'all') {
+      results = results.filter((c) => c.status === params.status);
+    }
+    if (params?.category && params.category !== 'all') {
+      results = results.filter((c) => c.category === params.category);
+    }
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      results = results.filter(
+        (c) => c.claim_text.toLowerCase().includes(q) || (c.rationale && c.rationale.toLowerCase().includes(q))
+      );
+    }
+    return results;
+  },
+
+  async getEvidenceClaimDetail(studyId: string, claimId: string): Promise<ClaimDetail> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/claims/${claimId}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    const claim = mockStore.claims.find((c) => c.id === claimId) || mockStore.claims[0];
+    const supporting = mockStore.sources.filter((s) => claim.supporting_source_ids.includes(s.id));
+    const contradicting = mockStore.sources.filter((s) => claim.contradicting_source_ids.includes(s.id));
+    const chunks = supporting.map((s, idx) => ({
+      id: `chk_${s.id}_${idx}`,
+      source_id: s.id,
+      chunk_index: idx,
+      content: s.content.slice(0, 300) + '...',
+    }));
+
+    return {
+      ...claim,
+      supporting_sources: supporting,
+      supporting_chunks: chunks,
+      contradicting_sources: contradicting,
+    };
+  },
+
+  async semanticSearchEvidence(
+    studyId: string,
+    query: string,
+    topK: number = 6
+  ): Promise<{ chunk_id: string; source_id: string; content: string; similarity_score: number; metadata: any }[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/search`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ query, top_k: topK }),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    return mockStore.sources.slice(0, topK).map((s, idx) => ({
+      chunk_id: `chk_${s.id}_${idx}`,
+      source_id: s.id,
+      content: s.content,
+      similarity_score: 0.88 - idx * 0.05,
+      metadata: { publisher: s.publisher, title: s.title },
+    }));
+  },
 };
+
 
 
