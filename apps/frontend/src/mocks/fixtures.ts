@@ -620,17 +620,21 @@ export const mockDatasets = [
     status: 'ready',
     row_count: 1250,
     column_count: 8,
+    content_hash: '1c461b9e01a4a6bbca64526e8ced0eaec964e779df88fc4ddd103419d4086739',
     schema_metadata: {
       columns: [
-        { name: 'student_id', type: 'text', missing_count: 0, missing_percentage: 0, unique_count: 1250, sample_values: ['STU_001', 'STU_002'] },
-        { name: 'segment', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 4, sample_values: ['Budget-conscious Student', 'Exam-focused Test-taker', 'Working Student', 'Premium Power User'] },
-        { name: 'age', type: 'numeric', missing_count: 0, missing_percentage: 0, unique_count: 12, sample_values: [19, 21, 22, 24] },
-        { name: 'monthly_budget_bdt', type: 'numeric', missing_count: 0, missing_percentage: 0, unique_count: 45, sample_values: [350, 500, 800, 1200] },
-        { name: 'tech_familiarity', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 3, sample_values: ['High', 'Medium', 'Low'] },
-        { name: 'shopping_platforms', type: 'text', missing_count: 0, missing_percentage: 0, unique_count: 120, sample_values: ['Daraz, Pickaboo', 'Bikroy, Facebook'] },
+        { name: 'student_id', type: 'text' as const, missing_count: 0, missing_percentage: 0, unique_count: 1250, sample_values: ['STU_001', 'STU_002'] },
+        { name: 'segment', type: 'categorical' as const, missing_count: 0, missing_percentage: 0, unique_count: 4, sample_values: ['Budget-conscious Student', 'Exam-focused Test-taker', 'Working Student', 'Premium Power User'] },
+        { name: 'age', type: 'numeric' as const, missing_count: 0, missing_percentage: 0, unique_count: 12, sample_values: [19, 21, 22, 24] },
+        { name: 'monthly_budget_bdt', type: 'numeric' as const, missing_count: 0, missing_percentage: 0, unique_count: 45, sample_values: [350, 500, 800, 1200] },
+        { name: 'tech_familiarity', type: 'categorical' as const, missing_count: 0, missing_percentage: 0, unique_count: 3, sample_values: ['High', 'Medium', 'Low'] },
+        { name: 'shopping_platforms', type: 'text' as const, missing_count: 0, missing_percentage: 0, unique_count: 120, sample_values: ['Daraz, Pickaboo', 'Bikroy, Facebook'] },
       ],
       row_count: 1250,
       column_count: 8,
+      duplicate_rows: 12,
+      missing_values_percentage: 1.2,
+      warnings: ['12 duplicate rows detected across student profiles.'],
     },
     statistics: {
       numeric: {
@@ -655,7 +659,8 @@ export const mockDatasets = [
           },
         },
       },
-      overview: { row_count: 1250, column_count: 8, numeric_columns_count: 2, categorical_columns_count: 2 },
+      overview: { row_count: 1250, column_count: 8, numeric_columns_count: 2, categorical_columns_count: 2, duplicate_rows: 12, missing_values_percentage: 1.2 },
+      warnings: ['12 duplicate rows detected across student profiles.'],
     },
     segments: [
       {
@@ -869,6 +874,7 @@ export const mockEvidenceClaims = [
     created_at: new Date().toISOString(),
   },
 ];
+
 
 
 

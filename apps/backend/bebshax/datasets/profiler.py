@@ -26,21 +26,48 @@ def profile_dataset(columns: list[str], rows: list[dict[str, Any]]) -> tuple[dic
             "row_count": 0,
             "column_count": col_count,
             "duplicate_rows": 0,
+            "missing_values_percentage": 0.0,
+            "warnings": ["Dataset is empty."],
         }, {
             "numeric": {},
             "categorical": {},
-            "overview": {"row_count": 0, "column_count": col_count},
+            "overview": {
+                "row_count": 0,
+                "column_count": col_count,
+                "duplicate_rows": 0,
+                "missing_values_percentage": 0.0,
+            },
+            "warnings": ["Dataset is empty."],
         }
+
+    # Duplicate row calculation
+    row_tuples: list[tuple[Any, ...]] = []
+    for r in rows:
+        row_tuples.append(tuple(str(r.get(c, "")) for c in columns))
+    duplicate_rows_count = len(row_tuples) - len(set(row_tuples))
+    duplicate_pct = round((duplicate_rows_count / row_count) * 100, 2) if row_count > 0 else 0.0
 
     # Extract columnar lists
     column_values: dict[str, list[Any]] = {col: [] for col in columns}
+    total_cells = row_count * col_count
+    total_missing_cells = 0
+
     for r in rows:
         for col in columns:
-            column_values[col].append(r.get(col))
+            val = r.get(col)
+            column_values[col].append(val)
+            if val is None or str(val).strip() == "":
+                total_missing_cells += 1
+
+    overall_missing_pct = round((total_missing_cells / total_cells) * 100, 2) if total_cells > 0 else 0.0
 
     schema_columns: list[dict[str, Any]] = []
     numeric_stats: dict[str, dict[str, Any]] = {}
     categorical_stats: dict[str, dict[str, Any]] = {}
+    warnings: list[str] = []
+
+    if duplicate_rows_count > 0:
+        warnings.append(f"{duplicate_rows_count} duplicate rows ({duplicate_pct}%) detected in dataset.")
 
     for col in columns:
         vals = column_values[col]
@@ -48,17 +75,17 @@ def profile_dataset(columns: list[str], rows: list[dict[str, Any]]) -> tuple[dic
         missing_count = row_count - len(non_null_vals)
         missing_pct = round((missing_count / row_count) * 100, 2) if row_count > 0 else 0.0
 
+        if missing_pct >= 10.0:
+            warnings.append(f"Column '{col}' has high missing rate of {missing_pct}% ({missing_count} missing rows).")
+
         # Unique values
         try:
             unique_set = set(non_null_vals)
             unique_count = len(unique_set)
         except TypeError:
-            # Handle unhashable items (dicts/lists)
             unique_count = len(set(str(v) for v in non_null_vals))
 
         sample_vals = [v for v in non_null_vals[:5]]
-
-        # Determine column data type
         col_type = _infer_type(non_null_vals)
 
         schema_columns.append({
@@ -97,8 +124,10 @@ def profile_dataset(columns: list[str], rows: list[dict[str, Any]]) -> tuple[dic
                     "p75": p75,
                     "iqr": iqr,
                 }
+
+                if min_v < 0 and col.lower() in ("age", "price", "budget", "salary", "income", "cost"):
+                    warnings.append(f"Column '{col}' contains unexpected negative values (min: {min_v}).")
         else:
-            # Categorical or text distribution
             str_vals = [str(v).strip() for v in non_null_vals if str(v).strip()]
             freq_map: dict[str, int] = {}
             for v in str_vals:
@@ -130,6 +159,9 @@ def profile_dataset(columns: list[str], rows: list[dict[str, Any]]) -> tuple[dic
         "columns": schema_columns,
         "row_count": row_count,
         "column_count": col_count,
+        "duplicate_rows": duplicate_rows_count,
+        "missing_values_percentage": overall_missing_pct,
+        "warnings": warnings,
     }
 
     stats_payload = {
@@ -140,7 +172,11 @@ def profile_dataset(columns: list[str], rows: list[dict[str, Any]]) -> tuple[dic
             "column_count": col_count,
             "numeric_columns_count": len(numeric_stats),
             "categorical_columns_count": len(categorical_stats),
+            "duplicate_rows": duplicate_rows_count,
+            "duplicate_rows_percentage": duplicate_pct,
+            "missing_values_percentage": overall_missing_pct,
         },
+        "warnings": warnings,
     }
 
     return schema_metadata, stats_payload

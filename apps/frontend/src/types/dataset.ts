@@ -69,11 +69,20 @@ export interface DatasetSource {
     overview: Record<string, any>;
   };
   segments: DatasetSegment[];
+  content_hash?: string | null;
   persona_count_generated: number;
   processing_error?: string | null;
   created_at: string;
   updated_at: string;
   last_processed_at?: string | null;
+}
+
+export interface DatasetPreviewResponse {
+  columns: string[];
+  rows: Record<string, any>[];
+  total_rows: number;
+  offset: number;
+  limit: number;
 }
 
 export interface PersonaGenerationRun {

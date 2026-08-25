@@ -27,6 +27,7 @@ import {
 } from '../types/auth';
 import {
   DatasetSource,
+  DatasetPreviewResponse,
   OpenRouterHealth,
   PersonaGenerationRun,
 } from '../types/dataset';
@@ -2376,366 +2377,8 @@ export const api = {
   },
 
   // =========================================================================
-  // Dataset Sources & OpenRouter Diagnostics API
+  // OpenRouter Diagnostics API
   // =========================================================================
-
-  async listDatasets(): Promise<DatasetSource[]> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/datasets`, {
-          headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    return mockStore.datasets;
-  },
-
-  async getDataset(id: string): Promise<DatasetSource | null> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/datasets/${id}`, {
-          headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    return mockStore.datasets.find((d) => d.id === id) || null;
-  },
-
-  async addDatasetUrl(payload: {
-    name: string;
-    url: string;
-    description?: string;
-    file_type?: string;
-    study_id?: string;
-  }): Promise<DatasetSource> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/datasets/url`, {
-          method: 'POST',
-          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(35000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          const created = await res.json();
-          mockStore.datasets.unshift(created);
-          return created;
-        }
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to ingest dataset URL');
-      } catch (err: any) {
-        if (!err.message?.includes('Failed to ingest dataset URL')) {
-          lastKnownLive = false;
-        } else {
-          throw err;
-        }
-      }
-    }
-
-    // Mock mode fallback
-    const ds: DatasetSource = {
-      id: `ds_${Date.now()}`,
-      name: payload.name,
-      source_type: 'url',
-      source_url: payload.url,
-      file_type: payload.file_type || 'csv',
-      description: payload.description,
-      status: 'ready',
-      row_count: 850,
-      column_count: 6,
-      schema_metadata: {
-        columns: [
-          { name: 'id', type: 'text', missing_count: 0, missing_percentage: 0, unique_count: 850, sample_values: ['1', '2'] },
-          { name: 'segment', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 3, sample_values: ['Budget Shopper', 'Deal Hunter', 'Tech Savvy'] },
-          { name: 'budget', type: 'numeric', missing_count: 0, missing_percentage: 0, unique_count: 30, sample_values: [300, 500, 1000] },
-        ],
-        row_count: 850,
-        column_count: 6,
-      },
-      statistics: {
-        numeric: {
-          budget: { count: 850, min: 100, max: 2000, mean: 550, median: 500, std: 250, p25: 350, p75: 750, iqr: 400 },
-        },
-        categorical: {
-          segment: {
-            count: 850,
-            unique_categories: 3,
-            top_categories: [
-              { category: 'Budget Shopper', count: 425, percentage: 50.0 },
-              { category: 'Deal Hunter', count: 255, percentage: 30.0 },
-              { category: 'Tech Savvy', count: 170, percentage: 20.0 },
-            ],
-            percentages: { 'Budget Shopper': 50.0, 'Deal Hunter': 30.0, 'Tech Savvy': 20.0 },
-          },
-        },
-        overview: { row_count: 850, column_count: 6 },
-      },
-      segments: [
-        {
-          id: 'seg_1',
-          name: 'Budget Shopper',
-          population_count: 425,
-          population_share: 0.5,
-          population_percentage: 50.0,
-          is_dataset_supported: true,
-          segmentation_feature: 'segment',
-          constraints: {
-            age_range: [18, 26],
-            median_age: 22,
-            monthly_budget: { min: 100, median: 400, max: 600, currency: 'BDT' },
-            technology_familiarity: 'Medium',
-            observed_needs: ['Discounts', 'Free shipping alerts'],
-            rule_description: 'Price-conscious shoppers seeking maximum discounts.',
-          },
-        },
-      ],
-      persona_count_generated: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    mockStore.datasets.unshift(ds);
-    return ds;
-  },
-
-  async uploadDataset(formData: FormData): Promise<DatasetSource> {
-    if (!this.isMockMode()) {
-      try {
-        const token = localStorage.getItem('bebshax_auth_token');
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-
-        const res = await fetch(`${API_BASE}/datasets/upload`, {
-          method: 'POST',
-          headers,
-          body: formData,
-          signal: AbortSignal.timeout(35000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          const created = await res.json();
-          mockStore.datasets.unshift(created);
-          return created;
-        }
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to upload dataset');
-      } catch (err: any) {
-        if (!err.message?.includes('Failed to upload dataset')) {
-          lastKnownLive = false;
-        } else {
-          throw err;
-        }
-      }
-    }
-
-    const name = (formData.get('name') as string) || 'Uploaded Dataset';
-    const file = formData.get('file') as File;
-    const ds: DatasetSource = {
-      id: `ds_${Date.now()}`,
-      name,
-      source_type: 'upload',
-      original_file_name: file?.name || 'dataset.csv',
-      file_type: file?.name?.split('.').pop() || 'csv',
-      description: (formData.get('description') as string) || null,
-      status: 'ready',
-      row_count: 500,
-      column_count: 5,
-      schema_metadata: {
-        columns: [
-          { name: 'id', type: 'text', missing_count: 0, missing_percentage: 0, unique_count: 500, sample_values: ['1', '2'] },
-          { name: 'segment', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 3, sample_values: ['Core User', 'Casual', 'Pro'] },
-          { name: 'budget', type: 'numeric', missing_count: 0, missing_percentage: 0, unique_count: 20, sample_values: [400, 600] },
-        ],
-        row_count: 500,
-        column_count: 5,
-      },
-      statistics: {
-        numeric: {
-          budget: { count: 500, min: 200, max: 1500, mean: 600, median: 550, std: 200, p25: 400, p75: 800, iqr: 400 },
-        },
-        categorical: {
-          segment: {
-            count: 500,
-            unique_categories: 3,
-            top_categories: [
-              { category: 'Core User', count: 250, percentage: 50.0 },
-              { category: 'Casual', count: 150, percentage: 30.0 },
-              { category: 'Pro', count: 100, percentage: 20.0 },
-            ],
-            percentages: { 'Core User': 50.0, 'Casual': 30.0, 'Pro': 20.0 },
-          },
-        },
-        overview: { row_count: 500, column_count: 5 },
-      },
-      segments: [
-        {
-          id: 'seg_1',
-          name: 'Core User Segment',
-          population_count: 250,
-          population_share: 0.5,
-          population_percentage: 50.0,
-          is_dataset_supported: true,
-          segmentation_feature: 'segment',
-          constraints: {
-            age_range: [20, 30],
-            median_age: 24,
-            monthly_budget: { min: 200, median: 500, max: 800, currency: 'BDT' },
-            technology_familiarity: 'High',
-            observed_needs: ['Automated analytics', 'Mobile notifications'],
-          },
-        },
-      ],
-      persona_count_generated: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    mockStore.datasets.unshift(ds);
-    return ds;
-  },
-
-  async refreshDataset(id: string): Promise<DatasetSource> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/datasets/${id}/refresh`, {
-          method: 'POST',
-          headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(30000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    const ds = mockStore.datasets.find((d) => d.id === id);
-    if (!ds) throw new Error('Dataset not found');
-    ds.last_processed_at = new Date().toISOString();
-    return { ...ds };
-  },
-
-  async queryDataset(
-    id: string,
-    filterCol?: string,
-    filterVal?: any
-  ): Promise<{ total_matches: number; records: any[] }> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/datasets/${id}/query`, {
-          method: 'POST',
-          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ filter_col: filterCol, filter_val: filterVal, limit: 50 }),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    return { total_matches: 5, records: [] };
-  },
-
-  async deleteDataset(id: string): Promise<{ status: string; id: string }> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/datasets/${id}`, {
-          method: 'DELETE',
-          headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          mockStore.datasets = mockStore.datasets.filter((d) => d.id !== id);
-          return await res.json();
-        }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    mockStore.datasets = mockStore.datasets.filter((d) => d.id !== id);
-    return { status: 'deleted', id };
-  },
-
-  async generateDatasetPersonas(
-    datasetId: string,
-    payload: { requested_count: number; business_name?: string; business_description?: string; study_id?: string }
-  ): Promise<PersonaGenerationRun> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/datasets/${datasetId}/generate-personas`, {
-          method: 'POST',
-          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(60000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-
-    // Mock persona generation fallback
-    const targetDs = mockStore.datasets.find((d) => d.id === datasetId) || mockStore.datasets[0];
-    const segs = targetDs?.segments || [];
-    const count = payload.requested_count || 5;
-
-    return {
-      run_id: `dpr_${Date.now()}`,
-      dataset_id: targetDs?.id || datasetId,
-      dataset_name: targetDs?.name || 'Dataset Source',
-      model_used: 'openrouter/meta-llama/llama-3.3-70b-instruct:free',
-      requested_count: count,
-      generated_count: count,
-      valid_count: Math.max(1, count - 1),
-      warning_count: 1,
-      contradiction_count: 0,
-      distribution: { [segs[0]?.id || 'seg_1']: count },
-      personas: Array.from({ length: count }).map((_, i) => ({
-        name: `Persona ${i + 1}`,
-        age: 22 + i,
-        occupation: segs[0]?.name || 'Student / Professional',
-        income_range: '৳500 per month',
-        description: `Synthetic persona generated from ${targetDs?.name}`,
-        validation: { status: 'VALID', is_valid: true, violations: [], warnings: [] },
-      })),
-      validation_summary: [
-        {
-          persona_name: 'Persona 1',
-          segment: segs[0]?.name || 'Core Segment',
-          status: 'VALID',
-          violations: [],
-          warnings: [],
-        },
-      ],
-    };
-  },
 
   async getOpenRouterHealth(): Promise<OpenRouterHealth> {
     if (!this.isMockMode()) {
@@ -3107,6 +2750,365 @@ export const api = {
       similarity_score: 0.88 - idx * 0.05,
       metadata: { publisher: s.publisher, title: s.title },
     }));
+  },
+
+  // ============================================================================
+  // Dataset Sources & Data Lab
+  // ============================================================================
+
+  async listDatasets(studyId?: string): Promise<DatasetSource[]> {
+    if (!this.isMockMode()) {
+      try {
+        const url = studyId ? `${API_BASE}/studies/${studyId}/datasets` : `${API_BASE}/datasets`;
+        const res = await fetch(url, { headers: this.getAuthHeaders() });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return studyId
+      ? mockStore.datasets.filter((d) => !d.study_id || d.study_id === studyId)
+      : [...mockStore.datasets];
+  },
+
+  async getStudyDatasets(studyId: string): Promise<DatasetSource[]> {
+    return this.listDatasets(studyId);
+  },
+
+  async addDatasetUrl(data: {
+    url: string;
+    name: string;
+    description?: string;
+    file_type?: string;
+    study_id?: string;
+  }): Promise<DatasetSource> {
+    if (!this.isMockMode()) {
+      try {
+        const endpoint = data.study_id
+          ? `${API_BASE}/studies/${data.study_id}/datasets/url`
+          : `${API_BASE}/datasets/url`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to ingest dataset URL');
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Failed to fetch')) throw e;
+        lastKnownLive = false;
+      }
+    }
+
+    const created: DatasetSource = {
+      id: `ds_${Date.now()}`,
+      study_id: data.study_id || 'study_default',
+      name: data.name,
+      source_type: 'url',
+      source_url: data.url,
+      file_type: data.file_type || 'csv',
+      description: data.description || null,
+      status: 'ready',
+      row_count: 5400,
+      column_count: 8,
+      schema_metadata: {
+        row_count: 5400,
+        column_count: 8,
+        duplicate_rows: 12,
+        missing_values_percentage: 1.8,
+        warnings: [],
+        columns: [
+          { name: 'user_id', type: 'text', missing_count: 0, missing_percentage: 0, unique_count: 5400, sample_values: ['u1', 'u2'] },
+          { name: 'monthly_spend', type: 'numeric', missing_count: 45, missing_percentage: 0.8, unique_count: 40, sample_values: [300, 500] },
+          { name: 'category', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 4, sample_values: ['Student', 'Professional'] },
+        ],
+      },
+      statistics: {
+        numeric: {
+          monthly_spend: { count: 5355, min: 100, max: 3000, mean: 650, median: 450, std: 280, p25: 300, p75: 750, iqr: 450 },
+        },
+        categorical: {
+          category: { count: 5400, unique_categories: 4, top_categories: [{ category: 'Student', count: 3600, percentage: 66.67 }], percentages: { Student: 66.67 } },
+        },
+        overview: { row_count: 5400, column_count: 8, duplicate_rows: 12, missing_values_percentage: 1.8 },
+      },
+      segments: [],
+      persona_count_generated: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_processed_at: new Date().toISOString(),
+    };
+    mockStore.datasets.unshift(created);
+    return created;
+  },
+
+  async uploadDataset(formData: FormData, studyId?: string): Promise<DatasetSource> {
+    if (!this.isMockMode()) {
+      try {
+        const endpoint = studyId
+          ? `${API_BASE}/studies/${studyId}/datasets/upload`
+          : `${API_BASE}/datasets/upload`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+          body: formData,
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to upload dataset');
+      } catch (e: any) {
+        if (e.message && !e.message.includes('Failed to fetch')) throw e;
+        lastKnownLive = false;
+      }
+    }
+
+    const file = formData.get('file') as File | null;
+    const name = (formData.get('name') as string) || file?.name || 'Uploaded Dataset';
+    const desc = (formData.get('description') as string) || '';
+
+    const created: DatasetSource = {
+      id: `ds_${Date.now()}`,
+      study_id: studyId || 'study_default',
+      name: name,
+      source_type: 'upload',
+      original_file_name: file?.name || 'uploaded_data.csv',
+      file_type: file?.name?.split('.').pop() || 'csv',
+      description: desc || null,
+      status: 'ready',
+      row_count: 2800,
+      column_count: 6,
+      schema_metadata: {
+        row_count: 2800,
+        column_count: 6,
+        duplicate_rows: 0,
+        missing_values_percentage: 0.5,
+        warnings: [],
+        columns: [
+          { name: 'age', type: 'numeric', missing_count: 5, missing_percentage: 0.18, unique_count: 25, sample_values: [19, 21, 24] },
+          { name: 'city', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 5, sample_values: ['Dhaka', 'Chittagong'] },
+        ],
+      },
+      statistics: {
+        numeric: {
+          age: { count: 2795, min: 18, max: 32, mean: 22.8, median: 22, std: 2.5, p25: 20, p75: 25, iqr: 5 },
+        },
+        categorical: {
+          city: { count: 2800, unique_categories: 5, top_categories: [{ category: 'Dhaka', count: 1800, percentage: 64.29 }], percentages: { Dhaka: 64.29 } },
+        },
+        overview: { row_count: 2800, column_count: 6, duplicate_rows: 0, missing_values_percentage: 0.5 },
+      },
+      segments: [],
+      persona_count_generated: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_processed_at: new Date().toISOString(),
+    };
+    mockStore.datasets.unshift(created);
+    return created;
+  },
+
+  async getDataset(datasetId: string, studyId?: string): Promise<DatasetSource> {
+    if (!this.isMockMode()) {
+      try {
+        const url = studyId
+          ? `${API_BASE}/studies/${studyId}/datasets/${datasetId}`
+          : `${API_BASE}/datasets/${datasetId}`;
+        const res = await fetch(url, { headers: this.getAuthHeaders() });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    const found = mockStore.datasets.find((d) => d.id === datasetId);
+    if (found) return found;
+    return mockStore.datasets[0];
+  },
+
+  async getDatasetPreview(
+    datasetId: string,
+    offset: number = 0,
+    limit: number = 20,
+    studyId?: string
+  ): Promise<DatasetPreviewResponse> {
+    if (!this.isMockMode()) {
+      try {
+        const url = studyId
+          ? `${API_BASE}/studies/${studyId}/datasets/${datasetId}/preview?offset=${offset}&limit=${limit}`
+          : `${API_BASE}/datasets/${datasetId}/preview?offset=${offset}&limit=${limit}`;
+        const res = await fetch(url, { headers: this.getAuthHeaders() });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    return {
+      columns: ['age', 'occupation', 'monthly_budget', 'platform'],
+      rows: [
+        { age: 21, occupation: 'Undergrad Student', monthly_budget: 450, platform: 'Mobile Android' },
+        { age: 22, occupation: 'Undergrad Student', monthly_budget: 500, platform: 'Desktop Web' },
+        { age: 19, occupation: 'HSC Candidate', monthly_budget: 350, platform: 'Mobile Android' },
+        { age: 24, occupation: 'Part-time Tutor', monthly_budget: 800, platform: 'iOS' },
+        { age: 20, occupation: 'Undergrad Student', monthly_budget: 400, platform: 'Mobile Android' },
+      ],
+      total_rows: 5,
+      offset,
+      limit,
+    };
+  },
+
+  async refreshDataset(datasetId: string, studyId?: string): Promise<DatasetSource> {
+    if (!this.isMockMode()) {
+      try {
+        const url = studyId
+          ? `${API_BASE}/studies/${studyId}/datasets/${datasetId}/refresh`
+          : `${API_BASE}/datasets/${datasetId}/refresh`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    const ds = mockStore.datasets.find((d) => d.id === datasetId) || mockStore.datasets[0];
+    const updated = { ...ds, last_processed_at: new Date().toISOString() };
+    mockStore.datasets = mockStore.datasets.map((d) => (d.id === datasetId ? updated : d));
+    return updated;
+  },
+
+  async deleteDataset(datasetId: string, studyId?: string): Promise<void> {
+    if (!this.isMockMode()) {
+      try {
+        const url = studyId
+          ? `${API_BASE}/studies/${studyId}/datasets/${datasetId}`
+          : `${API_BASE}/datasets/${datasetId}`;
+        const res = await fetch(url, {
+          method: 'DELETE',
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return;
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    mockStore.datasets = mockStore.datasets.filter((d) => d.id !== datasetId);
+  },
+
+  async generateDatasetPersonas(
+    datasetId: string,
+    data: {
+      requested_count: number;
+      business_name: string;
+      business_description: string;
+      study_id?: string;
+    }
+  ): Promise<PersonaGenerationRun> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/datasets/${datasetId}/generate-personas`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(data),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    return {
+      run_id: `gen_run_${Date.now()}`,
+      dataset_id: datasetId,
+      dataset_name: 'Student Survey 2026',
+      model_used: 'openrouter/meta-llama/llama-3.3-70b-instruct',
+      requested_count: data.requested_count,
+      generated_count: data.requested_count,
+      valid_count: Math.floor(data.requested_count * 0.8),
+      warning_count: Math.floor(data.requested_count * 0.2),
+      contradiction_count: 0,
+      distribution: { 'Budget-Conscious Students': data.requested_count },
+      personas: [],
+      validation_summary: [],
+    };
+  },
+
+  async checkOpenRouterHealth(): Promise<OpenRouterHealth> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/health/openrouter`);
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return {
+      status: 'healthy',
+      api_key_configured: true,
+      api_key_preview: 'sk-or-v1-••••••••',
+      active_model: 'meta-llama/llama-3.3-70b-instruct:free',
+      supported_models: [
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'deepseek/deepseek-r1:free',
+        'qwen/qwen-2.5-72b-instruct:free',
+      ],
+      quota_status: 'Free tier / Active',
+      last_checked_at: new Date().toISOString(),
+    };
+  },
+
+  async testOpenRouterModel(model: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/health/openrouter/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model }),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return {
+      success: true,
+      model,
+      latency_ms: 412,
+      response_text: 'OpenRouter diagnostic test response successful.',
+    };
   },
 };
 

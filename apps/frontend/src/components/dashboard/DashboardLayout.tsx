@@ -283,9 +283,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     width: '100%',
                     padding: isSidebarCollapsed ? '10px 0' : '10px 12px',
                     borderRadius: '10px',
-                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
-                    color: isActive ? '#818CF8' : '#9CA3AF',
-                    border: isActive ? '1px solid rgba(99, 102, 241, 0.25)' : '1px solid transparent',
+                    background: isActive ? 'rgba(20, 184, 166, 0.12)' : 'transparent',
+                    color: isActive ? '#22D3EE' : '#8D9999',
+                    border: isActive ? '1px solid rgba(20, 184, 166, 0.28)' : '1px solid transparent',
                     fontSize: '0.86rem',
                     fontWeight: isActive ? 600 : 400,
                     cursor: 'pointer',
@@ -299,12 +299,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   }}
                   onMouseLeave={(e) => {
                     if (!isActive) {
-                      e.currentTarget.style.color = '#9CA3AF';
+                      e.currentTarget.style.color = '#8D9999';
                       e.currentTarget.style.background = 'transparent';
                     }
                   }}
                 >
-                  <span style={{ color: isActive ? '#818CF8' : '#8A909A' }}>{item.icon}</span>
+                  <span style={{ color: isActive ? '#14B8A6' : '#8D9999' }}>{item.icon}</span>
                   {!isSidebarCollapsed && <span>{item.label}</span>}
                 </button>
               );
@@ -325,7 +325,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
-                  color: '#6B7280',
+                  color: '#8D9999',
                   cursor: 'pointer',
                   marginBottom: '6px',
                 }}
@@ -343,11 +343,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                       <div style={{ height: '14px', width: '60%', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.06)' }} />
                     </div>
                   ) : recentStudies.length === 0 ? (
-                    <div style={{ padding: '8px 10px', fontSize: '0.78rem', color: '#64748B', lineHeight: 1.45 }}>
+                    <div style={{ padding: '8px 10px', fontSize: '0.78rem', color: '#8D9999', lineHeight: 1.45 }}>
                       No studies yet.<br />
                       <span
                         onClick={() => handleTabClick('new-study')}
-                        style={{ color: '#818CF8', cursor: 'pointer', fontWeight: 600 }}
+                        style={{ color: '#14B8A6', cursor: 'pointer', fontWeight: 600 }}
                       >
                         Start your first research study
                       </span>
@@ -378,7 +378,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                               padding: '7px 8px',
                               borderRadius: '8px',
                               fontSize: '0.8rem',
-                              color: '#9CA3AF',
+                              color: '#8D9999',
                               cursor: 'pointer',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
@@ -387,10 +387,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                             }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.color = '#FFFFFF';
-                              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                              e.currentTarget.style.background = '#111616';
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.color = '#9CA3AF';
+                              e.currentTarget.style.color = '#8D9999';
                               e.currentTarget.style.background = 'transparent';
                             }}
                             title={displayTitle}
@@ -412,10 +412,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                       })}
 
                       <div
-                        onClick={() => setActiveTab('dashboard')}
+                        onClick={() => handleTabClick('dashboard')}
                         style={{
                           fontSize: '0.78rem',
-                          color: '#818CF8',
+                          color: '#22D3EE',
                           fontWeight: 600,
                           padding: '6px 8px',
                           cursor: 'pointer',

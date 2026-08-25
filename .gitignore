@@ -21,8 +21,10 @@ apps/frontend/dist/
 # Datasets: raw/processed are reproducible via scripts; metadata is tracked
 data/raw/*
 data/processed/*
+data/uploads/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/uploads/.gitkeep
 
 # OS / editor
 .DS_Store

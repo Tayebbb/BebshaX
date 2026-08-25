@@ -426,5 +426,38 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 **Tests:** 12/12 frontend test suites passed (55/55 tests green); 160/160 backend pytest tests green.
 
+### Part 3 (2026-08-26) — Dataset Sources, Data Analysis & User-Scoped Research
 
+**What was built:**
 
+- **Database Models & Alembic Migration (`apps/backend/bebshax/db/models.py` & Alembic):**
+  - Added `content_hash` column to `DatasetSources` to track dataset file changes and prevent silent invalidation of historical studies.
+  - Generated and applied Alembic migration `614fe05a6f4d_add_content_hash_to_dataset_sources.py` to head on PostgreSQL.
+- **Deterministic Profiler & Ingestion (`apps/backend/bebshax/datasets/`):**
+  - Multi-format ingestion parser supporting CSV, JSON, XLSX, and TSV with strict size verification (≤25MB), content length validation, and anti-SSRF protections on URL fetches.
+  - Deterministic statistical calculations (pure algorithmic computation, never hallucinated by LLM):
+    - Row count, column count, column datatypes (numeric, categorical, boolean, datetime, text).
+    - Missing cell count and missingness percentages per column and overall dataset.
+    - Duplicate row detection and duplication percentage computation.
+    - Numeric distribution analysis (min, max, mean, median, standard deviation, P25, P75, IQR).
+    - Categorical frequency distributions (unique categories, value counts, percentages, top categories).
+    - Automated data quality anomaly auditing (flagging duplicate records, missingness >10%, extreme outliers).
+- **Backend API & Strict Multi-Tenant Isolation (`apps/backend/bebshax/api/datasets.py` & `api/studies.py`):**
+  - Study-nested dataset routes: `GET /api/studies/{id}/datasets`, `POST /api/studies/{id}/datasets/url`, `POST /api/studies/{id}/datasets/upload`, `GET /api/studies/{id}/datasets/{ds_id}`, `GET /api/studies/{id}/datasets/{ds_id}/preview`, `POST /api/studies/{id}/datasets/{ds_id}/refresh`, `DELETE /api/studies/{id}/datasets/{ds_id}`.
+  - Enforced zero-trust caller isolation (`_verify_study_access`) returning `404 Not Found` for unowned studies/datasets to prevent ID enumeration and data leakage.
+  - Added paginated data preview endpoint (`/preview?offset=0&limit=20`) to safely render empirical subsets without loading full 25MB datasets into the browser.
+  - Added hash-aware refresh (`POST /refresh`) that compares new `sha256` content hash against existing hash before re-profiling.
+- **Teal / Cyan Research Theme & Frontend Polish (`apps/frontend/`):**
+  - Globally updated application styling in `index.css` to the restrained **Teal / Cyan Research Theme** (`#14B8A6` primary, `#22D3EE` secondary, `#080A0A` background, `#0D1111` surface, `#202727` border, `#F4F7F7` text, `#8D9999` muted).
+  - Modernized `DatasetSourcesView.tsx` with summary metrics banner (Connected Datasets, Total Empirical Records, Discovered Segments), dataset card grid with status badges, and Add Dataset modal supporting both URL and direct file upload (CSV, JSON, XLSX).
+  - Built comprehensive Dataset Detail Modal featuring:
+    - **Overview Tab**: Content SHA-256 hash, ingestion source, record counts, and last processed timestamp.
+    - **Data Preview Tab**: Paginated row subset table with Previous/Next controls and row counters.
+    - **Schema & Quality Tab**: Column type breakdown, missing value meters, duplicate row warnings, and data integrity health alerts.
+    - **Descriptive Statistics Tab**: Numeric distribution metrics (Mean, Median, Std, IQR, Min, Max) and Categorical frequency bars.
+    - **Discovered Segments Tab**: Empirical cluster breakdowns and grounded persona synthesis trigger.
+- **Automated Tests:**
+  - Backend: `test_dataset_ownership_idor.py` and `test_datasets_api.py` covering multi-format ingestion, statistical formulas, duplicate detection, data quality warnings, content hash tracking, and cross-user IDOR isolation.
+  - Frontend: `DatasetSources.test.tsx` verifying card rendering, Add modal, tab navigation (Schema, Stats, Preview, Quality), and OpenRouter diagnostics.
+
+**Tests:** 12/12 frontend test suites passed (55/55 tests green); 163/163 backend pytest tests green.

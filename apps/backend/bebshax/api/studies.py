@@ -263,11 +263,11 @@ async def update_study(
         )
         session.add(study)
     else:
-        # Ownership guard
+        # Ownership guard: return 403 Forbidden when trying to update another user's study
         if not _user_owns_study(study, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to modify this study",
+                detail="Not authorized to modify this study",
             )
         # Backfill user_id if it was missing (e.g. created anonymously, now logged in)
         if current_user and not study.user_id:
@@ -297,15 +297,26 @@ async def delete_study(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Delete a research study. Returns 403 if not owned by caller."""
+    """Delete a research study and all dependent records. Returns 403 if not owned by caller, 404 if not found."""
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
     if not _user_owns_study(study, current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to delete this study",
+            detail="Not authorized to delete this study",
         )
+    # Cascade cleanup of dependent study records
+    from sqlalchemy import delete
+    from bebshax.db.models import DatasetSources, EvidenceClaims, EvidenceChunks, EvidenceSources, ResearchRuns
+
+    await session.execute(delete(EvidenceClaims).where(EvidenceClaims.study_id == study_id))
+    await session.execute(delete(EvidenceChunks).where(EvidenceChunks.study_id == study_id))
+    await session.execute(delete(EvidenceSources).where(EvidenceSources.study_id == study_id))
+    await session.execute(delete(ResearchRuns).where(ResearchRuns.study_id == study_id))
+    await session.execute(delete(DatasetSources).where(DatasetSources.study_id == study_id))
+    await session.execute(delete(SavedAudiences).where(SavedAudiences.study_id == study_id))
+
     await session.delete(study)
     await session.commit()
     return {"success": True, "deleted_id": study_id}

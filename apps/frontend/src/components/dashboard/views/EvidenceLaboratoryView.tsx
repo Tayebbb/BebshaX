@@ -282,9 +282,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span
                 style={{
-                  background: 'rgba(99, 102, 241, 0.15)',
-                  color: '#818CF8',
-                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  background: 'rgba(20, 184, 166, 0.15)',
+                  color: '#22D3EE',
+                  border: '1px solid rgba(20, 184, 166, 0.3)',
                   padding: '2px 8px',
                   borderRadius: '4px',
                   fontSize: '0.72rem',
@@ -299,7 +299,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 {study?.title || study?.prompt || 'Study Research & Evidence'}
               </h1>
             </div>
-            <p style={{ fontSize: '0.82rem', color: '#9299A5', margin: '4px 0 0 0' }}>
+            <p style={{ fontSize: '0.82rem', color: '#8D9999', margin: '4px 0 0 0' }}>
               Empirical market grounding, public sources, and verified claim confidence
             </p>
           </div>
@@ -310,8 +310,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           onClick={handleRunResearch}
           disabled={isRunningResearch}
           style={{
-            background: isRunningResearch ? '#4338CA' : 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
-            color: '#FFFFFF',
+            background: isRunningResearch ? '#0D9488' : 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+            color: '#080A0A',
             border: 'none',
             borderRadius: '8px',
             padding: '10px 20px',
@@ -321,7 +321,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+            boxShadow: '0 4px 14px rgba(20, 184, 166, 0.35)',
             transition: 'all 0.2s ease',
           }}
         >
@@ -345,22 +345,22 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
         {isRunningResearch && (
           <div
             style={{
-              background: '#0D0F14',
-              border: '1px solid #6366F1',
+              background: '#0D1111',
+              border: '1px solid #14B8A6',
               borderRadius: '12px',
               padding: '20px 24px',
               marginBottom: '24px',
-              boxShadow: '0 8px 24px rgba(99, 102, 241, 0.15)',
+              boxShadow: '0 8px 24px rgba(20, 184, 166, 0.15)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <RefreshCw size={18} color="#818CF8" className="spin" />
+                <RefreshCw size={18} color="#22D3EE" className="spin" />
                 <span style={{ fontSize: '0.92rem', fontWeight: 600, color: '#F5F7FA' }}>
                   {researchStatusText}
                 </span>
               </div>
-              <span style={{ fontSize: '0.8rem', color: '#818CF8', fontWeight: 600 }}>
+              <span style={{ fontSize: '0.8rem', color: '#22D3EE', fontWeight: 600 }}>
                 Step {researchProgressStep} of 5
               </span>
             </div>
@@ -380,8 +380,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                       background: isPassed
                         ? '#10B981'
                         : isCurrent
-                        ? '#6366F1'
-                        : '#1E2330',
+                        ? '#14B8A6'
+                        : '#202727',
                       transition: 'background 0.3s ease',
                     }}
                   />
@@ -403,13 +403,13 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           {/* Coverage Card */}
           <div
             style={{
-              background: '#0D0F14',
-              border: '1px solid #1E2330',
+              background: '#0D1111',
+              border: '1px solid #202727',
               borderRadius: '10px',
               padding: '18px 20px',
             }}
           >
-            <div style={{ fontSize: '0.78rem', color: '#9299A5', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, marginBottom: '6px' }}>
+            <div style={{ fontSize: '0.78rem', color: '#8D9999', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, marginBottom: '6px' }}>
               Evidence Coverage
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
@@ -420,12 +420,12 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 {summary?.supported_count ?? 3} verified claims
               </span>
             </div>
-            <div style={{ height: '5px', background: '#1E2330', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
+            <div style={{ height: '5px', background: '#202727', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
               <div
                 style={{
                   height: '100%',
                   width: `${summary?.evidence_coverage ?? 68}%`,
-                  background: 'linear-gradient(90deg, #6366F1 0%, #10B981 100%)',
+                  background: 'linear-gradient(90deg, #14B8A6 0%, #10B981 100%)',
                 }}
               />
             </div>
@@ -434,7 +434,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           {/* Supported Card */}
           <div
             style={{
-              background: '#0D0F14',
+              background: '#0D1111',
               border: '1px solid rgba(16, 185, 129, 0.25)',
               borderRadius: '10px',
               padding: '18px 20px',

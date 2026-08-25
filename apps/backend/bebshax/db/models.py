@@ -281,6 +281,7 @@ class DatasetSources(Base):
     )
     persona_count_generated: Mapped[int] = mapped_column(default=0)
     processing_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     last_processed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Users,
   Compass,
@@ -20,6 +20,14 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -64,32 +72,32 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
     {
       type: 'interviews',
       icon: <Users size={19} />,
-      iconBg: 'rgba(99, 102, 241, 0.15)',
-      iconColor: '#818CF8',
+      iconBg: 'rgba(20, 184, 166, 0.15)',
+      iconColor: '#14B8A6',
       title: 'User Interviews',
       description: 'Simulate in-depth discovery interviews with grounded personas to reveal daily workflows and unarticulated pain points.',
     },
     {
       type: 'landing_page_test',
       icon: <Compass size={19} />,
-      iconBg: 'rgba(56, 189, 248, 0.15)',
-      iconColor: '#38BDF8',
+      iconBg: 'rgba(34, 211, 238, 0.15)',
+      iconColor: '#22D3EE',
       title: 'Concept & Demand',
       description: 'Validate product-market fit, value proposition desirability, and core feature hypotheses before writing code.',
     },
     {
       type: 'message_testing',
       icon: <MessageSquare size={19} />,
-      iconBg: 'rgba(167, 139, 250, 0.15)',
-      iconColor: '#A78BFA',
+      iconBg: 'rgba(20, 184, 166, 0.15)',
+      iconColor: '#2DD4BF',
       title: 'Message Testing',
       description: 'Test pitch clarity, value proposition framing, and objection handling across customer demographic segments.',
     },
     {
       type: 'ab_test',
       icon: <BadgePercent size={19} />,
-      iconBg: 'rgba(236, 72, 153, 0.15)',
-      iconColor: '#F472B6',
+      iconBg: 'rgba(34, 211, 238, 0.15)',
+      iconColor: '#22D3EE',
       title: 'Pricing & WTP',
       description: 'Validate price elasticity, subscription ceilings, and tier packaging against grounded budget constraints.',
     },
@@ -98,15 +106,14 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
   return (
     <div
       style={{
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: 'calc(100vh - 120px)',
-        padding: '30px 24px',
-        maxWidth: '1080px',
-        margin: '0 auto',
+        padding: '24px 20px 60px 20px',
         width: '100%',
+        position: 'relative',
       }}
     >
       {/* Title & Subtitle */}
@@ -126,7 +133,7 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
         <p
           style={{
             fontSize: '0.98rem',
-            color: '#9CA3AF',
+            color: '#8D9999',
             margin: 0,
             letterSpacing: '-0.01em',
           }}
@@ -140,63 +147,57 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
         <div
           role="alert"
           style={{
+            width: '100%',
+            maxWidth: '720px',
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '12px',
+            padding: '12px 18px',
+            marginBottom: '16px',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: '10px',
-            padding: '10px 16px',
+            gap: '10px',
             color: '#F87171',
-            fontSize: '0.86rem',
-            marginBottom: '16px',
-            width: '100%',
-            maxWidth: '1040px',
+            fontSize: '0.88rem',
+            animation: 'fadeIn 0.2s ease-out',
           }}
         >
-          <AlertCircle size={16} style={{ flexShrink: 0 }} />
+          <AlertCircle size={17} style={{ flexShrink: 0 }} />
           <span>{validationError}</span>
         </div>
       )}
 
-      {/* Wide Query Input Card */}
+      {/* Large Input Box Component (Central Prompt Area) */}
       <form
         onSubmit={handleSubmit}
         style={{
           width: '100%',
-          maxWidth: '1040px',
-          background: 'rgba(18, 21, 28, 0.65)',
-          border: isFocused
-            ? '1px solid rgba(99, 102, 241, 0.5)'
-            : '1px solid #1E2330',
-          borderRadius: '20px',
-          padding: '20px 24px',
+          maxWidth: '720px',
+          background: '#0D1111',
+          border: isFocused ? '1px solid rgba(20, 184, 166, 0.6)' : '1px solid #202727',
+          borderRadius: '24px',
+          padding: '20px 24px 18px 24px',
           position: 'relative',
+          marginBottom: '40px',
           boxShadow: isFocused
-            ? '0 16px 40px -10px rgba(0, 0, 0, 0.7), 0 0 24px rgba(99, 102, 241, 0.18)'
-            : '0 12px 36px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
-          backdropFilter: 'blur(16px)',
-          marginBottom: '28px',
-          transition: 'all 0.2s ease',
+            ? '0 0 24px rgba(20, 184, 166, 0.15), 0 8px 32px rgba(0,0,0,0.5)'
+            : '0 4px 20px rgba(0, 0, 0, 0.35)',
+          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
+        {/* Multiline Prompt Textarea */}
         <textarea
-          rows={3}
+          ref={textareaRef}
           value={prompt}
-          disabled={isSubmitting}
           onChange={(e) => {
             setPrompt(e.target.value);
-            if (validationError && e.target.value.trim()) setValidationError(null);
+            if (validationError) setValidationError(null);
           }}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
+          onKeyDown={handleKeyDown}
           placeholder="Describe your business idea, target audience, or pricing hypothesis (e.g., An AI study planner for students with a 250 BDT/month tier)..."
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-              e.preventDefault();
-              handleSubmit();
-            }
-          }}
+          rows={3}
           style={{
             width: '100%',
             background: 'transparent',
@@ -224,16 +225,16 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
             height: '40px',
             borderRadius: '50%',
             background: prompt.trim()
-              ? 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)'
+              ? 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)'
               : 'rgba(255, 255, 255, 0.06)',
             border: 'none',
-            color: prompt.trim() ? '#FFFFFF' : '#4B5563',
+            color: prompt.trim() ? '#080A0A' : '#535D5D',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             cursor: prompt.trim() && !isSubmitting ? 'pointer' : 'default',
             transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-            boxShadow: prompt.trim() ? '0 4px 14px rgba(99, 102, 241, 0.4)' : 'none',
+            boxShadow: prompt.trim() ? '0 4px 14px rgba(20, 184, 166, 0.35)' : 'none',
           }}
         >
           {isSubmitting ? (
@@ -251,7 +252,7 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
           gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
           gap: '14px',
           width: '100%',
-          maxWidth: '1040px',
+          maxWidth: '720px',
         }}
       >
         {studyTypes.map((item) => {
@@ -262,11 +263,11 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
               onClick={() => handleCardClick(item.type)}
               style={{
                 background: isSelected
-                  ? 'rgba(99, 102, 241, 0.06)'
-                  : 'rgba(18, 21, 28, 0.45)',
+                  ? 'rgba(20, 184, 166, 0.06)'
+                  : '#0D1111',
                 border: isSelected
-                  ? '1px solid rgba(99, 102, 241, 0.45)'
-                  : '1px solid #1E2330',
+                  ? '1px solid rgba(20, 184, 166, 0.45)'
+                  : '1px solid #202727',
                 borderRadius: '16px',
                 padding: '20px 18px',
                 cursor: 'pointer',
@@ -275,20 +276,20 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
                 flexDirection: 'column',
                 gap: '12px',
                 position: 'relative',
-                boxShadow: isSelected ? '0 4px 16px rgba(99, 102, 241, 0.12)' : 'none',
+                boxShadow: isSelected ? '0 4px 16px rgba(20, 184, 166, 0.12)' : 'none',
               }}
               onMouseEnter={(e) => {
                 if (!isSelected) {
-                  e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+                  e.currentTarget.style.borderColor = 'rgba(20, 184, 166, 0.3)';
                   e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                  e.currentTarget.style.background = '#111616';
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isSelected) {
-                  e.currentTarget.style.borderColor = '#1E2330';
+                  e.currentTarget.style.borderColor = '#202727';
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.background = 'rgba(18, 21, 28, 0.45)';
+                  e.currentTarget.style.background = '#0D1111';
                 }
               }}
             >

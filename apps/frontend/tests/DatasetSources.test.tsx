@@ -14,9 +14,10 @@ describe('DatasetSourcesView & OpenRouter Diagnostics', () => {
   it('renders dataset sources header, summary metrics, and dataset cards', async () => {
     render(<DatasetSourcesView />);
 
-    expect(screen.getByText(/Dataset Sources & Empirical Grounding/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: /Dataset Sources/i })).toBeInTheDocument();
+    expect(screen.getByText(/Data Lab/i)).toBeInTheDocument();
     expect(screen.getByText(/Connected Datasets/i)).toBeInTheDocument();
-    expect(screen.getByText(/Profiled Evidence Rows/i)).toBeInTheDocument();
+    expect(screen.getByText(/Total Empirical Records/i)).toBeInTheDocument();
     expect(screen.getByText(/Discovered Segments/i)).toBeInTheDocument();
 
     await waitFor(() => {
@@ -25,23 +26,23 @@ describe('DatasetSourcesView & OpenRouter Diagnostics', () => {
     });
   });
 
-  it('opens and closes Add Dataset modal and supports switching modes', async () => {
+  it('opens and closes Add Dataset modal and supports switching between URL and File upload', async () => {
     render(<DatasetSourcesView />);
 
     const addButtons = screen.getAllByRole('button', { name: /Add Dataset/i });
     fireEvent.click(addButtons[0]);
 
     expect(screen.getByText(/Add Dataset Source/i)).toBeInTheDocument();
-    expect(screen.getByText(/Dataset URL \(HTTP\/HTTPS\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/URL Ingestion/i)).toBeInTheDocument();
 
     // Switch to upload mode
-    const uploadTab = screen.getByRole('button', { name: /Upload File/i });
+    const uploadTab = screen.getByRole('button', { name: /File Upload/i });
     fireEvent.click(uploadTab);
 
-    expect(screen.getByText(/Dataset File \(CSV, JSON, TSV, XLSX\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Select File \(CSV, JSON, XLSX, TSV\)/i)).toBeInTheDocument();
   });
 
-  it('opens dataset detail modal and displays schema and descriptive statistics', async () => {
+  it('opens dataset detail modal, tests Preview tab and Data Quality alerts', async () => {
     render(<DatasetSourcesView />);
 
     await waitFor(() => {
@@ -49,25 +50,32 @@ describe('DatasetSourcesView & OpenRouter Diagnostics', () => {
     });
 
     // Click dataset card to open detail modal
-    fireEvent.click(screen.getByText(/Bangladesh University Student Tech & Budget Survey 2026/i));
+    fireEvent.click(screen.getByTestId('dataset-card-ds_bd_student_survey_2026'));
+
+    // Verify modal is open on Overview tab
+    await waitFor(() => {
+      expect(screen.getByText(/CONTENT HASH/i)).toBeInTheDocument();
+    });
 
     // Click Schema tab
+    fireEvent.click(screen.getByTestId('tab-schema'));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^schema$/i })).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^schema$/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Inferred Column Types & Quality Profiling/i)).toBeInTheDocument();
+      expect(screen.getByText(/Inferred Column Types & Missingness Profiling/i)).toBeInTheDocument();
     });
 
-    // Switch to Descriptive Statistics tab
-    const statsTab = screen.getByRole('button', { name: /Descriptive Statistics/i });
-    fireEvent.click(statsTab);
-
+    // Click Stats tab
+    fireEvent.click(screen.getByTestId('tab-stats'));
     await waitFor(() => {
       expect(screen.getByText(/Numeric Distributions/i)).toBeInTheDocument();
       expect(screen.getByText(/Categorical Frequencies/i)).toBeInTheDocument();
+    });
+
+    // Click Preview tab
+    fireEvent.click(screen.getByTestId('tab-preview'));
+    await waitFor(() => {
+      expect(screen.getByText(/Showing records/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Next/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Previous/i })).toBeInTheDocument();
     });
   });
 

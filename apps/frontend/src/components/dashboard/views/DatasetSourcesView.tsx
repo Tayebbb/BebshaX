@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../../services/api';
-import { DatasetSource, DatasetSegment, PersonaGenerationRun } from '../../../types/dataset';
+import { DatasetSource, DatasetSegment, PersonaGenerationRun, DatasetPreviewResponse } from '../../../types/dataset';
 import { OpenRouterDiagnosticModal } from './OpenRouterDiagnosticModal';
 import {
   Database,
@@ -24,13 +24,26 @@ import {
   Info,
   X,
   Cpu,
+  Table,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
-export const DatasetSourcesView: React.FC = () => {
+interface DatasetSourcesViewProps {
+  studyId?: string;
+}
+
+export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId }) => {
   const [datasets, setDatasets] = useState<DatasetSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDataset, setSelectedDataset] = useState<DatasetSource | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'schema' | 'stats' | 'segments'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'preview' | 'schema' | 'stats' | 'quality' | 'segments'>('overview');
+
+  // Preview State
+  const [previewData, setPreviewData] = useState<DatasetPreviewResponse | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewOffset, setPreviewOffset] = useState(0);
+  const PREVIEW_PAGE_SIZE = 15;
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -48,6 +61,9 @@ export const DatasetSourcesView: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Refresh Notification Feedback
+  const [refreshNotification, setRefreshNotification] = useState<{ id: string; message: string; changed: boolean } | null>(null);
+
   // Persona Generation State
   const [personaCount, setPersonaCount] = useState(10);
   const [businessName, setBusinessName] = useState('BebshaX Market Validation');
@@ -57,17 +73,36 @@ export const DatasetSourcesView: React.FC = () => {
 
   useEffect(() => {
     loadDatasets();
-  }, []);
+  }, [studyId]);
+
+  useEffect(() => {
+    if (selectedDataset && activeTab === 'preview') {
+      loadPreview(selectedDataset.id, 0);
+    }
+  }, [selectedDataset?.id, activeTab]);
 
   const loadDatasets = async () => {
     setLoading(true);
     try {
-      const data = await api.listDatasets();
+      const data = await api.listDatasets(studyId);
       setDatasets(data);
     } catch (err) {
       console.error('Failed to load datasets:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPreview = async (dsId: string, offset: number) => {
+    setPreviewLoading(true);
+    try {
+      const res = await api.getDatasetPreview(dsId, offset, PREVIEW_PAGE_SIZE, studyId);
+      setPreviewData(res);
+      setPreviewOffset(offset);
+    } catch (err) {
+      console.error('Failed to load dataset preview:', err);
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -85,6 +120,7 @@ export const DatasetSourcesView: React.FC = () => {
         url: datasetUrl.trim(),
         description: datasetDesc.trim() || undefined,
         file_type: datasetType,
+        study_id: studyId,
       });
       setDatasets([created, ...datasets]);
       setIsAddModalOpen(false);
@@ -111,8 +147,9 @@ export const DatasetSourcesView: React.FC = () => {
       formData.append('name', datasetName.trim());
       if (datasetDesc.trim()) formData.append('description', datasetDesc.trim());
       formData.append('file_type', datasetType);
+      if (studyId) formData.append('study_id', studyId);
 
-      const created = await api.uploadDataset(formData);
+      const created = await api.uploadDataset(formData, studyId);
       setDatasets([created, ...datasets]);
       setIsAddModalOpen(false);
       resetForm();
@@ -127,9 +164,15 @@ export const DatasetSourcesView: React.FC = () => {
   const handleRefresh = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const refreshed = await api.refreshDataset(id);
+      const refreshed = await api.refreshDataset(id, studyId);
       setDatasets(datasets.map((d) => (d.id === id ? refreshed : d)));
       if (selectedDataset?.id === id) setSelectedDataset(refreshed);
+      setRefreshNotification({
+        id,
+        message: 'Dataset verified with source. Metadata & statistics updated.',
+        changed: true,
+      });
+      setTimeout(() => setRefreshNotification(null), 4000);
     } catch (err) {
       console.error('Failed to refresh dataset:', err);
     }
@@ -139,7 +182,7 @@ export const DatasetSourcesView: React.FC = () => {
     e.stopPropagation();
     if (!confirm('Are you sure you want to remove this dataset source?')) return;
     try {
-      await api.deleteDataset(id);
+      await api.deleteDataset(id, studyId);
       setDatasets(datasets.filter((d) => d.id !== id));
       if (selectedDataset?.id === id) setSelectedDataset(null);
     } catch (err) {
@@ -162,6 +205,7 @@ export const DatasetSourcesView: React.FC = () => {
         requested_count: personaCount,
         business_name: businessName,
         business_description: businessDesc,
+        study_id: studyId,
       });
       setGenerationRun(run);
       // Update persona count in dataset card
@@ -187,25 +231,32 @@ export const DatasetSourcesView: React.FC = () => {
     setFormError(null);
   };
 
-  const totalRows = datasets.reduce((acc, d) => acc + (d.row_count || 0), 0);
-  const totalSegments = datasets.reduce((acc, d) => acc + (d.segments?.length || 0), 0);
-  const totalPersonasGen = datasets.reduce((acc, d) => acc + (d.persona_count_generated || 0), 0);
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', color: '#fff', width: '100%', maxWidth: '1280px', margin: '0 auto', padding: '10px 0 60px 0' }}>
-      {/* Top Header & Actions */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+    <div style={{ flex: 1, padding: '36px 40px', maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
+      {/* Header Bar */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '28px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(246, 200, 120, 0.15)', border: '1px solid rgba(246, 200, 120, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f6c878' }}>
-              <Database size={20} />
-            </div>
-            <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
-              Dataset Sources & Empirical Grounding
+            <h1 style={{ fontSize: '1.65rem', fontWeight: 700, color: '#f4f7f7', letterSpacing: '-0.02em', margin: 0 }}>
+              Dataset Sources
             </h1>
+            <span
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                color: '#14B8A6',
+                background: 'rgba(20, 184, 166, 0.12)',
+                border: '1px solid rgba(20, 184, 166, 0.25)',
+                borderRadius: '6px',
+                padding: '2px 8px',
+                textTransform: 'uppercase',
+              }}
+            >
+              Data Lab
+            </span>
           </div>
-          <p style={{ margin: 0, fontSize: '0.92rem', color: '#9ca3af', maxWidth: '720px' }}>
-            Connect public data URLs or upload research datasets to deterministically extract market segments, calculate demographic distributions, and generate evidence-constrained personas.
+          <p style={{ fontSize: '0.88rem', color: '#8D9999', margin: 0, maxWidth: '680px', lineHeight: 1.5 }}>
+            Attach empirical datasets (CSV, JSON, XLSX) to ground market segmentation and persona synthesis in real-world statistical distributions.
           </p>
         </div>
 
@@ -213,22 +264,21 @@ export const DatasetSourcesView: React.FC = () => {
           <button
             onClick={() => setIsOpenRouterModalOpen(true)}
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              borderRadius: '9px',
-              padding: '9px 16px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid #202727',
               color: '#cbd5e1',
-              fontSize: '0.86rem',
+              borderRadius: '8px',
+              padding: '9px 15px',
+              fontSize: '0.84rem',
               fontWeight: 500,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              transition: 'all 0.2s',
+              gap: '6px',
+              transition: 'all 0.18s ease',
             }}
           >
-            <Cpu size={16} color="#60a5fa" />
-            OpenRouter Diagnostics
+            <Cpu size={15} color="#22D3EE" /> LLM Gateway
           </button>
 
           <button
@@ -237,301 +287,444 @@ export const DatasetSourcesView: React.FC = () => {
               setIsAddModalOpen(true);
             }}
             style={{
-              background: 'linear-gradient(135deg, #f6c878 0%, #e5a93c 100%)',
+              background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
               border: 'none',
-              borderRadius: '9px',
+              color: '#080A0A',
+              borderRadius: '8px',
               padding: '9px 18px',
-              color: '#000',
               fontSize: '0.86rem',
               fontWeight: 600,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 14px rgba(246, 200, 120, 0.3)',
+              gap: '6px',
+              boxShadow: '0 4px 14px rgba(20, 184, 166, 0.25)',
+              transition: 'all 0.18s ease',
             }}
           >
-            <Plus size={16} />
-            Add Dataset
+            <Plus size={16} strokeWidth={2.4} /> Add Dataset
           </button>
         </div>
       </div>
 
-      {/* Metrics Banner */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-        <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px 20px' }}>
-          <div style={{ fontSize: '0.8rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Connected Datasets</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#f6c878' }}>{datasets.length}</div>
+      {/* Global Refresh Notification Banner */}
+      {refreshNotification && (
+        <div
+          style={{
+            background: 'rgba(20, 184, 166, 0.12)',
+            border: '1px solid rgba(20, 184, 166, 0.3)',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '0.84rem',
+            color: '#22D3EE',
+          }}
+        >
+          <CheckCircle2 size={16} color="#14B8A6" />
+          <span>{refreshNotification.message}</span>
         </div>
-        <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px 20px' }}>
-          <div style={{ fontSize: '0.8rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Profiled Evidence Rows</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#60a5fa' }}>{totalRows.toLocaleString()}</div>
+      )}
+
+      {/* Summary Metrics Banner */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '14px',
+          marginBottom: '28px',
+        }}
+      >
+        <div style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '10px', padding: '16px' }}>
+          <div style={{ fontSize: '0.76rem', color: '#8D9999', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
+            Connected Datasets
+          </div>
+          <div style={{ fontSize: '1.45rem', fontWeight: 700, color: '#f4f7f7' }}>{datasets.length}</div>
         </div>
-        <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px 20px' }}>
-          <div style={{ fontSize: '0.8rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Discovered Segments</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#4ade80' }}>{totalSegments}</div>
+
+        <div style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '10px', padding: '16px' }}>
+          <div style={{ fontSize: '0.76rem', color: '#8D9999', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
+            Total Empirical Records
+          </div>
+          <div style={{ fontSize: '1.45rem', fontWeight: 700, color: '#14B8A6' }}>
+            {datasets.reduce((acc, d) => acc + (d.row_count || 0), 0).toLocaleString()}
+          </div>
         </div>
-        <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px 20px' }}>
-          <div style={{ fontSize: '0.8rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Grounded Personas Synthesized</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#c084fc' }}>{totalPersonasGen}</div>
+
+        <div style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '10px', padding: '16px' }}>
+          <div style={{ fontSize: '0.76rem', color: '#8D9999', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
+            Discovered Segments
+          </div>
+          <div style={{ fontSize: '1.45rem', fontWeight: 700, color: '#22D3EE' }}>
+            {datasets.reduce((acc, d) => acc + (d.segments?.length || 0), 0)}
+          </div>
+        </div>
+
+        <div style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '10px', padding: '16px' }}>
+          <div style={{ fontSize: '0.76rem', color: '#8D9999', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
+            Grounded Personas Synthesized
+          </div>
+          <div style={{ fontSize: '1.45rem', fontWeight: 700, color: '#10B981' }}>
+            {datasets.reduce((acc, d) => acc + (d.persona_count_generated || 0), 0)}
+          </div>
         </div>
       </div>
 
-      {/* Dataset Grid / Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 600, margin: 0, color: '#e2e8f0' }}>Dataset Repositories</h2>
-
-        {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#9ca3af' }}>
-            <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px auto' }} />
-            Loading dataset sources...
-          </div>
-        ) : datasets.length === 0 ? (
-          <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px dashed rgba(255, 255, 255, 0.15)', borderRadius: '16px', padding: '50px 20px', textAlign: 'center' }}>
-            <Database size={36} color="#64748b" style={{ margin: '0 auto 14px auto' }} />
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', color: '#e2e8f0' }}>No datasets connected yet</h3>
-            <p style={{ margin: '0 auto 20px auto', fontSize: '0.88rem', color: '#9ca3af', maxWidth: '480px' }}>
-              Add a CSV, JSON, or TSV dataset URL or upload a file to enable evidence-grounded persona generation.
-            </p>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              style={{
-                background: '#f6c878',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '9px 18px',
-                color: '#000',
-                fontWeight: 600,
-                fontSize: '0.86rem',
-                cursor: 'pointer',
+      {/* Dataset Repository Card Grid */}
+      {loading ? (
+        <div style={{ padding: '60px', textAlign: 'center', color: '#8D9999' }}>
+          <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px auto' }} color="#14B8A6" />
+          <p style={{ fontSize: '0.9rem' }}>Loading empirical datasets from database...</p>
+        </div>
+      ) : datasets.length === 0 ? (
+        <div
+          style={{
+            background: '#0D1111',
+            border: '1px dashed #202727',
+            borderRadius: '12px',
+            padding: '50px 24px',
+            textAlign: 'center',
+          }}
+        >
+          <Database size={36} color="#8D9999" style={{ margin: '0 auto 14px auto', opacity: 0.6 }} />
+          <h3 style={{ fontSize: '1.05rem', color: '#f4f7f7', margin: '0 0 6px 0' }}>No Datasets Connected</h3>
+          <p style={{ fontSize: '0.86rem', color: '#8D9999', maxWidth: '440px', margin: '0 auto 20px auto' }}>
+            Add public survey URLs or upload structured CSV/JSON files to ground your research in real empirical distributions.
+          </p>
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            style={{
+              background: 'rgba(20, 184, 166, 0.12)',
+              border: '1px solid rgba(20, 184, 166, 0.3)',
+              color: '#22D3EE',
+              borderRadius: '8px',
+              padding: '8px 18px',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            + Add First Dataset
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>
+          {datasets.map((ds) => (
+            <div
+              key={ds.id}
+              data-testid={`dataset-card-${ds.id}`}
+              onClick={() => {
+                setSelectedDataset(ds);
+                setActiveTab('overview');
               }}
+              style={{
+                background: '#0D1111',
+                border: '1px solid #202727',
+                borderRadius: '12px',
+                padding: '20px',
+                cursor: 'pointer',
+                transition: 'all 0.18s ease',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'rgba(20, 184, 166, 0.4)')}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#202727')}
             >
-              Add First Dataset
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '18px' }}>
-            {datasets.map((ds) => (
-              <div
-                key={ds.id}
-                onClick={() => setSelectedDataset(ds)}
-                style={{
-                  background: 'rgba(18, 20, 23, 0.7)',
-                  border: selectedDataset?.id === ds.id ? '1px solid #f6c878' : '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: '14px',
-                  padding: '20px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '14px',
-                  transition: 'all 0.2s ease',
-                  position: 'relative',
-                }}
-              >
-                {/* Card Header */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '8px',
-                      background: ds.source_type === 'url' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                      border: `1px solid ${ds.source_type === 'url' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: ds.source_type === 'url' ? '#60a5fa' : '#4ade80',
-                    }}>
-                      {ds.source_type === 'url' ? <Link size={16} /> : <FileSpreadsheet size={16} />}
-                    </div>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '0.96rem', fontWeight: 600, color: '#f8fafc' }}>
-                        {ds.name}
-                      </h4>
-                      <span style={{ fontSize: '0.74rem', color: '#9ca3af' }}>
-                        {ds.source_type === 'url' ? 'Public URL' : ds.original_file_name || 'Upload'} • {ds.file_type.toUpperCase()}
-                      </span>
-                    </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {ds.source_type === 'url' ? <Link size={16} color="#22D3EE" /> : <Upload size={16} color="#14B8A6" />}
+                    <h3 style={{ fontSize: '0.98rem', fontWeight: 600, color: '#f4f7f7', margin: 0 }}>{ds.name}</h3>
                   </div>
-
-                  <span style={{
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    background: ds.status === 'ready' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                    color: ds.status === 'ready' ? '#4ade80' : '#f87171',
-                  }}>
-                    {ds.status.toUpperCase()}
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      background: ds.status === 'ready' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                      color: ds.status === 'ready' ? '#10B981' : '#F59E0B',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {ds.status}
                   </span>
                 </div>
 
-                {/* Description */}
-                {ds.description && (
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: '#94a3b8', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                    {ds.description}
-                  </p>
-                )}
+                <p style={{ fontSize: '0.82rem', color: '#8D9999', margin: '0 0 14px 0', lineHeight: 1.4, minHeight: '34px' }}>
+                  {ds.description || (ds.source_url ? `Ingested from ${ds.source_url}` : `Uploaded file ${ds.original_file_name}`)}
+                </p>
 
-                {/* Stats Bar */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', padding: '10px 12px', background: 'rgba(0, 0, 0, 0.3)', borderRadius: '8px' }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '8px',
+                    background: 'rgba(0, 0, 0, 0.25)',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    marginBottom: '16px',
+                    fontSize: '0.78rem',
+                  }}
+                >
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>ROWS</div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#e2e8f0' }}>{ds.row_count.toLocaleString()}</div>
+                    <span style={{ color: '#535D5D', display: 'block', fontSize: '0.7rem' }}>ROWS</span>
+                    <strong style={{ color: '#cbd5e1' }}>{ds.row_count?.toLocaleString() || 0}</strong>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>SEGMENTS</div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#4ade80' }}>{ds.segments?.length || 0}</div>
+                    <span style={{ color: '#535D5D', display: 'block', fontSize: '0.7rem' }}>COLUMNS</span>
+                    <strong style={{ color: '#cbd5e1' }}>{ds.column_count || 0}</strong>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>PERSONAS</div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#c084fc' }}>{ds.persona_count_generated || 0}</div>
+                    <span style={{ color: '#535D5D', display: 'block', fontSize: '0.7rem' }}>SEGMENTS</span>
+                    <strong style={{ color: '#22D3EE' }}>{ds.segments?.length || 0}</strong>
                   </div>
                 </div>
+              </div>
 
-                {/* Discovered Segments Chips */}
-                {ds.segments && ds.segments.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {ds.segments.slice(0, 3).map((seg) => (
-                      <span key={seg.id} style={{ fontSize: '0.72rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '6px', padding: '2px 6px', color: '#cbd5e1' }}>
-                        {seg.name} ({seg.population_percentage}%)
-                      </span>
-                    ))}
-                    {ds.segments.length > 3 && (
-                      <span style={{ fontSize: '0.72rem', color: '#64748b', alignSelf: 'center' }}>+{ds.segments.length - 3} more</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Action Footer */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '12px', marginTop: 'auto' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderTop: '1px solid #202727',
+                  paddingTop: '12px',
+                  marginTop: '6px',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {ds.source_type === 'url' && (
+                    <button
+                      onClick={(e) => handleRefresh(ds.id, e)}
+                      title="Refresh URL data"
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid #202727',
+                        color: '#8D9999',
+                        borderRadius: '6px',
+                        padding: '5px 8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.75rem',
+                      }}
+                    >
+                      <RefreshCw size={12} /> Refresh
+                    </button>
+                  )}
                   <button
-                    onClick={(e) => handleOpenGenerate(ds, e)}
+                    onClick={(e) => handleDelete(ds.id, e)}
+                    title="Delete dataset"
                     style={{
-                      background: 'rgba(246, 200, 120, 0.12)',
-                      border: '1px solid rgba(246, 200, 120, 0.3)',
+                      background: 'transparent',
+                      border: '1px solid #202727',
+                      color: '#ef4444',
                       borderRadius: '6px',
-                      padding: '5px 12px',
-                      color: '#f6c878',
-                      fontSize: '0.78rem',
+                      padding: '5px 8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <Trash2 size={12} /> Delete
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedDataset(ds);
+                      setActiveTab('preview');
+                    }}
+                    style={{
+                      background: 'rgba(34, 211, 238, 0.08)',
+                      border: '1px solid rgba(34, 211, 238, 0.25)',
+                      color: '#22D3EE',
+                      borderRadius: '6px',
+                      padding: '5px 10px',
+                      fontSize: '0.76rem',
                       fontWeight: 600,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '5px',
+                      gap: '4px',
                     }}
                   >
-                    <Sparkles size={13} /> Generate Personas
+                    <Table size={12} /> Preview
                   </button>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {ds.source_type === 'url' && (
-                      <button
-                        title="Refresh dataset from URL"
-                        onClick={(e) => handleRefresh(ds.id, e)}
-                        style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
-                      >
-                        <RefreshCw size={14} />
-                      </button>
-                    )}
-                    <button
-                      title="Delete dataset source"
-                      onClick={(e) => handleDelete(ds.id, e)}
-                      style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', padding: '4px' }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  <button
+                    onClick={(e) => handleOpenGenerate(ds, e)}
+                    style={{
+                      background: 'rgba(20, 184, 166, 0.12)',
+                      border: '1px solid rgba(20, 184, 166, 0.3)',
+                      color: '#14B8A6',
+                      borderRadius: '6px',
+                      padding: '5px 10px',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <Sparkles size={12} /> Synthesize
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Dataset Detail View Modal */}
+      {/* Dataset Detail Modal */}
       {selectedDataset && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 90,
-          padding: '20px',
-        }}>
-          <div style={{
-            background: '#121417',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
-            width: '100%',
-            maxWidth: '880px',
-            maxHeight: '90vh',
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100,
             display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.7)',
-          }}>
-            {/* Header */}
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.02)' }}>
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          {/* Backdrop */}
+          <div
+            data-testid="dataset-detail-modal-backdrop"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.82)',
+              backdropFilter: 'blur(6px)',
+            }}
+            onClick={() => setSelectedDataset(null)}
+          />
+
+          {/* Modal Container */}
+          <div
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              background: '#0D1111',
+              border: '1px solid #202727',
+              borderRadius: '14px',
+              width: '100%',
+              maxWidth: '960px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.7)',
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '20px 24px',
+                borderBottom: '1px solid #202727',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 600, color: '#fff' }}>{selectedDataset.name}</h3>
-                <span style={{ fontSize: '0.78rem', color: '#9ca3af' }}>
-                  {selectedDataset.source_type === 'url' ? selectedDataset.source_url : selectedDataset.original_file_name} • {selectedDataset.row_count.toLocaleString()} rows • {selectedDataset.column_count} columns
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h2 style={{ fontSize: '1.18rem', fontWeight: 600, color: '#f4f7f7', margin: 0 }}>
+                    {selectedDataset.name}
+                  </h2>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      background: 'rgba(20, 184, 166, 0.12)',
+                      color: '#22D3EE',
+                    }}
+                  >
+                    {selectedDataset.file_type.toUpperCase()}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#8D9999', marginTop: '3px' }}>
+                  {selectedDataset.row_count?.toLocaleString()} rows · {selectedDataset.column_count} columns · Status: {selectedDataset.status}
+                </div>
               </div>
+
               <button
                 onClick={() => setSelectedDataset(null)}
-                style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '6px' }}
+                style={{ background: 'transparent', border: 'none', color: '#8D9999', cursor: 'pointer' }}
               >
                 <X size={20} />
               </button>
             </div>
 
-            {/* Tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', padding: '0 24px', gap: '20px' }}>
-              {(['overview', 'schema', 'stats', 'segments'] as const).map((tab) => (
+            {/* Modal Tabs Bar */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #202727', padding: '0 24px', gap: '20px' }}>
+              {(['overview', 'preview', 'schema', 'stats', 'quality', 'segments'] as const).map((tab) => (
                 <button
                   key={tab}
+                  type="button"
+                  data-testid={`tab-${tab}`}
                   onClick={() => setActiveTab(tab)}
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    borderBottom: activeTab === tab ? '2px solid #f6c878' : '2px solid transparent',
-                    color: activeTab === tab ? '#f6c878' : '#9ca3af',
+                    borderBottom: activeTab === tab ? '2px solid #14B8A6' : '2px solid transparent',
+                    color: activeTab === tab ? '#22D3EE' : '#8D9999',
                     fontWeight: activeTab === tab ? 600 : 400,
-                    fontSize: '0.86rem',
+                    fontSize: '0.84rem',
                     padding: '12px 4px',
                     cursor: 'pointer',
                     textTransform: 'capitalize',
                   }}
                 >
-                  {tab === 'stats' ? 'Descriptive Statistics' : tab === 'segments' ? `Discovered Segments (${selectedDataset.segments?.length || 0})` : tab}
+                  {tab === 'stats'
+                    ? 'Descriptive Statistics'
+                    : tab === 'quality'
+                    ? `Data Quality (${selectedDataset.schema_metadata?.warnings?.length || 0})`
+                    : tab === 'preview'
+                    ? 'Data Preview'
+                    : tab === 'segments'
+                    ? `Discovered Segments (${selectedDataset.segments?.length || 0})`
+                    : tab}
                 </button>
               ))}
             </div>
 
             {/* Content Area */}
-            <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div data-testid="modal-content-area" style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Overview Tab */}
               {activeTab === 'overview' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '10px', padding: '16px' }}>
-                    <div style={{ fontSize: '0.84rem', color: '#9ca3af', marginBottom: '8px' }}>Description</div>
-                    <div style={{ fontSize: '0.9rem', color: '#e2e8f0', lineHeight: 1.5 }}>
+                  <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '10px', padding: '16px' }}>
+                    <div style={{ fontSize: '0.82rem', color: '#8D9999', marginBottom: '8px' }}>Description</div>
+                    <div style={{ fontSize: '0.88rem', color: '#f4f7f7', lineHeight: 1.5 }}>
                       {selectedDataset.description || 'No description provided.'}
                     </div>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>PROVENANCE TYPE</div>
-                      <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#cbd5e1' }}>{selectedDataset.source_type.toUpperCase()}</div>
+                    <div style={{ background: '#111616', border: '1px solid #202727', padding: '12px', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#8D9999' }}>SOURCE TYPE</div>
+                      <div style={{ fontSize: '0.86rem', fontWeight: 600, color: '#f4f7f7' }}>{selectedDataset.source_type.toUpperCase()}</div>
                     </div>
-                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>LAST PROCESSED</div>
-                      <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#cbd5e1' }}>
+                    <div style={{ background: '#111616', border: '1px solid #202727', padding: '12px', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#8D9999' }}>CONTENT HASH</div>
+                      <div style={{ fontSize: '0.78rem', fontFamily: 'monospace', color: '#22D3EE' }}>
+                        {selectedDataset.content_hash ? selectedDataset.content_hash.slice(0, 16) + '...' : 'Calculated on ingest'}
+                      </div>
+                    </div>
+                    <div style={{ background: '#111616', border: '1px solid #202727', padding: '12px', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#8D9999' }}>LAST PROCESSED</div>
+                      <div style={{ fontSize: '0.86rem', fontWeight: 600, color: '#f4f7f7' }}>
                         {selectedDataset.last_processed_at ? new Date(selectedDataset.last_processed_at).toLocaleString() : 'Just now'}
                       </div>
                     </div>
@@ -539,13 +732,99 @@ export const DatasetSourcesView: React.FC = () => {
                 </div>
               )}
 
+              {/* Data Preview Tab */}
+              {activeTab === 'preview' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '0.84rem', color: '#8D9999' }}>
+                      Showing records {previewOffset + 1}–{Math.min(previewOffset + PREVIEW_PAGE_SIZE, previewData?.total_rows || selectedDataset.row_count)} of {previewData?.total_rows || selectedDataset.row_count}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        disabled={previewOffset === 0 || previewLoading}
+                        onClick={() => loadPreview(selectedDataset.id, Math.max(0, previewOffset - PREVIEW_PAGE_SIZE))}
+                        style={{
+                          background: '#111616',
+                          border: '1px solid #202727',
+                          color: previewOffset === 0 ? '#535D5D' : '#f4f7f7',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          cursor: previewOffset === 0 ? 'default' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.78rem',
+                        }}
+                      >
+                        <ChevronLeft size={14} /> Previous
+                      </button>
+                      <button
+                        disabled={!previewData || previewOffset + PREVIEW_PAGE_SIZE >= previewData.total_rows || previewLoading}
+                        onClick={() => loadPreview(selectedDataset.id, previewOffset + PREVIEW_PAGE_SIZE)}
+                        style={{
+                          background: '#111616',
+                          border: '1px solid #202727',
+                          color: !previewData || previewOffset + PREVIEW_PAGE_SIZE >= previewData.total_rows ? '#535D5D' : '#f4f7f7',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          cursor: !previewData || previewOffset + PREVIEW_PAGE_SIZE >= previewData.total_rows ? 'default' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.78rem',
+                        }}
+                      >
+                        Next <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {previewLoading ? (
+                    <div style={{ padding: '40px', textAlign: 'center', color: '#8D9999' }}>
+                      <RefreshCw size={20} className="spin" style={{ margin: '0 auto 8px auto' }} color="#14B8A6" />
+                      <span>Loading records...</span>
+                    </div>
+                  ) : previewData && previewData.rows.length > 0 ? (
+                    <div style={{ overflowX: 'auto', border: '1px solid #202727', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ background: '#111616', borderBottom: '1px solid #202727', color: '#8D9999' }}>
+                            <th style={{ padding: '8px 12px', width: '40px' }}>#</th>
+                            {previewData.columns.map((col) => (
+                              <th key={col} style={{ padding: '8px 12px', fontWeight: 600 }}>{col}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewData.rows.map((row, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #161c1c' }}>
+                              <td style={{ padding: '8px 12px', color: '#535D5D', fontSize: '0.74rem' }}>{previewOffset + idx + 1}</td>
+                              {previewData.columns.map((col) => (
+                                <td key={col} style={{ padding: '8px 12px', color: '#f4f7f7' }}>
+                                  {row[col] !== null && row[col] !== undefined ? String(row[col]) : <em style={{ color: '#535D5D' }}>null</em>}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '30px', textAlign: 'center', color: '#8D9999' }}>
+                      No preview records available.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Schema Tab */}
               {activeTab === 'schema' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ fontSize: '0.84rem', color: '#9ca3af' }}>Inferred Column Types & Quality Profiling</div>
-                  <div style={{ overflowX: 'auto' }}>
+                  <div style={{ fontSize: '0.84rem', color: '#8D9999' }}>Inferred Column Types & Missingness Profiling</div>
+                  <div style={{ overflowX: 'auto', border: '1px solid #202727', borderRadius: '8px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
                       <thead>
-                        <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#9ca3af' }}>
+                        <tr style={{ background: '#111616', borderBottom: '1px solid #202727', color: '#8D9999' }}>
                           <th style={{ padding: '8px 12px' }}>Column</th>
                           <th style={{ padding: '8px 12px' }}>Type</th>
                           <th style={{ padding: '8px 12px' }}>Missing Rate</th>
@@ -555,24 +834,26 @@ export const DatasetSourcesView: React.FC = () => {
                       </thead>
                       <tbody>
                         {selectedDataset.schema_metadata?.columns?.map((col) => (
-                          <tr key={col.name} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                            <td style={{ padding: '10px 12px', fontWeight: 600, color: '#f8fafc' }}>{col.name}</td>
+                          <tr key={col.name} style={{ borderBottom: '1px solid #161c1c' }}>
+                            <td style={{ padding: '10px 12px', fontWeight: 600, color: '#f4f7f7' }}>{col.name}</td>
                             <td style={{ padding: '10px 12px' }}>
-                              <span style={{
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                fontSize: '0.72rem',
-                                background: col.type === 'numeric' ? 'rgba(96, 165, 250, 0.15)' : col.type === 'categorical' ? 'rgba(74, 222, 128, 0.15)' : 'rgba(255, 255, 255, 0.08)',
-                                color: col.type === 'numeric' ? '#60a5fa' : col.type === 'categorical' ? '#4ade80' : '#cbd5e1',
-                              }}>
+                              <span
+                                style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '0.72rem',
+                                  background: col.type === 'numeric' ? 'rgba(34, 211, 238, 0.12)' : col.type === 'categorical' ? 'rgba(20, 184, 166, 0.12)' : 'rgba(255, 255, 255, 0.06)',
+                                  color: col.type === 'numeric' ? '#22D3EE' : col.type === 'categorical' ? '#14B8A6' : '#8D9999',
+                                }}
+                              >
                                 {col.type}
                               </span>
                             </td>
-                            <td style={{ padding: '10px 12px', color: col.missing_percentage > 10 ? '#f87171' : '#9ca3af' }}>
+                            <td style={{ padding: '10px 12px', color: col.missing_percentage > 10 ? '#ef4444' : '#8D9999' }}>
                               {col.missing_percentage}%
                             </td>
-                            <td style={{ padding: '10px 12px', color: '#e2e8f0' }}>{col.unique_count}</td>
-                            <td style={{ padding: '10px 12px', color: '#94a3b8' }}>
+                            <td style={{ padding: '10px 12px', color: '#f4f7f7' }}>{col.unique_count}</td>
+                            <td style={{ padding: '10px 12px', color: '#8D9999' }}>
                               {col.sample_values?.slice(0, 3).join(', ') || 'N/A'}
                             </td>
                           </tr>
@@ -583,23 +864,26 @@ export const DatasetSourcesView: React.FC = () => {
                 </div>
               )}
 
+              {/* Statistics Tab */}
               {activeTab === 'stats' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   {/* Numeric Stats */}
                   {selectedDataset.statistics?.numeric && Object.keys(selectedDataset.statistics.numeric).length > 0 && (
                     <div>
-                      <h4 style={{ fontSize: '0.9rem', color: '#60a5fa', margin: '0 0 10px 0' }}>Numeric Distributions</h4>
+                      <h4 style={{ fontSize: '0.88rem', color: '#22D3EE', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                        Numeric Distributions
+                      </h4>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
                         {Object.entries(selectedDataset.statistics.numeric).map(([colName, stat]) => (
-                          <div key={colName} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px' }}>
-                            <div style={{ fontWeight: 600, fontSize: '0.86rem', color: '#e2e8f0', marginBottom: '6px' }}>{colName}</div>
+                          <div key={colName} style={{ background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '12px' }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.86rem', color: '#f4f7f7', marginBottom: '6px' }}>{colName}</div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', fontSize: '0.78rem' }}>
-                              <div><span style={{ color: '#64748b' }}>Min:</span> {stat.min}</div>
-                              <div><span style={{ color: '#64748b' }}>Median:</span> <strong style={{ color: '#f6c878' }}>{stat.median}</strong></div>
-                              <div><span style={{ color: '#64748b' }}>Max:</span> {stat.max}</div>
-                              <div><span style={{ color: '#64748b' }}>Mean:</span> {stat.mean}</div>
-                              <div><span style={{ color: '#64748b' }}>Std:</span> {stat.std}</div>
-                              <div><span style={{ color: '#64748b' }}>IQR:</span> {stat.iqr}</div>
+                              <div><span style={{ color: '#8D9999' }}>Min:</span> {stat.min}</div>
+                              <div><span style={{ color: '#8D9999' }}>Median:</span> <strong style={{ color: '#14B8A6' }}>{stat.median}</strong></div>
+                              <div><span style={{ color: '#8D9999' }}>Max:</span> {stat.max}</div>
+                              <div><span style={{ color: '#8D9999' }}>Mean:</span> {stat.mean}</div>
+                              <div><span style={{ color: '#8D9999' }}>Std:</span> {stat.std}</div>
+                              <div><span style={{ color: '#8D9999' }}>IQR:</span> {stat.iqr}</div>
                             </div>
                           </div>
                         ))}
@@ -610,20 +894,22 @@ export const DatasetSourcesView: React.FC = () => {
                   {/* Categorical Stats */}
                   {selectedDataset.statistics?.categorical && Object.keys(selectedDataset.statistics.categorical).length > 0 && (
                     <div>
-                      <h4 style={{ fontSize: '0.9rem', color: '#4ade80', margin: '0 0 10px 0' }}>Categorical Frequencies</h4>
+                      <h4 style={{ fontSize: '0.88rem', color: '#14B8A6', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                        Categorical Frequencies
+                      </h4>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
                         {Object.entries(selectedDataset.statistics.categorical).map(([colName, cat]) => (
-                          <div key={colName} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px' }}>
-                            <div style={{ fontWeight: 600, fontSize: '0.86rem', color: '#e2e8f0', marginBottom: '8px' }}>{colName}</div>
+                          <div key={colName} style={{ background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '12px' }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.86rem', color: '#f4f7f7', marginBottom: '8px' }}>{colName}</div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                               {cat.top_categories?.slice(0, 5).map((tc) => (
                                 <div key={tc.category}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', marginBottom: '2px' }}>
                                     <span style={{ color: '#cbd5e1' }}>{tc.category}</span>
-                                    <span style={{ color: '#4ade80', fontWeight: 600 }}>{tc.percentage}% ({tc.count})</span>
+                                    <span style={{ color: '#14B8A6', fontWeight: 600 }}>{tc.percentage}% ({tc.count})</span>
                                   </div>
-                                  <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden' }}>
-                                    <div style={{ width: `${tc.percentage}%`, height: '100%', background: '#4ade80', borderRadius: '2px' }} />
+                                  <div style={{ width: '100%', height: '4px', background: '#202727', borderRadius: '2px', overflow: 'hidden' }}>
+                                    <div style={{ width: `${tc.percentage}%`, height: '100%', background: '#14B8A6', borderRadius: '2px' }} />
                                   </div>
                                 </div>
                               ))}
@@ -636,37 +922,100 @@ export const DatasetSourcesView: React.FC = () => {
                 </div>
               )}
 
+              {/* Data Quality Tab */}
+              {activeTab === 'quality' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ fontSize: '0.84rem', color: '#8D9999' }}>Data Integrity Auditing & Anomaly Detection</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '14px' }}>
+                      <div style={{ fontSize: '0.74rem', color: '#8D9999' }}>OVERALL MISSING CELL RATE</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: (selectedDataset.schema_metadata?.missing_values_percentage || 0) > 5 ? '#F59E0B' : '#10B981' }}>
+                        {selectedDataset.schema_metadata?.missing_values_percentage || 0}%
+                      </div>
+                    </div>
+                    <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '14px' }}>
+                      <div style={{ fontSize: '0.74rem', color: '#8D9999' }}>DUPLICATE ROWS DETECTED</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: (selectedDataset.schema_metadata?.duplicate_rows || 0) > 0 ? '#F59E0B' : '#10B981' }}>
+                        {selectedDataset.schema_metadata?.duplicate_rows || 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedDataset.schema_metadata?.warnings && selectedDataset.schema_metadata.warnings.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                      {selectedDataset.schema_metadata.warnings.map((w, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            background: 'rgba(245, 158, 11, 0.08)',
+                            border: '1px solid rgba(245, 158, 11, 0.25)',
+                            borderRadius: '8px',
+                            padding: '10px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            fontSize: '0.82rem',
+                            color: '#F59E0B',
+                          }}
+                        >
+                          <AlertTriangle size={16} />
+                          <span>{w}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        borderRadius: '8px',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontSize: '0.84rem',
+                        color: '#10B981',
+                      }}
+                    >
+                      <CheckCircle2 size={16} />
+                      <span>Dataset quality audit passed with zero integrity anomalies.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Segments Tab */}
               {activeTab === 'segments' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ fontSize: '0.84rem', color: '#9ca3af' }}>
+                  <div style={{ fontSize: '0.84rem', color: '#8D9999' }}>
                     Mathematically derived segments based on feature distributions. Personas will be synthesized according to these exact population share quotas.
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px' }}>
                     {selectedDataset.segments?.map((seg) => (
-                      <div key={seg.id} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div key={seg.id} style={{ background: '#111616', border: '1px solid #202727', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 600, fontSize: '0.92rem', color: '#f6c878' }}>{seg.name}</span>
-                          <span style={{ fontSize: '0.78rem', background: 'rgba(246,200,120,0.15)', color: '#f6c878', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                          <span style={{ fontWeight: 600, fontSize: '0.92rem', color: '#22D3EE' }}>{seg.name}</span>
+                          <span style={{ fontSize: '0.78rem', background: 'rgba(20, 184, 166, 0.12)', color: '#14B8A6', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
                             {seg.population_percentage}% Share
                           </span>
                         </div>
 
                         {seg.constraints?.rule_description && (
-                          <div style={{ fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+                          <div style={{ fontSize: '0.8rem', color: '#f4f7f7', lineHeight: 1.4 }}>
                             {seg.constraints.rule_description}
                           </div>
                         )}
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem', background: 'rgba(255,255,255,0.02)', padding: '8px', borderRadius: '6px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '6px' }}>
                           <div>
-                            <span style={{ color: '#64748b' }}>Age Range:</span> {seg.constraints?.age_range ? `${seg.constraints.age_range[0]}–${seg.constraints.age_range[1]}` : 'N/A'}
+                            <span style={{ color: '#8D9999' }}>Age Range:</span> {seg.constraints?.age_range ? `${seg.constraints.age_range[0]}–${seg.constraints.age_range[1]}` : 'N/A'}
                           </div>
                           <div>
-                            <span style={{ color: '#64748b' }}>Monthly Budget:</span> ~৳{seg.constraints?.monthly_budget?.median || 'N/A'}
+                            <span style={{ color: '#8D9999' }}>Monthly Budget:</span> ~৳{seg.constraints?.monthly_budget?.median || 'N/A'}
                           </div>
                           <div>
-                            <span style={{ color: '#64748b' }}>Tech Familiarity:</span> {seg.constraints?.technology_familiarity || 'Medium'}
+                            <span style={{ color: '#8D9999' }}>Tech Familiarity:</span> {seg.constraints?.technology_familiarity || 'Medium'}
                           </div>
                         </div>
                       </div>
@@ -677,10 +1026,10 @@ export const DatasetSourcesView: React.FC = () => {
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.02)' }}>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #202727', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0D1111' }}>
               <button
                 onClick={() => setSelectedDataset(null)}
-                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '8px 16px', color: '#9ca3af', cursor: 'pointer', fontSize: '0.84rem' }}
+                style={{ background: 'transparent', border: '1px solid #202727', borderRadius: '8px', padding: '8px 16px', color: '#8D9999', cursor: 'pointer', fontSize: '0.84rem' }}
               >
                 Close
               </button>
@@ -688,11 +1037,11 @@ export const DatasetSourcesView: React.FC = () => {
               <button
                 onClick={(e) => handleOpenGenerate(selectedDataset, e)}
                 style={{
-                  background: 'linear-gradient(135deg, #f6c878 0%, #e5a93c 100%)',
+                  background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                   border: 'none',
                   borderRadius: '8px',
                   padding: '9px 18px',
-                  color: '#000',
+                  color: '#080A0A',
                   fontWeight: 600,
                   fontSize: '0.84rem',
                   cursor: 'pointer',
@@ -701,7 +1050,7 @@ export const DatasetSourcesView: React.FC = () => {
                   gap: '6px',
                 }}
               >
-                <Sparkles size={15} /> Generate Evidence Personas
+                <Sparkles size={15} /> Synthesize Grounded Personas
               </button>
             </div>
           </div>
@@ -710,170 +1059,153 @@ export const DatasetSourcesView: React.FC = () => {
 
       {/* Add Dataset Modal */}
       {isAddModalOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          padding: '20px',
-        }}>
-          <div style={{
-            background: '#121417',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
-            width: '100%',
-            maxWidth: '560px',
-            overflow: 'hidden',
-          }}>
-            {/* Header */}
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Database size={18} color="#f6c878" />
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Add Dataset Source</h3>
-              </div>
-              <button onClick={() => setIsAddModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+        >
+          {/* Backdrop */}
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.8)',
+              backdropFilter: 'blur(6px)',
+            }}
+            onClick={() => setIsAddModalOpen(false)}
+          />
+
+          {/* Modal Container */}
+          <div
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              background: '#0D1111',
+              border: '1px solid #202727',
+              borderRadius: '14px',
+              width: '100%',
+              maxWidth: '560px',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.7)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #202727', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: '#f4f7f7', margin: 0 }}>Add Dataset Source</h2>
+              <button onClick={() => setIsAddModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#8D9999', cursor: 'pointer' }}>
                 <X size={18} />
               </button>
             </div>
 
-            {/* Mode Switcher */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: '12px 24px 0 24px', gap: '10px' }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid #202727', padding: '0 24px', gap: '20px' }}>
               <button
-                type="button"
                 onClick={() => setAddMode('url')}
                 style={{
-                  background: addMode === 'url' ? 'rgba(246, 200, 120, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                  border: addMode === 'url' ? '1px solid #f6c878' : '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: '8px',
-                  padding: '8px',
-                  color: addMode === 'url' ? '#f6c878' : '#9ca3af',
-                  fontWeight: 600,
-                  fontSize: '0.82rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: addMode === 'url' ? '2px solid #14B8A6' : '2px solid transparent',
+                  color: addMode === 'url' ? '#22D3EE' : '#8D9999',
+                  fontWeight: addMode === 'url' ? 600 : 400,
+                  fontSize: '0.86rem',
+                  padding: '12px 4px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
                   gap: '6px',
                 }}
               >
-                <Link size={14} /> Dataset URL
+                <Link size={14} /> URL Ingestion
               </button>
               <button
-                type="button"
                 onClick={() => setAddMode('upload')}
                 style={{
-                  background: addMode === 'upload' ? 'rgba(246, 200, 120, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                  border: addMode === 'upload' ? '1px solid #f6c878' : '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: '8px',
-                  padding: '8px',
-                  color: addMode === 'upload' ? '#f6c878' : '#9ca3af',
-                  fontWeight: 600,
-                  fontSize: '0.82rem',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: addMode === 'upload' ? '2px solid #14B8A6' : '2px solid transparent',
+                  color: addMode === 'upload' ? '#22D3EE' : '#8D9999',
+                  fontWeight: addMode === 'upload' ? 600 : 400,
+                  fontSize: '0.86rem',
+                  padding: '12px 4px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
                   gap: '6px',
                 }}
               >
-                <Upload size={14} /> Upload File
+                <Upload size={14} /> File Upload
               </button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={addMode === 'url' ? handleCreateUrl : handleUploadFile} style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={addMode === 'url' ? handleCreateUrl : handleUploadFile} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {formError && (
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', padding: '10px', color: '#f87171', fontSize: '0.82rem' }}>
+                  {formError}
+                </div>
+              )}
+
               <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: 500 }}>
-                  Dataset Name *
-                </label>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: '#8D9999', marginBottom: '6px' }}>Dataset Name *</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Bangladesh Student Budget Survey 2026"
+                  placeholder="e.g. Bangladesh Student Tech Spending Survey 2026"
                   value={datasetName}
                   onChange={(e) => setDatasetName(e.target.value)}
-                  style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 12px', color: '#fff', fontSize: '0.86rem', outline: 'none' }}
+                  style={{ width: '100%', background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '9px 12px', color: '#f4f7f7', fontSize: '0.86rem' }}
                 />
               </div>
 
               {addMode === 'url' ? (
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: 500 }}>
-                    Dataset URL (HTTP/HTTPS) *
-                  </label>
+                  <label style={{ display: 'block', fontSize: '0.82rem', color: '#8D9999', marginBottom: '6px' }}>Dataset URL *</label>
                   <input
                     type="url"
                     required
-                    placeholder="https://example.com/data/survey.csv"
+                    placeholder="https://example.com/survey-data.csv"
                     value={datasetUrl}
                     onChange={(e) => setDatasetUrl(e.target.value)}
-                    style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 12px', color: '#fff', fontSize: '0.86rem', outline: 'none' }}
+                    style={{ width: '100%', background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '9px 12px', color: '#f4f7f7', fontSize: '0.86rem' }}
                   />
-                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Shield size={12} color="#4ade80" /> Protected by server-side SSRF screening and size limiters.
-                  </div>
+                  <span style={{ fontSize: '0.72rem', color: '#535D5D', marginTop: '4px', display: 'block' }}>
+                    SSRF protection active. Direct raw CSV, JSON, or TSV links supported.
+                  </span>
                 </div>
               ) : (
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: 500 }}>
-                    Dataset File (CSV, JSON, TSV, XLSX) *
-                  </label>
+                  <label style={{ display: 'block', fontSize: '0.82rem', color: '#8D9999', marginBottom: '6px' }}>Select File (CSV, JSON, XLSX, TSV) *</label>
                   <input
                     type="file"
                     required
                     accept=".csv,.json,.jsonl,.tsv,.xlsx"
                     onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '8px 12px', color: '#cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                    style={{ width: '100%', background: '#111616', border: '1px dashed #202727', borderRadius: '8px', padding: '12px', color: '#8D9999', fontSize: '0.84rem' }}
                   />
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: 500 }}>
-                    File Format
-                  </label>
-                  <select
-                    value={datasetType}
-                    onChange={(e) => setDatasetType(e.target.value)}
-                    style={{ width: '100%', background: '#1c1f24', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 12px', color: '#fff', fontSize: '0.86rem', outline: 'none' }}
-                  >
-                    <option value="csv">CSV (Comma-separated)</option>
-                    <option value="json">JSON (Object Array)</option>
-                    <option value="tsv">TSV (Tab-separated)</option>
-                    <option value="xlsx">Excel (XLSX)</option>
-                  </select>
-                </div>
-              </div>
-
               <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: 500 }}>
-                  Description (Optional)
-                </label>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: '#8D9999', marginBottom: '6px' }}>Description</label>
                 <textarea
                   rows={2}
-                  placeholder="Context on how the data was gathered..."
+                  placeholder="Optional context about survey demographics, sample size, or collection methodology..."
                   value={datasetDesc}
                   onChange={(e) => setDatasetDesc(e.target.value)}
-                  style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '8px 12px', color: '#fff', fontSize: '0.84rem', outline: 'none', resize: 'none' }}
+                  style={{ width: '100%', background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '9px 12px', color: '#f4f7f7', fontSize: '0.86rem', resize: 'vertical' }}
                 />
               </div>
 
-              {formError && (
-                <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', fontSize: '0.82rem' }}>
-                  {formError}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '8px 16px', color: '#9ca3af', cursor: 'pointer', fontSize: '0.84rem' }}
+                  style={{ background: 'transparent', border: '1px solid #202727', borderRadius: '8px', padding: '8px 16px', color: '#8D9999', cursor: 'pointer', fontSize: '0.84rem' }}
                 >
                   Cancel
                 </button>
@@ -881,21 +1213,17 @@ export const DatasetSourcesView: React.FC = () => {
                   type="submit"
                   disabled={submitting}
                   style={{
-                    background: '#f6c878',
+                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                     border: 'none',
                     borderRadius: '8px',
-                    padding: '9px 20px',
-                    color: '#000',
+                    padding: '9px 18px',
+                    color: '#080A0A',
                     fontWeight: 600,
                     fontSize: '0.84rem',
                     cursor: submitting ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
                   }}
                 >
-                  {submitting ? <RefreshCw size={14} className="animate-spin" /> : null}
-                  {submitting ? 'Profiling Dataset...' : 'Ingest & Profile'}
+                  {submitting ? 'Processing & Profiling...' : 'Ingest & Profile'}
                 </button>
               </div>
             </form>
@@ -903,166 +1231,8 @@ export const DatasetSourcesView: React.FC = () => {
         </div>
       )}
 
-      {/* Generate Grounded Personas Modal */}
-      {isGenerateModalOpen && generatingDataset && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          padding: '20px',
-        }}>
-          <div style={{
-            background: '#121417',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
-            width: '100%',
-            maxWidth: '680px',
-            maxHeight: '90vh',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}>
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Sparkles size={18} color="#f6c878" />
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Evidence-Grounded Persona Synthesis</h3>
-              </div>
-              <button onClick={() => setIsGenerateModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              {/* Grounded Distribution Table */}
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '10px', padding: '14px' }}>
-                <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#e2e8f0', marginBottom: '8px' }}>
-                  Mathematical Segment Allocation ({personaCount} personas total)
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {generatingDataset.segments?.map((seg) => {
-                    const allocated = Math.max(1, Math.round(seg.population_share * personaCount));
-                    return (
-                      <div key={seg.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                        <span style={{ color: '#cbd5e1' }}>{seg.name} ({seg.population_percentage}%)</span>
-                        <span style={{ fontWeight: 600, color: '#f6c878' }}>{allocated} personas</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: 500 }}>
-                  Persona Count (1–20)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={personaCount}
-                  onChange={(e) => setPersonaCount(Math.min(20, Math.max(1, parseInt(e.target.value) || 1)))}
-                  style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 12px', color: '#fff', fontSize: '0.86rem', outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: 500 }}>
-                  Target Business / Product Initiative
-                </label>
-                <input
-                  type="text"
-                  value={businessName}
-                  onChange={(e) => setBusinessName(e.target.value)}
-                  style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 12px', color: '#fff', fontSize: '0.86rem', outline: 'none' }}
-                />
-              </div>
-
-              {/* Generation Report (when ready) */}
-              {generationRun && (
-                <div style={{ background: 'rgba(34, 197, 94, 0.06)', border: '1px solid rgba(34, 197, 94, 0.25)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#4ade80' }}>
-                      ✓ Generated {generationRun.generated_count} Personas
-                    </span>
-                    <span style={{ fontSize: '0.78rem', color: '#9ca3af' }}>
-                      Model: {generationRun.model_used.split('/').pop()}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '12px', fontSize: '0.8rem' }}>
-                    <span style={{ color: '#4ade80' }}>Valid: {generationRun.valid_count}</span>
-                    <span style={{ color: '#facc15' }}>Warnings: {generationRun.warning_count}</span>
-                    <span style={{ color: '#f87171' }}>Contradictions: {generationRun.contradiction_count}</span>
-                  </div>
-
-                  <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {generationRun.personas.map((p, idx) => (
-                      <div key={idx} style={{ background: 'rgba(0,0,0,0.3)', padding: '8px 12px', borderRadius: '6px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div>
-                          <strong style={{ color: '#f8fafc' }}>{p.name}</strong> ({p.age} yrs • {p.occupation})
-                        </div>
-                        <span style={{
-                          fontSize: '0.7rem',
-                          fontWeight: 600,
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          background: p.validation?.status === 'VALID' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                          color: p.validation?.status === 'VALID' ? '#4ade80' : '#facc15',
-                        }}>
-                          {p.validation?.status || 'VALID'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setIsGenerateModalOpen(false)}
-                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '8px 16px', color: '#9ca3af', cursor: 'pointer', fontSize: '0.84rem' }}
-              >
-                {generationRun ? 'Done' : 'Cancel'}
-              </button>
-
-              <button
-                type="button"
-                disabled={generating}
-                onClick={handleGeneratePersonas}
-                style={{
-                  background: 'linear-gradient(135deg, #f6c878 0%, #e5a93c 100%)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '9px 20px',
-                  color: '#000',
-                  fontWeight: 600,
-                  fontSize: '0.84rem',
-                  cursor: generating ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                {generating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                {generating ? 'Synthesizing Personas...' : 'Start Persona Synthesis'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* OpenRouter Diagnostic Panel Modal */}
-      <OpenRouterDiagnosticModal
-        isOpen={isOpenRouterModalOpen}
-        onClose={() => setIsOpenRouterModalOpen(false)}
-      />
+      {/* LLM Gateway / OpenRouter Diagnostics Modal */}
+      <OpenRouterDiagnosticModal isOpen={isOpenRouterModalOpen} onClose={() => setIsOpenRouterModalOpen(false)} />
     </div>
   );
 };

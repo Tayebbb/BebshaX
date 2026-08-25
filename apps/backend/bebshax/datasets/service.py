@@ -44,12 +44,13 @@ class DatasetService:
     ) -> DatasetSources:
         """Fetch external dataset URL with SSRF protection, parse, profile, and store metadata."""
         content, ctype = await safe_fetch_dataset_bytes(url)
+        content_hash = hashlib.sha256(content).hexdigest()
         columns, rows = parse_dataset_bytes(content, file_type=file_type, content_type=ctype)
         schema_metadata, stats = profile_dataset(columns, rows)
         segments = discover_segments(columns, rows, schema_metadata, stats)
 
         ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-        # Store a sample of rows on disk for queries if needed
+        # Store structured records on disk for fast querying and preview
         file_path = str(UPLOAD_DIR / f"{ds_id}.json")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(rows, f)
@@ -70,6 +71,7 @@ class DatasetService:
             schema_metadata=schema_metadata,
             statistics=stats,
             segments=segments,
+            content_hash=content_hash,
             persona_count_generated=0,
             last_processed_at=_utcnow(),
         )
@@ -92,14 +94,15 @@ class DatasetService:
         file_type: Optional[str] = None,
     ) -> DatasetSources:
         """Parse uploaded dataset file, profile deterministically, discover segments, and store."""
+        content_hash = hashlib.sha256(content).hexdigest()
         columns, rows = parse_dataset_bytes(content, file_type=file_type, filename=original_filename)
         schema_metadata, stats = profile_dataset(columns, rows)
         segments = discover_segments(columns, rows, schema_metadata, stats)
 
         ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-        file_path = str(UPLOAD_DIR / f"{ds_id}_{original_filename}")
-        with open(file_path, "wb") as f:
-            f.write(content)
+        file_path = str(UPLOAD_DIR / f"{ds_id}.json")
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(rows, f)
 
         dataset = DatasetSources(
             id=ds_id,
@@ -117,6 +120,7 @@ class DatasetService:
             schema_metadata=schema_metadata,
             statistics=stats,
             segments=segments,
+            content_hash=content_hash,
             persona_count_generated=0,
             last_processed_at=_utcnow(),
         )
@@ -128,17 +132,24 @@ class DatasetService:
 
         return dataset
 
-    async def list_datasets(self, user_id: Optional[str] = None) -> list[DatasetSources]:
+    async def list_datasets(
+        self, user_id: Optional[str] = None, study_id: Optional[str] = None
+    ) -> list[DatasetSources]:
         async with self._sessionmaker() as session:
             query = select(DatasetSources).order_by(DatasetSources.created_at.desc())
+            if study_id:
+                query = query.filter(DatasetSources.study_id == study_id)
             if user_id:
                 query = query.filter((DatasetSources.user_id == user_id) | (DatasetSources.user_id.is_(None)))
             res = await session.execute(query)
             return list(res.scalars().all())
 
-    async def get_dataset(self, dataset_id: str) -> Optional[DatasetSources]:
+    async def get_dataset(self, dataset_id: str, user_id: Optional[str] = None) -> Optional[DatasetSources]:
         async with self._sessionmaker() as session:
-            res = await session.execute(select(DatasetSources).filter_by(id=dataset_id))
+            query = select(DatasetSources).filter_by(id=dataset_id)
+            if user_id:
+                query = query.filter((DatasetSources.user_id == user_id) | (DatasetSources.user_id.is_(None)))
+            res = await session.execute(query)
             return res.scalar_one_or_none()
 
     async def delete_dataset(self, dataset_id: str, user_id: Optional[str] = None) -> bool:
@@ -161,15 +172,31 @@ class DatasetService:
             await session.commit()
             return True
 
-    async def refresh_dataset(self, dataset_id: str) -> Optional[DatasetSources]:
-        """Re-fetch a URL-based dataset, re-calculate statistics and segments."""
+    async def refresh_dataset(self, dataset_id: str, user_id: Optional[str] = None) -> tuple[Optional[DatasetSources], bool]:
+        """Re-fetch a URL-based dataset, check content-hash, and re-calculate statistics only if changed.
+
+        Returns:
+            (dataset: DatasetSources | None, changed: bool)
+        """
         async with self._sessionmaker() as session:
-            res = await session.execute(select(DatasetSources).filter_by(id=dataset_id))
+            query = select(DatasetSources).filter_by(id=dataset_id)
+            if user_id:
+                query = query.filter((DatasetSources.user_id == user_id) | (DatasetSources.user_id.is_(None)))
+            res = await session.execute(query)
             ds = res.scalar_one_or_none()
             if not ds or ds.source_type != "url" or not ds.source_url:
-                return None
+                return None, False
 
             content, ctype = await safe_fetch_dataset_bytes(ds.source_url)
+            new_hash = hashlib.sha256(content).hexdigest()
+
+            # If content is completely identical, skip reprocessing
+            if ds.content_hash and ds.content_hash == new_hash:
+                ds.last_processed_at = _utcnow()
+                await session.commit()
+                await session.refresh(ds)
+                return ds, False
+
             columns, rows = parse_dataset_bytes(content, file_type=ds.file_type, content_type=ctype)
             schema_metadata, stats = profile_dataset(columns, rows)
             segments = discover_segments(columns, rows, schema_metadata, stats)
@@ -183,13 +210,37 @@ class DatasetService:
             ds.schema_metadata = schema_metadata
             ds.statistics = stats
             ds.segments = segments
+            ds.content_hash = new_hash
             ds.last_processed_at = _utcnow()
             ds.status = "ready"
             ds.processing_error = None
 
             await session.commit()
             await session.refresh(ds)
-            return ds
+            return ds, True
+
+    async def get_dataset_preview(
+        self, dataset_id: str, offset: int = 0, limit: int = 20, user_id: Optional[str] = None
+    ) -> dict[str, Any]:
+        """Load paginated preview rows from stored dataset records without loading massive files into client."""
+        ds = await self.get_dataset(dataset_id, user_id=user_id)
+        if not ds or not ds.file_path or not os.path.exists(ds.file_path):
+            return {"columns": [], "rows": [], "total_rows": 0, "offset": offset, "limit": limit}
+
+        with open(ds.file_path, "r", encoding="utf-8") as f:
+            records = json.load(f)
+
+        total_rows = len(records)
+        columns = list(records[0].keys()) if records else []
+        paged_rows = records[offset : offset + limit]
+
+        return {
+            "columns": columns,
+            "rows": paged_rows,
+            "total_rows": total_rows,
+            "offset": offset,
+            "limit": limit,
+        }
 
     async def query_dataset(
         self, dataset_id: str, filter_col: Optional[str] = None, filter_val: Optional[Any] = None, limit: int = 100

@@ -1,44 +1,43 @@
 /* ==========================================================================
-   BebshaX Ultra-Clean Minimalist Dark Design System (No Outlines / Borders)
+   BebshaX Teal / Cyan Research Theme Design System
    ========================================================================== */
 
 :root {
-  /* Core Color Palette: High-Craft Dark with #08090B Base */
-  --bg-pure: #08090b;
-  --bg-primary: #08090b;
-  --bg-secondary: #0d0f14;
-  --bg-card: #12151c;
-  --bg-card-hover: #181c26;
-  --bg-glass: rgba(8, 9, 11, 0.85);
+  /* Core Color Palette: High-Craft Dark with #080A0A Base */
+  --bg-pure: #080a0a;
+  --bg-primary: #080a0a;
+  --bg-secondary: #0d1111;
+  --bg-card: #111616;
+  --bg-card-hover: #161c1c;
+  --bg-glass: rgba(8, 10, 10, 0.85);
 
   /* Borders & Dividers */
-  --border-subtle: #1e2330;
-  --border-medium: #2a3142;
-  --border-hover: rgba(99, 102, 241, 0.35);
+  --border-subtle: #202727;
+  --border-medium: #2a3333;
+  --border-hover: rgba(20, 184, 166, 0.35);
 
   /* Typography Palette */
   --text-main: #ffffff;
-  --text-primary: #f5f7fa;
-  --text-secondary: #9299a5;
-  --text-muted: #5a6270;
+  --text-primary: #f4f7f7;
+  --text-secondary: #8d9999;
+  --text-muted: #535d5d;
 
-  /* Primary Accent: Indigo / Violet */
-  --accent-primary: #6366f1;
-  --accent-hover: #818cf8;
-  --accent-subtle: rgba(99, 102, 241, 0.12);
-  --accent-glow: rgba(99, 102, 241, 0.25);
+  /* Primary Accent: Teal / Cyan */
+  --accent-primary: #14b8a6;
+  --accent-hover: #22d3ee;
+  --accent-subtle: rgba(20, 184, 166, 0.12);
+  --accent-glow: rgba(20, 184, 166, 0.25);
 
-  /* Secondary Accent: Cool Blue & Status */
-  --accent-cyan: #38bdf8;
-  --accent-blue-primary: #60a5fa;
-  --accent-blue-glow: rgba(96, 165, 250, 0.25);
+  /* Secondary Accent & Status */
+  --accent-cyan: #22d3ee;
+  --accent-teal: #14b8a6;
   --accent-emerald: #10b981;
   --accent-amber: #f59e0b;
   --accent-rose: #ef4444;
 
   /* Legacy Accent Mappings for backward compatibility */
-  --accent-gold-primary: #6366f1;
-  --accent-gold-hover: #818cf8;
+  --accent-gold-primary: #14b8a6;
+  --accent-gold-hover: #22d3ee;
 
   /* Typography Fonts */
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -49,7 +48,7 @@
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 24px rgba(99, 102, 241, 0.2);
+  --shadow-glow: 0 0 24px rgba(20, 184, 166, 0.2);
 }
 
 *, *::before, *::after {
@@ -86,14 +85,20 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
 }
 
+.text-gradient-teal {
+  background: linear-gradient(135deg, #ffffff 20%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .text-gradient-indigo {
-  background: linear-gradient(135deg, #ffffff 20%, #818cf8 100%);
+  background: linear-gradient(135deg, #ffffff 20%, #22d3ee 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .text-gradient-gold {
-  background: linear-gradient(135deg, #ffffff 20%, #818cf8 100%);
+  background: linear-gradient(135deg, #ffffff 20%, #22d3ee 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
