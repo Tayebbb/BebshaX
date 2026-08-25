@@ -71,18 +71,13 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
     });
   });
 
-  it('navigates to Model Router view showing FreeLLMpool active provider routes and telemetry', async () => {
+  it('renders primary sidebar navigation tabs without Model Router', async () => {
     renderDashboard();
 
-    // Click on Model Router tab in sidebar
-    const routerTab = screen.getByRole('button', { name: /Model Router/i });
-    fireEvent.click(routerTab);
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Model Router & Telemetry/i })).toBeInTheDocument();
-      expect(screen.getByText('Live Provider Health Matrix')).toBeInTheDocument();
-      expect(screen.getByText('222 Free Model Routes')).toBeInTheDocument();
-    });
+    expect(screen.getByRole('button', { name: /New Study/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Persona Library/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Model Router/i })).toBeNull();
   });
 
   it('initiates study workflow from New Study prompt and moves through steps', async () => {

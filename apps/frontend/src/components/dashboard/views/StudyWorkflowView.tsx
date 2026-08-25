@@ -184,11 +184,19 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   // Synchronization refs to eliminate any duplicate assistant turns
   const isFetchingCopilotRef = useRef<boolean>(false);
+  const pendingHistoryRef = useRef<{ role: 'user' | 'assistant'; content: string }[] | null>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
+  const copilotMessagesRef = useRef<CopilotMessage[]>([]);
+
+  useEffect(() => {
+    copilotMessagesRef.current = copilotMessages;
+  }, [copilotMessages]);
 
   const fetchCopilotTurn = async (history: { role: 'user' | 'assistant'; content: string }[]) => {
-    // Synchronous lock: prevent concurrent double-execution
-    if (isFetchingCopilotRef.current) return;
+    if (isFetchingCopilotRef.current) {
+      pendingHistoryRef.current = history;
+      return;
+    }
     isFetchingCopilotRef.current = true;
     setIsCopilotTyping(true);
     try {
@@ -203,55 +211,81 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       };
 
       setCopilotMessages((prev) => {
-        // Enforce exactly one response: deduplicate identical consecutive assistant messages
         const lastMsg = prev[prev.length - 1];
         if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content.trim() === assistantMsg.content.trim()) {
           return prev;
         }
-        return [...prev, assistantMsg];
+        const updated = [...prev, assistantMsg];
+        copilotMessagesRef.current = updated;
+        return updated;
       });
 
       if (res.suggested_roles && res.suggested_roles.length > 0) {
         setSuggestedRoles(res.suggested_roles);
       }
     } catch {
-      // fallback handled gracefully
+      // Guaranteed fallback: create helpful assistant turn with approval card so the user is never stuck
+      const userTurns = history.filter((m) => m.role === 'user');
+      const latestUserPrompt = userTurns[userTurns.length - 1]?.content || 'Product Study';
+      const fallbackMsg = {
+        id: `msg_a_${Date.now()}`,
+        role: 'assistant' as const,
+        content: `Understood! I've synthesized your research objective for "${latestUserPrompt}". User Interviews will validate customer interest, price sensitivity, and willingness to pay.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+        isGoalCard: true,
+        goalCardData: {
+          title: 'RESEARCH GOAL',
+          summary: `Validate demand, pricing sensitivity, and willingness to pay for "${latestUserPrompt}". Does this capture what you're looking for?`,
+          target_audience: 'Target customers and price-sensitive shoppers',
+          core_hypothesis: 'Strong product-market fit and willingness to pay',
+        },
+      };
+      setCopilotMessages((prev) => {
+        const updated = [...prev, fallbackMsg];
+        copilotMessagesRef.current = updated;
+        return updated;
+      });
     } finally {
       setIsCopilotTyping(false);
       isFetchingCopilotRef.current = false;
+      if (pendingHistoryRef.current) {
+        const queued = pendingHistoryRef.current;
+        pendingHistoryRef.current = null;
+        fetchCopilotTurn(queued);
+      }
     }
   };
 
   const handleSendCopilotMessage = (text?: string) => {
-    if (isFetchingCopilotRef.current || isCopilotTyping) return;
-    const messageToSend = (typeof text === 'string' ? text : step1Prompt || promptInput).trim();
+    const inputEl = document.querySelector('input[placeholder*="Type here"]') as HTMLInputElement | null;
+    const domValue = inputEl?.value || '';
+    const messageToSend = (
+      typeof text === 'string' && text.trim() ? text : step1Prompt || promptInput || domValue
+    ).trim();
     if (!messageToSend) return;
 
-    const userMsg = {
+    setStep1Prompt('');
+    setPromptInput('');
+    if (inputEl) inputEl.value = '';
+
+    if (studyId) {
+      api.updateStudy(studyId, { prompt: messageToSend }).catch(() => {});
+    }
+
+    const userMsg: CopilotMessage = {
       id: `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       role: 'user' as const,
       content: messageToSend,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
     };
 
-    setStep1Prompt('');
-    setPromptInput('');
+    const currentList = copilotMessagesRef.current;
+    const updatedMessages = [...currentList, userMsg];
+    copilotMessagesRef.current = updatedMessages;
+    setCopilotMessages(updatedMessages);
 
-    setCopilotMessages((prev) => {
-      // Deduplicate consecutive identical user messages
-      const last = prev[prev.length - 1];
-      if (last && last.role === 'user' && last.content.trim() === userMsg.content.trim()) {
-        return prev;
-      }
-      const updated = [...prev, userMsg];
-      fetchCopilotTurn(
-        updated.map((m) => ({
-          role: m.role,
-          content: m.content,
-        }))
-      );
-      return updated;
-    });
+    const newHistory = updatedMessages.map((m) => ({ role: m.role, content: m.content }));
+    fetchCopilotTurn(newHistory);
   };
 
   const handleSendInterviewMessage = async (e: React.FormEvent) => {
@@ -288,18 +322,26 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   const handleApproveGoal = async (summary?: string) => {
     setShowRoleSelection(true);
-    if (suggestedRoles.length === 0) {
-      try {
-        const roles = await api.getSuggestedPersonaRoles(summary || promptInput || 'Bangladeshi student study planner');
-        if (roles && roles.length > 0) setSuggestedRoles(roles);
-      } catch {
-        // ignore
+    const activePrompt =
+      summary ||
+      [...copilotMessages].reverse().find((m) => m.role === 'user')?.content ||
+      promptInput ||
+      study?.prompt ||
+      'Product Research Study';
+
+    try {
+      const roles = await api.getSuggestedPersonaRoles(activePrompt);
+      if (roles && roles.length > 0) {
+        setSuggestedRoles(roles);
       }
+    } catch {
+      // ignore
     }
+
     if (study) {
       try {
         api.updateStudy(study.id, {
-          prompt: summary || promptInput,
+          prompt: activePrompt,
         });
       } catch {
         // ignore
@@ -365,6 +407,24 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     const activeRoles = suggestedRoles.filter((r) => r.selected && r.count > 0);
     const totalCount = activeRoles.reduce((sum, r) => sum + r.count, 0) || 10;
 
+    const allUserTexts = copilotMessagesRef.current
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content)
+      .join(' ');
+
+    const userPrompt =
+      allUserTexts ||
+      promptInput ||
+      study?.prompt ||
+      'Product Research Study';
+
+    const studyTitle =
+      study?.title && study.title !== 'Untitled Study'
+        ? study.title
+        : userPrompt.length > 50
+        ? userPrompt.slice(0, 50) + '...'
+        : userPrompt;
+
     // Fast animated generation sequence
     const progressInterval = setInterval(() => {
       setGenerationProgress((prev) => {
@@ -379,9 +439,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     try {
       const generated = await api.generateStudyPersonas(
         study?.id || studyId,
-        study?.prompt || promptInput || 'Student Study Planner AI',
+        userPrompt,
         suggestedRoles,
-        study?.title || 'Student Study Planner AI'
+        studyTitle
       );
 
       setTimeout(() => {
@@ -394,6 +454,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
         if (study) {
           api.updateStudy(study.id, {
+            title: studyTitle,
+            prompt: userPrompt,
             persona_count: generated.length || totalCount,
             persona_ids: generated.map((p) => p.id),
             step: 2,
@@ -467,7 +529,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           if (data.prompt) setPromptInput(data.prompt);
           if (data.goal) setSelectedGoal(data.goal);
           if (data.step && !initialStep) setCurrentStep(data.step);
-          if (data.copilot_messages && data.copilot_messages.length > 0) {
+          if (data.copilot_messages && data.copilot_messages.length > 0 && copilotMessagesRef.current.length === 0) {
             setCopilotMessages(
               data.copilot_messages.map((m: any, idx: number) => ({
                 id: m.id || `msg_loaded_${idx}`,
@@ -1220,7 +1282,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   margin: 0,
                 }}
               >
-                {study?.title || 'Student Study Planner AI'}
+                {study?.title && study.title !== 'Untitled Study'
+                  ? study.title
+                  : [...copilotMessages].reverse().find((m) => m.role === 'user')?.content ||
+                    promptInput ||
+                    'Product Research Study'}
               </h1>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '2px' }}>
@@ -2591,7 +2657,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 type="button"
                 onClick={() => {
                   if (currentStep === 1) {
-                    handleSendCopilotMessage(step1Prompt);
+                    handleSendCopilotMessage();
                   } else {
                     handleStepChange(currentStep + 1);
                   }

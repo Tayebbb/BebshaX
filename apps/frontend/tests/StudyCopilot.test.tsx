@@ -133,4 +133,67 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       expect(screen.getByText('Interview Script & Probing Rules')).toBeInTheDocument();
     });
   });
+
+  it('answers user prompt and generates custom personas for price tracker website business idea', async () => {
+    renderWorkflow();
+
+    // User types in bottom bar and submits
+    const input = screen.getByPlaceholderText(/Type here to answer or give more context/i);
+    fireEvent.change(input, { target: { value: 'want to start a price tracker website for 100 taka per month' } });
+    const sendBtn = screen.getByLabelText(/Send prompt/i);
+    fireEvent.click(sendBtn);
+
+    // User message bubble appears
+    expect(screen.getByText('want to start a price tracker website for 100 taka per month')).toBeInTheDocument();
+
+    // Assistant answers and provides guidance
+    await waitFor(() => {
+      expect(screen.getByText(/Got it — you're exploring a(n)? (\*\*)?price tracker/i)).toBeInTheDocument();
+      expect(screen.getByText(/Who are your primary users/i)).toBeInTheDocument();
+    });
+
+    // Provide audience clarification
+    const input2 = screen.getByPlaceholderText(/Type here to answer or give more context/i);
+    fireEvent.change(input2, { target: { value: 'bargain hunters in Bangladesh who shop on Daraz and Pickaboo' } });
+    fireEvent.click(screen.getByLabelText(/Send prompt/i));
+
+    await waitFor(() => {
+      expect(screen.getByText(/What specific alert channels/i)).toBeInTheDocument();
+    });
+
+    // Provide pricing model confirmation
+    const input3 = screen.getByPlaceholderText(/Type here to answer or give more context/i);
+    fireEvent.change(input3, { target: { value: '100 taka per month subscription via bKash' } });
+    fireEvent.click(screen.getByLabelText(/Send prompt/i));
+
+    // Goal card appears
+    await waitFor(() => {
+      expect(screen.getByText('RESEARCH GOAL')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Approve/i })).toBeInTheDocument();
+    });
+
+    // Approve goal
+    const approveBtn = screen.getAllByRole('button', { name: /Approve/i })[0];
+    fireEvent.click(approveBtn);
+
+    // Verify suggested roles include price tracker roles
+    await waitFor(() => {
+      expect(screen.getByText(/SUGGESTED ROLES FOR YOUR STUDY/i)).toBeInTheDocument();
+      expect(screen.getByText(/SMART BARGAIN HUNTER/i)).toBeInTheDocument();
+    });
+
+    // Generate Personas
+    const generateBtn = screen.getAllByRole('button', { name: /Generate Personas/i })[0];
+    fireEvent.click(generateBtn);
+
+    // Verify Step 2 shows generated personas for price tracker
+    await waitFor(
+      () => {
+        expect(screen.getByText('Samiul Alam')).toBeInTheDocument();
+        expect(screen.getByText('The Strategic Deal Optimizer')).toBeInTheDocument();
+        expect(screen.getByText('Nabila Khan')).toBeInTheDocument();
+      },
+      { timeout: 4000 }
+    );
+  });
 });

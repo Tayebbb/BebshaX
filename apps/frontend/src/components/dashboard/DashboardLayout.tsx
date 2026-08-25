@@ -3,7 +3,6 @@ import {
   PenSquare,
   LayoutGrid,
   Contact2,
-  Cpu,
   ChevronDown,
   ChevronRight,
   PanelLeft,
@@ -176,11 +175,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       id: 'personas' as DashboardTab,
       label: 'Persona Library',
       icon: <Contact2 size={16} />,
-    },
-    {
-      id: 'router' as DashboardTab,
-      label: 'Model Router & Provenance',
-      icon: <Cpu size={16} />,
     },
   ];
 

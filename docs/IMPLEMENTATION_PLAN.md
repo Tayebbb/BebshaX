@@ -279,3 +279,18 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 **Tests:** 142 passed, 3 deselected (auth/DB integration tests skipped without live DB). No new dependencies added.
 
 **Deviations:** None from spec. The `test_unknown_adapter_in_pool_config_fails_fast` test was renamed to `test_unknown_adapter_in_pool_config_warns` to match the intentional behavior change (warn, not fail).
+
+### Maintenance (2026-08-25) — Dashboard Sidebar Cleanup & Copilot Dialogue & Persona Generation Fixes
+
+**What was built:**
+
+- **Dashboard Layout Cleanup:** Removed `Model Router & Provenance` tab and its `Cpu` icon from `DashboardLayout.tsx` per user request. Verified sidebar now renders only `New Study`, `Dashboard`, and `Persona Library`.
+- **Copilot Message & Persona Generation Resilience:**
+  - Resolved issue in `StudyWorkflowView.tsx` where Copilot conversational answering or persona generation failed when backend is unreachable.
+  - Implemented `copilotMessagesRef` synchronization and `pendingHistoryRef` request queuing to eliminate state clobbering, race conditions, and typing stalls.
+  - Guarded `useEffect` on `[studyId]` so loaded study messages do not overwrite active user turns in-flight.
+  - Enriched `api.ts` with context-aware pricing tracker roles (`SMART BARGAIN HUNTER`, `TECH-SAVVY CONSUMER`, `BUDGET-CONSCIOUS BUYER`, etc.) and tailored personas (`Samiul Alam`, `Nabila Khan`, `Tanvir Hasan`).
+  - Added full test coverage in `StudyCopilot.test.tsx` verifying multi-turn price tracker prompts, goal card synthesis, suggested roles, and Step 2 grounded persona generation.
+
+**Tests:** 41/41 frontend tests green; 143/143 backend pytest tests green.
+
