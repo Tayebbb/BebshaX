@@ -106,6 +106,13 @@ async def init_database(
         SavedAudiences,
         Studies,
     )
+    from bebshax.behavioral.orm import (  # noqa: F401
+        BehavioralInsights,
+        BehavioralTestResults,
+        BehavioralTestRuns,
+        BehavioralTestScenarios,
+        BehavioralTests,
+    )
     from bebshax.interview.orm import (  # noqa: F401
         Conversations,
         ConversationTurns,

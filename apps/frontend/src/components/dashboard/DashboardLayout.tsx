@@ -9,6 +9,8 @@ import {
   PanelLeft,
   LogOut,
   Globe,
+  Sliders,
+  MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
@@ -22,11 +24,14 @@ import { EvidenceLaboratoryView } from './views/EvidenceLaboratoryView';
 import { SegmentationView } from './views/SegmentationView';
 import { InterviewsView } from './views/InterviewsView';
 import { InterviewWorkspaceView } from './views/InterviewWorkspaceView';
+import { BehavioralTestingView } from './views/BehavioralTestingView';
+import { BehavioralTestDetailView } from './views/BehavioralTestDetailView';
+import { BehavioralComparisonView } from './views/BehavioralComparisonView';
 import { StartInterviewModal } from './modals/StartInterviewModal';
+import { CreateBehavioralTestModal } from './modals/CreateBehavioralTestModal';
 import { StudyType, Study, SyntheticPersona } from '../../types';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
-import { MessageSquare } from 'lucide-react';
 
 export type DashboardTab =
   | 'new-study'
@@ -34,6 +39,9 @@ export type DashboardTab =
   | 'personas'
   | 'interviews'
   | 'interview-workspace'
+  | 'behavioral-tests'
+  | 'behavioral-test-detail'
+  | 'behavioral-compare'
   | 'datasets'
   | 'router'
   | 'study-workflow'
@@ -48,8 +56,31 @@ const parseDashboardPath = (path: string): {
   tab: DashboardTab;
   studyId?: string;
   interviewId?: string;
+  testId?: string;
+  runId?: string;
+  compareRunIds?: string[];
   step?: number;
 } => {
+  if (path.includes('/behavioral-tests/compare')) {
+    const parts = path.split('?');
+    const queryParams = new URLSearchParams(parts[1] || '');
+    const runIds = queryParams.get('run_ids')?.split(',').filter(Boolean) || [];
+    const pathParts = parts[0].split('/').filter(Boolean);
+    const studyId = pathParts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    return { tab: 'behavioral-compare', studyId, compareRunIds: runIds };
+  }
+  if (path.includes('/behavioral-tests/') && !path.endsWith('/behavioral-tests')) {
+    const parts = path.split('/').filter(Boolean);
+    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const testId = parts[3] || parts[2] || '';
+    const runId = parts[5] || undefined;
+    return { tab: 'behavioral-test-detail', studyId, testId, runId };
+  }
+  if (path.includes('/behavioral-tests') || path.startsWith('/behavioral-tests')) {
+    const parts = path.split('/').filter(Boolean);
+    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    return { tab: 'behavioral-tests', studyId };
+  }
   if (path.includes('/interviews/') || path.startsWith('/interviews/')) {
     const parts = path.split('/').filter(Boolean);
     const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
@@ -89,6 +120,17 @@ const parseDashboardPath = (path: string): {
   if (path.startsWith('/research') || path.startsWith('/study')) {
     const parts = path.split('/').filter(Boolean);
     const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    if (parts[2] === 'behavioral-tests' && parts[3] === 'compare') {
+      const queryParams = new URLSearchParams(path.split('?')[1] || '');
+      const runIds = queryParams.get('run_ids')?.split(',').filter(Boolean) || [];
+      return { tab: 'behavioral-compare', studyId, compareRunIds: runIds };
+    }
+    if (parts[2] === 'behavioral-tests' && parts[3]) {
+      return { tab: 'behavioral-test-detail', studyId, testId: parts[3], runId: parts[5] };
+    }
+    if (parts[2] === 'behavioral-tests') {
+      return { tab: 'behavioral-tests', studyId };
+    }
     if (parts[2] === 'interviews' && parts[3]) {
       return { tab: 'interview-workspace', studyId, interviewId: parts[3] };
     }
@@ -117,6 +159,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [activeInterviewId, setActiveInterviewId] = useState<string | undefined>(initialParsed.interviewId);
   const [activeStep, setActiveStep] = useState<number>(initialParsed.step || 1);
 
+  const [activeTestId, setActiveTestId] = useState<string | undefined>(initialParsed.testId);
+  const [activeRunId, setActiveRunId] = useState<string | undefined>(initialParsed.runId);
+  const [activeCompareRunIds, setActiveCompareRunIds] = useState<string[]>(initialParsed.compareRunIds || []);
+
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isRecentStudiesOpen, setIsRecentStudiesOpen] = useState(true);
   const [recentStudies, setRecentStudies] = useState<Study[]>([]);
@@ -125,9 +171,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [initialWorkflowPrompt, setInitialWorkflowPrompt] = useState<string | undefined>(undefined);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  // Interview Modal State
+  // Interview & Behavioral Modal State
   const [modalPersona, setModalPersona] = useState<SyntheticPersona | null>(null);
   const [showStartInterviewModal, setShowStartInterviewModal] = useState<boolean>(false);
+  const [showCreateBehavioralModal, setShowCreateBehavioralModal] = useState<boolean>(false);
+  const [initialBehavioralPersonaId, setInitialBehavioralPersonaId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const parsed = parseDashboardPath(currentPath);
@@ -137,6 +185,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     }
     if (parsed.interviewId) {
       setActiveInterviewId(parsed.interviewId);
+    }
+    if (parsed.testId) {
+      setActiveTestId(parsed.testId);
+    }
+    if (parsed.runId) {
+      setActiveRunId(parsed.runId);
+    }
+    if (parsed.compareRunIds) {
+      setActiveCompareRunIds(parsed.compareRunIds);
     }
     if (parsed.step) {
       setActiveStep(parsed.step);
@@ -173,6 +230,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     else if (tab === 'dashboard') navigate('/dashboard');
     else if (tab === 'personas') navigate('/persona-library');
     else if (tab === 'interviews') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`);
+    else if (tab === 'behavioral-tests') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests`);
     else if (tab === 'datasets') navigate('/datasets');
     else if (tab === 'router') navigate('/router');
     else if (tab === 'study-workflow') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
@@ -233,6 +291,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       id: 'interviews' as DashboardTab,
       label: 'Interviews',
       icon: <MessageSquare size={16} />,
+    },
+    {
+      id: 'behavioral-tests' as DashboardTab,
+      label: 'Behavioral Testing',
+      icon: <Sliders size={16} />,
     },
     {
       id: 'datasets' as DashboardTab,
@@ -787,6 +850,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`);
               }
             }}
+            onTestBehaviorWithPersona={(pId) => {
+              setInitialBehavioralPersonaId(pId);
+              setShowCreateBehavioralModal(true);
+            }}
             onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}
             onNavigateToDatasets={() => navigate('/datasets')}
             onNavigateToSegmentation={() => navigate(`/research/${activeStudyId || 'study_default'}/segmentation`)}
@@ -810,6 +877,48 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             interviewId={activeInterviewId}
             onBackToInterviews={() => navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`)}
             onNavigateToPersona={() => navigate('/persona-library')}
+          />
+        )}
+
+        {activeTab === 'behavioral-tests' && (
+          <BehavioralTestingView
+            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+            onOpenTest={(testId, runId) => {
+              setActiveTestId(testId);
+              setActiveRunId(runId);
+              navigate(
+                runId
+                  ? `/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/${testId}/runs/${runId}`
+                  : `/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/${testId}`
+              );
+            }}
+            onCompareRuns={(runIds) => {
+              setActiveCompareRunIds(runIds);
+              navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/compare?run_ids=${runIds.join(',')}`);
+            }}
+            onNavigateToPersonas={() => navigate('/persona-library')}
+          />
+        )}
+
+        {activeTab === 'behavioral-test-detail' && activeTestId && (
+          <BehavioralTestDetailView
+            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+            testId={activeTestId}
+            initialRunId={activeRunId}
+            onBack={() => navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests`)}
+            onCompareRuns={(runIds) => {
+              setActiveCompareRunIds(runIds);
+              navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/compare?run_ids=${runIds.join(',')}`);
+            }}
+            onNavigateToPersona={() => navigate('/persona-library')}
+          />
+        )}
+
+        {activeTab === 'behavioral-compare' && (
+          <BehavioralComparisonView
+            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+            runIds={activeCompareRunIds}
+            onBack={() => navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests`)}
           />
         )}
 
@@ -862,6 +971,28 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           onInterviewStarted={(newInterviewId) => {
             setActiveInterviewId(newInterviewId);
             navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews/${newInterviewId}`);
+          }}
+        />
+      )}
+
+      {/* Create Behavioral Simulation Modal */}
+      {showCreateBehavioralModal && (
+        <CreateBehavioralTestModal
+          isOpen={showCreateBehavioralModal}
+          onClose={() => {
+            setShowCreateBehavioralModal(false);
+            setInitialBehavioralPersonaId(undefined);
+          }}
+          studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+          initialPersonaId={initialBehavioralPersonaId}
+          onTestCreated={(testId, runId) => {
+            setActiveTestId(testId);
+            setActiveRunId(runId);
+            navigate(
+              runId
+                ? `/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/${testId}/runs/${runId}`
+                : `/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/${testId}`
+            );
           }}
         />
       )}

@@ -18,6 +18,7 @@ import {
   Quote,
   Target,
   AlertCircle,
+  Sliders,
 } from 'lucide-react';
 import { SyntheticPersona, MarketSegment, Study, PersonaGenerationRun } from '../../../types';
 import { api } from '../../../services/api';
@@ -25,6 +26,7 @@ import { api } from '../../../services/api';
 interface PersonaLibraryViewProps {
   studyId?: string;
   onStartInterviewWithPersona?: (personaId: string) => void;
+  onTestBehaviorWithPersona?: (personaId: string) => void;
   onNavigateToEvidence?: () => void;
   onNavigateToDatasets?: () => void;
   onNavigateToSegmentation?: () => void;
@@ -33,6 +35,7 @@ interface PersonaLibraryViewProps {
 export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   studyId,
   onStartInterviewWithPersona,
+  onTestBehaviorWithPersona,
   onNavigateToEvidence,
   onNavigateToDatasets: _onNavigateToDatasets,
   onNavigateToSegmentation: _onNavigateToSegmentation,
@@ -791,6 +794,27 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         }}
                       >
                         <MessageSquare size={14} />
+                      </button>
+                    )}
+
+                    {onTestBehaviorWithPersona && (
+                      <button
+                        type="button"
+                        onClick={() => onTestBehaviorWithPersona(persona.id)}
+                        title="Simulate Behavioral Scenario with this persona (Part 7)"
+                        style={{
+                          background: 'rgba(20, 184, 166, 0.1)',
+                          border: '1px solid rgba(20, 184, 166, 0.25)',
+                          borderRadius: '8px',
+                          padding: '7px 10px',
+                          color: '#14B8A6',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Sliders size={14} />
                       </button>
                     )}
                   </div>

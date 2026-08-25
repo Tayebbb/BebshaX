@@ -208,4 +208,5 @@ export * from './evidence';
 export * from './segmentation';
 export * from './persona';
 export * from './interview';
+export * from './behavioral';
 

@@ -51,6 +51,7 @@ TASK_POOL_MAP: dict[TaskType, str] = {
     TaskType.REPORT_GENERATION: "long_context",
     TaskType.STRUCTURED_OUTPUT: "structured",
     TaskType.PERSONA_NARRATIVE: "reasoning",
+    TaskType.BEHAVIORAL_SIMULATION: "reasoning",
     TaskType.BROWSER_AGENT: "structured",
     TaskType.TOOL_CALLING: "structured",
     TaskType.EMERGENCY_FALLBACK: "emergency",

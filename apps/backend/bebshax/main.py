@@ -55,6 +55,10 @@ async def _lifespan(app: FastAPI):
     app.state.interview_engine = InterviewEngine(
         llm_router, sessionmaker_, memory=app.state.memory_service
     )
+    from bebshax.behavioral.engine import BehavioralSimulationEngine
+    app.state.behavioral_engine = BehavioralSimulationEngine(
+        llm_router, sessionmaker_, memory=app.state.memory_service
+    )
 
     # Automatic table creation, extensions, and demo data initialization on startup
     try:
@@ -87,6 +91,8 @@ def create_app() -> FastAPI:
     app.include_router(routes_router, prefix="/api")
     app.include_router(personas_router, prefix="/api")
     app.include_router(interviews_router, prefix="/api")
+    from bebshax.api.behavioral import router as behavioral_router
+    app.include_router(behavioral_router, prefix="/api")
     app.include_router(copilot_router, prefix="/api")
     app.include_router(studies_router, prefix="/api")
     app.include_router(evaluation_router, prefix="/api")

@@ -563,4 +563,53 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 **Tests:** 15/15 frontend test suites passed (68/68 tests green); 190/190 backend pytest tests green; TypeScript typecheck green (0 errors).
 
+---
+
+### Part 7 (2026-08-26) — Behavioral Testing & Simulation ✅
+
+**What was built:**
+
+- **Task Type & Model Pools (`apps/backend/bebshax/llm/`):**
+  - Added `TaskType.BEHAVIORAL_SIMULATION` in `apps/backend/bebshax/llm/types.py`.
+  - Mapped `TaskType.BEHAVIORAL_SIMULATION` to the high-reliability `"reasoning"` model pool in `apps/backend/bebshax/llm/pools.py`.
+- **Database Persistence & Alembic Migration (`apps/backend/bebshax/behavioral/orm.py` & Alembic):**
+  - Created ORM models: `BehavioralTests`, `BehavioralTestScenarios`, `BehavioralTestRuns`, `BehavioralTestResults`, and `BehavioralInsights`.
+  - Created and applied Alembic migration `b8e4f1a2c3d5_add_behavioral_testing_tables.py` adding all 5 behavioral testing tables with UUID primary keys, foreign keys, and indexes.
+- **Simulation Engine & Anti-Sycophancy Guardrails (`apps/backend/bebshax/behavioral/engine.py`):**
+  - Modular Simulation Framework: 8 test types implemented with domain-specific decision evaluation logic (`purchase_decision`, `pricing_test`, `feature_test`, `concept_test`, `message_test`, `offer_test`, `switching_test`, `objection_test`).
+  - Context Aggregator: aggregates persona commercial profiles, monthly budget (BDT), pain points, behaviors, objections, Part 2 evidence claims, and Part 6 adaptive interview transcripts.
+  - Non-Sycophantic Prompting: personas evaluate scenarios within disposable budget (e.g. ৳300–৳600), consider free alternatives, and challenge concepts with genuine friction. Untrusted scenario inputs are wrapped in `<UNTRUSTED_SCENARIO>` tags with system instruction override defenses.
+  - Deterministic Confidence Scoring: calculated from presence of commercial budget, interview transcript depth, and evidence grounding.
+  - Aggregate Synthesizer: computes positive/neutral/negative distributions, average purchase likelihood percentage, segment-level breakdowns, cross-persona pattern extraction, and surfaced risks/opportunities.
+  - Resilience & Retries: `retry_failed_simulations` handler that re-runs only failed or timeout persona simulations and updates aggregate metrics.
+- **FastAPI Behavioral REST Router (`apps/backend/bebshax/api/behavioral.py`):**
+  - Study-scoped endpoints with strict IDOR ownership verification:
+    - `POST /api/studies/{study_id}/behavioral-tests` (Create test & scenario)
+    - `GET /api/studies/{study_id}/behavioral-tests` (List study tests with summary metrics)
+    - `GET /api/studies/{study_id}/behavioral-tests/metrics` (Aggregate behavioral testing metrics)
+    - `GET /api/studies/{study_id}/behavioral-tests/{test_id}` (Test details & configuration)
+    - `PUT /api/studies/{study_id}/behavioral-tests/{test_id}` (Update test)
+    - `DELETE /api/studies/{study_id}/behavioral-tests/{test_id}` (Delete test)
+    - `POST /api/studies/{study_id}/behavioral-tests/{test_id}/runs` (Trigger new simulation run across personas/segments)
+    - `GET /api/studies/{study_id}/behavioral-tests/{test_id}/runs` (List historical simulation runs)
+    - `GET /api/studies/{study_id}/behavioral-tests/runs/{run_id}` (Simulation run details, progress, & individual results)
+    - `POST /api/studies/{study_id}/behavioral-tests/runs/{run_id}/retry-failed` (Retry failed persona simulations)
+    - `GET /api/studies/{study_id}/behavioral-tests/compare` (Side-by-side run comparison)
+- **Teal / Cyan Behavioral Testing Frontend UI (`apps/frontend/`):**
+  - TypeScript types (`src/types/behavioral.ts`) exported in `src/types/index.ts`.
+  - API Client methods in `src/services/api.ts`.
+  - `CreateBehavioralTestModal.tsx`: 4-step interactive wizard (Test Type Selection with 8 rich cards → Dynamic Scenario Configuration → Target Population Selector with All/Segment/Individual modes → Preview & Confirm with Synthetic Simulation disclaimer).
+  - `BehavioralTestingView.tsx`: Main overview hub with 4 top metrics (Total Tests, Simulation Runs, Personas Evaluated, Avg Purchase Likelihood), filter & search controls, and test cards with status badges and re-run triggers.
+  - `BehavioralTestDetailView.tsx`: In-depth results view with live simulation polling, stacked sentiment distribution bar, confidence breakdown, identified risks & friction points, opportunities & drivers, segment comparison table, persona decision grid, retry failed button, and an interactive Persona Decision Inspector modal displaying reasoning chains and grounded context signals.
+  - `BehavioralComparisonView.tsx`: Side-by-side simulation run comparison matrix for parameter variation analysis.
+  - `PersonaLibraryView.tsx`: Added "Test Behavior" quick-action button on persona cards.
+  - `DashboardLayout.tsx`: Added "Behavioral Testing" sidebar navigation item and route matching for `/behavioral-tests`, `/behavioral-tests/:id`, and `/behavioral-tests/compare`.
+- **Automated Tests:**
+  - Backend: `apps/backend/tests/behavioral/test_behavioral_engine.py` (engine unit tests) and `apps/backend/tests/test_behavioral_api_idor.py` (IDOR isolation) (**195/195 pytest passed**).
+  - Frontend: `apps/frontend/tests/BehavioralTesting.test.tsx` testing overview rendering, 4-step wizard, result detail view, persona inspector drawer, and run comparison (**16/16 test suites, 72/72 vitest passed**).
+  - Full bundle build: `npm run build` green (0 TypeScript compilation errors).
+
+**Tests:** 16/16 frontend test suites passed (72/72 tests green); 195/195 backend pytest tests green; Vite build complete.
+
+
 

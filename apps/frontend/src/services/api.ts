@@ -3445,6 +3445,10 @@ export const api = {
     return this.listStudySegments(studyId, options);
   },
 
+  async getStudySegments(studyId: string, options?: { run_id?: string; status?: string }): Promise<MarketSegment[]> {
+    return this.listStudySegments(studyId, options);
+  },
+
   async getSegmentDetail(studyId: string, segmentId: string): Promise<MarketSegment> {
     if (!this.isMockMode()) {
       try {
@@ -4128,6 +4132,244 @@ export const api = {
       }
     }
     return { insights: [] };
+  },
+
+  // ---------------------------------------------------------------------------
+  // Part 7: Behavioral Testing & Simulation
+  // ---------------------------------------------------------------------------
+
+  async createBehavioralTest(studyId: string, payload: any): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests`, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({ detail: 'Failed to create behavioral test' }));
+        throw new Error(err.detail || 'Failed to create behavioral test');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    throw new Error('Backend required for creating behavioral tests');
+  },
+
+  async getBehavioralTests(studyId: string, q?: string, testType?: string, statusFilter?: string): Promise<any[]> {
+    if (!this.isMockMode()) {
+      try {
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (testType && testType !== 'all') params.set('test_type', testType);
+        if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
+
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests?${params.toString()}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return [];
+  },
+
+  async getBehavioralMetrics(studyId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/metrics`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return {
+      study_id: studyId,
+      total_tests: 0,
+      total_runs: 0,
+      completed_runs: 0,
+      total_personas_simulated: 0,
+      average_buy_likelihood: 0.52,
+      average_buy_likelihood_percentage: 52,
+    };
+  },
+
+  async getBehavioralTestDetail(studyId: string, testId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/${testId}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({ detail: 'Failed to fetch test detail' }));
+        throw new Error(err.detail || 'Failed to fetch test detail');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    throw new Error('Backend required for test detail');
+  },
+
+  async updateBehavioralTest(studyId: string, testId: string, payload: any): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/${testId}`, {
+          method: 'PUT',
+          headers: this.getAuthHeaders(),
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({ detail: 'Failed to update test' }));
+        throw new Error(err.detail || 'Failed to update test');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    throw new Error('Backend required for updating test');
+  },
+
+  async deleteBehavioralTest(studyId: string, testId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/${testId}`, {
+          method: 'DELETE',
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    return { success: true };
+  },
+
+  async triggerBehavioralTestRun(studyId: string, testId: string, payload: any): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/${testId}/runs`, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({ detail: 'Failed to start simulation run' }));
+        throw new Error(err.detail || 'Failed to start simulation run');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    throw new Error('Backend required for running simulation');
+  },
+
+  async getBehavioralTestRuns(studyId: string, testId: string): Promise<any[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/${testId}/runs`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return [];
+  },
+
+  async getBehavioralRunStatus(studyId: string, runId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/runs/${runId}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({ detail: 'Failed to fetch run status' }));
+        throw new Error(err.detail || 'Failed to fetch run status');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    throw new Error('Backend required for run status');
+  },
+
+  async getBehavioralRunResults(studyId: string, runId: string): Promise<any> {
+    return this.getBehavioralRunStatus(studyId, runId);
+  },
+
+  async retryFailedBehavioralRun(studyId: string, runId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/runs/${runId}/retry-failed`, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({ detail: 'Failed to retry failed simulations' }));
+        throw new Error(err.detail || 'Failed to retry failed simulations');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    throw new Error('Backend required for retrying simulations');
+  },
+
+  async compareBehavioralRuns(studyId: string, runIds: string[]): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(
+          `${API_BASE}/studies/${studyId}/behavioral-tests/compare?run_ids=${encodeURIComponent(runIds.join(','))}`,
+          {
+            headers: this.getAuthHeaders(),
+          }
+        );
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return { study_id: studyId, compared_run_count: 0, runs: [] };
   },
 };
 

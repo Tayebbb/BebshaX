@@ -1,0 +1,561 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Sliders,
+  Plus,
+  Search,
+  ArrowRight,
+  TrendingUp,
+  Users,
+  CheckCircle2,
+  AlertTriangle,
+  RotateCw,
+  Layers,
+  DollarSign,
+  ShoppingCart,
+  MessageSquare,
+  Gift,
+  RefreshCw,
+  Lightbulb,
+} from 'lucide-react';
+import { BehavioralTest, BehavioralMetricsResponse, BehavioralTestType } from '../../../types';
+import { api } from '../../../services/api';
+import { CreateBehavioralTestModal } from '../modals/CreateBehavioralTestModal';
+
+interface BehavioralTestingViewProps {
+  studyId: string;
+  onOpenTest: (testId: string, runId?: string) => void;
+  onCompareRuns?: (runIds: string[]) => void;
+  onNavigateToPersonas?: () => void;
+}
+
+export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
+  studyId,
+  onOpenTest,
+  onCompareRuns: _onCompareRuns,
+  onNavigateToPersonas: _onNavigateToPersonas,
+}) => {
+  const [tests, setTests] = useState<BehavioralTest[]>([]);
+  const [metrics, setMetrics] = useState<BehavioralMetricsResponse | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const fetchTestsAndMetrics = async () => {
+    setIsLoading(true);
+    try {
+      const [testList, metricsData] = await Promise.all([
+        api.getBehavioralTests(studyId, searchQuery, typeFilter, statusFilter),
+        api.getBehavioralMetrics(studyId),
+      ]);
+      setTests(testList || []);
+      setMetrics(metricsData || null);
+    } catch {
+      // Graceful fallback
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTestsAndMetrics();
+  }, [studyId, typeFilter, statusFilter]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchTestsAndMetrics();
+  };
+
+  const getTypeIcon = (type: BehavioralTestType) => {
+    switch (type) {
+      case 'pricing_test':
+        return <DollarSign size={18} className="text-teal-400" />;
+      case 'purchase_decision':
+        return <ShoppingCart size={18} className="text-cyan-400" />;
+      case 'feature_test':
+        return <Layers size={18} className="text-emerald-400" />;
+      case 'concept_test':
+        return <Lightbulb size={18} className="text-amber-400" />;
+      case 'message_test':
+        return <MessageSquare size={18} className="text-sky-400" />;
+      case 'offer_test':
+        return <Gift size={18} className="text-violet-400" />;
+      case 'switching_test':
+        return <RefreshCw size={18} className="text-rose-400" />;
+      case 'objection_test':
+        return <AlertTriangle size={18} className="text-orange-400" />;
+      default:
+        return <Sliders size={18} className="text-teal-400" />;
+    }
+  };
+
+  return (
+    <div style={{ padding: '32px 40px', maxWidth: '1400px', margin: '0 auto', color: '#F8FAFC' }}>
+      {/* Top Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          marginBottom: '28px',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                backgroundColor: 'rgba(20, 184, 166, 0.15)',
+                border: '1px solid rgba(20, 184, 166, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#14B8A6',
+              }}
+            >
+              <Sliders size={20} />
+            </div>
+            <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
+              Behavioral Testing & Simulation
+            </h1>
+          </div>
+          <p style={{ margin: 0, fontSize: '0.92rem', color: '#94A3B8' }}>
+            Test how your synthetic customer population responds to pricing, features, copy, and product offers.
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShowCreateModal(true)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '12px 22px',
+            borderRadius: '10px',
+            backgroundColor: '#14B8A6',
+            border: 'none',
+            color: '#042F2E',
+            fontSize: '0.9rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            boxShadow: '0 0 20px rgba(20, 184, 166, 0.35)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <Plus size={18} />
+          New Behavioral Test
+        </button>
+      </div>
+
+      {/* Top Metrics Cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '16px',
+          marginBottom: '28px',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px',
+            borderRadius: '14px',
+            backgroundColor: 'rgba(30, 41, 59, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: 500 }}>Total Tests</span>
+            <Sliders size={16} className="text-teal-400" />
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#FFFFFF' }}>
+            {metrics?.total_tests ?? tests.length}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px' }}>Active decision hypotheses</div>
+        </div>
+
+        <div
+          style={{
+            padding: '20px',
+            borderRadius: '14px',
+            backgroundColor: 'rgba(30, 41, 59, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: 500 }}>Completed Runs</span>
+            <CheckCircle2 size={16} className="text-emerald-400" />
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#FFFFFF' }}>
+            {metrics?.completed_runs ?? 0}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px' }}>Across scenarios</div>
+        </div>
+
+        <div
+          style={{
+            padding: '20px',
+            borderRadius: '14px',
+            backgroundColor: 'rgba(30, 41, 59, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: 500 }}>Simulated Personas</span>
+            <Users size={16} className="text-cyan-400" />
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#FFFFFF' }}>
+            {metrics?.total_personas_simulated ?? 0}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px' }}>Persona evaluations</div>
+        </div>
+
+        <div
+          style={{
+            padding: '20px',
+            borderRadius: '14px',
+            backgroundColor: 'rgba(30, 41, 59, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: 500 }}>Avg Buy Likelihood</span>
+            <TrendingUp size={16} className="text-teal-400" />
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#2DD4BF' }}>
+            {metrics?.average_buy_likelihood_percentage ?? 52}%
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px' }}>Simulation aggregate signal</div>
+        </div>
+      </div>
+
+      {/* Filter & Search Bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '24px',
+          gap: '14px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', flex: 1, minWidth: '280px', maxWidth: '420px' }}>
+          <div style={{ position: 'relative', width: '100%' }}>
+            <Search
+              size={16}
+              style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748B' }}
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search behavioral tests..."
+              style={{
+                width: '100%',
+                padding: '10px 14px 10px 38px',
+                borderRadius: '10px',
+                backgroundColor: 'rgba(30, 41, 59, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                color: '#F8FAFC',
+                fontSize: '0.88rem',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+        </form>
+
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(30, 41, 59, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              color: '#CBD5E1',
+              fontSize: '0.85rem',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="all">All Test Types</option>
+            <option value="pricing_test">Pricing Tests</option>
+            <option value="purchase_decision">Purchase Decisions</option>
+            <option value="feature_test">Feature Tests</option>
+            <option value="concept_test">Product Concepts</option>
+            <option value="message_test">Marketing Copy</option>
+            <option value="offer_test">Promotional Offers</option>
+            <option value="switching_test">Competitor Switching</option>
+            <option value="objection_test">Adoption Barriers</option>
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(30, 41, 59, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              color: '#CBD5E1',
+              fontSize: '0.85rem',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="all">All Statuses</option>
+            <option value="ready">Ready</option>
+            <option value="completed">Completed</option>
+            <option value="running">Running</option>
+          </select>
+
+          <button
+            onClick={fetchTestsAndMetrics}
+            style={{
+              padding: '10px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(30, 41, 59, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              color: '#94A3B8',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+            title="Refresh"
+          >
+            <RotateCw size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Tests Grid */}
+      {isLoading ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '18px' }}>
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              style={{
+                height: '180px',
+                borderRadius: '14px',
+                backgroundColor: 'rgba(30, 41, 59, 0.3)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                animation: 'pulse 1.5s infinite',
+              }}
+            />
+          ))}
+        </div>
+      ) : tests.length === 0 ? (
+        <div
+          style={{
+            padding: '60px 24px',
+            textAlign: 'center',
+            backgroundColor: 'rgba(30, 41, 59, 0.3)',
+            border: '1px dashed rgba(255, 255, 255, 0.12)',
+            borderRadius: '16px',
+          }}
+        >
+          <div
+            style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '14px',
+              backgroundColor: 'rgba(20, 184, 166, 0.1)',
+              border: '1px solid rgba(20, 184, 166, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#14B8A6',
+              margin: '0 auto 16px auto',
+            }}
+          >
+            <Sliders size={28} />
+          </div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.2rem', color: '#FFFFFF' }}>
+            No Behavioral Tests Created Yet
+          </h3>
+          <p style={{ margin: '0 auto 24px auto', maxWidth: '440px', fontSize: '0.88rem', color: '#94A3B8', lineHeight: 1.5 }}>
+            Simulate how your synthetic customer population responds to pricing, features, marketing messages, and competitor alternatives.
+          </p>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            style={{
+              padding: '12px 24px',
+              borderRadius: '10px',
+              backgroundColor: '#14B8A6',
+              border: 'none',
+              color: '#042F2E',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 0 20px rgba(20, 184, 166, 0.3)',
+            }}
+          >
+            Create First Behavioral Test
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+            gap: '18px',
+          }}
+        >
+          {tests.map((test) => {
+            const hasRun = test.latest_run != null;
+            return (
+              <div
+                key={test.id}
+                onClick={() => onOpenTest(test.id, test.latest_run?.id)}
+                style={{
+                  padding: '22px',
+                  borderRadius: '14px',
+                  backgroundColor: 'rgba(30, 41, 59, 0.5)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div
+                        style={{
+                          padding: '6px',
+                          borderRadius: '8px',
+                          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                        }}
+                      >
+                        {getTypeIcon(test.test_type)}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          backgroundColor: 'rgba(20, 184, 166, 0.12)',
+                          color: '#2DD4BF',
+                          border: '1px solid rgba(20, 184, 166, 0.25)',
+                          textTransform: 'capitalize',
+                        }}
+                      >
+                        {test.test_type.replace('_', ' ')}
+                      </span>
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        color: test.status === 'completed' ? '#34D399' : '#94A3B8',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          backgroundColor: test.status === 'completed' ? '#10B981' : '#64748B',
+                        }}
+                      />
+                      {test.status}
+                    </span>
+                  </div>
+
+                  <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 700, color: '#FFFFFF' }}>
+                    {test.name}
+                  </h3>
+                  <p style={{ margin: '0 0 16px 0', fontSize: '0.82rem', color: '#94A3B8', lineHeight: 1.4, minHeight: '36px' }}>
+                    {test.description || 'Behavioral evaluation scenario against grounded population.'}
+                  </p>
+                </div>
+
+                <div>
+                  {/* Latest Run Snapshot */}
+                  {hasRun ? (
+                    <div
+                      style={{
+                        padding: '12px',
+                        borderRadius: '10px',
+                        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                        marginBottom: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748B' }}>Latest Simulation</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#F1F5F9' }}>
+                          {test.latest_run?.persona_count} personas evaluated
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#64748B' }}>Likelihood</div>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#2DD4BF' }}>
+                          {Math.round((test.latest_run?.average_likelihood || 0.5) * 100)}%
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        backgroundColor: 'rgba(15, 23, 42, 0.4)',
+                        marginBottom: '14px',
+                        fontSize: '0.78rem',
+                        color: '#94A3B8',
+                        fontStyle: 'italic',
+                      }}
+                    >
+                      Ready to execute first simulation run.
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                      {test.run_count} {test.run_count === 1 ? 'run' : 'runs'} recorded
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', color: '#14B8A6', fontWeight: 600 }}>
+                      <span>View Results</span>
+                      <ArrowRight size={14} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Creation Modal */}
+      {showCreateModal && (
+        <CreateBehavioralTestModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          studyId={studyId}
+          onTestCreated={(testId, runId) => {
+            fetchTestsAndMetrics();
+            onOpenTest(testId, runId);
+          }}
+        />
+      )}
+    </div>
+  );
+};
