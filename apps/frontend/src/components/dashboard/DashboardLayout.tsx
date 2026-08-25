@@ -19,11 +19,12 @@ import { StudyWorkflowView } from './views/StudyWorkflowView';
 import { ModelRouterView } from './views/ModelRouterView';
 import { DatasetSourcesView } from './views/DatasetSourcesView';
 import { EvidenceLaboratoryView } from './views/EvidenceLaboratoryView';
+import { SegmentationView } from './views/SegmentationView';
 import { StudyType, Study } from '../../types';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 
-export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'datasets' | 'router' | 'study-workflow' | 'evidence';
+export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'datasets' | 'router' | 'study-workflow' | 'evidence' | 'segmentation';
 
 interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
@@ -34,6 +35,11 @@ const parseDashboardPath = (path: string): {
   studyId?: string;
   step?: number;
 } => {
+  if (path.includes('/segmentation') || path.startsWith('/segmentation')) {
+    const parts = path.split('/').filter(Boolean);
+    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    return { tab: 'segmentation', studyId };
+  }
   if (path.includes('/evidence') || path.startsWith('/evidence')) {
     const parts = path.split('/').filter(Boolean);
     const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
@@ -751,6 +757,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             studyId={activeStudyId || 'study_default'}
             onBack={() => navigate('/dashboard')}
           />
+        )}
+
+        {activeTab === 'segmentation' && (
+          <div style={{ padding: '24px 40px' }}>
+            <SegmentationView
+              studyId={activeStudyId || 'study_default'}
+              onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}
+              onNavigateToDatasets={() => navigate(`/datasets`)}
+              onProceedToPersonas={(segmentId) => {
+                navigate(`/research/${activeStudyId || 'study_default'}/step3`);
+              }}
+            />
+          </div>
         )}
       </main>
 

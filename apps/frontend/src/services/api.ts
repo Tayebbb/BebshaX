@@ -3110,6 +3110,305 @@ export const api = {
       response_text: 'OpenRouter diagnostic test response successful.',
     };
   },
+  // --- Market Segmentation API Methods ---
+  async getSegmentationReadiness(studyId: string): Promise<SegmentationReadiness> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/segmentation/readiness`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return {
+      status: 'ready',
+      can_run: true,
+      dataset_count: 1,
+      total_records: 1200,
+      usable_variables_count: 4,
+      usable_variables: [
+        {
+          name: 'monthly_budget_bdt',
+          type: 'numeric',
+          source_dataset_name: 'Survey Data',
+          source_dataset_id: 'ds_1',
+          coverage_percentage: 98.5,
+          missing_percentage: 1.5,
+          usefulness: 'high',
+        },
+        {
+          name: 'study_hours_per_day',
+          type: 'numeric',
+          source_dataset_name: 'Survey Data',
+          source_dataset_id: 'ds_1',
+          coverage_percentage: 99.0,
+          missing_percentage: 1.0,
+          usefulness: 'high',
+        },
+        {
+          name: 'academic_goal',
+          type: 'categorical',
+          source_dataset_name: 'Survey Data',
+          source_dataset_id: 'ds_1',
+          coverage_percentage: 95.0,
+          missing_percentage: 5.0,
+          usefulness: 'medium',
+        },
+      ],
+      evidence_claim_count: 6,
+      supported_claims_count: 5,
+      guidance_message: 'Ready for segmentation with 1 connected dataset (1,200 empirical records) and 6 research evidence claims.',
+      study_id: studyId,
+    };
+  },
+
+  async runSegmentation(
+    studyId: string,
+    options?: { desired_clusters?: number; configuration?: any }
+  ): Promise<{ run: SegmentationRun; segments: MarketSegment[] }> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/segmentation`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(options || {}),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    const runId = `segrun_${Date.now()}`;
+    const count = options?.desired_clusters || 3;
+    const mockSegments: MarketSegment[] = [
+      {
+        id: `seg_${Date.now()}_1`,
+        study_id: studyId,
+        segmentation_run_id: runId,
+        name: 'Budget-Conscious Students (৳350/mo)',
+        cluster_label: 'cluster_0',
+        description: 'Represents 45.0% of empirical respondents with strict spending limits under ৳400/month. Highly sensitive to subscription friction.',
+        population_count: 540,
+        population_percentage: 45.0,
+        confidence_score: 0.92,
+        status: 'data_backed',
+        characteristics: {
+          demographics: { age_range: [18, 22], median_age: 20, dominant_occupation: 'Undergraduate Student' },
+          economics: { monthly_budget: { min: 250, median: 350, max: 500, currency: 'BDT' } },
+          behavior: { study_hours_per_day: 4.5, technology_familiarity: 'Medium' },
+          needs: ['Affordable micro-subscriptions', 'Offline mobile revision mode'],
+        },
+        variable_distributions: { monthly_budget: { min: 250, median: 350, max: 500, count: 540 } },
+        evidence_citations: [
+          { claim_id: 'clm_1', claim_text: 'Students prefer bKash micro-payments over monthly auto-debit.', category: 'pricing', status: 'supported', confidence: 0.88 },
+        ],
+        differentiation_summary: 'Differs by lower monthly spending tolerance and high prioritization of free/affordable core features.',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: `seg_${Date.now()}_2`,
+        study_id: studyId,
+        segmentation_run_id: runId,
+        name: 'Exam-Driven Achievers (৳750/mo)',
+        cluster_label: 'cluster_1',
+        description: 'Represents 35.0% of students preparing for competitive admission tests with high urgency and willingness to invest in score improvement.',
+        population_count: 420,
+        population_percentage: 35.0,
+        confidence_score: 0.88,
+        status: 'data_backed',
+        characteristics: {
+          demographics: { age_range: [19, 23], median_age: 21, dominant_occupation: 'Admission Candidate' },
+          economics: { monthly_budget: { min: 500, median: 750, max: 1200, currency: 'BDT' } },
+          behavior: { study_hours_per_day: 7.2, technology_familiarity: 'High' },
+          needs: ['Mock test analytics', 'Dynamic daily revision schedules'],
+        },
+        variable_distributions: { monthly_budget: { min: 500, median: 750, max: 1200, count: 420 } },
+        evidence_citations: [
+          { claim_id: 'clm_2', claim_text: 'Candidates are willing to pay a premium during the 90 days leading to admission exams.', category: 'behavior', status: 'supported', confidence: 0.90 },
+        ],
+        differentiation_summary: 'Differs by high daily study intensity (7+ hours) and elevated willingness to pay for proven exam score improvements.',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: `seg_${Date.now()}_3`,
+        study_id: studyId,
+        segmentation_run_id: runId,
+        name: 'Casual Self-Paced Learners (৳500/mo)',
+        cluster_label: 'cluster_2',
+        description: 'Represents 20.0% of users seeking general productivity support with moderate study frequency.',
+        population_count: 240,
+        population_percentage: 20.0,
+        confidence_score: 0.82,
+        status: 'data_backed',
+        characteristics: {
+          demographics: { age_range: [20, 25], median_age: 22, dominant_occupation: 'Graduate Student' },
+          economics: { monthly_budget: { min: 350, median: 500, max: 800, currency: 'BDT' } },
+          behavior: { study_hours_per_day: 3.0, technology_familiarity: 'Medium' },
+          needs: ['Clean distraction-free interface', 'Cross-platform web access'],
+        },
+        variable_distributions: { monthly_budget: { min: 350, median: 500, max: 800, count: 240 } },
+        evidence_citations: [],
+        differentiation_summary: 'Differs by flexible study schedules and preference for simple checklist interfaces.',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ].slice(0, count);
+
+    const mockRun: SegmentationRun = {
+      id: runId,
+      study_id: studyId,
+      status: 'completed',
+      method: 'hybrid_quantile_clustering',
+      configuration: options?.configuration || {},
+      dataset_versions: [
+        { dataset_id: 'ds_1', name: 'Survey Data', content_hash: 'hash_abc123', row_count: 1200, file_type: 'csv' },
+      ],
+      evidence_snapshot: { claim_count: 6 },
+      segment_count: mockSegments.length,
+      started_at: new Date(Date.now() - 3000).toISOString(),
+      completed_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+
+    return { run: mockRun, segments: mockSegments };
+  },
+
+  async listSegmentationRuns(studyId: string): Promise<SegmentationRun[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/segmentation/runs`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return [];
+  },
+
+  async getSegmentationRun(studyId: string, runId: string): Promise<SegmentationRun> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/segmentation/runs/${runId}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    throw new Error('Segmentation run not found');
+  },
+
+  async listStudySegments(studyId: string, options?: { run_id?: string; status?: string }): Promise<MarketSegment[]> {
+    if (!this.isMockMode()) {
+      try {
+        const params = new URLSearchParams();
+        if (options?.run_id) params.append('run_id', options.run_id);
+        if (options?.status) params.append('status', options.status);
+        const query = params.toString() ? `?${params.toString()}` : '';
+        const res = await fetch(`${API_BASE}/studies/${studyId}/segments${query}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return [];
+  },
+
+  async getSegmentDetail(studyId: string, segmentId: string): Promise<MarketSegment> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/segments/${segmentId}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    throw new Error('Segment not found');
+  },
+
+  async compareSegments(studyId: string, segmentIds: string[]): Promise<SegmentComparisonResult> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/segments/compare`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ segment_ids: segmentIds }),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return {
+      study_id: studyId,
+      compared_count: segmentIds.length,
+      comparison_matrix: segmentIds.map((id, idx) => ({
+        segment_id: id,
+        name: idx === 0 ? 'Budget-Conscious Students' : 'Exam-Driven Achievers',
+        cluster_label: `cluster_${idx}`,
+        population_count: idx === 0 ? 540 : 420,
+        population_percentage: idx === 0 ? 45.0 : 35.0,
+        confidence_score: idx === 0 ? 0.92 : 0.88,
+        status: 'data_backed',
+        median_budget: idx === 0 ? '৳350' : '৳750',
+        budget_range: idx === 0 ? '৳250–৳500' : '৳500–৳1200',
+        age_range: idx === 0 ? '18–22' : '19–23',
+        tech_familiarity: idx === 0 ? 'Medium' : 'High',
+        evidence_citations_count: 1,
+        differentiation: idx === 0 ? 'Lower spending tolerance and micro-subscription preference' : 'High daily urgency and readiness to pay for score improvement',
+      })),
+    };
+  },
+
+  async deleteSegmentationRun(studyId: string, runId: string): Promise<void> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/segmentation/runs/${runId}`, {
+          method: 'DELETE',
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return;
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+  },
 };
 
 

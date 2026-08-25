@@ -22,6 +22,7 @@ import {
   X,
   RefreshCw,
   Database,
+  PieChart,
 } from 'lucide-react';
 import { useNavigation } from '../../../context/NavigationContext';
 import { Study, ResearchGoal, StudyType, Persona, ConversationTurn, PersonaRoleSuggestion } from '../../../types';
@@ -736,9 +737,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             type="button"
             onClick={() => navigate(`/research/${studyId || 'default'}/evidence`)}
             style={{
-              background: 'rgba(99, 102, 241, 0.12)',
-              border: '1px solid rgba(99, 102, 241, 0.3)',
-              color: '#818CF8',
+              background: 'rgba(20, 184, 166, 0.12)',
+              border: '1px solid rgba(20, 184, 166, 0.3)',
+              color: '#2DD4BF',
               borderRadius: '8px',
               padding: '6px 12px',
               display: 'flex',
@@ -751,6 +752,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             }}
           >
             <Database size={14} /> Evidence Lab
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate(`/research/${studyId || 'default'}/segmentation`)}
+            data-testid="study-workflow-segmentation-btn"
+            style={{
+              background: 'rgba(34, 211, 238, 0.12)',
+              border: '1px solid rgba(34, 211, 238, 0.3)',
+              color: '#22D3EE',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.18s ease',
+            }}
+          >
+            <PieChart size={14} /> Market Segments
           </button>
 
           {/* Exit Button */}

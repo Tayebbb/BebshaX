@@ -461,3 +461,31 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
   - Frontend: `DatasetSources.test.tsx` verifying card rendering, Add modal, tab navigation (Schema, Stats, Preview, Quality), and OpenRouter diagnostics.
 
 **Tests:** 12/12 frontend test suites passed (55/55 tests green); 163/163 backend pytest tests green.
+
+### Part 4 (2026-08-26) — Market Segmentation & Segment Builder
+
+**What was built:**
+
+- **Database Persistence & Alembic Migration (`apps/backend/bebshax/db/models.py` & Alembic):**
+  - Added `SegmentationRuns` model: captures run status (`pending`, `analyzing_data`, `selecting_variables`, `clustering`, `interpreting_segments`, `completed`, `failed`), methodology, configuration parameters, `dataset_versions` (with `content_hash`), and `evidence_snapshot`.
+  - Added `MarketSegments` model: captures data-grounded segments with `population_count`, `population_percentage`, `confidence_score`, status (`data_backed`, `inference_assisted`), `characteristics` (demographics, economics, behaviors, observed needs), `variable_distributions` (min, median, max, IQR), `evidence_citations`, and `differentiation_summary`.
+  - Created and applied Alembic migration `7c8d9e0f1a2b_add_segmentation_runs_and_market_segments.py` on PostgreSQL.
+- **Deterministic Market Segmentation Engine (`apps/backend/bebshax/segmentation/`):**
+  - `pre_check.py`: Pre-segmentation data readiness evaluator returning structured assessment (`READY`, `LIMITED_DATA`, `NO_DATA`), usable candidate variables, coverage %, and guidance message.
+  - `variable_selector.py`: High-signal variable discovery across demographic, economic, behavioral, and preference dimensions, filtering out constant/ID columns and ranking by coverage and usefulness score.
+  - `clusterer.py`: Pure mathematical distribution calculations and deterministic cluster partitioning (quantile-based budget/demographic splits or explicit categorical groups). Computes exact row counts, population shares, medians, ranges, and IQR without LLM-invented statistics.
+  - `interpreter.py`: Qualitative synthesis using `LLMService` (`TaskType.STRUCTURED_OUTPUT`) to generate grounded, human-readable segment names, descriptions, and differentiation summaries while preserving exact mathematical metrics and attaching cited research evidence claims. Includes resilient deterministic template fallback.
+  - `service.py`: End-to-end orchestrator managing run status transitions, snapshotting dataset content hashes, generating side-by-side segment comparisons, and persisting segments.
+- **FastAPI Segmentation REST Router (`apps/backend/bebshax/api/segmentation.py`):**
+  - Endpoints: `GET /api/studies/{id}/segmentation/readiness`, `POST /api/studies/{id}/segmentation`, `GET /api/studies/{id}/segmentation/runs`, `GET /api/studies/{id}/segmentation/runs/{run_id}`, `GET /api/studies/{id}/segments`, `GET /api/studies/{id}/segments/{seg_id}`, `POST /api/studies/{id}/segments/compare`, `DELETE /api/studies/{id}/segmentation/runs/{run_id}`.
+  - Enforced zero-trust study-scoped ownership verification returning `404 Not Found` for unowned studies, runs, and segments to prevent ID enumeration and data leakage.
+- **Teal / Cyan Market Segmentation UI (`apps/frontend/`):**
+  - Built `SegmentationView.tsx` with top metrics banner, pre-check readiness card, live running execution stepper, segment cards grid, search/filter controls, and JSON/CSV export.
+  - Interactive Side-by-Side Comparison Modal comparing 2 to 4 segments across population share, median budget, age cohort, tech familiarity, and differentiation rationale.
+  - Deep Dive Inspection Modal with 5 dedicated tabs: `Overview`, `Demographics & Traits`, `Economics & WTP`, `Evidence Citations`, and `Dataset Provenance`.
+  - Connected `/research/:id/segmentation` route in `DashboardLayout.tsx` and added quick-switch Market Segments button in `StudyWorkflowView.tsx`.
+- **Automated Tests:**
+  - Backend (`test_segmentation_engine.py` & `test_segmentation_ownership_idor.py`): deterministic quantile calculations, variable filtering, readiness evaluation, evidence linking, LLM fallback, dataset hash versioning, and strict User A vs User B IDOR isolation.
+  - Frontend (`SegmentationView.test.tsx`): banner metrics, readiness assessment, run trigger, progress stepper, deep dive tab navigation, side-by-side comparison modal, search filtering, and JSON/CSV export.
+
+**Tests:** 13/13 frontend test suites passed (60/60 tests green); 170/170 backend pytest tests green.

@@ -416,4 +416,65 @@ class EvidenceClaims(Base):
     )
 
 
+class SegmentationRuns(Base):
+    """Audit and lifecycle record for a market segmentation run."""
 
+    __tablename__ = "segmentation_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    study_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(
+        String(64), default="pending"
+    )  # pending, analyzing_data, selecting_variables, clustering, evaluating_groups, interpreting_segments, completed, failed
+    method: Mapped[str] = mapped_column(String(64), default="hybrid_quantile_clustering")
+    configuration: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    dataset_versions: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    evidence_snapshot: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    segment_count: Mapped[int] = mapped_column(default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class MarketSegments(Base):
+    """Data-grounded customer market segments derived from datasets and evidence."""
+
+    __tablename__ = "market_segments"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    study_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    segmentation_run_id: Mapped[str] = mapped_column(String(64), index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    cluster_label: Mapped[str] = mapped_column(String(64), default="cluster_0")
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    population_count: Mapped[int] = mapped_column(default=0)
+    population_percentage: Mapped[float] = mapped_column(Float, default=0.0)
+    confidence_score: Mapped[float] = mapped_column(Float, default=0.85)
+    status: Mapped[str] = mapped_column(
+        String(64), default="data_backed"
+    )  # data_backed, inference_assisted, insufficient_evidence
+    characteristics: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    variable_distributions: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    evidence_citations: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    differentiation_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
