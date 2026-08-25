@@ -132,6 +132,55 @@ class DatasetService:
 
         return dataset
 
+    async def ingest_candidate_dataset(
+        self,
+        content: bytes,
+        name: str,
+        source_url: str,
+        description: Optional[str] = None,
+        user_id: Optional[str] = None,
+        study_id: Optional[str] = None,
+        file_type: Optional[str] = None,
+    ) -> DatasetSources:
+        """Parse discovered candidate bytes, profile deterministically, discover segments, and store."""
+        content_hash = hashlib.sha256(content).hexdigest()
+        columns, rows = parse_dataset_bytes(content, file_type=file_type or "csv")
+        schema_metadata, stats = profile_dataset(columns, rows)
+        segments = discover_segments(columns, rows, schema_metadata, stats)
+
+        ds_id = f"ds_{uuid.uuid4().hex[:16]}"
+        file_path = str(UPLOAD_DIR / f"{ds_id}.json")
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(rows, f)
+
+        dataset = DatasetSources(
+            id=ds_id,
+            user_id=user_id,
+            study_id=study_id,
+            name=name,
+            source_type="url",
+            source_url=source_url,
+            file_path=file_path,
+            file_type=file_type or "csv",
+            description=description,
+            status="ready",
+            row_count=len(rows),
+            column_count=len(columns),
+            schema_metadata=schema_metadata,
+            statistics=stats,
+            segments=segments,
+            content_hash=content_hash,
+            persona_count_generated=0,
+            last_processed_at=_utcnow(),
+        )
+
+        async with self._sessionmaker() as session:
+            session.add(dataset)
+            await session.commit()
+            await session.refresh(dataset)
+
+        return dataset
+
     async def list_datasets(
         self, user_id: Optional[str] = None, study_id: Optional[str] = None
     ) -> list[DatasetSources]:

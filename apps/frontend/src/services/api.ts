@@ -20,6 +20,11 @@ import {
   SyntheticPersona,
   StudyPersonasResponse,
   GeneratePersonasPayload,
+  PersonaGenerationRun,
+  SegmentationReadiness,
+  SegmentationRun,
+  MarketSegment,
+  SegmentComparisonResult,
 } from '../types';
 import {
   AuthResponse,
@@ -31,8 +36,8 @@ import {
 import {
   DatasetSource,
   DatasetPreviewResponse,
+  DatasetPersonaRun,
   OpenRouterHealth,
-  PersonaGenerationRun,
 } from '../types/dataset';
 import {
   mockBusinesses,
@@ -2756,6 +2761,100 @@ export const api = {
   },
 
   // ============================================================================
+  // Autonomous Research — Plan & Dataset Candidates
+  // ============================================================================
+
+  async getResearchPlan(studyId: string): Promise<import('../types').ResearchPlan | null> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/research/plan`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        if (res.status === 404) return null;
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return null;
+  },
+
+  async listDatasetCandidates(studyId: string): Promise<import('../types').DatasetCandidate[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/datasets/candidates`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    // No mock fabrication per product requirement — return empty list
+    return [];
+  },
+
+  async importDatasetCandidate(
+    studyId: string,
+    candidateId: string
+  ): Promise<{ success: boolean; imported_dataset_id: string; dataset_name: string; row_count: number | null }> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(
+          `${API_BASE}/studies/${studyId}/datasets/candidates/${candidateId}/import`,
+          {
+            method: 'POST',
+            headers: this.getAuthHeaders(),
+          }
+        );
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).detail || 'Import failed');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    throw new Error('Not available in mock mode');
+  },
+
+  async rejectDatasetCandidate(
+    studyId: string,
+    candidateId: string
+  ): Promise<{ success: boolean }> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(
+          `${API_BASE}/studies/${studyId}/datasets/candidates/${candidateId}/reject`,
+          {
+            method: 'POST',
+            headers: this.getAuthHeaders(),
+          }
+        );
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return { success: true };
+  },
+
+  // ============================================================================
   // Dataset Sources & Data Lab
   // ============================================================================
 
@@ -3030,7 +3129,7 @@ export const api = {
       business_description: string;
       study_id?: string;
     }
-  ): Promise<PersonaGenerationRun> {
+  ): Promise<DatasetPersonaRun> {
     if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/datasets/${datasetId}/generate-personas`, {
@@ -3340,6 +3439,10 @@ export const api = {
       }
     }
     return [];
+  },
+
+  async getMarketSegments(studyId: string, options?: { run_id?: string; status?: string }): Promise<MarketSegment[]> {
+    return this.listStudySegments(studyId, options);
   },
 
   async getSegmentDetail(studyId: string, segmentId: string): Promise<MarketSegment> {
@@ -3834,6 +3937,197 @@ export const api = {
         lastKnownLive = false;
       }
     }
+  },
+
+  // -------------------------------------------------------------
+  // Part 6: Adaptive Persona Interviews
+  // -------------------------------------------------------------
+  async startPersonaInterview(
+    studyId: string,
+    personaId: string,
+    payload: {
+      objective: string;
+      custom_objective?: string;
+      length_tier?: string;
+      generation_run_id?: string;
+    }
+  ): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/personas/${personaId}/interviews`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({ detail: 'Failed to start interview' }));
+        throw new Error(err.detail || 'Failed to start interview');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    return {
+      id: `int_${Date.now().toString(36)}`,
+      study_id: studyId,
+      persona_id: personaId,
+      persona_version: 1,
+      objective: payload.objective,
+      custom_objective: payload.custom_objective,
+      interview_type: 'adaptive_persona',
+      length_tier: payload.length_tier || 'standard',
+      max_turns: payload.length_tier === 'short' ? 6 : payload.length_tier === 'deep' ? 24 : 14,
+      status: 'active',
+      topics_explored: {},
+      question_count: 0,
+      turn_count: 0,
+      created_at: new Date().toISOString(),
+    };
+  },
+
+  async listStudyInterviews(
+    studyId: string,
+    params?: { status?: string; objective?: string; search?: string; limit?: number; offset?: number }
+  ): Promise<{ interviews: any[]; total: number }> {
+    if (!this.isMockMode()) {
+      try {
+        const q = new URLSearchParams();
+        if (params?.status && params.status !== 'all') q.set('status', params.status);
+        if (params?.objective && params.objective !== 'all') q.set('objective', params.objective);
+        if (params?.search) q.set('search', params.search);
+        if (params?.limit) q.set('limit', String(params.limit));
+        if (params?.offset) q.set('offset', String(params.offset));
+
+        const res = await fetch(`${API_BASE}/studies/${studyId}/interviews?${q.toString()}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return {
+      interviews: [],
+      total: 0,
+    };
+  },
+
+  async getStudyInterviewMetrics(studyId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/interviews/metrics`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return {
+      total_interviews: 0,
+      active_interviews: 0,
+      completed_interviews: 0,
+      total_insights_generated: 0,
+    };
+  },
+
+  async getStudyInterviewDetail(studyId: string, interviewId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/interviews/${interviewId}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    throw new Error('Interview not found');
+  },
+
+  async sendInterviewMessage(
+    studyId: string,
+    interviewId: string,
+    payload: { content: string }
+  ): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(
+          `${API_BASE}/studies/${studyId}/interviews/${interviewId}/messages`,
+          {
+            method: 'POST',
+            headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(payload),
+          }
+        );
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({ detail: 'Failed to send message' }));
+        throw new Error(err.detail || 'Failed to send message');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    throw new Error('Backend required for live persona interview');
+  },
+
+  async completeStudyInterview(studyId: string, interviewId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(
+          `${API_BASE}/studies/${studyId}/interviews/${interviewId}/complete`,
+          {
+            method: 'POST',
+            headers: this.getAuthHeaders(),
+          }
+        );
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const err = await res.json().catch(() => ({ detail: 'Failed to complete interview' }));
+        throw new Error(err.detail || 'Failed to complete interview');
+      } catch (e) {
+        lastKnownLive = false;
+        throw e;
+      }
+    }
+    throw new Error('Backend required for completion synthesis');
+  },
+
+  async getStudyInterviewInsights(studyId: string, interviewId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(
+          `${API_BASE}/studies/${studyId}/interviews/${interviewId}/insights`,
+          {
+            headers: this.getAuthHeaders(),
+          }
+        );
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return { insights: [] };
   },
 };
 

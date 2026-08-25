@@ -308,8 +308,10 @@ async def delete_study(
         )
     # Cascade cleanup of dependent study records
     from sqlalchemy import delete
-    from bebshax.db.models import DatasetSources, EvidenceClaims, EvidenceChunks, EvidenceSources, ResearchRuns
+    from bebshax.db.models import DatasetCandidates, DatasetSources, EvidenceClaims, EvidenceChunks, EvidenceSources, ResearchPlans, ResearchRuns
 
+    await session.execute(delete(ResearchPlans).where(ResearchPlans.study_id == study_id))
+    await session.execute(delete(DatasetCandidates).where(DatasetCandidates.study_id == study_id))
     await session.execute(delete(EvidenceClaims).where(EvidenceClaims.study_id == study_id))
     await session.execute(delete(EvidenceChunks).where(EvidenceChunks.study_id == study_id))
     await session.execute(delete(EvidenceSources).where(EvidenceSources.study_id == study_id))

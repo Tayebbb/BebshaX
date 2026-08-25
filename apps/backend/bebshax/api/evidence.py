@@ -1,4 +1,4 @@
-"""FastAPI router for study research runs, evidence sources, chunks, and claims."""
+"""FastAPI router for study research runs, evidence sources, chunks, claims, research plans, and discovered dataset candidates."""
 
 from __future__ import annotations
 
@@ -14,9 +14,12 @@ from bebshax.api.auth import get_optional_current_user
 from bebshax.api.studies import _user_owns_study, get_session
 from bebshax.auth.models import Users
 from bebshax.db.models import (
+    DatasetCandidates,
+    DatasetSources,
     EvidenceChunks,
     EvidenceClaims,
     EvidenceSources,
+    ResearchPlans,
     ResearchRuns,
     Studies,
 )
@@ -37,9 +40,14 @@ def _serialize_run(r: ResearchRuns) -> dict[str, Any]:
         "study_id": r.study_id,
         "user_id": r.user_id,
         "status": r.status,
+        "current_step": r.current_step,
         "query_count": r.query_count,
         "source_count": r.source_count,
         "claim_count": r.claim_count,
+        "dataset_candidate_count": r.dataset_candidate_count,
+        "dataset_imported_count": r.dataset_imported_count,
+        "step_progress": r.step_progress or {},
+        "research_plan": r.research_plan,
         "queries": r.queries or [],
         "error_message": r.error_message,
         "started_at": r.started_at.isoformat() if r.started_at else None,
@@ -95,7 +103,7 @@ async def start_study_research(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Trigger a new evidence research run for a study."""
+    """Trigger a new autonomous evidence and dataset research run for a study."""
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
@@ -125,6 +133,24 @@ async def list_study_research_runs(
     result = await session.execute(stmt)
     runs = list(result.scalars().all())
     return [_serialize_run(r) for r in runs]
+
+
+@router.get("/{study_id}/research/plan")
+async def get_study_research_plan(
+    study_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Get the latest structured research plan generated for a study."""
+    study = await session.get(Studies, study_id)
+    if not study or not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+
+    service = ResearchEngineService()
+    plan = await service.get_research_plan(session, study_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="No research plan found for this study")
+    return plan
 
 
 @router.get("/{study_id}/research/{run_id}")
@@ -277,7 +303,6 @@ async def get_study_evidence_claim_detail(
 
     data = _serialize_claim(claim)
 
-    # Fetch supporting sources
     supporting_sources = []
     if claim.supporting_source_ids:
         src_stmt = select(EvidenceSources).where(EvidenceSources.id.in_(claim.supporting_source_ids))
@@ -285,7 +310,6 @@ async def get_study_evidence_claim_detail(
         sources = list(src_res.scalars().all())
         supporting_sources = [_serialize_source(s) for s in sources]
 
-    # Fetch supporting chunks
     supporting_chunks = []
     if claim.supporting_chunk_ids:
         chk_stmt = select(EvidenceChunks).where(EvidenceChunks.id.in_(claim.supporting_chunk_ids))
@@ -296,7 +320,6 @@ async def get_study_evidence_claim_detail(
             for c in chunks
         ]
 
-    # Fetch contradicting sources
     contradicting_sources = []
     if claim.contradicting_source_ids:
         csrc_stmt = select(EvidenceSources).where(EvidenceSources.id.in_(claim.contradicting_source_ids))
@@ -335,3 +358,69 @@ async def semantic_search_evidence(
         }
         for chunk, score in results
     ]
+
+
+# ============================================================================
+# Discovered Dataset Candidates Endpoints
+# ============================================================================
+
+@router.get("/{study_id}/datasets/candidates")
+async def list_study_dataset_candidates(
+    study_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict[str, Any]]:
+    """List public dataset candidates discovered for a study."""
+    study = await session.get(Studies, study_id)
+    if not study or not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+
+    service = ResearchEngineService()
+    return await service.list_dataset_candidates(session, study_id)
+
+
+@router.post("/{study_id}/datasets/candidates/{candidate_id}/import")
+async def import_study_dataset_candidate(
+    study_id: str,
+    candidate_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Manually import a discovered dataset candidate into the study's dataset sources."""
+    study = await session.get(Studies, study_id)
+    if not study or not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+
+    service = ResearchEngineService()
+    effective_user_id = current_user.id if current_user else study.user_id
+    try:
+        imported_ds = await service.import_candidate_dataset(session, study_id, candidate_id, effective_user_id)
+        return {
+            "success": True,
+            "imported_dataset_id": imported_ds.id,
+            "dataset_name": imported_ds.name,
+            "row_count": imported_ds.row_count,
+            "column_count": imported_ds.column_count,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/{study_id}/datasets/candidates/{candidate_id}/reject")
+async def reject_study_dataset_candidate(
+    study_id: str,
+    candidate_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Reject a discovered dataset candidate so it is excluded from auto-selection."""
+    study = await session.get(Studies, study_id)
+    if not study or not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+
+    service = ResearchEngineService()
+    try:
+        await service.reject_candidate_dataset(session, study_id, candidate_id)
+        return {"success": True, "candidate_id": candidate_id, "status": "rejected_by_user"}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))

@@ -106,7 +106,13 @@ async def init_database(
         SavedAudiences,
         Studies,
     )
-    from bebshax.interview.orm import Conversations, ConversationTurns  # noqa: F401
+    from bebshax.interview.orm import (  # noqa: F401
+        Conversations,
+        ConversationTurns,
+        InterviewInsights,
+        Interviews,
+        InterviewTurns,
+    )
     from bebshax.memory.orm import MemoryItems  # noqa: F401
     from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence  # noqa: F401
 

@@ -519,3 +519,48 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 **Tests:** 14/14 frontend test suites passed (65/65 tests green); 177/177 backend pytest tests green.
 
+---
+
+### Part 6 (2026-08-26) — Adaptive Persona Interviews & Structured Insights
+
+**What was built:**
+
+- **Database Persistence & Alembic Migration (`apps/backend/bebshax/interview/orm.py` & Alembic):**
+  - Expanded `Conversations` (aliased `Interviews`) with study-scoped columns: `study_id`, `user_id`, `persona_id`, `persona_version`, `persona_name`, `persona_occupation`, `objective`, `interview_type` (`adaptive_persona`), `length_tier` (`short` / `standard` / `deep`), `max_turns` (6 / 14 / 24), `status` (`active` / `completed`), `topics_explored` (JSON mapping across 9 core discovery dimensions), `summary`, `key_findings`, and `metrics`.
+  - Expanded `ConversationTurns` (aliased `InterviewTurns`) with `turn_number`, `role` (`interviewer` / `persona`), `topic`, `served_by`, and `latency_ms`.
+  - Created `InterviewInsights` table with `interview_id`, `persona_id`, `study_id`, `user_id`, `type` (`pain_point` / `willingness_to_pay` / `feature_demand` / `objection` / `quote` / `unmet_need`), `title`, `description`, `supporting_turn_numbers` (array of transcript turns providing verifiable evidence), `confidence`, and `is_synthetic` flag.
+  - Created and applied Alembic migration `af1e2d3c4b5a_add_interview_insights_and_update_conversations.py` to head on PostgreSQL.
+- **Adaptive Persona Interview Engine (`apps/backend/bebshax/interview/engine.py`):**
+  - Dynamic Persona Context Compilation: builds persona identity card from demographic details, commercial profile (monthly budget in BDT, price sensitivity, payment preferences), technology profile, goals, pain points, behaviors, objections, and cites connected empirical evidence.
+  - Episodic Memory Retrieval: queries `MemoryService` (pgvector cosine similarity) for relevant past turns and observations.
+  - Anti-Sycophancy & Grounded Persona Guardrails: Persona realistically doubts, hesitates, or declines offers outside their budget or lifestyle; refuses prompt leakage and retains immersion without breaking character.
+  - Dynamic Topic Tracking & Classification: automatically tracks 9 core dimensions (`pain_points`, `pricing_budget`, `current_behavior`, `feature_demand`, `objections_friction`, `channel_discovery`, `alternatives_competition`, `willingness_to_pay`, `lifestyle_context`) based on conversational content.
+  - Dynamic Suggested Questions Generator (`generate_suggested_questions`): generates 3 contextual, high-signal follow-up questions for unexplored topics based on current transcript state.
+  - Structured Synthesis & Insight Extraction (`complete`): executes `TaskType.STRUCTURED_OUTPUT` to generate an executive summary, key findings, and structured `InterviewInsights` with explicit `supporting_turn_numbers` linking claims back to transcript lines.
+- **FastAPI Interview REST Router (`apps/backend/bebshax/api/interviews.py`):**
+  - Endpoints:
+    - `POST /api/studies/{study_id}/personas/{persona_id}/interviews` (Start new adaptive interview with objective & length tier)
+    - `GET /api/studies/{study_id}/interviews` (List study interviews with status & objective filters)
+    - `GET /api/studies/{study_id}/interviews/metrics` (Aggregate study interview metrics)
+    - `GET /api/studies/{study_id}/interviews/{interview_id}` (Retrieve transcript, topics, suggestions, insights)
+    - `POST /api/studies/{study_id}/interviews/{interview_id}/messages` (Submit question and receive persona response)
+    - `POST /api/studies/{study_id}/interviews/{interview_id}/complete` (Conclude interview and generate synthesis)
+    - `GET /api/studies/{study_id}/interviews/{interview_id}/insights` (List extracted structured insights)
+  - Strict IDOR isolation: all endpoints verify user ownership of study and entities, returning `404 Not Found` on cross-tenant access.
+- **Teal / Cyan Adaptive Interview UI (`apps/frontend/`):**
+  - `InterviewsView.tsx`: Study-level interview hub with 4 top metric cards (Total Interviews, Active, Completed, Insights Generated), search and status/objective filter bar, and responsive interview cards with progress meters and quick actions.
+  - `StartInterviewModal.tsx`: Modal launched from persona cards with persona identity header, synthetic badge, 5 objective presets (`Problem & Pain Point Discovery`, `Pricing & Willingness to Pay`, `Feature Validation & Feedback`, `Behavioral & Workflow Understanding`, `General Customer Discovery`) plus custom input, and 3 length tier cards (`Short 5–7 turns`, `Standard 10–15 turns`, `Deep 20+ turns`).
+  - `InterviewWorkspaceView.tsx`: Live research interview workspace featuring:
+    - Left Persona Sidebar: demographic card, commercial budget (BDT), tech stack, evidence citations, and interactive checklist of explored vs unexplored topics.
+    - Live Conversation Transcript: turn numbers, speaker badges, topic tags, model latency info, and simulated typing indicator.
+    - Suggested Questions Bar: clickable contextual question pills that populate the composer.
+    - Multiline Sticky Composer: `Enter` to send, `Shift+Enter` for new line, turn counter progress bar, and "Finish Interview" action.
+    - Synthesis & Insights Tab: executive summary, key findings, and structured insight cards grouped by category with interactive `Turn #N` provenance badges that jump to supporting transcript turns.
+  - Connected `/interviews` and `/interviews/:id` navigation and routes in `DashboardLayout.tsx`.
+- **Automated Tests:**
+  - Backend (`test_adaptive_engine.py` & `test_interview_ownership_idor.py`): multi-turn conversational grounding, anti-sycophantic resistance, topic classification, length tier enforcement, structured insight extraction with supporting turn provenance, and zero-trust IDOR isolation (**190/190 pytest passed**).
+  - Frontend (`AdaptiveInterview.test.tsx`): hub rendering, metrics, modal objective selection, length tier selection, transcript rendering, suggested question clicks, message dispatching, and synthesis tab review (**15/15 test suites, 68/68 vitest passed**; `npx tsc --noEmit` 0 errors).
+
+**Tests:** 15/15 frontend test suites passed (68/68 tests green); 190/190 backend pytest tests green; TypeScript typecheck green (0 errors).
+
+

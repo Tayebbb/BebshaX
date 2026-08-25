@@ -38,6 +38,20 @@ interface StudyWorkflowViewProps {
   onStepChange?: (step: number) => void;
 }
 
+interface CopilotMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+  isGoalCard?: boolean;
+  goalCardData?: {
+    title: string;
+    summary: string;
+    target_audience: string;
+    core_hypothesis: string;
+  };
+}
+
 const DEFAULT_STUDENT_ROLES: PersonaRoleSuggestion[] = [
   {
     id: 'role_uni_student',

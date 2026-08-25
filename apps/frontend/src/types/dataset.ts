@@ -62,6 +62,9 @@ export interface DatasetSource {
     columns: DatasetColumnSchema[];
     row_count: number;
     column_count: number;
+    duplicate_rows?: number;
+    missing_values_percentage?: number;
+    warnings?: string[];
   };
   statistics: {
     numeric: Record<string, NumericColumnStats>;
@@ -85,7 +88,7 @@ export interface DatasetPreviewResponse {
   limit: number;
 }
 
-export interface PersonaGenerationRun {
+export interface DatasetPersonaRun {
   run_id: string;
   dataset_id: string;
   dataset_name: string;
@@ -99,20 +102,27 @@ export interface PersonaGenerationRun {
   personas: any[];
   validation_summary: Array<{
     persona_name: string;
-    segment: string;
-    status: 'VALID' | 'WARNING' | 'CONTRADICTION' | 'INVALID';
-    violations: string[];
-    warnings: string[];
+    is_valid: boolean;
+    issues: string[];
   }>;
+  created_at?: string;
 }
 
 export interface OpenRouterHealth {
-  configured: boolean;
-  authenticated: boolean;
-  model: string;
-  status: string;
+  model?: string;
+  active_model?: string;
+  status?: string;
   latency_ms?: number;
   error_code?: string;
-  message: string;
+  message?: string;
   verified_response?: string;
+  api_key_configured?: boolean;
+  api_key_preview?: string;
+  configured?: boolean;
+  authenticated?: boolean;
+  default_model?: string;
+  models_available?: number;
+  supported_models?: string[];
+  quota_status?: string;
+  [key: string]: any;
 }

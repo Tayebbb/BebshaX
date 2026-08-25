@@ -20,11 +20,25 @@ import { ModelRouterView } from './views/ModelRouterView';
 import { DatasetSourcesView } from './views/DatasetSourcesView';
 import { EvidenceLaboratoryView } from './views/EvidenceLaboratoryView';
 import { SegmentationView } from './views/SegmentationView';
-import { StudyType, Study } from '../../types';
+import { InterviewsView } from './views/InterviewsView';
+import { InterviewWorkspaceView } from './views/InterviewWorkspaceView';
+import { StartInterviewModal } from './modals/StartInterviewModal';
+import { StudyType, Study, SyntheticPersona } from '../../types';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
+import { MessageSquare } from 'lucide-react';
 
-export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'datasets' | 'router' | 'study-workflow' | 'evidence' | 'segmentation';
+export type DashboardTab =
+  | 'new-study'
+  | 'dashboard'
+  | 'personas'
+  | 'interviews'
+  | 'interview-workspace'
+  | 'datasets'
+  | 'router'
+  | 'study-workflow'
+  | 'evidence'
+  | 'segmentation';
 
 interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
@@ -33,8 +47,20 @@ interface DashboardLayoutProps {
 const parseDashboardPath = (path: string): {
   tab: DashboardTab;
   studyId?: string;
+  interviewId?: string;
   step?: number;
 } => {
+  if (path.includes('/interviews/') || path.startsWith('/interviews/')) {
+    const parts = path.split('/').filter(Boolean);
+    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const interviewId = parts[3] || parts[2] || '';
+    return { tab: 'interview-workspace', studyId, interviewId };
+  }
+  if (path.includes('/interviews') || path.startsWith('/interviews')) {
+    const parts = path.split('/').filter(Boolean);
+    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    return { tab: 'interviews', studyId };
+  }
   if (path.includes('/segmentation') || path.startsWith('/segmentation')) {
     const parts = path.split('/').filter(Boolean);
     const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
@@ -63,6 +89,12 @@ const parseDashboardPath = (path: string): {
   if (path.startsWith('/research') || path.startsWith('/study')) {
     const parts = path.split('/').filter(Boolean);
     const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    if (parts[2] === 'interviews' && parts[3]) {
+      return { tab: 'interview-workspace', studyId, interviewId: parts[3] };
+    }
+    if (parts[2] === 'interviews') {
+      return { tab: 'interviews', studyId };
+    }
     let step = 1;
     if (parts[2] && parts[2].startsWith('step')) {
       const parsed = parseInt(parts[2].replace('step', ''), 10);
@@ -82,6 +114,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const initialParsed = parseDashboardPath(currentPath);
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialParsed.tab);
   const [activeStudyId, setActiveStudyId] = useState<string | undefined>(initialParsed.studyId);
+  const [activeInterviewId, setActiveInterviewId] = useState<string | undefined>(initialParsed.interviewId);
   const [activeStep, setActiveStep] = useState<number>(initialParsed.step || 1);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -92,11 +125,18 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [initialWorkflowPrompt, setInitialWorkflowPrompt] = useState<string | undefined>(undefined);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
+  // Interview Modal State
+  const [modalPersona, setModalPersona] = useState<SyntheticPersona | null>(null);
+  const [showStartInterviewModal, setShowStartInterviewModal] = useState<boolean>(false);
+
   useEffect(() => {
     const parsed = parseDashboardPath(currentPath);
     setActiveTab(parsed.tab);
     if (parsed.studyId) {
       setActiveStudyId(parsed.studyId);
+    }
+    if (parsed.interviewId) {
+      setActiveInterviewId(parsed.interviewId);
     }
     if (parsed.step) {
       setActiveStep(parsed.step);
@@ -132,6 +172,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     if (tab === 'new-study') navigate('/create-study');
     else if (tab === 'dashboard') navigate('/dashboard');
     else if (tab === 'personas') navigate('/persona-library');
+    else if (tab === 'interviews') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`);
     else if (tab === 'datasets') navigate('/datasets');
     else if (tab === 'router') navigate('/router');
     else if (tab === 'study-workflow') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
@@ -187,6 +228,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       id: 'personas' as DashboardTab,
       label: 'Persona Library',
       icon: <Contact2 size={16} />,
+    },
+    {
+      id: 'interviews' as DashboardTab,
+      label: 'Interviews',
+      icon: <MessageSquare size={16} />,
     },
     {
       id: 'datasets' as DashboardTab,
@@ -732,12 +778,38 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         {activeTab === 'personas' && (
           <PersonaLibraryView
             studyId={activeStudyId}
-            onStartInterviewWithPersona={(pId) => {
-              handleStartStudy('interviews', `Interview with persona ${pId}`);
+            onStartInterviewWithPersona={async (pId) => {
+              try {
+                const p = await api.getStudyPersonaDetail(activeStudyId || 'tj6FY3cXDO8oxpuxeAMb', pId);
+                setModalPersona(p);
+                setShowStartInterviewModal(true);
+              } catch {
+                navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`);
+              }
             }}
             onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}
             onNavigateToDatasets={() => navigate('/datasets')}
             onNavigateToSegmentation={() => navigate(`/research/${activeStudyId || 'study_default'}/segmentation`)}
+          />
+        )}
+
+        {activeTab === 'interviews' && (
+          <InterviewsView
+            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+            onOpenInterview={(intId) => {
+              setActiveInterviewId(intId);
+              navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews/${intId}`);
+            }}
+            onNavigateToPersonas={() => navigate('/persona-library')}
+          />
+        )}
+
+        {activeTab === 'interview-workspace' && activeInterviewId && (
+          <InterviewWorkspaceView
+            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+            interviewId={activeInterviewId}
+            onBackToInterviews={() => navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`)}
+            onNavigateToPersona={() => navigate('/persona-library')}
           />
         )}
 
@@ -769,13 +841,30 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               studyId={activeStudyId || 'study_default'}
               onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}
               onNavigateToDatasets={() => navigate(`/datasets`)}
-              onProceedToPersonas={(segmentId) => {
+              onProceedToPersonas={() => {
                 navigate(`/research/${activeStudyId || 'study_default'}/step3`);
               }}
             />
           </div>
         )}
       </main>
+
+      {/* Start Adaptive Interview Modal */}
+      {showStartInterviewModal && modalPersona && (
+        <StartInterviewModal
+          isOpen={showStartInterviewModal}
+          onClose={() => {
+            setShowStartInterviewModal(false);
+            setModalPersona(null);
+          }}
+          persona={modalPersona}
+          studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+          onInterviewStarted={(newInterviewId) => {
+            setActiveInterviewId(newInterviewId);
+            navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews/${newInterviewId}`);
+          }}
+        />
+      )}
 
     </div>
   );

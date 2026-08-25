@@ -373,6 +373,66 @@ async def upload_study_dataset_file(
         ) from exc
 
 
+# ============================================================================
+# Discovered Dataset Candidates Endpoints
+# ============================================================================
+
+@router.get("/studies/{study_id}/datasets/candidates")
+async def list_study_dataset_candidates(
+    study_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(_get_session),
+) -> list[dict[str, Any]]:
+    """List public dataset candidates discovered for a study."""
+    await _verify_study_access(study_id, current_user, session)
+    from bebshax.research.service import ResearchEngineService
+    service = ResearchEngineService()
+    return await service.list_dataset_candidates(session, study_id)
+
+
+@router.post("/studies/{study_id}/datasets/candidates/{candidate_id}/import")
+async def import_study_dataset_candidate(
+    study_id: str,
+    candidate_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(_get_session),
+) -> dict[str, Any]:
+    """Manually import a discovered dataset candidate into the study's dataset sources."""
+    await _verify_study_access(study_id, current_user, session)
+    from bebshax.research.service import ResearchEngineService
+    service = ResearchEngineService()
+    effective_user_id = current_user.id if current_user else "usr_default"
+    try:
+        imported_ds = await service.import_candidate_dataset(session, study_id, candidate_id, effective_user_id)
+        return {
+            "success": True,
+            "imported_dataset_id": imported_ds.id,
+            "dataset_name": imported_ds.name,
+            "row_count": imported_ds.row_count,
+            "column_count": imported_ds.column_count,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/studies/{study_id}/datasets/candidates/{candidate_id}/reject")
+async def reject_study_dataset_candidate(
+    study_id: str,
+    candidate_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(_get_session),
+) -> dict[str, Any]:
+    """Reject a discovered dataset candidate so it is excluded from auto-selection."""
+    await _verify_study_access(study_id, current_user, session)
+    from bebshax.research.service import ResearchEngineService
+    service = ResearchEngineService()
+    try:
+        await service.reject_candidate_dataset(session, study_id, candidate_id)
+        return {"success": True, "candidate_id": candidate_id, "status": "rejected_by_user"}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
 @router.get("/studies/{study_id}/datasets/{dataset_id}")
 async def get_study_dataset(
     study_id: str,

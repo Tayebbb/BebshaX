@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search,
-  Plus,
-  Filter,
   Sparkles,
   Layers,
   CheckCircle2,
@@ -20,11 +18,8 @@ import {
   Quote,
   Target,
   AlertCircle,
-  TrendingUp,
-  Cpu,
-  Share2,
 } from 'lucide-react';
-import { SyntheticPersona, PersonaGenerationRun, MarketSegment, Study } from '../../../types';
+import { SyntheticPersona, MarketSegment, Study, PersonaGenerationRun } from '../../../types';
 import { api } from '../../../services/api';
 
 interface PersonaLibraryViewProps {
@@ -39,15 +34,15 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   studyId,
   onStartInterviewWithPersona,
   onNavigateToEvidence,
-  onNavigateToDatasets,
-  onNavigateToSegmentation,
+  onNavigateToDatasets: _onNavigateToDatasets,
+  onNavigateToSegmentation: _onNavigateToSegmentation,
 }) => {
   // Studies and active context
   const [studies, setStudies] = useState<Study[]>([]);
   const [activeStudyId, setActiveStudyId] = useState<string>(studyId || '');
   const [personas, setPersonas] = useState<SyntheticPersona[]>([]);
   const [segments, setSegments] = useState<MarketSegment[]>([]);
-  const [runs, setRuns] = useState<PersonaGenerationRun[]>([]);
+  const [, setRuns] = useState<PersonaGenerationRun[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +51,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   const [selectedSegmentFilter, setSelectedSegmentFilter] = useState<string>('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [selectedGroundingFilter, setSelectedGroundingFilter] = useState<string>('all');
-  const [selectedRunFilter, setSelectedRunFilter] = useState<string>('all');
+  const [selectedRunFilter] = useState<string>('all');
 
   // Deep Dive Inspector Modal
   const [inspectingPersona, setInspectingPersona] = useState<SyntheticPersona | null>(null);
@@ -65,7 +60,6 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
   // Generation Modal & Stepper States
   const [showGenerateModal, setShowGenerateModal] = useState<boolean>(false);
-  const [selectedRunId, setSelectedRunId] = useState<string>('');
   const [personasPerSegment, setPersonasPerSegment] = useState<number>(2);
   const [distributionStrategy, setDistributionStrategy] = useState<'population_weighted' | 'equal'>('population_weighted');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -101,7 +95,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
     setError(null);
     try {
       const [personasRes, segmentsRes, runsRes] = await Promise.allSettled([
-        api.getStudyPersonas(activeStudyId || undefined),
+        api.getStudyPersonas(activeStudyId || 'default'),
         activeStudyId ? api.getMarketSegments(activeStudyId) : Promise.resolve([]),
         activeStudyId ? api.listStudyPersonaRuns(activeStudyId) : Promise.resolve({ runs: [] }),
       ]);
@@ -174,7 +168,6 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
     try {
       const res = await api.generateSyntheticPersonas(activeStudyId, {
-        segmentation_run_id: selectedRunId || undefined,
         personas_per_segment: personasPerSegment,
         distribution_strategy: distributionStrategy,
       });

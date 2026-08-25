@@ -104,7 +104,7 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
       expect(screen.getByText('Context')).toBeInTheDocument();
       expect(screen.getByText('Personas')).toBeInTheDocument();
       expect(screen.getByText('Script')).toBeInTheDocument();
-      expect(screen.getByText('Interviews')).toBeInTheDocument();
+      expect(screen.getAllByText('Interviews').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Report')).toBeInTheDocument();
     });
   });

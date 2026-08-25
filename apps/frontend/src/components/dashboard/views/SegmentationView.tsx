@@ -1,33 +1,23 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   PieChart,
-  Users,
-  Layers,
   Sparkles,
   ArrowRight,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
-  Clock,
-  TrendingUp,
-  DollarSign,
   HelpCircle,
   Sliders,
-  Filter,
   Download,
   Search,
-  ExternalLink,
   ChevronRight,
-  ShieldCheck,
-  BarChart3,
   X,
   FileSpreadsheet,
   CheckSquare,
   Square,
-  Maximize2,
   FileText,
 } from 'lucide-react';
-import api from '../../../services/api';
+import { api } from '../../../services/api';
 import {
   MarketSegment,
   SegmentationReadiness,
@@ -50,9 +40,9 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 }) => {
   const [readiness, setReadiness] = useState<SegmentationReadiness | null>(null);
   const [segments, setSegments] = useState<MarketSegment[]>([]);
-  const [runs, setRuns] = useState<SegmentationRun[]>([]);
+  const [, setRuns] = useState<SegmentationRun[]>([]);
   const [activeRun, setActiveRun] = useState<SegmentationRun | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [, setIsLoading] = useState<boolean>(true);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [executionStep, setExecutionStep] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
@@ -592,8 +582,8 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                   {/* Key Attribute Pills */}
                   <div className="grid grid-cols-2 gap-2 bg-[#111616] border border-[#202727] p-2.5 rounded-lg mb-4 text-xs">
                     <div>
-                      <span className="text-[10px] text-[#8D9999] block">Median Budget</span>
-                      <span className="font-semibold text-teal-400 font-mono">{medianBudget}</span>
+                      <span className="text-[10px] text-[#8D9999] block">Budget Range</span>
+                      <span className="font-semibold text-teal-400 font-mono">{budgetRange}</span>
                     </div>
                     <div>
                       <span className="text-[10px] text-[#8D9999] block">Age Cohort</span>

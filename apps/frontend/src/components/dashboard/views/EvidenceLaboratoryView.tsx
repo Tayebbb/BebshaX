@@ -3,31 +3,23 @@ import {
   Search,
   Sparkles,
   Database,
-  FileText,
   CheckCircle2,
   AlertTriangle,
   XCircle,
   ExternalLink,
   RefreshCw,
-  Layers,
   ArrowLeft,
   ChevronRight,
   ShieldCheck,
-  Filter,
-  Info,
   Clock,
-  Check,
-  TrendingUp,
 } from 'lucide-react';
 import {
   ClaimDetail,
-  EvidenceCategory,
   EvidenceClaim,
   EvidenceSource,
   EvidenceStatus,
   EvidenceSummary,
   ResearchRun,
-  ResearchStatus,
   Study,
 } from '../../../types';
 import { api } from '../../../services/api';
@@ -49,11 +41,11 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
   const [sources, setSources] = useState<EvidenceSource[]>([]);
   const [runs, setRuns] = useState<ResearchRun[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [categoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sourceTypeFilter, setSourceTypeFilter] = useState<string>('all');
   const [selectedClaimDetail, setSelectedClaimDetail] = useState<ClaimDetail | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [, setIsLoading] = useState<boolean>(true);
   const [isRunningResearch, setIsRunningResearch] = useState<boolean>(false);
   const [researchProgressStep, setResearchProgressStep] = useState<number>(0);
   const [researchStatusText, setResearchStatusText] = useState<string>('');
@@ -86,32 +78,42 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
     if (isRunningResearch) return;
     setIsRunningResearch(true);
     setResearchProgressStep(1);
-    setResearchStatusText('Generating targeted research queries...');
+    setResearchStatusText('Building autonomous research plan...');
 
     try {
       setTimeout(() => {
         setResearchProgressStep(2);
-        setResearchStatusText('Searching permitted empirical sources & public discussions...');
-      }, 1000);
+        setResearchStatusText('Discovering public datasets (BBS, World Bank, Kaggle)...');
+      }, 800);
 
       setTimeout(() => {
         setResearchProgressStep(3);
-        setResearchStatusText('Chunking documents & computing 384-dim pgvector embeddings...');
-      }, 2200);
+        setResearchStatusText('Generating targeted research queries...');
+      }, 1800);
 
       setTimeout(() => {
         setResearchProgressStep(4);
-        setResearchStatusText('Extracting structured claims & empirical status classification...');
-      }, 3400);
+        setResearchStatusText('Searching empirical sources & public discussions...');
+      }, 2800);
 
-      const run = await api.startResearch(studyId);
+      setTimeout(() => {
+        setResearchProgressStep(5);
+        setResearchStatusText('Chunking documents & computing pgvector embeddings...');
+      }, 3800);
+
+      setTimeout(() => {
+        setResearchProgressStep(6);
+        setResearchStatusText('Extracting structured claims & empirical classification...');
+      }, 5000);
+
+      await api.startResearch(studyId);
 
       setTimeout(async () => {
-        setResearchProgressStep(5);
-        setResearchStatusText('Research complete.');
+        setResearchProgressStep(7);
+        setResearchStatusText('Research complete — datasets discovered & evidence extracted.');
         await loadAllData();
         setIsRunningResearch(false);
-      }, 4500);
+      }, 6200);
     } catch {
       setIsRunningResearch(false);
     }
@@ -361,13 +363,13 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 </span>
               </div>
               <span style={{ fontSize: '0.8rem', color: '#22D3EE', fontWeight: 600 }}>
-                Step {researchProgressStep} of 5
+                Step {researchProgressStep} of 7
               </span>
             </div>
 
             {/* Stepper Progress Bar */}
             <div style={{ display: 'flex', gap: '8px' }}>
-              {[1, 2, 3, 4, 5].map((step) => {
+              {[1, 2, 3, 4, 5, 6, 7].map((step) => {
                 const isPassed = researchProgressStep > step;
                 const isCurrent = researchProgressStep === step;
                 return (

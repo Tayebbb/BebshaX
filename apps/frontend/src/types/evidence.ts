@@ -11,6 +11,8 @@ export type EvidenceCategory =
 export type ResearchStatus =
   | 'idle'
   | 'pending'
+  | 'planning'
+  | 'discovering_datasets'
   | 'generating_queries'
   | 'collecting_sources'
   | 'processing_chunks'
@@ -23,14 +25,67 @@ export interface ResearchRun {
   study_id: string;
   user_id?: string | null;
   status: ResearchStatus;
+  current_step?: string | null;
   query_count: number;
   source_count: number;
   claim_count: number;
+  dataset_candidate_count?: number;
+  dataset_imported_count?: number;
+  step_progress?: Record<string, string | number | boolean>;
+  research_plan?: Record<string, any> | null;
   queries: string[];
   error_message?: string | null;
   started_at: string;
   completed_at?: string | null;
   created_at: string;
+}
+
+// ── Autonomous Research Plan ──────────────────────────────────────────────────
+
+export interface ResearchArea {
+  area: string;
+  focus: string;
+  data_types: string[];
+  priority: 'high' | 'medium' | 'low';
+}
+
+export interface ResearchPlan {
+  study_id: string;
+  idea_summary: string;
+  domain: string;
+  target_region: string;
+  research_areas: ResearchArea[];
+  dataset_search_terms: string[];
+  evidence_query_topics: string[];
+  created_at?: string;
+}
+
+// ── Discovered Dataset Candidate ─────────────────────────────────────────────
+
+export type CandidateStatus =
+  | 'discovered'
+  | 'auto_imported'
+  | 'imported_by_user'
+  | 'rejected_by_user'
+  | 'import_failed';
+
+export interface DatasetCandidate {
+  id: string;
+  study_id: string;
+  run_id?: string | null;
+  name: string;
+  description?: string | null;
+  source_url?: string | null;
+  source_name?: string | null;
+  file_type?: string | null;
+  estimated_rows?: number | null;
+  quality_score: number;
+  relevance_score: number;
+  diversity_tag?: string | null;
+  status: CandidateStatus;
+  imported_dataset_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface EvidenceSource {

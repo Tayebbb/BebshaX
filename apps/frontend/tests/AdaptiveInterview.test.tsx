@@ -1,0 +1,256 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { InterviewsView } from '../src/components/dashboard/views/InterviewsView';
+import { InterviewWorkspaceView } from '../src/components/dashboard/views/InterviewWorkspaceView';
+import { StartInterviewModal } from '../src/components/dashboard/modals/StartInterviewModal';
+import { api } from '../src/services/api';
+import {
+  SyntheticPersona,
+  Interview,
+  InterviewDetailResponse,
+} from '../src/types';
+
+vi.mock('../src/services/api', () => ({
+  api: {
+    getStudyInterviewMetrics: vi.fn(),
+    listStudyInterviews: vi.fn(),
+    getStudyInterviewDetail: vi.fn(),
+    getStudyPersonaDetail: vi.fn(),
+    startPersonaInterview: vi.fn(),
+    sendInterviewMessage: vi.fn(),
+    completeStudyInterview: vi.fn(),
+  },
+}));
+
+const mockPersona: SyntheticPersona = {
+  id: 'per_nadia',
+  name: 'Nadia Rahman',
+  status: 'ready',
+  version: 1,
+  demographics: {
+    age: 21,
+    occupation: 'University Student',
+    location: 'Dhanmondi, Dhaka',
+    education: 'Undergraduate BBA',
+  },
+  commercial_profile: {
+    monthly_budget_bdt: 400,
+    price_sensitivity: 'Very High',
+    payment_preference: 'bKash',
+  },
+  technology_profile: {
+    primary_devices: ['Android smartphone'],
+  },
+  evidence_citations: [
+    {
+      claim_text: '72% of university hostellers spend under 150 BDT on lunch',
+      category: 'spending',
+    },
+  ],
+  goals: ['Save time during exam weeks'],
+  needs: ['Budget meals'],
+  pain_points: ['Mess food is repetitive'],
+  behaviors: ['Uses bKash daily'],
+  preferences: ['Affordability'],
+  motivations: ['Graduation'],
+  objections: ['Will cancel if fee > 400 BDT'],
+  dataset_refs: [],
+  grounding_score: 0.92,
+  confidence: 0.95,
+  validation_warnings: [],
+  is_synthetic: true,
+  created_at: new Date().toISOString(),
+};
+
+const mockInterview: Interview = {
+  id: 'int_001',
+  study_id: 'study_123',
+  persona_id: 'per_nadia',
+  persona_version: 1,
+  persona_name: 'Nadia Rahman',
+  persona_occupation: 'University Student',
+  objective: 'Problem & Pain Point Discovery',
+  interview_type: 'adaptive_persona',
+  length_tier: 'standard',
+  max_turns: 14,
+  status: 'active',
+  topics_explored: {
+    pain_points: 'explored',
+    pricing_budget: 'explored',
+  },
+  question_count: 2,
+  turn_count: 4,
+  created_at: new Date().toISOString(),
+};
+
+const mockDetail: InterviewDetailResponse = {
+  interview: mockInterview,
+  turns: [
+    {
+      id: 't_1',
+      turn_number: 1,
+      role: 'interviewer',
+      content: 'How do you handle meals during finals?',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: 't_2',
+      turn_number: 2,
+      role: 'persona',
+      content: 'I usually eat at the dorm canteen, but the food is very repetitive.',
+      topic: 'pain_points',
+      served_by: 'openrouter/qwen3.5',
+      latency_ms: 320,
+      created_at: new Date().toISOString(),
+    },
+  ],
+  insights: [
+    {
+      id: 'ins_1',
+      type: 'pain_point',
+      title: 'Hostel Dining Monotony',
+      description: 'The student archetype experiences high friction during exam periods with hostel food.',
+      supporting_turn_numbers: [2],
+      confidence: 0.9,
+      is_synthetic: true,
+      created_at: new Date().toISOString(),
+    },
+  ],
+  suggested_questions: [
+    'How much would you pay per month for an alternative meal service?',
+    'What payment method do you use most frequently?',
+  ],
+  topics: [
+    { id: 'pain_points', label: 'Problem Discovery & Friction', status: 'explored' },
+    { id: 'pricing_budget', label: 'Pricing & Budget Tolerance', status: 'explored' },
+    { id: 'current_behavior', label: 'Current Habits & Workarounds', status: 'not_explored' },
+  ],
+};
+
+describe('Adaptive Persona Interviews (Part 6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders study-level interviews hub with metrics and interview cards', async () => {
+    vi.mocked(api.getStudyInterviewMetrics).mockResolvedValue({
+      total_interviews: 3,
+      active_interviews: 1,
+      completed_interviews: 2,
+      total_insights_generated: 7,
+    });
+    vi.mocked(api.listStudyInterviews).mockResolvedValue({
+      interviews: [mockInterview],
+      total: 1,
+    });
+
+    render(
+      <InterviewsView
+        studyId="study_123"
+        onOpenInterview={vi.fn()}
+        onNavigateToPersonas={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Customer Interview Lab')).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText('Nadia Rahman')).toBeDefined();
+      expect(screen.getByText('Problem & Pain Point Discovery')).toBeDefined();
+      expect(screen.getByText('Continue Interview')).toBeDefined();
+    });
+  });
+
+  it('opens and submits StartInterviewModal with selected objective and length tier', async () => {
+    vi.mocked(api.startPersonaInterview).mockResolvedValue(mockInterview);
+    const onStarted = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <StartInterviewModal
+        isOpen={true}
+        onClose={onClose}
+        persona={mockPersona}
+        studyId="study_123"
+        onInterviewStarted={onStarted}
+      />
+    );
+
+    expect(screen.getByText('Interview Nadia Rahman')).toBeDefined();
+    expect(screen.getByText(/Synthetic Persona/i)).toBeDefined();
+
+    // Click Pricing Objective preset
+    const pricingObj = screen.getByText('Pricing & Willingness to Pay');
+    fireEvent.click(pricingObj);
+
+    // Click Start Interview button
+    const startBtn = screen.getByText('Start Adaptive Interview');
+    fireEvent.click(startBtn);
+
+    await waitFor(() => {
+      expect(api.startPersonaInterview).toHaveBeenCalledWith(
+        'study_123',
+        'per_nadia',
+        expect.objectContaining({
+          objective: 'Pricing & Willingness to Pay',
+        })
+      );
+      expect(onStarted).toHaveBeenCalledWith('int_001');
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it('renders InterviewWorkspaceView with transcript, suggestions, and synthesis tab', async () => {
+    vi.mocked(api.getStudyInterviewDetail).mockResolvedValue(mockDetail);
+    vi.mocked(api.getStudyPersonaDetail).mockResolvedValue(mockPersona);
+    vi.mocked(api.sendInterviewMessage).mockResolvedValue({
+      reply: '৳2,000 is way above my ৳400 monthly allowance.',
+      turn_number: 4,
+      total_turns: 4,
+      max_turns: 14,
+      is_finished: false,
+      topic: 'pricing_budget',
+      topics_explored: { pain_points: 'explored', pricing_budget: 'explored' },
+      suggested_questions: ['What if it were ৳250/mo?'],
+      latency_ms: 250,
+    });
+
+    render(
+      <InterviewWorkspaceView
+        studyId="study_123"
+        interviewId="int_001"
+        onBackToInterviews={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Nadia Rahman').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/How do you handle meals during finals/i)).toBeDefined();
+      expect(screen.getByText(/I usually eat at the dorm canteen/i)).toBeDefined();
+    });
+
+    // Check suggested question pill
+    const suggestionPill = screen.getByText('How much would you pay per month for an alternative meal service?');
+    expect(suggestionPill).toBeDefined();
+
+    // Click suggestion to send message
+    fireEvent.click(suggestionPill);
+
+    await waitFor(() => {
+      expect(api.sendInterviewMessage).toHaveBeenCalledWith(
+        'study_123',
+        'int_001',
+        { content: 'How much would you pay per month for an alternative meal service?' }
+      );
+    });
+
+    // Switch to Synthesis tab
+    const synthesisTabBtn = screen.getByText('Synthesis & Insights');
+    fireEvent.click(synthesisTabBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Research Findings: Nadia Rahman')).toBeDefined();
+      expect(screen.getByText('Hostel Dining Monotony')).toBeDefined();
+      expect(screen.getByText('Turn #2')).toBeDefined();
+    });
+  });
+});

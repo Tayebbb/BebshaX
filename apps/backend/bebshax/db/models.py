@@ -363,6 +363,87 @@ class DatasetPersonaRuns(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class ResearchPlans(Base):
+    """Structured research plan generated from the user's business idea."""
+
+    __tablename__ = "research_plans"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    study_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    business_idea: Mapped[str] = mapped_column(Text, nullable=False)
+    target_market: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    problem_areas: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    behavioral_questions: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    economic_questions: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    competition_questions: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    market_questions: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    dataset_requirements: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class DatasetCandidates(Base):
+    """Discovered public dataset candidate before or after evaluation and import."""
+
+    __tablename__ = "dataset_candidates"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    study_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(128), index=True)
+    external_id: Mapped[str] = mapped_column(String(256))
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    download_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    publisher: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    license: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    license_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    format: Mapped[str] = mapped_column(String(64), default="csv")
+    size_bytes: Mapped[Optional[int]] = mapped_column(nullable=True)
+    sample_rows: Mapped[Optional[int]] = mapped_column(nullable=True)
+    sample_columns: Mapped[Optional[int]] = mapped_column(nullable=True)
+    geographic_coverage: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    population_coverage: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    relevant_variables: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    relevance_score: Mapped[float] = mapped_column(Float, default=0.75)
+    quality_score: Mapped[float] = mapped_column(Float, default=0.80)
+    selection_status: Mapped[str] = mapped_column(
+        String(64), default="discovered"
+    )  # selected, discovered, rejected_by_user, import_failed, imported
+    selection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    evaluation_details: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    imported_dataset_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
 class ResearchRuns(Base):
     """Audit and lifecycle record for a study research execution."""
 
@@ -371,10 +452,19 @@ class ResearchRuns(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(String(64), index=True)
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
-    status: Mapped[str] = mapped_column(String(64), default="pending")  # pending, generating_queries, collecting_sources, processing_chunks, extracting_evidence, completed, failed
+    status: Mapped[str] = mapped_column(String(64), default="pending")  # pending, understanding_idea, building_research_plan, searching_evidence, discovering_datasets, evaluating_datasets, importing_datasets, completed, failed
     query_count: Mapped[int] = mapped_column(default=0)
     source_count: Mapped[int] = mapped_column(default=0)
     claim_count: Mapped[int] = mapped_column(default=0)
+    dataset_candidate_count: Mapped[int] = mapped_column(default=0)
+    dataset_imported_count: Mapped[int] = mapped_column(default=0)
+    current_step: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    step_progress: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    research_plan: Mapped[Optional[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
     queries: Mapped[list[str]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=list
     )

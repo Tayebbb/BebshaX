@@ -41,11 +41,11 @@ export interface MarketSegment {
   population_count: number;
   population_percentage: number;
   confidence_score: number;
-  status: 'data_backed' | 'inference_assisted' | 'insufficient_evidence';
+  status?: 'data_backed' | 'inference_assisted' | 'insufficient_evidence' | string;
   characteristics: {
     name_hint?: string;
     demographics?: {
-      age_range?: [number, number];
+      age_range?: [number, number] | number[];
       median_age?: number;
       dominant_occupation?: string;
       [key: string]: any;
@@ -73,7 +73,7 @@ export interface MarketSegment {
   evidence_citations: EvidenceCitation[];
   differentiation_summary?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface DatasetVersionItem {

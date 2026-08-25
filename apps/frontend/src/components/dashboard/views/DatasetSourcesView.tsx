@@ -1,32 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../../services/api';
-import { DatasetSource, DatasetSegment, PersonaGenerationRun, DatasetPreviewResponse } from '../../../types/dataset';
+import { DatasetSource, DatasetPersonaRun, DatasetPreviewResponse } from '../../../types/dataset';
+import { DatasetCandidate } from '../../../types/evidence';
 import { OpenRouterDiagnosticModal } from './OpenRouterDiagnosticModal';
 import {
   Database,
   Plus,
   RefreshCw,
   Trash2,
-  Eye,
-  Users,
-  FileSpreadsheet,
   Link,
   Upload,
   CheckCircle2,
   AlertTriangle,
-  XCircle,
-  BarChart3,
-  Layers,
   ArrowRight,
-  Shield,
-  Clock,
   Sparkles,
-  Info,
   X,
   Cpu,
   Table,
   ChevronLeft,
   ChevronRight,
+  Bot,
+  Download,
+  Globe,
+  ThumbsDown,
 } from 'lucide-react';
 
 interface DatasetSourcesViewProps {
@@ -38,6 +34,16 @@ export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId 
   const [loading, setLoading] = useState(true);
   const [selectedDataset, setSelectedDataset] = useState<DatasetSource | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'preview' | 'schema' | 'stats' | 'quality' | 'segments'>('overview');
+
+  // Main panel switcher: 'sources' = manually-managed datasets, 'discovered' = autonomous candidates
+  const [mainTab, setMainTab] = useState<'sources' | 'discovered'>('sources');
+
+  // Autonomous dataset candidates state
+  const [candidates, setCandidates] = useState<DatasetCandidate[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [importingId, setImportingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [candidateActionMsg, setCandidateActionMsg] = useState<{ id: string; type: 'success' | 'error'; text: string } | null>(null);
 
   // Preview State
   const [previewData, setPreviewData] = useState<DatasetPreviewResponse | null>(null);
@@ -56,7 +62,7 @@ export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId 
   const [datasetName, setDatasetName] = useState('');
   const [datasetUrl, setDatasetUrl] = useState('');
   const [datasetDesc, setDatasetDesc] = useState('');
-  const [datasetType, setDatasetType] = useState('csv');
+  const [datasetType] = useState('csv');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -69,10 +75,11 @@ export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId 
   const [businessName, setBusinessName] = useState('BebshaX Market Validation');
   const [businessDesc, setBusinessDesc] = useState('Evidence-grounded user demand testing');
   const [generating, setGenerating] = useState(false);
-  const [generationRun, setGenerationRun] = useState<PersonaGenerationRun | null>(null);
+  const [generationRun, setGenerationRun] = useState<DatasetPersonaRun | null>(null);
 
   useEffect(() => {
     loadDatasets();
+    if (studyId) loadCandidates();
   }, [studyId]);
 
   useEffect(() => {
@@ -90,6 +97,51 @@ export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId 
       console.error('Failed to load datasets:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCandidates = async () => {
+    if (!studyId) return;
+    setCandidatesLoading(true);
+    try {
+      const data = await api.listDatasetCandidates(studyId);
+      setCandidates(data);
+    } catch (err) {
+      console.error('Failed to load candidates:', err);
+    } finally {
+      setCandidatesLoading(false);
+    }
+  };
+
+  const handleImportCandidate = async (candidateId: string) => {
+    if (!studyId) return;
+    setImportingId(candidateId);
+    try {
+      const result = await api.importDatasetCandidate(studyId, candidateId);
+      setCandidateActionMsg({ id: candidateId, type: 'success', text: `Imported "${result.dataset_name}" (${result.row_count?.toLocaleString() ?? '?'} rows)` });
+      // Update candidate status locally
+      setCandidates((prev) => prev.map((c) => c.id === candidateId ? { ...c, status: 'imported_by_user', imported_dataset_id: result.imported_dataset_id } : c));
+      // Refresh datasets list to show new entry
+      await loadDatasets();
+      setTimeout(() => setCandidateActionMsg(null), 5000);
+    } catch (err: any) {
+      setCandidateActionMsg({ id: candidateId, type: 'error', text: err.message || 'Import failed' });
+      setTimeout(() => setCandidateActionMsg(null), 5000);
+    } finally {
+      setImportingId(null);
+    }
+  };
+
+  const handleRejectCandidate = async (candidateId: string) => {
+    if (!studyId) return;
+    setRejectingId(candidateId);
+    try {
+      await api.rejectDatasetCandidate(studyId, candidateId);
+      setCandidates((prev) => prev.map((c) => c.id === candidateId ? { ...c, status: 'rejected_by_user' } : c));
+    } catch (err) {
+      console.error('Failed to reject candidate:', err);
+    } finally {
+      setRejectingId(null);
     }
   };
 
@@ -307,6 +359,35 @@ export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId 
         </div>
       </div>
 
+      {/* Main Panel Tab Switcher */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', background: 'rgba(255,255,255,0.03)', border: '1px solid #202727', borderRadius: '10px', padding: '4px', width: 'fit-content' }}>
+        {([
+          { key: 'sources', label: 'Dataset Sources', icon: <Database size={14} /> },
+          { key: 'discovered', label: `Discovered${candidates.length > 0 ? ` (${candidates.filter(c => c.status === 'discovered').length})` : ''}`, icon: <Bot size={14} /> },
+        ] as { key: 'sources' | 'discovered'; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => (
+          <button
+            key={key}
+            onClick={() => setMainTab(key)}
+            style={{
+              background: mainTab === key ? 'rgba(20, 184, 166, 0.15)' : 'transparent',
+              border: mainTab === key ? '1px solid rgba(20, 184, 166, 0.35)' : '1px solid transparent',
+              color: mainTab === key ? '#22D3EE' : '#8D9999',
+              borderRadius: '7px',
+              padding: '7px 16px',
+              fontSize: '0.82rem',
+              fontWeight: mainTab === key ? 600 : 400,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {icon} {label}
+          </button>
+        ))}
+      </div>
+
       {/* Global Refresh Notification Banner */}
       {refreshNotification && (
         <div
@@ -372,7 +453,7 @@ export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId 
         </div>
       </div>
 
-      {/* Dataset Repository Card Grid */}
+      {mainTab === 'sources' && (<>
       {loading ? (
         <div style={{ padding: '60px', textAlign: 'center', color: '#8D9999' }}>
           <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px auto' }} color="#14B8A6" />
@@ -943,7 +1024,7 @@ export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId 
 
                   {selectedDataset.schema_metadata?.warnings && selectedDataset.schema_metadata.warnings.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
-                      {selectedDataset.schema_metadata.warnings.map((w, i) => (
+                      {selectedDataset.schema_metadata.warnings.map((w: string, i: number) => (
                         <div
                           key={i}
                           style={{
@@ -1054,6 +1135,178 @@ export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId 
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      </>
+      )}
+
+      {/* Discovered Dataset Candidates Panel */}
+      {mainTab === 'discovered' && (
+        <div style={{ marginTop: '4px' }}>
+          {/* Action banner */}
+          {candidateActionMsg && (
+            <div style={{
+              background: candidateActionMsg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+              border: `1px solid ${candidateActionMsg.type === 'success' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+              borderRadius: '8px', padding: '10px 16px', marginBottom: '20px',
+              display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem',
+              color: candidateActionMsg.type === 'success' ? '#10B981' : '#EF4444',
+            }}>
+              {candidateActionMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+              <span>{candidateActionMsg.text}</span>
+            </div>
+          )}
+
+          {candidatesLoading ? (
+            <div style={{ padding: '60px', textAlign: 'center', color: '#8D9999' }}>
+              <RefreshCw size={24} className="spin" style={{ margin: '0 auto 12px auto' }} color="#14B8A6" />
+              <p style={{ fontSize: '0.9rem' }}>Searching public data repositories...</p>
+            </div>
+          ) : candidates.length === 0 ? (
+            <div style={{
+              background: '#0D1111', border: '1px dashed #202727', borderRadius: '12px',
+              padding: '60px 24px', textAlign: 'center',
+            }}>
+              <Bot size={38} color="#8D9999" style={{ margin: '0 auto 16px auto', opacity: 0.5 }} />
+              <h3 style={{ fontSize: '1.05rem', color: '#f4f7f7', margin: '0 0 8px 0' }}>No Discovered Datasets Yet</h3>
+              <p style={{ fontSize: '0.86rem', color: '#8D9999', maxWidth: '460px', margin: '0 auto 6px auto' }}>
+                Run autonomous research from the Evidence Laboratory. BebshaX will automatically discover, evaluate,
+                and present public datasets relevant to your study.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <div style={{ marginBottom: '18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: '0.84rem', color: '#8D9999', margin: 0 }}>
+                    {candidates.filter(c => c.status === 'discovered').length} pending &nbsp;·&nbsp;
+                    {candidates.filter(c => c.status === 'auto_imported' || c.status === 'imported_by_user').length} imported &nbsp;·&nbsp;
+                    {candidates.filter(c => c.status === 'rejected_by_user').length} rejected
+                  </p>
+                </div>
+                <button
+                  onClick={loadCandidates}
+                  style={{ background: 'transparent', border: '1px solid #202727', color: '#8D9999', borderRadius: '7px', padding: '6px 12px', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  <RefreshCw size={13} /> Refresh
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {candidates.map(c => {
+                  const isImported = c.status === 'auto_imported' || c.status === 'imported_by_user';
+                  const isRejected = c.status === 'rejected_by_user';
+                  const isPending = c.status === 'discovered';
+                  return (
+                    <div
+                      key={c.id}
+                      style={{
+                        background: isRejected ? 'rgba(255,255,255,0.01)' : '#0D1111',
+                        border: `1px solid ${isImported ? 'rgba(16,185,129,0.3)' : isRejected ? '#202727' : 'rgba(20,184,166,0.2)'}`,
+                        borderRadius: '10px', padding: '18px 20px',
+                        opacity: isRejected ? 0.55 : 1,
+                        transition: 'border-color 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: isRejected ? '#8D9999' : '#f4f7f7' }}>{c.name}</span>
+                            {isImported && <span style={{ fontSize: '0.7rem', fontWeight: 600, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10B981', borderRadius: '4px', padding: '1px 7px' }}>IMPORTED</span>}
+                            {c.status === 'auto_imported' && <span style={{ fontSize: '0.68rem', color: '#8D9999' }}>Auto</span>}
+                            {isRejected && <span style={{ fontSize: '0.7rem', fontWeight: 600, background: 'rgba(100,100,100,0.12)', border: '1px solid #202727', color: '#8D9999', borderRadius: '4px', padding: '1px 7px' }}>REJECTED</span>}
+                            {c.diversity_tag && <span style={{ fontSize: '0.68rem', color: '#22D3EE', background: 'rgba(34,211,238,0.07)', border: '1px solid rgba(34,211,238,0.15)', borderRadius: '4px', padding: '1px 7px' }}>{c.diversity_tag.toUpperCase()}</span>}
+                            {c.file_type && <span style={{ fontSize: '0.68rem', color: '#8D9999' }}>{c.file_type.toUpperCase()}</span>}
+                          </div>
+                          {c.description && <p style={{ fontSize: '0.83rem', color: '#8D9999', margin: '0 0 10px 0', lineHeight: 1.5 }}>{c.description}</p>}
+                          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                            <div style={{ minWidth: '140px' }}>
+                              <div style={{ fontSize: '0.72rem', color: '#8D9999', marginBottom: '3px', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Quality</span><span style={{ color: '#22D3EE' }}>{Math.round(c.quality_score * 100)}%</span>
+                              </div>
+                              <div style={{ background: '#202727', borderRadius: '3px', height: '4px' }}>
+                                <div style={{ background: 'linear-gradient(90deg,#14B8A6,#22D3EE)', borderRadius: '3px', height: '4px', width: `${Math.round(c.quality_score * 100)}%` }} />
+                              </div>
+                            </div>
+                            <div style={{ minWidth: '140px' }}>
+                              <div style={{ fontSize: '0.72rem', color: '#8D9999', marginBottom: '3px', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Relevance</span><span style={{ color: '#22D3EE' }}>{Math.round(c.relevance_score * 100)}%</span>
+                              </div>
+                              <div style={{ background: '#202727', borderRadius: '3px', height: '4px' }}>
+                                <div style={{ background: 'linear-gradient(90deg,#0D9488,#14B8A6)', borderRadius: '3px', height: '4px', width: `${Math.round(c.relevance_score * 100)}%` }} />
+                              </div>
+                            </div>
+                            {c.estimated_rows != null && (
+                              <div style={{ fontSize: '0.78rem', color: '#8D9999', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Table size={12} /> ~{c.estimated_rows.toLocaleString()} rows
+                              </div>
+                            )}
+                            {c.source_name && (
+                              <div style={{ fontSize: '0.78rem', color: '#8D9999', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Globe size={12} /> {c.source_name}
+                              </div>
+                            )}
+                          </div>
+                          {c.source_url && (
+                            <a href={c.source_url} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: '0.78rem', color: '#22D3EE', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                            >
+                              <ArrowRight size={11} /> View Source
+                            </a>
+                          )}
+                        </div>
+
+                        {isPending && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', flexShrink: 0 }}>
+                            <button
+                              id={`import-candidate-${c.id}`}
+                              onClick={() => handleImportCandidate(c.id)}
+                              disabled={importingId === c.id}
+                              style={{
+                                background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                                border: 'none', color: '#080A0A', borderRadius: '7px',
+                                padding: '7px 14px', fontSize: '0.81rem', fontWeight: 600,
+                                cursor: importingId === c.id ? 'wait' : 'pointer',
+                                display: 'flex', alignItems: 'center', gap: '5px',
+                                opacity: importingId === c.id ? 0.7 : 1,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              <Download size={13} />
+                              {importingId === c.id ? 'Importing...' : 'Import'}
+                            </button>
+                            <button
+                              id={`reject-candidate-${c.id}`}
+                              onClick={() => handleRejectCandidate(c.id)}
+                              disabled={rejectingId === c.id}
+                              style={{
+                                background: 'transparent', border: '1px solid #202727', color: '#8D9999',
+                                borderRadius: '7px', padding: '7px 14px', fontSize: '0.81rem',
+                                cursor: rejectingId === c.id ? 'wait' : 'pointer',
+                                display: 'flex', alignItems: 'center', gap: '5px',
+                                opacity: rejectingId === c.id ? 0.5 : 1,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              <ThumbsDown size={13} />
+                              {rejectingId === c.id ? '...' : 'Reject'}
+                            </button>
+                          </div>
+                        )}
+
+                        {isImported && (
+                          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px', color: '#10B981', fontSize: '0.82rem' }}>
+                            <CheckCircle2 size={16} /> Added to Sources
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1227,6 +1480,89 @@ export const DatasetSourcesView: React.FC<DatasetSourcesViewProps> = ({ studyId 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Persona Generation / Synthesis Modal */}
+      {isGenerateModalOpen && generatingDataset && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '16px', maxWidth: '520px', width: '100%', padding: '24px', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f4f7f7', margin: 0 }}>Synthesize Personas</h3>
+                <p style={{ fontSize: '0.78rem', color: '#8D9999', margin: '4px 0 0 0' }}>Dataset: {generatingDataset.name}</p>
+              </div>
+              <button onClick={() => setIsGenerateModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#8D9999', cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+
+            {generationRun ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ background: 'rgba(20, 184, 166, 0.1)', border: '1px solid rgba(20, 184, 166, 0.3)', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#14B8A6', fontWeight: 600, fontSize: '0.88rem' }}>
+                    <CheckCircle2 size={16} /> Synthesis Complete
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: '#8D9999', margin: '6px 0 0 0' }}>
+                    Generated {generationRun.generated_count} personas ({generationRun.valid_count} valid, {generationRun.warning_count} warnings).
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsGenerateModalOpen(false)}
+                  style={{ background: '#14B8A6', border: 'none', borderRadius: '8px', padding: '10px', color: '#080A0A', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Close & View in Persona Library
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', color: '#8D9999', marginBottom: '6px' }}>Target Personas Count</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={personaCount}
+                    onChange={(e) => setPersonaCount(Number(e.target.value))}
+                    style={{ width: '100%', background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '8px 12px', color: '#f4f7f7', fontSize: '0.86rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', color: '#8D9999', marginBottom: '6px' }}>Business Context</label>
+                  <input
+                    type="text"
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    style={{ width: '100%', background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '8px 12px', color: '#f4f7f7', fontSize: '0.86rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', color: '#8D9999', marginBottom: '6px' }}>Hypothesis / Value Proposition</label>
+                  <textarea
+                    rows={2}
+                    value={businessDesc}
+                    onChange={(e) => setBusinessDesc(e.target.value)}
+                    style={{ width: '100%', background: '#111616', border: '1px solid #202727', borderRadius: '8px', padding: '8px 12px', color: '#f4f7f7', fontSize: '0.86rem', resize: 'vertical' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsGenerateModalOpen(false)}
+                    style={{ background: 'transparent', border: '1px solid #202727', borderRadius: '8px', padding: '8px 16px', color: '#8D9999', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGeneratePersonas}
+                    disabled={generating}
+                    style={{ background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)', border: 'none', borderRadius: '8px', padding: '9px 18px', color: '#080A0A', fontWeight: 600, cursor: generating ? 'not-allowed' : 'pointer' }}
+                  >
+                    {generating ? 'Synthesizing...' : 'Generate Personas'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

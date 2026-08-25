@@ -1,9 +1,8 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PersonaLibraryView } from '../src/components/dashboard/views/PersonaLibraryView';
 import { api } from '../src/services/api';
-import { SyntheticPersona, PersonaGenerationRun, MarketSegment, Study } from '../src/types';
+import { SyntheticPersona, MarketSegment, Study } from '../src/types';
 
 // Mock API
 vi.mock('../src/services/api', () => ({

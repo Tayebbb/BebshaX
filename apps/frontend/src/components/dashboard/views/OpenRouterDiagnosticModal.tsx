@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../../services/api';
 import { OpenRouterHealth } from '../../../types/dataset';
-import { CheckCircle2, AlertTriangle, XCircle, RefreshCw, Cpu, Activity, KeyRound, ShieldCheck, X } from 'lucide-react';
+import { RefreshCw, Cpu, Activity, KeyRound, ShieldCheck, X } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;

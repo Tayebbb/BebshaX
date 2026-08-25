@@ -13,6 +13,7 @@ export interface PersonaDemographicsProfile {
 
 export interface PersonaCommercialProfile {
   monthly_budget_bdt?: number;
+  budget_bdt?: number;
   budget_range?: string;
   price_sensitivity?: 'High' | 'Moderate' | 'Low' | string;
   payment_preference?: string;
@@ -48,6 +49,7 @@ export interface SyntheticPersona {
   segment_name?: string;
   generation_run_id?: string;
   name: string;
+  avatar_url?: string;
   status: PersonaStatus;
   version: number;
   generation_model?: string;

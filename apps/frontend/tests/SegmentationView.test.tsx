@@ -1,8 +1,7 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import SegmentationView from '../src/components/dashboard/views/SegmentationView';
-import api from '../src/services/api';
+import { SegmentationView } from '../src/components/dashboard/views/SegmentationView';
+import { api } from '../src/services/api';
 import {
   MarketSegment,
   SegmentationReadiness,
@@ -12,14 +11,14 @@ import {
 
 // Mock API methods
 vi.mock('../src/services/api', () => ({
-  default: {
+  api: {
     getSegmentationReadiness: vi.fn(),
     listStudySegments: vi.fn(),
     listSegmentationRuns: vi.fn(),
     runSegmentation: vi.fn(),
     compareSegments: vi.fn(),
   },
-  api: {
+  default: {
     getSegmentationReadiness: vi.fn(),
     listStudySegments: vi.fn(),
     listSegmentationRuns: vi.fn(),
