@@ -357,3 +357,37 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 **Tests:** 10/10 test files passed (45/45 frontend tests green); 153/153 backend pytest tests green.
 
+### Part 1 (2026-08-25) — Dashboard & Study Creation
+
+**What was built:**
+
+- **Deterministic Study Title Generation (`apps/backend/bebshax/utils/title_generator.py`):**
+  - Implemented `generate_deterministic_study_title(prompt, study_type)`: extracts concise, research-oriented titles by stripping conversational filler prefixes (`I'm building`, `We want to test`, `I want to validate`, etc.), title-casing tokens, preserving domain acronyms (`AI`, `ML`, `SaaS`, `B2B`, `B2C`, `API`, `WTP`, `BDT`), and handling type-specific fallbacks without unnecessary LLM calls (satisfying R3/R10/rules).
+- **Backend Model & Database Persistence (`apps/backend/bebshax/db/models.py` & Alembic Migration):**
+  - Extended `Studies` model with `target_audience: Optional[str]` and `pricing_hypothesis: Optional[str]`.
+  - Generated Alembic migration `3900b8c81727_add_study_target_audience_and_pricing_.py` and applied migration to head on Neon PostgreSQL.
+- **FastAPI Studies API & Validation (`apps/backend/bebshax/api/studies.py`):**
+  - Added input validation in `create_study` requiring non-empty study ideas before creation.
+  - Automatically derives deterministic title if not provided or left generic.
+  - Strict user isolation in `get_study`, `update_study`, `delete_study`, and `list_studies`.
+- **CSS Research Token System (`apps/frontend/src/index.css`):**
+  - Replaced yellow/gold UI accents with modern indigo/violet AI-research tokens: `--accent-primary: #6366f1`, `--accent-hover: #818cf8`, `--accent-subtle: rgba(99, 102, 241, 0.12)`, `--accent-glow: rgba(99, 102, 241, 0.25)`, `--bg-pure: #08090b`, `--bg-secondary: #0d0f14`, `--border-subtle: #1e2330`.
+- **New Study View (`apps/frontend/src/components/dashboard/views/NewStudyView.tsx`):**
+  - Preserved the large central multiline textarea layout and rounded styling.
+  - Added validation error alert banner for empty submissions.
+  - Added `Ctrl+Enter` / `Cmd+Enter` keyboard shortcut.
+  - Interactive submit button with loading state (`Creating study...`).
+  - Implemented 4 canonical study type quick-select cards (User Interviews, Concept & Demand, Message Testing, Pricing & WTP) with subtle indigo active states and clear descriptions.
+- **Dashboard Layout & Studies View (`DashboardLayout.tsx` & `StudiesDashboardView.tsx`):**
+  - Updated sidebar navigation with indigo/violet active tabs.
+  - Dynamic greeting based on time of day (`Good morning / afternoon / evening, {name}`).
+  - Real dynamic Recent Studies loading from backend with loading skeleton and friendly empty state.
+  - Immediate optimistic update of Recent Studies list upon study creation.
+  - Updated Studies dashboard view, demo card, filter pills, and "Create Study" action button.
+- **Automated Tests (`apps/backend/tests/test_studies_api.py` & `apps/frontend/tests/NewStudyView.test.tsx`):**
+  - Backend tests: title generator, acronym casing, study creation, validation rejection, and user authorization isolation.
+  - Frontend tests: prompt rendering, 4 study type cards, validation alert on empty submit, card selection, and `Ctrl+Enter` submission.
+
+**Tests:** 11/11 frontend test suites passed (50/50 tests green); 156/156 backend pytest tests green.
+
+

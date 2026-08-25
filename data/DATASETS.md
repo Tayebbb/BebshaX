@@ -213,4 +213,3 @@ Profiles follow a strict subset relationship: `minimal` ⊂ `development` ⊂ `e
 - **Prohibited Uses:** Model training / fine-tuning (R9 violation), Commercial redistribution without upstream license compliance, Deanonymization or PII scraping
 
 ---
-

@@ -3,33 +3,42 @@
    ========================================================================== */
 
 :root {
-  /* Core Color Palette: High-Craft Dark with #080909 Base */
-  --bg-pure: #080909;
-  --bg-primary: #080909;
-  --bg-secondary: #0F1011;
-  --bg-card: #131415;
-  --bg-card-hover: #1A1B1D;
-  --bg-glass: rgba(8, 9, 9, 0.85);
+  /* Core Color Palette: High-Craft Dark with #08090B Base */
+  --bg-pure: #08090b;
+  --bg-primary: #08090b;
+  --bg-secondary: #0d0f14;
+  --bg-card: #12151c;
+  --bg-card-hover: #181c26;
+  --bg-glass: rgba(8, 9, 11, 0.85);
 
-  /* Borders & Dividers - Set to none / transparent for ultra-clean look */
-  --border-subtle: transparent;
-  --border-medium: transparent;
-  --border-hover: transparent;
-  --border-gold: transparent;
+  /* Borders & Dividers */
+  --border-subtle: #1e2330;
+  --border-medium: #2a3142;
+  --border-hover: rgba(99, 102, 241, 0.35);
 
   /* Typography Palette */
-  --text-main: #FFFFFF;
-  --text-primary: #F4F4F5;
-  --text-secondary: #8E8E93;
-  --text-muted: #5E5E66;
+  --text-main: #ffffff;
+  --text-primary: #f5f7fa;
+  --text-secondary: #9299a5;
+  --text-muted: #5a6270;
 
-  /* Accent Tones */
-  --accent-gold-primary: #F6C878;
-  --accent-gold-hover: #E5B45F;
-  --accent-blue-primary: #3B82F6;
-  --accent-blue-glow: rgba(59, 130, 246, 0.25);
-  --accent-emerald: #10B981;
-  --accent-rose: #EF4444;
+  /* Primary Accent: Indigo / Violet */
+  --accent-primary: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-subtle: rgba(99, 102, 241, 0.12);
+  --accent-glow: rgba(99, 102, 241, 0.25);
+
+  /* Secondary Accent: Cool Blue & Status */
+  --accent-cyan: #38bdf8;
+  --accent-blue-primary: #60a5fa;
+  --accent-blue-glow: rgba(96, 165, 250, 0.25);
+  --accent-emerald: #10b981;
+  --accent-amber: #f59e0b;
+  --accent-rose: #ef4444;
+
+  /* Legacy Accent Mappings for backward compatibility */
+  --accent-gold-primary: #6366f1;
+  --accent-gold-hover: #818cf8;
 
   /* Typography Fonts */
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -37,10 +46,10 @@
   --font-mono: 'JetBrains Mono', monospace;
 
   /* Elevation Shadows */
-  --shadow-sm: none;
-  --shadow-md: none;
-  --shadow-lg: none;
-  --shadow-glow: none;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 24px rgba(99, 102, 241, 0.2);
 }
 
 *, *::before, *::after {
@@ -50,7 +59,7 @@
 }
 
 *:focus-visible {
-  outline: 2px solid #F6C878;
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -77,20 +86,26 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
 }
 
+.text-gradient-indigo {
+  background: linear-gradient(135deg, #ffffff 20%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .text-gradient-gold {
-  background: linear-gradient(135deg, #FFFFFF 20%, #F6C878 100%);
+  background: linear-gradient(135deg, #ffffff 20%, #818cf8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .text-gradient-blue {
-  background: linear-gradient(135deg, #FFFFFF 30%, #93C5FD 100%);
+  background: linear-gradient(135deg, #ffffff 30%, #93c5fd 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .text-gradient-red {
-  background: linear-gradient(135deg, #FCA5A5 0%, #EF4444 100%);
+  background: linear-gradient(135deg, #fca5a5 0%, #ef4444 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -98,39 +113,38 @@ h1, h2, h3, h4, h5, h6 {
 /* Minimalist Dark Cards without Outlines */
 .clean-card {
   background: var(--bg-card);
-  border: none !important;
-  outline: none !important;
+  border: 1px solid var(--border-subtle);
   border-radius: 18px;
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .clean-card:hover {
   background: var(--bg-card-hover);
+  border-color: var(--border-hover);
 }
 
 /* Legacy aliases */
 .glass-panel {
   background: var(--bg-card);
-  border: none !important;
-  outline: none !important;
+  border: 1px solid var(--border-subtle);
   border-radius: 20px;
 }
 
 .glass-card {
   background: var(--bg-card);
-  border: none !important;
-  outline: none !important;
+  border: 1px solid var(--border-subtle);
   border-radius: 16px;
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .glass-card:hover {
   background: var(--bg-card-hover);
+  border-color: var(--border-hover);
 }
 
 /* Buttons */
 .primary-hero-btn {
-  background: #FFFFFF;
+  background: #ffffff;
   color: #000000;
   border: none !important;
   outline: none !important;
@@ -140,22 +154,40 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .primary-hero-btn:hover {
-  background: #E4E4E7;
+  background: #e4e4e7;
   transform: translateY(-1px);
 }
 
-.gold-btn {
-  background: var(--accent-gold-primary);
-  color: #1A1305;
+.indigo-btn {
+  background: var(--accent-primary);
+  color: #ffffff;
   border: none !important;
   outline: none !important;
   border-radius: 9999px;
   font-weight: 700;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+}
+
+.indigo-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+}
+
+.gold-btn {
+  background: var(--accent-primary);
+  color: #ffffff;
+  border: none !important;
+  outline: none !important;
+  border-radius: 9999px;
+  font-weight: 700;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
 }
 
 .gold-btn:hover {
-  background: var(--accent-gold-hover);
+  background: var(--accent-hover);
   transform: translateY(-1px);
 }
 

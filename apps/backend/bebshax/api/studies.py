@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bebshax.auth.models import Users
 from bebshax.api.auth import get_optional_current_user
 from bebshax.db.models import Studies, SavedAudiences
+from bebshax.utils.title_generator import generate_deterministic_study_title
 
 router = APIRouter(tags=["studies"])
 
@@ -19,10 +20,14 @@ router = APIRouter(tags=["studies"])
 class StudyCreateRequest(BaseModel):
     id: Optional[str] = None
     user_id: Optional[str] = None
-    title: str = Field(..., min_length=1, max_length=256)
+    title: Optional[str] = None
     type: str = "interviews"
+    study_type: Optional[str] = None
     goal: str = "demand_validation"
     prompt: Optional[str] = None
+    product_idea: Optional[str] = None
+    target_audience: Optional[str] = None
+    pricing_hypothesis: Optional[str] = None
     status: str = "draft"
     step: int = 1
     persona_count: int = 0
@@ -40,8 +45,12 @@ class StudyUpdateRequest(BaseModel):
     user_id: Optional[str] = None
     title: Optional[str] = None
     type: Optional[str] = None
+    study_type: Optional[str] = None
     goal: Optional[str] = None
     prompt: Optional[str] = None
+    product_idea: Optional[str] = None
+    target_audience: Optional[str] = None
+    pricing_hypothesis: Optional[str] = None
     status: Optional[str] = None
     step: Optional[int] = None
     persona_count: Optional[int] = None
@@ -72,8 +81,12 @@ def _serialize_study(s: Studies) -> dict[str, Any]:
         "user_id": s.user_id,
         "title": s.title,
         "type": s.type,
+        "study_type": s.type,
         "goal": s.goal,
         "prompt": s.prompt,
+        "product_idea": s.prompt,
+        "target_audience": s.target_audience,
+        "pricing_hypothesis": s.pricing_hypothesis,
         "status": s.status,
         "step": s.step,
         "persona_count": s.persona_count,
@@ -106,10 +119,12 @@ def _serialize_audience(a: SavedAudiences) -> dict[str, Any]:
 
 
 def _user_owns_study(study: Studies, current_user: Optional[Users]) -> bool:
-    """Return True if the current user owns the study or it is a public demo."""
+    """Return True if the current user owns the study, or it is a public demo / default study."""
     if study.is_demo:
         return True
     if current_user and study.user_id == current_user.id:
+        return True
+    if current_user is None and (not study.user_id or study.user_id in ("usr_default", "anonymous")):
         return True
     return False
 
@@ -155,16 +170,36 @@ async def create_study(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Create a new research study for the authenticated user."""
+    """Create a new research study for the authenticated user with deterministic title."""
+    effective_prompt = (payload.prompt or payload.product_idea or "").strip()
+    provided_title = (payload.title or "").strip()
+    study_type = payload.type or payload.study_type or "interviews"
+
+    # Input validation: reject empty prompt and empty title
+    if not effective_prompt and not provided_title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Describe your product idea before starting the study.",
+        )
+
+    # Determine title deterministically if missing or generic
+    if provided_title and provided_title != "Untitled Study":
+        title = provided_title
+    else:
+        title = generate_deterministic_study_title(effective_prompt, study_type)
+
     study_id = payload.id or f"study_{uuid.uuid4().hex[:16]}"
     study_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
+
     study = Studies(
         id=study_id,
         user_id=study_user_id,
-        title=payload.title,
-        type=payload.type,
+        title=title,
+        type=study_type,
         goal=payload.goal,
-        prompt=payload.prompt,
+        prompt=effective_prompt or None,
+        target_audience=(payload.target_audience or "").strip() or None,
+        pricing_hypothesis=(payload.pricing_hypothesis or "").strip() or None,
         status=payload.status,
         step=payload.step,
         persona_count=payload.persona_count,
@@ -213,12 +248,18 @@ async def update_study(
     if not study:
         # Auto-create — supports seamless workflow initialization
         study_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
+        prompt = (payload.prompt or payload.product_idea or "").strip()
+        study_type = payload.type or payload.study_type or "interviews"
+        title = payload.title or (generate_deterministic_study_title(prompt, study_type) if prompt else "Untitled Study")
         study = Studies(
             id=study_id,
             user_id=study_user_id,
-            title=payload.title or "Untitled Study",
-            type=payload.type or "interviews",
+            title=title,
+            type=study_type,
             goal=payload.goal or "demand_validation",
+            prompt=prompt or None,
+            target_audience=payload.target_audience,
+            pricing_hypothesis=payload.pricing_hypothesis,
         )
         session.add(study)
     else:
@@ -235,6 +276,11 @@ async def update_study(
             study.user_id = payload.user_id
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "product_idea" in update_data and "prompt" not in update_data:
+        update_data["prompt"] = update_data["product_idea"]
+    if "study_type" in update_data and "type" not in update_data:
+        update_data["type"] = update_data["study_type"]
+
     for field, val in update_data.items():
         if val is not None and hasattr(study, field):
             setattr(study, field, val)

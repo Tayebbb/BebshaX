@@ -109,8 +109,8 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
           type="button"
           onClick={onCreateStudy}
           style={{
-            background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
-            color: '#080909',
+            background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+            color: '#FFFFFF',
             border: 'none',
             borderRadius: '10px',
             padding: '9px 18px',
@@ -120,16 +120,16 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
             alignItems: 'center',
             gap: '6px',
             cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(246, 200, 120, 0.25)',
+            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
             transition: 'transform 0.18s ease, box-shadow 0.18s ease',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(246, 200, 120, 0.4)';
+            e.currentTarget.style.boxShadow = '0 6px 20px rgba(99, 102, 241, 0.5)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 14px rgba(246, 200, 120, 0.25)';
+            e.currentTarget.style.boxShadow = '0 4px 14px rgba(99, 102, 241, 0.35)';
           }}
         >
           <Plus size={16} strokeWidth={2.5} />
@@ -200,9 +200,9 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                 type="button"
                 onClick={() => setSelectedFilter(tab)}
                 style={{
-                  background: isTabActive ? 'rgba(246, 200, 120, 0.15)' : 'transparent',
-                  color: isTabActive ? '#F6C878' : '#8A909A',
-                  border: isTabActive ? '1px solid rgba(246, 200, 120, 0.3)' : '1px solid transparent',
+                  background: isTabActive ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                  color: isTabActive ? '#818CF8' : '#8A909A',
+                  border: isTabActive ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid transparent',
                   borderRadius: '7px',
                   padding: '6px 14px',
                   fontSize: '0.8rem',
@@ -224,8 +224,8 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
           onClick={() => onOpenStudy(demoStudy.id)}
           style={{
             background:
-              'linear-gradient(135deg, rgba(246, 200, 120, 0.05) 0%, rgba(20, 20, 22, 0.8) 100%)',
-            border: '1px solid rgba(246, 200, 120, 0.35)',
+              'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(18, 21, 28, 0.85) 100%)',
+            border: '1px solid rgba(99, 102, 241, 0.35)',
             borderRadius: '16px',
             padding: '20px 24px',
             marginBottom: '28px',
@@ -237,11 +237,11 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
             boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(246, 200, 120, 0.6)';
+            e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.6)';
             e.currentTarget.style.transform = 'translateY(-2px)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(246, 200, 120, 0.35)';
+            e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.35)';
             e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
@@ -251,8 +251,8 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                 width: '36px',
                 height: '36px',
                 borderRadius: '10px',
-                background: 'rgba(246, 200, 120, 0.15)',
-                color: '#F6C878',
+                background: 'rgba(99, 102, 241, 0.15)',
+                color: '#818CF8',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -266,7 +266,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                   style={{
                     fontSize: '1rem',
                     fontWeight: 600,
-                    color: '#F6C878',
+                    color: '#818CF8',
                     letterSpacing: '-0.01em',
                   }}
                 >
@@ -280,9 +280,9 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                     letterSpacing: '0.05em',
                     padding: '2px 8px',
                     borderRadius: '6px',
-                    background: 'rgba(246, 200, 120, 0.15)',
-                    color: '#F6C878',
-                    border: '1px solid rgba(246, 200, 120, 0.3)',
+                    background: 'rgba(99, 102, 241, 0.15)',
+                    color: '#818CF8',
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
                   }}
                 >
                   DEMO STUDY
@@ -299,7 +299,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              color: '#F6C878',
+              color: '#818CF8',
               fontSize: '0.84rem',
               fontWeight: 600,
             }}
@@ -362,7 +362,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                   position: 'relative',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(246, 200, 120, 0.3)';
+                  e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.35)';
                   e.currentTarget.style.background = 'rgba(255, 255, 255, 0.035)';
                 }}
                 onMouseLeave={(e) => {

@@ -75,6 +75,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isRecentStudiesOpen, setIsRecentStudiesOpen] = useState(true);
   const [recentStudies, setRecentStudies] = useState<Study[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(true);
   const [initialWorkflowType, setInitialWorkflowType] = useState<StudyType>('interviews');
   const [initialWorkflowPrompt, setInitialWorkflowPrompt] = useState<string | undefined>(undefined);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -92,11 +93,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
   useEffect(() => {
     const loadRecent = async () => {
+      setLoadingRecent(true);
       try {
         const data = await api.getStudies();
         setRecentStudies(data.slice(0, 5));
       } catch {
         // fallback
+      } finally {
+        setLoadingRecent(false);
       }
     };
     loadRecent();
@@ -110,12 +114,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     return 'Good evening';
   };
 
-  const displayName = user?.full_name?.split(' ')[0]?.toUpperCase() || 'SAIDUL';
+  const displayName = user?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
 
   const handleTabClick = (tab: DashboardTab) => {
     if (tab === 'new-study') navigate('/create-study');
     else if (tab === 'dashboard') navigate('/dashboard');
     else if (tab === 'personas') navigate('/persona-library');
+    else if (tab === 'datasets') navigate('/datasets');
     else if (tab === 'router') navigate('/router');
     else if (tab === 'study-workflow') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
   };
@@ -124,25 +129,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     setInitialWorkflowType(type);
     setInitialWorkflowPrompt(prompt);
     try {
-      const title = prompt
-        ? prompt.length > 40
-          ? prompt.slice(0, 40) + '...'
-          : prompt
-        : type === 'interviews'
-        ? 'Customer Discovery Study'
-        : type === 'landing_page_test'
-        ? 'Concept & Demand Validation'
-        : type === 'ab_test'
-        ? 'Pricing Sensitivity Test'
-        : 'Message Hook Testing';
-
       const created = await api.createStudy({
-        title,
         type: type,
         prompt: prompt,
         status: 'in_progress',
         step: 1,
       });
+
+      // Optimistically update recent studies list immediately
+      setRecentStudies((prev) => [created, ...prev.filter((s) => s.id !== created.id)].slice(0, 5));
       setActiveStudyId(created.id);
       setActiveStep(1);
       navigate(`/research/${created.id}/step1`);
@@ -282,9 +277,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     width: '100%',
                     padding: isSidebarCollapsed ? '10px 0' : '10px 12px',
                     borderRadius: '10px',
-                    background: isActive ? 'rgba(246, 200, 120, 0.12)' : 'transparent',
-                    color: isActive ? '#F6C878' : '#9CA3AF',
-                    border: 'none',
+                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
+                    color: isActive ? '#818CF8' : '#9CA3AF',
+                    border: isActive ? '1px solid rgba(99, 102, 241, 0.25)' : '1px solid transparent',
                     fontSize: '0.86rem',
                     fontWeight: isActive ? 600 : 400,
                     cursor: 'pointer',
@@ -303,7 +298,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     }
                   }}
                 >
-                  <span style={{ color: isActive ? '#F6C878' : '#8A909A' }}>{item.icon}</span>
+                  <span style={{ color: isActive ? '#818CF8' : '#8A909A' }}>{item.icon}</span>
                   {!isSidebarCollapsed && <span>{item.label}</span>}
                 </button>
               );
@@ -335,75 +330,95 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
               {isRecentStudiesOpen && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '4px' }}>
-                  {recentStudies.map((st) => {
-                    const isCompleted = st.status === 'completed';
-                    const displayTitle =
-                      st.title && st.title !== 'Untitled Study'
-                        ? st.title
-                        : st.type === 'interviews'
-                        ? 'Customer Discovery Study'
-                        : st.type === 'landing_page_test'
-                        ? 'Concept & Demand Validation'
-                        : st.type === 'ab_test'
-                        ? 'Pricing Sensitivity Test'
-                        : 'Message Hook Testing';
-
-                    return (
-                      <div
-                        key={st.id}
-                        onClick={() => handleOpenStudy(st.id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          padding: '7px 8px',
-                          borderRadius: '8px',
-                          fontSize: '0.8rem',
-                          color: '#9CA3AF',
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          transition: 'color 0.16s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.color = '#FFFFFF';
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.color = '#9CA3AF';
-                          e.currentTarget.style.background = 'transparent';
-                        }}
-                        title={displayTitle}
+                  {loadingRecent ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '6px 8px' }}>
+                      <div style={{ height: '14px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.06)' }} />
+                      <div style={{ height: '14px', width: '75%', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.06)' }} />
+                      <div style={{ height: '14px', width: '60%', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.06)' }} />
+                    </div>
+                  ) : recentStudies.length === 0 ? (
+                    <div style={{ padding: '8px 10px', fontSize: '0.78rem', color: '#64748B', lineHeight: 1.45 }}>
+                      No studies yet.<br />
+                      <span
+                        onClick={() => handleTabClick('new-study')}
+                        style={{ color: '#818CF8', cursor: 'pointer', fontWeight: 600 }}
                       >
-                        {isCompleted && (
-                          <div
-                            style={{
-                              width: '6px',
-                              height: '6px',
-                              borderRadius: '50%',
-                              background: '#10B981',
-                              flexShrink: 0,
-                            }}
-                          />
-                        )}
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayTitle}</span>
-                      </div>
-                    );
-                  })}
+                        Start your first research study
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      {recentStudies.map((st) => {
+                        const isCompleted = st.status === 'completed';
+                        const displayTitle =
+                          st.title && st.title !== 'Untitled Study'
+                            ? st.title
+                            : st.type === 'interviews'
+                            ? 'Customer Discovery Study'
+                            : st.type === 'landing_page_test'
+                            ? 'Concept & Demand Validation'
+                            : st.type === 'ab_test'
+                            ? 'Pricing Sensitivity Test'
+                            : 'Message Hook Testing';
 
-                  <div
-                    onClick={() => setActiveTab('dashboard')}
-                    style={{
-                      fontSize: '0.78rem',
-                      color: '#F6C878',
-                      fontWeight: 600,
-                      padding: '6px 8px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    See more
-                  </div>
+                        return (
+                          <div
+                            key={st.id}
+                            onClick={() => handleOpenStudy(st.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '7px 8px',
+                              borderRadius: '8px',
+                              fontSize: '0.8rem',
+                              color: '#9CA3AF',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              transition: 'color 0.16s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = '#FFFFFF';
+                              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = '#9CA3AF';
+                              e.currentTarget.style.background = 'transparent';
+                            }}
+                            title={displayTitle}
+                          >
+                            {isCompleted && (
+                              <div
+                                style={{
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  background: '#10B981',
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayTitle}</span>
+                          </div>
+                        );
+                      })}
+
+                      <div
+                        onClick={() => setActiveTab('dashboard')}
+                        style={{
+                          fontSize: '0.78rem',
+                          color: '#818CF8',
+                          fontWeight: 600,
+                          padding: '6px 8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        See more
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -454,8 +469,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     width: '30px',
                     height: '30px',
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
-                    color: '#080909',
+                    background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+                    color: '#FFFFFF',
                     fontWeight: 700,
                     fontSize: '0.8rem',
                     display: 'flex',
@@ -464,7 +479,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     flexShrink: 0,
                   }}
                 >
-                  {displayName.charAt(0)}
+                  {displayName.charAt(0).toUpperCase()}
                 </div>
               )}
 

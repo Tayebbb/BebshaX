@@ -192,6 +192,8 @@ class Studies(Base):
     type: Mapped[str] = mapped_column(String(64), default="interviews")
     goal: Mapped[str] = mapped_column(String(64), default="demand_validation")
     prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    target_audience: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pricing_hypothesis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(64), default="draft")  # draft, in_progress, completed, archived
     step: Mapped[int] = mapped_column(default=1)
     persona_count: Mapped[int] = mapped_column(default=0)
