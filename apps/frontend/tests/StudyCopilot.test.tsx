@@ -7,6 +7,7 @@ import { api } from '../src/services/api';
 describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Generation', () => {
   beforeEach(() => {
     api.setMockMode(true);
+    api.resetMockStore();
     vi.restoreAllMocks();
   });
 

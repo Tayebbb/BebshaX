@@ -95,7 +95,17 @@ async def init_database(
     """
     # Import all ORM models so they are registered on Base.metadata
     from bebshax.auth.models import Users  # noqa: F401
-    from bebshax.db.models import Base, Businesses, LLMRequests, ModelRegistry, Personas, SavedAudiences, Studies  # noqa: F401
+    from bebshax.db.models import (  # noqa: F401
+        Base,
+        Businesses,
+        DatasetPersonaRuns,
+        DatasetSources,
+        LLMRequests,
+        ModelRegistry,
+        Personas,
+        SavedAudiences,
+        Studies,
+    )
     from bebshax.interview.orm import Conversations, ConversationTurns  # noqa: F401
     from bebshax.memory.orm import MemoryItems  # noqa: F401
     from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence  # noqa: F401

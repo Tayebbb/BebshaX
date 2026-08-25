@@ -177,7 +177,7 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
 
 
 async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
-    # 1. Create study for User A
+    # 1. Create study for User A (unauthenticated — user_id in body)
     s1_resp = api_test_app.post(
         "/api/studies",
         json={
@@ -186,12 +186,17 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
             "type": "interviews",
             "goal": "demand_validation",
             "persona_count": 2,
+            "copilot_messages": [{"role": "user", "content": "grocery delivery idea"}],
+            "personas_data": [{"id": "per_1", "name": "Alice Persona"}],
         },
     )
     assert s1_resp.status_code == 201
     s1 = s1_resp.json()
     assert s1["user_id"] == "usr_alice"
     assert s1["title"] == "Alice's Grocery Delivery Demand Study"
+    # Verify new fields are returned in the response
+    assert s1["copilot_messages"] == [{"role": "user", "content": "grocery delivery idea"}]
+    assert s1["personas_data"] == [{"id": "per_1", "name": "Alice Persona"}]
 
     # 2. Create study for User B
     s2_resp = api_test_app.post(
@@ -208,7 +213,7 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     s2 = s2_resp.json()
     assert s2["user_id"] == "usr_bob"
 
-    # 3. List studies filtered by User A
+    # 3. List studies filtered by User A — only Alice's study (no auth JWT used)
     alice_studies = api_test_app.get("/api/studies?user_id=usr_alice").json()
     assert any(s["id"] == s1["id"] for s in alice_studies)
     assert not any(s["id"] == s2["id"] for s in alice_studies)
@@ -218,18 +223,34 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     assert any(s["id"] == s2["id"] for s in bob_studies)
     assert not any(s["id"] == s1["id"] for s in bob_studies)
 
-    # 5. Update study
+    # 5. Unauthenticated GET /api/studies (no user_id) returns only demo studies (empty here)
+    unauth_studies = api_test_app.get("/api/studies").json()
+    assert not any(s["id"] in (s1["id"], s2["id"]) for s in unauth_studies)
+
+    # 6. Update study — no JWT so current_user=None; study.user_id="usr_alice" → owner check
+    #    With no JWT the ownership guard sees current_user=None and study is not demo → 403
     patch_resp = api_test_app.patch(
         f"/api/studies/{s1['id']}",
-        json={"status": "in_progress", "step": 3},
+        json={"status": "in_progress", "step": 3, "user_id": "usr_alice"},
     )
-    assert patch_resp.status_code == 200
-    assert patch_resp.json()["status"] == "in_progress"
-    assert patch_resp.json()["step"] == 3
-    assert patch_resp.json()["user_id"] == "usr_alice"
+    # update_study auto-backfills user_id when study.user_id is already set; with no JWT
+    # current_user=None so _user_owns_study → False → 403
+    assert patch_resp.status_code == 403
 
-    # 6. Delete study
-    del_resp = api_test_app.delete(f"/api/studies/{s1['id']}")
-    assert del_resp.status_code == 200
-    assert del_resp.json()["success"] is True
+    # 7. Update succeeds when user_id matches via the study auto-create path (new study_id)
+    patch2_resp = api_test_app.patch(
+        f"/api/studies/new_study_xyz",
+        json={"status": "in_progress", "step": 2, "user_id": "usr_alice", "title": "New auto-created"},
+    )
+    assert patch2_resp.status_code == 200
+    assert patch2_resp.json()["step"] == 2
+
+    # 8. Delete study — same ownership rule applies
+    del_resp = api_test_app.delete(f"/api/studies/{s2['id']}")
+    assert del_resp.status_code == 403
+
+    # 9. Cleanup: delete studies via same user_id trick (auto-create path gives owner access)
+    #    Just verify that the created studies still exist (delete was blocked)
+    check = api_test_app.get(f"/api/studies?user_id=usr_bob").json()
+    assert any(s["id"] == s2["id"] for s in check)
 

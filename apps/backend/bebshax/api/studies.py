@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete, or_
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
@@ -32,6 +32,8 @@ class StudyCreateRequest(BaseModel):
     findings: Optional[dict[str, Any]] = None
     is_demo: bool = False
     duration_text: Optional[str] = None
+    copilot_messages: Optional[list[dict[str, Any]]] = None
+    personas_data: Optional[list[dict[str, Any]]] = None
 
 
 class StudyUpdateRequest(BaseModel):
@@ -49,6 +51,8 @@ class StudyUpdateRequest(BaseModel):
     findings: Optional[dict[str, Any]] = None
     is_demo: Optional[bool] = None
     duration_text: Optional[str] = None
+    copilot_messages: Optional[list[dict[str, Any]]] = None
+    personas_data: Optional[list[dict[str, Any]]] = None
 
 
 class AudienceCreateRequest(BaseModel):
@@ -79,6 +83,8 @@ def _serialize_study(s: Studies) -> dict[str, Any]:
         "findings": s.findings,
         "is_demo": s.is_demo,
         "duration_text": s.duration_text or "Just created • No personas yet",
+        "copilot_messages": s.copilot_messages or [],
+        "personas_data": s.personas_data or [],
         "created_at": s.created_at.isoformat() if s.created_at else datetime.now(timezone.utc).isoformat(),
         "updated_at": s.updated_at.isoformat() if s.updated_at else datetime.now(timezone.utc).isoformat(),
     }
@@ -99,6 +105,15 @@ def _serialize_audience(a: SavedAudiences) -> dict[str, Any]:
     }
 
 
+def _user_owns_study(study: Studies, current_user: Optional[Users]) -> bool:
+    """Return True if the current user owns the study or it is a public demo."""
+    if study.is_demo:
+        return True
+    if current_user and study.user_id == current_user.id:
+        return True
+    return False
+
+
 async def get_session(request: Request) -> AsyncSession:
     sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
     if not sessionmaker:
@@ -107,20 +122,28 @@ async def get_session(request: Request) -> AsyncSession:
         yield session
 
 
+# ============================================================================
+# Studies
+# ============================================================================
+
 @router.get("/studies", response_model=list[dict[str, Any]])
 async def list_studies(
     user_id: Optional[str] = None,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[dict[str, Any]]:
-    """List research studies filtered for the current user (and public demo studies)."""
+    """List research studies for the current user only (+ public demo studies).
+
+    If no authenticated user can be resolved, returns [] (never all studies).
+    """
     effective_user_id = (current_user.id if current_user else None) or user_id
     if effective_user_id:
         stmt = select(Studies).where(
             or_(Studies.user_id == effective_user_id, Studies.is_demo == True)
         ).order_by(Studies.created_at.desc())
     else:
-        stmt = select(Studies).order_by(Studies.created_at.desc())
+        # Unauthenticated — return only public demo studies (never leak all studies)
+        stmt = select(Studies).where(Studies.is_demo == True).order_by(Studies.created_at.desc())
     result = await session.execute(stmt)
     studies = list(result.scalars().all())
     return [_serialize_study(s) for s in studies]
@@ -132,7 +155,7 @@ async def create_study(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Create a new research study draft for the user."""
+    """Create a new research study for the authenticated user."""
     study_id = payload.id or f"study_{uuid.uuid4().hex[:16]}"
     study_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
     study = Studies(
@@ -151,6 +174,8 @@ async def create_study(
         findings=payload.findings,
         is_demo=payload.is_demo,
         duration_text=payload.duration_text,
+        copilot_messages=payload.copilot_messages,
+        personas_data=payload.personas_data,
     )
     session.add(study)
     await session.commit()
@@ -164,9 +189,11 @@ async def get_study(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Get research study details by ID."""
+    """Get a research study by ID. Returns 404 if not found or not owned by caller."""
     study = await session.get(Studies, study_id)
     if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
     return _serialize_study(study)
 
@@ -179,10 +206,12 @@ async def update_study(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Update research study attributes (status, step, questions, personas, findings)."""
+    """Update a research study. Creates it if missing (for seamless workflow init).
+    Returns 403 if the study exists but belongs to a different user.
+    """
     study = await session.get(Studies, study_id)
     if not study:
-        # Auto-create if not found to support seamless workflow initialization
+        # Auto-create — supports seamless workflow initialization
         study_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
         study = Studies(
             id=study_id,
@@ -193,6 +222,13 @@ async def update_study(
         )
         session.add(study)
     else:
+        # Ownership guard
+        if not _user_owns_study(study, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to modify this study",
+            )
+        # Backfill user_id if it was missing (e.g. created anonymously, now logged in)
         if current_user and not study.user_id:
             study.user_id = current_user.id
         elif payload.user_id and not study.user_id:
@@ -215,10 +251,15 @@ async def delete_study(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Delete a research study."""
+    """Delete a research study. Returns 403 if not owned by caller."""
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to delete this study",
+        )
     await session.delete(study)
     await session.commit()
     return {"success": True, "deleted_id": study_id}

@@ -172,9 +172,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         step: clamped,
         status: clamped === 5 ? 'completed' : 'in_progress',
         prompt: promptInput || study?.prompt,
-        copilot_messages: copilotMessages,
+        copilot_messages: copilotMessagesRef.current as any,
         suggested_roles: suggestedRoles,
-        personas_data: personas,
+        personas_data: personas as any,
         persona_count: personas.length,
         persona_ids: personas.map((p) => p.id),
         script_questions: questions,
@@ -191,6 +191,38 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   useEffect(() => {
     copilotMessagesRef.current = copilotMessages;
   }, [copilotMessages]);
+
+  // Restore full study state from DB when loading an existing study
+  useEffect(() => {
+    if (!studyId) return;
+    api.getStudy(studyId).then((s) => {
+      if (!s) return;
+      setStudy(s);
+      if (s.prompt && !promptInput) setPromptInput(s.prompt);
+      if (!initialPrompt && s.copilot_messages && s.copilot_messages.length > 0 && copilotMessages.length === 0) {
+        // Ensure each message has a unique id
+        const restored = s.copilot_messages.map((m: any, i: number) => ({
+          ...m,
+          id: m.id || `msg_restored_${i}_${Date.now()}`,
+        }));
+        setCopilotMessages(restored);
+        copilotMessagesRef.current = restored;
+      }
+      if (s.suggested_roles && s.suggested_roles.length > 0) {
+        setSuggestedRoles(s.suggested_roles);
+      }
+      if (s.script_questions && s.script_questions.length > 0) {
+        setQuestions(s.script_questions);
+      }
+      if (s.personas_data && s.personas_data.length > 0) {
+        setPersonas(s.personas_data as any);
+        const firstId = (s.personas_data[0] as any)?.id;
+        if (firstId) setActiveInterviewPersonaId(firstId);
+        setSelectedPersonaIds((s.personas_data as any[]).map((p: any) => p.id));
+      }
+    }).catch(() => { /* best-effort: start fresh if load fails */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studyId]);
 
   const fetchCopilotTurn = async (history: { role: 'user' | 'assistant'; content: string }[]) => {
     if (isFetchingCopilotRef.current) {
@@ -458,6 +490,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             prompt: userPrompt,
             persona_count: generated.length || totalCount,
             persona_ids: generated.map((p) => p.id),
+            personas_data: generated as any,
             step: 2,
           });
         }

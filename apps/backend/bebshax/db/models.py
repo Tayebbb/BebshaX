@@ -209,6 +209,14 @@ class Studies(Base):
     )
     is_demo: Mapped[bool] = mapped_column(default=False)
     duration_text: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Copilot conversation history (list of {role, content, ...} dicts)
+    copilot_messages: Mapped[Optional[list]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True, default=None
+    )
+    # Generated persona objects from the workflow (list of persona dicts)
+    personas_data: Mapped[Optional[list]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
@@ -238,4 +246,70 @@ class SavedAudiences(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
+
+
+class DatasetSources(Base):
+    """Dataset source metadata, profiled schema, statistics, and derived segments."""
+
+    __tablename__ = "dataset_sources"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    study_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), default="url")  # url, upload
+    source_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    original_file_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    file_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    file_type: Mapped[str] = mapped_column(String(64), default="csv")  # csv, json, xlsx, tsv
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(64), default="idle")  # idle, fetching, parsing, profiling, analyzing, ready, error
+    row_count: Mapped[int] = mapped_column(default=0)
+    column_count: Mapped[int] = mapped_column(default=0)
+    schema_metadata: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    statistics: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    segments: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    persona_count_generated: Mapped[int] = mapped_column(default=0)
+    processing_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_processed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class DatasetPersonaRuns(Base):
+    """Audit record for persona generation runs grounded in dataset distributions."""
+
+    __tablename__ = "dataset_persona_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dataset_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    study_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    model_used: Mapped[str] = mapped_column(String(256))
+    requested_count: Mapped[int] = mapped_column(default=0)
+    generated_count: Mapped[int] = mapped_column(default=0)
+    valid_count: Mapped[int] = mapped_column(default=0)
+    warning_count: Mapped[int] = mapped_column(default=0)
+    contradiction_count: Mapped[int] = mapped_column(default=0)
+    distribution_target: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    distribution_actual: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    validation_results: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
 

@@ -609,3 +609,142 @@ export const mockStudies: Study[] = [
   },
 ];
 
+export const mockDatasets = [
+  {
+    id: 'ds_bd_student_survey_2026',
+    name: 'Bangladesh University Student Tech & Budget Survey 2026',
+    source_type: 'upload',
+    original_file_name: 'student_tech_budget_2026.csv',
+    file_type: 'csv',
+    description: 'Empirical survey of 1,250 university students in Dhaka, Chittagong, and Rajshahi tracking willingness to pay for SaaS tools.',
+    status: 'ready',
+    row_count: 1250,
+    column_count: 8,
+    schema_metadata: {
+      columns: [
+        { name: 'student_id', type: 'text', missing_count: 0, missing_percentage: 0, unique_count: 1250, sample_values: ['STU_001', 'STU_002'] },
+        { name: 'segment', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 4, sample_values: ['Budget-conscious Student', 'Exam-focused Test-taker', 'Working Student', 'Premium Power User'] },
+        { name: 'age', type: 'numeric', missing_count: 0, missing_percentage: 0, unique_count: 12, sample_values: [19, 21, 22, 24] },
+        { name: 'monthly_budget_bdt', type: 'numeric', missing_count: 0, missing_percentage: 0, unique_count: 45, sample_values: [350, 500, 800, 1200] },
+        { name: 'tech_familiarity', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 3, sample_values: ['High', 'Medium', 'Low'] },
+        { name: 'shopping_platforms', type: 'text', missing_count: 0, missing_percentage: 0, unique_count: 120, sample_values: ['Daraz, Pickaboo', 'Bikroy, Facebook'] },
+      ],
+      row_count: 1250,
+      column_count: 8,
+    },
+    statistics: {
+      numeric: {
+        age: { count: 1250, min: 18, max: 28, mean: 21.8, median: 22.0, std: 2.1, p25: 20.0, p75: 23.0, iqr: 3.0 },
+        monthly_budget_bdt: { count: 1250, min: 150, max: 2500, mean: 680.0, median: 500.0, std: 320.0, p25: 350.0, p75: 850.0, iqr: 500.0 },
+      },
+      categorical: {
+        segment: {
+          count: 1250,
+          unique_categories: 4,
+          top_categories: [
+            { category: 'Budget-conscious Student', count: 562, percentage: 45.0 },
+            { category: 'Exam-focused Test-taker', count: 312, percentage: 25.0 },
+            { category: 'Working Student', count: 250, percentage: 20.0 },
+            { category: 'Premium Power User', count: 126, percentage: 10.0 },
+          ],
+          percentages: {
+            'Budget-conscious Student': 45.0,
+            'Exam-focused Test-taker': 25.0,
+            'Working Student': 20.0,
+            'Premium Power User': 10.0,
+          },
+        },
+      },
+      overview: { row_count: 1250, column_count: 8, numeric_columns_count: 2, categorical_columns_count: 2 },
+    },
+    segments: [
+      {
+        id: 'seg_1',
+        name: 'Budget-conscious Student',
+        population_count: 562,
+        population_share: 0.45,
+        population_percentage: 45.0,
+        is_dataset_supported: true,
+        segmentation_feature: 'segment',
+        constraints: {
+          age_range: [18, 24],
+          median_age: 21,
+          monthly_budget: { min: 150, median: 450, max: 600, currency: 'BDT' },
+          technology_familiarity: 'Medium',
+          observed_needs: ['Free tier access', 'Offline notes', 'Low data usage'],
+          rule_description: 'Price-sensitive university student validating ৳100–300/month affordability.',
+        },
+        sample_records: [
+          { student_id: 'STU_012', segment: 'Budget-conscious Student', age: 20, monthly_budget_bdt: 350, tech_familiarity: 'Medium' },
+          { student_id: 'STU_045', segment: 'Budget-conscious Student', age: 21, monthly_budget_bdt: 400, tech_familiarity: 'Medium' },
+        ],
+      },
+      {
+        id: 'seg_2',
+        name: 'Exam-focused Test-taker',
+        population_count: 312,
+        population_share: 0.25,
+        population_percentage: 25.0,
+        is_dataset_supported: true,
+        segmentation_feature: 'segment',
+        constraints: {
+          age_range: [20, 26],
+          median_age: 23,
+          monthly_budget: { min: 400, median: 750, max: 1000, currency: 'BDT' },
+          technology_familiarity: 'High',
+          observed_needs: ['Mock test analytics', 'Instant question resolution', 'Study streak tracking'],
+          rule_description: 'Competitive exam applicant with higher urgency and moderate budget.',
+        },
+        sample_records: [
+          { student_id: 'STU_108', segment: 'Exam-focused Test-taker', age: 22, monthly_budget_bdt: 700, tech_familiarity: 'High' },
+        ],
+      },
+      {
+        id: 'seg_3',
+        name: 'Working Student',
+        population_count: 250,
+        population_share: 0.20,
+        population_percentage: 20.0,
+        is_dataset_supported: true,
+        segmentation_feature: 'segment',
+        constraints: {
+          age_range: [22, 28],
+          median_age: 24,
+          monthly_budget: { min: 600, median: 1100, max: 1500, currency: 'BDT' },
+          technology_familiarity: 'High',
+          observed_needs: ['Time savings', 'Schedule synchronization', 'Mobile first workflow'],
+          rule_description: 'Employed student balancing job and courses, values efficiency over low cost.',
+        },
+        sample_records: [
+          { student_id: 'STU_215', segment: 'Working Student', age: 24, monthly_budget_bdt: 1200, tech_familiarity: 'High' },
+        ],
+      },
+      {
+        id: 'seg_4',
+        name: 'Premium Power User',
+        population_count: 126,
+        population_share: 0.10,
+        population_percentage: 10.0,
+        is_dataset_supported: true,
+        segmentation_feature: 'segment',
+        constraints: {
+          age_range: [21, 28],
+          median_age: 24,
+          monthly_budget: { min: 1200, median: 2000, max: 2500, currency: 'BDT' },
+          technology_familiarity: 'High',
+          observed_needs: ['Priority feature access', 'Unlimited exports', 'Pro customization'],
+          rule_description: 'Top willingness-to-pay early adopters seeking deepest feature sets.',
+        },
+        sample_records: [
+          { student_id: 'STU_309', segment: 'Premium Power User', age: 25, monthly_budget_bdt: 2200, tech_familiarity: 'High' },
+        ],
+      },
+    ],
+    persona_count_generated: 8,
+    created_at: '2026-08-25T10:00:00Z',
+    updated_at: '2026-08-25T10:00:00Z',
+    last_processed_at: '2026-08-25T10:00:00Z',
+  },
+];
+
+

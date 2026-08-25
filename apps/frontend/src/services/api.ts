@@ -20,8 +20,14 @@ import {
   User,
 } from '../types/auth';
 import {
+  DatasetSource,
+  OpenRouterHealth,
+  PersonaGenerationRun,
+} from '../types/dataset';
+import {
   mockBusinesses,
   mockConversations,
+  mockDatasets,
   mockEvaluationMetrics,
   mockHealth,
   mockMemories,
@@ -42,6 +48,7 @@ class MockStore {
   conversations: Record<string, Conversation> = {};
   provenance: ProvenanceRecord[] = [];
   studies: Study[] = [];
+  datasets: DatasetSource[] = [];
 
   constructor() {
     this.reset();
@@ -54,6 +61,7 @@ class MockStore {
     this.conversations = JSON.parse(JSON.stringify(mockConversations));
     this.provenance = JSON.parse(JSON.stringify(mockProvenanceRecords));
     this.studies = JSON.parse(JSON.stringify(mockStudies));
+    this.datasets = JSON.parse(JSON.stringify(mockDatasets));
   }
 }
 
@@ -65,6 +73,13 @@ let lastKnownLive = false;
 export const api = {
   resetMockStore() {
     mockStore.reset();
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.clear();
+      }
+    } catch {
+      // ignore
+    }
   },
 
   setMockMode(enabled: boolean) {
@@ -710,58 +725,113 @@ export const api = {
     return null;
   },
 
+  /** Return all registered users. Requires a valid login token (any authenticated user). */
+  async listUsers(): Promise<User[]> {
+    if (this.isMockMode()) return [];
+    try {
+      const res = await fetch(`${API_BASE}/auth/users`, {
+        headers: this.getAuthHeaders(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        lastKnownLive = true;
+        return await res.json();
+      }
+      lastKnownLive = false;
+    } catch {
+      lastKnownLive = false;
+    }
+    return [];
+  },
+
+  async syncUser(data: {
+    email: string;
+    full_name?: string;
+    avatar_url?: string | null;
+    auth_provider?: string;
+  }): Promise<AuthResponse | null> {
+    if (this.isMockMode()) return null;
+    try {
+      const res = await fetch(`${API_BASE}/auth/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        const result: AuthResponse = await res.json();
+        this.setAuthToken(result.access_token);
+        this.setStoredUser(result.user);
+        lastKnownLive = true;
+        return result;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  },
+
   async signup(data: SignUpData): Promise<AuthResponse> {
     if (!this.isMockMode()) {
-      // 1. Primary: Direct Neon Auth registration
+      // 1. Primary: Direct Backend API registration (commits to PostgreSQL users table)
       try {
-        const neonRes = await neonAuth.signUp({
-          email: data.email,
-          password: data.password,
-          name: data.full_name,
+        const res = await fetch(`${API_BASE}/auth/signup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+          signal: AbortSignal.timeout(10000),
         });
-        const token = neonRes.token || `neon_sess_${Date.now()}`;
-        if (!neonRes.emailVerificationRequired && neonRes.user.is_verified) {
-          this.setAuthToken(token);
-          this.setStoredUser(neonRes.user);
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          this.setStoredUser(result.user);
+          lastKnownLive = true;
+          // Optionally register with Neon Auth in background
+          neonAuth.signUp({
+            email: data.email,
+            password: data.password,
+            name: data.full_name,
+          }).catch(() => {});
+          return result;
         }
-        lastKnownLive = true;
-        return {
-          access_token: token,
-          token_type: 'bearer',
-          expires_in_days: 7,
-          user: neonRes.user,
-        };
-      } catch (err: any) {
-        // If Neon Auth returned an explicit client error, surface it
-        if (
-          err.message &&
-          (err.message.includes('already exists') ||
-            err.message.includes('Password') ||
-            err.message.includes('Invalid') ||
-            err.message.includes('Origin'))
-        ) {
-          throw err;
+        if (res.status === 409) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.detail || 'An account with this email address already exists.');
+        }
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Registration failed');
+      } catch (backendErr: any) {
+        if (backendErr.message && backendErr.message.includes('already exists')) {
+          throw backendErr;
         }
 
-        // 2. Secondary: Backend API fallback if Neon Auth network failed
+        // 2. Secondary: Try Neon Auth registration and sync back to backend
         try {
-          const res = await fetch(`${API_BASE}/auth/signup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-            signal: AbortSignal.timeout(10000),
+          const neonRes = await neonAuth.signUp({
+            email: data.email,
+            password: data.password,
+            name: data.full_name,
           });
-          if (res.ok) {
-            const result: AuthResponse = await res.json();
-            lastKnownLive = true;
-            return result;
-          }
-          lastKnownLive = false;
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.detail || 'Signup failed');
-        } catch (backendErr: any) {
-          lastKnownLive = false;
-          throw backendErr;
+          // Sync user to backend database
+          const synced = await this.syncUser({
+            email: data.email,
+            full_name: data.full_name,
+            auth_provider: 'neon',
+          });
+          if (synced) return synced;
+
+          const token = neonRes.token || `neon_sess_${Date.now()}`;
+          this.setAuthToken(token);
+          this.setStoredUser(neonRes.user);
+          lastKnownLive = true;
+          return {
+            access_token: token,
+            token_type: 'bearer',
+            expires_in_days: 7,
+            user: neonRes.user,
+          };
+        } catch (neonErr: any) {
+          throw neonErr || backendErr;
         }
       }
     }
@@ -788,54 +858,56 @@ export const api = {
 
   async signin(data: SignInData): Promise<AuthResponse> {
     if (!this.isMockMode()) {
-      // 1. Primary: Direct Neon Auth authentication
+      // 1. Primary: Direct Backend API authentication (verifies against PostgreSQL users table)
       try {
-        const neonRes = await neonAuth.signIn({
-          email: data.email,
-          password: data.password,
+        const res = await fetch(`${API_BASE}/auth/signin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+          signal: AbortSignal.timeout(10000),
         });
-        const token = neonRes.token || `neon_sess_${Date.now()}`;
-        this.setAuthToken(token);
-        this.setStoredUser(neonRes.user);
-        lastKnownLive = true;
-        return {
-          access_token: token,
-          token_type: 'bearer',
-          expires_in_days: 7,
-          user: neonRes.user,
-        };
-      } catch (err: any) {
-        if (
-          err.message &&
-          (err.code === 'EMAIL_NOT_VERIFIED' ||
-            err.message.includes('Email not verified') ||
-            err.message.includes('Invalid email or password') ||
-            err.message.includes('Origin'))
-        ) {
-          throw err;
+        if (res.ok) {
+          const result: AuthResponse = await res.json();
+          this.setAuthToken(result.access_token);
+          this.setStoredUser(result.user);
+          lastKnownLive = true;
+          return result;
+        }
+        if (res.status === 401 || res.status === 403) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.detail || 'Invalid email or password.');
+        }
+      } catch (backendErr: any) {
+        if (backendErr.message && (backendErr.message.includes('Invalid email') || backendErr.message.includes('disabled'))) {
+          throw backendErr;
         }
 
-        // 2. Secondary: Backend API fallback
+        // 2. Secondary: Neon Auth authentication fallback, followed by sync
         try {
-          const res = await fetch(`${API_BASE}/auth/signin`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-            signal: AbortSignal.timeout(10000),
+          const neonRes = await neonAuth.signIn({
+            email: data.email,
+            password: data.password,
           });
-          if (res.ok) {
-            const result: AuthResponse = await res.json();
-            this.setAuthToken(result.access_token);
-            this.setStoredUser(result.user);
-            lastKnownLive = true;
-            return result;
-          }
-          lastKnownLive = false;
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.detail || 'Invalid email or password');
-        } catch (backendErr: any) {
-          lastKnownLive = false;
-          throw backendErr;
+          const synced = await this.syncUser({
+            email: data.email,
+            full_name: neonRes.user.full_name,
+            avatar_url: neonRes.user.avatar_url,
+            auth_provider: 'neon',
+          });
+          if (synced) return synced;
+
+          const token = neonRes.token || `neon_sess_${Date.now()}`;
+          this.setAuthToken(token);
+          this.setStoredUser(neonRes.user);
+          lastKnownLive = true;
+          return {
+            access_token: token,
+            token_type: 'bearer',
+            expires_in_days: 7,
+            user: neonRes.user,
+          };
+        } catch (neonErr: any) {
+          throw neonErr || backendErr;
         }
       }
     }
@@ -1003,6 +1075,16 @@ export const api = {
   ): Promise<{ user: User; token?: string | null }> {
     if (!this.isMockMode()) {
       const res = await neonAuth.verifyEmailOtp({ email, otp });
+      // Sync verified user to backend database
+      const synced = await this.syncUser({
+        email: res.user.email,
+        full_name: res.user.full_name,
+        avatar_url: res.user.avatar_url,
+        auth_provider: 'neon',
+      });
+      if (synced) {
+        return { user: synced.user, token: synced.access_token };
+      }
       if (res.token) this.setAuthToken(res.token);
       this.setStoredUser(res.user);
       return res;
@@ -2278,5 +2360,440 @@ export const api = {
 
     return defaultPersonas;
   },
+
+  // =========================================================================
+  // Dataset Sources & OpenRouter Diagnostics API
+  // =========================================================================
+
+  async listDatasets(): Promise<DatasetSource[]> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/datasets`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return mockStore.datasets;
+  },
+
+  async getDataset(id: string): Promise<DatasetSource | null> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/datasets/${id}`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return mockStore.datasets.find((d) => d.id === id) || null;
+  },
+
+  async addDatasetUrl(payload: {
+    name: string;
+    url: string;
+    description?: string;
+    file_type?: string;
+    study_id?: string;
+  }): Promise<DatasetSource> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/datasets/url`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(35000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          const created = await res.json();
+          mockStore.datasets.unshift(created);
+          return created;
+        }
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to ingest dataset URL');
+      } catch (err: any) {
+        if (!err.message?.includes('Failed to ingest dataset URL')) {
+          lastKnownLive = false;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    // Mock mode fallback
+    const ds: DatasetSource = {
+      id: `ds_${Date.now()}`,
+      name: payload.name,
+      source_type: 'url',
+      source_url: payload.url,
+      file_type: payload.file_type || 'csv',
+      description: payload.description,
+      status: 'ready',
+      row_count: 850,
+      column_count: 6,
+      schema_metadata: {
+        columns: [
+          { name: 'id', type: 'text', missing_count: 0, missing_percentage: 0, unique_count: 850, sample_values: ['1', '2'] },
+          { name: 'segment', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 3, sample_values: ['Budget Shopper', 'Deal Hunter', 'Tech Savvy'] },
+          { name: 'budget', type: 'numeric', missing_count: 0, missing_percentage: 0, unique_count: 30, sample_values: [300, 500, 1000] },
+        ],
+        row_count: 850,
+        column_count: 6,
+      },
+      statistics: {
+        numeric: {
+          budget: { count: 850, min: 100, max: 2000, mean: 550, median: 500, std: 250, p25: 350, p75: 750, iqr: 400 },
+        },
+        categorical: {
+          segment: {
+            count: 850,
+            unique_categories: 3,
+            top_categories: [
+              { category: 'Budget Shopper', count: 425, percentage: 50.0 },
+              { category: 'Deal Hunter', count: 255, percentage: 30.0 },
+              { category: 'Tech Savvy', count: 170, percentage: 20.0 },
+            ],
+            percentages: { 'Budget Shopper': 50.0, 'Deal Hunter': 30.0, 'Tech Savvy': 20.0 },
+          },
+        },
+        overview: { row_count: 850, column_count: 6 },
+      },
+      segments: [
+        {
+          id: 'seg_1',
+          name: 'Budget Shopper',
+          population_count: 425,
+          population_share: 0.5,
+          population_percentage: 50.0,
+          is_dataset_supported: true,
+          segmentation_feature: 'segment',
+          constraints: {
+            age_range: [18, 26],
+            median_age: 22,
+            monthly_budget: { min: 100, median: 400, max: 600, currency: 'BDT' },
+            technology_familiarity: 'Medium',
+            observed_needs: ['Discounts', 'Free shipping alerts'],
+            rule_description: 'Price-conscious shoppers seeking maximum discounts.',
+          },
+        },
+      ],
+      persona_count_generated: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockStore.datasets.unshift(ds);
+    return ds;
+  },
+
+  async uploadDataset(formData: FormData): Promise<DatasetSource> {
+    if (!this.isMockMode()) {
+      try {
+        const token = localStorage.getItem('bebshax_auth_token');
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`${API_BASE}/datasets/upload`, {
+          method: 'POST',
+          headers,
+          body: formData,
+          signal: AbortSignal.timeout(35000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          const created = await res.json();
+          mockStore.datasets.unshift(created);
+          return created;
+        }
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to upload dataset');
+      } catch (err: any) {
+        if (!err.message?.includes('Failed to upload dataset')) {
+          lastKnownLive = false;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const name = (formData.get('name') as string) || 'Uploaded Dataset';
+    const file = formData.get('file') as File;
+    const ds: DatasetSource = {
+      id: `ds_${Date.now()}`,
+      name,
+      source_type: 'upload',
+      original_file_name: file?.name || 'dataset.csv',
+      file_type: file?.name?.split('.').pop() || 'csv',
+      description: (formData.get('description') as string) || null,
+      status: 'ready',
+      row_count: 500,
+      column_count: 5,
+      schema_metadata: {
+        columns: [
+          { name: 'id', type: 'text', missing_count: 0, missing_percentage: 0, unique_count: 500, sample_values: ['1', '2'] },
+          { name: 'segment', type: 'categorical', missing_count: 0, missing_percentage: 0, unique_count: 3, sample_values: ['Core User', 'Casual', 'Pro'] },
+          { name: 'budget', type: 'numeric', missing_count: 0, missing_percentage: 0, unique_count: 20, sample_values: [400, 600] },
+        ],
+        row_count: 500,
+        column_count: 5,
+      },
+      statistics: {
+        numeric: {
+          budget: { count: 500, min: 200, max: 1500, mean: 600, median: 550, std: 200, p25: 400, p75: 800, iqr: 400 },
+        },
+        categorical: {
+          segment: {
+            count: 500,
+            unique_categories: 3,
+            top_categories: [
+              { category: 'Core User', count: 250, percentage: 50.0 },
+              { category: 'Casual', count: 150, percentage: 30.0 },
+              { category: 'Pro', count: 100, percentage: 20.0 },
+            ],
+            percentages: { 'Core User': 50.0, 'Casual': 30.0, 'Pro': 20.0 },
+          },
+        },
+        overview: { row_count: 500, column_count: 5 },
+      },
+      segments: [
+        {
+          id: 'seg_1',
+          name: 'Core User Segment',
+          population_count: 250,
+          population_share: 0.5,
+          population_percentage: 50.0,
+          is_dataset_supported: true,
+          segmentation_feature: 'segment',
+          constraints: {
+            age_range: [20, 30],
+            median_age: 24,
+            monthly_budget: { min: 200, median: 500, max: 800, currency: 'BDT' },
+            technology_familiarity: 'High',
+            observed_needs: ['Automated analytics', 'Mobile notifications'],
+          },
+        },
+      ],
+      persona_count_generated: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockStore.datasets.unshift(ds);
+    return ds;
+  },
+
+  async refreshDataset(id: string): Promise<DatasetSource> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/datasets/${id}/refresh`, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    const ds = mockStore.datasets.find((d) => d.id === id);
+    if (!ds) throw new Error('Dataset not found');
+    ds.last_processed_at = new Date().toISOString();
+    return { ...ds };
+  },
+
+  async queryDataset(
+    id: string,
+    filterCol?: string,
+    filterVal?: any
+  ): Promise<{ total_matches: number; records: any[] }> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/datasets/${id}/query`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ filter_col: filterCol, filter_val: filterVal, limit: 50 }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return { total_matches: 5, records: [] };
+  },
+
+  async deleteDataset(id: string): Promise<{ status: string; id: string }> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/datasets/${id}`, {
+          method: 'DELETE',
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          mockStore.datasets = mockStore.datasets.filter((d) => d.id !== id);
+          return await res.json();
+        }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    mockStore.datasets = mockStore.datasets.filter((d) => d.id !== id);
+    return { status: 'deleted', id };
+  },
+
+  async generateDatasetPersonas(
+    datasetId: string,
+    payload: { requested_count: number; business_name?: string; business_description?: string; study_id?: string }
+  ): Promise<PersonaGenerationRun> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/datasets/${datasetId}/generate-personas`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(60000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    // Mock persona generation fallback
+    const targetDs = mockStore.datasets.find((d) => d.id === datasetId) || mockStore.datasets[0];
+    const segs = targetDs?.segments || [];
+    const count = payload.requested_count || 5;
+
+    return {
+      run_id: `dpr_${Date.now()}`,
+      dataset_id: targetDs?.id || datasetId,
+      dataset_name: targetDs?.name || 'Dataset Source',
+      model_used: 'openrouter/meta-llama/llama-3.3-70b-instruct:free',
+      requested_count: count,
+      generated_count: count,
+      valid_count: Math.max(1, count - 1),
+      warning_count: 1,
+      contradiction_count: 0,
+      distribution: { [segs[0]?.id || 'seg_1']: count },
+      personas: Array.from({ length: count }).map((_, i) => ({
+        name: `Persona ${i + 1}`,
+        age: 22 + i,
+        occupation: segs[0]?.name || 'Student / Professional',
+        income_range: '৳500 per month',
+        description: `Synthetic persona generated from ${targetDs?.name}`,
+        validation: { status: 'VALID', is_valid: true, violations: [], warnings: [] },
+      })),
+      validation_summary: [
+        {
+          persona_name: 'Persona 1',
+          segment: segs[0]?.name || 'Core Segment',
+          status: 'VALID',
+          violations: [],
+          warnings: [],
+        },
+      ],
+    };
+  },
+
+  async getOpenRouterHealth(): Promise<OpenRouterHealth> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/health/openrouter`, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        lastKnownLive = false;
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+    return {
+      configured: true,
+      authenticated: true,
+      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      status: 'healthy',
+      latency_ms: 320.5,
+      message: 'OpenRouter diagnostic check (Mock / Local Mode).',
+      verified_response: 'BebshaX OpenRouter connection verified.',
+    };
+  },
+
+  async testOpenRouterConnection(model?: string): Promise<OpenRouterHealth> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/health/openrouter/test`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ model }),
+          signal: AbortSignal.timeout(35000),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+        const errData = await res.json().catch(() => ({}));
+        return {
+          configured: errData.configured ?? true,
+          authenticated: false,
+          model: model || 'default',
+          status: 'error',
+          error_code: errData.error_code || 'OPENROUTER_AUTH_FAILED',
+          message: errData.message || 'OpenRouter test request failed.',
+        };
+      } catch (err: any) {
+        lastKnownLive = false;
+        return {
+          configured: true,
+          authenticated: false,
+          model: model || 'default',
+          status: 'error',
+          error_code: 'OPENROUTER_CONNECTION_ERROR',
+          message: `Connection error: ${err.message || err}`,
+        };
+      }
+    }
+    return {
+      configured: true,
+      authenticated: true,
+      model: model || 'meta-llama/llama-3.3-70b-instruct:free',
+      status: 'healthy',
+      latency_ms: 245.2,
+      message: 'OpenRouter connection successful (Verified).',
+      verified_response: 'BebshaX OpenRouter connection successful.',
+    };
+  },
 };
+
 

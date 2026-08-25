@@ -47,13 +47,15 @@ class OpenRouterAdapter(ProviderAdapter):
         default_model: str = "meta-llama/llama-3.3-70b-instruct:free",
         timeout: float = 30.0,
     ) -> None:
-        self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        self._api_key = api_key
         self._default_model = default_model
         self._timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None
 
     def _get_api_key(self) -> str | None:
-        return self._api_key or os.environ.get("OPENROUTER_API_KEY")
+        if self._api_key is not None:
+            return self._api_key
+        return os.environ.get("OPENROUTER_API_KEY")
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -177,3 +179,130 @@ class OpenRouterAdapter(ProviderAdapter):
             model=serving_model,
             notes=notes,
         )
+
+    async def health_check(self, model: Optional[str] = None) -> dict:
+        """Perform a safe, authenticated health check against OpenRouter API.
+
+        Never returns or logs the actual API key.
+        """
+        key = self._get_api_key()
+        if not key or not key.strip():
+            return {
+                "configured": False,
+                "authenticated": False,
+                "model": model or self._default_model,
+                "status": "not_configured",
+                "error_code": "OPENROUTER_NOT_CONFIGURED",
+                "message": "OPENROUTER_API_KEY is not set in environment or .env.",
+            }
+
+        target_model = model or os.environ.get("OPENROUTER_MODEL") or self._default_model
+        client = await self._get_client()
+
+        payload = {
+            "model": target_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Return exactly: BebshaX OpenRouter connection successful.",
+                }
+            ],
+            "max_tokens": 30,
+            "temperature": 0.0,
+        }
+        headers = {
+            "Authorization": f"Bearer {key.strip()}",
+            "HTTP-Referer": "https://bebshax.ai",
+            "X-Title": "BebshaX Health Diagnostic",
+            "Content-Type": "application/json",
+        }
+
+        t0 = time.perf_counter()
+        try:
+            resp = await client.post(OPENROUTER_ENDPOINT, json=payload, headers=headers)
+            latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        except httpx.TimeoutException:
+            return {
+                "configured": True,
+                "authenticated": False,
+                "model": target_model,
+                "status": "error",
+                "error_code": "OPENROUTER_TIMEOUT",
+                "message": "OpenRouter connection timed out after 30 seconds.",
+            }
+        except httpx.TransportError as exc:
+            return {
+                "configured": True,
+                "authenticated": False,
+                "model": target_model,
+                "status": "error",
+                "error_code": "OPENROUTER_CONNECTION_ERROR",
+                "message": f"Network transport error connecting to OpenRouter: {exc}",
+            }
+
+        if resp.status_code == 401 or resp.status_code == 403:
+            return {
+                "configured": True,
+                "authenticated": False,
+                "model": target_model,
+                "status": "error",
+                "error_code": "OPENROUTER_AUTH_FAILED",
+                "message": "OpenRouter authentication failed. Please verify OPENROUTER_API_KEY.",
+            }
+
+        if resp.status_code == 429:
+            return {
+                "configured": True,
+                "authenticated": True,
+                "model": target_model,
+                "status": "rate_limited",
+                "error_code": "OPENROUTER_RATE_LIMITED",
+                "message": "OpenRouter rate limit reached or free credit exhausted.",
+            }
+
+        if resp.status_code == 404:
+            return {
+                "configured": True,
+                "authenticated": True,
+                "model": target_model,
+                "status": "error",
+                "error_code": "OPENROUTER_MODEL_UNAVAILABLE",
+                "message": f"Requested model '{target_model}' is not available on OpenRouter.",
+            }
+
+        if resp.status_code != 200:
+            return {
+                "configured": True,
+                "authenticated": False,
+                "model": target_model,
+                "status": "error",
+                "error_code": "OPENROUTER_API_ERROR",
+                "message": f"OpenRouter returned HTTP {resp.status_code}: {resp.text[:200]}",
+            }
+
+        try:
+            data = resp.json()
+            serving_model = data.get("model", target_model)
+            choices = data.get("choices", [])
+            reply_text = (
+                choices[0].get("message", {}).get("content", "").strip() if choices else ""
+            )
+            return {
+                "configured": True,
+                "authenticated": True,
+                "model": serving_model,
+                "latency_ms": latency_ms,
+                "status": "healthy",
+                "verified_response": reply_text[:100],
+                "message": "OpenRouter connected and verified successfully.",
+            }
+        except Exception as exc:
+            return {
+                "configured": True,
+                "authenticated": True,
+                "model": target_model,
+                "status": "error",
+                "error_code": "OPENROUTER_MALFORMED_RESPONSE",
+                "message": f"Failed to parse OpenRouter JSON response: {exc}",
+            }
+

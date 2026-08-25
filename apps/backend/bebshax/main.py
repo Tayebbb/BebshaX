@@ -90,7 +90,15 @@ def create_app() -> FastAPI:
     app.include_router(copilot_router, prefix="/api")
     app.include_router(studies_router, prefix="/api")
     app.include_router(evaluation_router, prefix="/api")
+
+    # OpenRouter health verification & Dataset Sources
+    from bebshax.api.datasets import router as datasets_router
+    from bebshax.api.openrouter_health import router as openrouter_health_router
+
+    app.include_router(openrouter_health_router, prefix="/api")
+    app.include_router(datasets_router, prefix="/api")
     return app
 
 
 app = create_app()
+

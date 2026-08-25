@@ -1,9 +1,8 @@
-"""FastAPI authentication routes: signup, signin, current user profile, Google auth."""
-
 from datetime import timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
@@ -31,6 +30,13 @@ class GoogleAuthRequest(BaseModel):
     avatar_url: Optional[str] = None
 
 
+class UserSyncRequest(BaseModel):
+    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    auth_provider: str = "neon"
+
+
 class UserProfileResponse(BaseModel):
     id: str
     email: str
@@ -40,6 +46,7 @@ class UserProfileResponse(BaseModel):
     is_verified: bool
     auth_provider: str
     created_at: str
+    updated_at: str
 
 
 class AuthResponse(BaseModel):
@@ -59,6 +66,7 @@ def _serialize_user(user: Users) -> UserProfileResponse:
         is_verified=user.is_verified,
         auth_provider=user.auth_provider,
         created_at=user.created_at.isoformat(),
+        updated_at=user.updated_at.isoformat(),
     )
 
 
@@ -248,6 +256,37 @@ async def google_auth(
     )
 
 
+@auth_router.post("/sync", response_model=AuthResponse)
+async def sync_user(
+    payload: UserSyncRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Sync, register, or upsert an account authenticated via Neon Auth or external providers."""
+    email = payload.email.strip().lower()
+    full_name = payload.full_name or email.split("@")[0]
+    user = await get_user_by_email(session, email)
+    if not user:
+        user = await create_user(
+            session=session,
+            email=email,
+            full_name=full_name,
+            auth_provider=payload.auth_provider,
+            avatar_url=payload.avatar_url,
+        )
+    elif payload.avatar_url and not user.avatar_url:
+        user.avatar_url = payload.avatar_url
+        await session.commit()
+        await session.refresh(user)
+
+    token = create_access_token(
+        data={"sub": user.id, "email": user.email, "name": user.full_name}
+    )
+    return AuthResponse(
+        access_token=token,
+        user=_serialize_user(user),
+    )
+
+
 @auth_router.get("/me", response_model=UserProfileResponse)
 async def get_me(current_user: Users = Depends(get_current_user)):
     """Retrieve current logged-in user profile."""
@@ -264,3 +303,14 @@ async def refresh_token(current_user: Users = Depends(get_current_user)):
         access_token=token,
         user=_serialize_user(current_user),
     )
+
+
+@auth_router.get("/users", response_model=list[UserProfileResponse])
+async def list_users(
+    current_user: Users = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[UserProfileResponse]:
+    """Return all registered user accounts. Requires a valid login token."""
+    result = await session.execute(select(Users).order_by(Users.created_at.desc()))
+    users = list(result.scalars().all())
+    return [_serialize_user(u) for u in users]

@@ -294,3 +294,66 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 **Tests:** 41/41 frontend tests green; 143/143 backend pytest tests green.
 
+### Maintenance (2026-08-25) — Case Study Auto-Save, User Isolation & User List Endpoint
+
+**What was built:**
+
+- **`copilot_messages` + `personas_data` DB columns:** Added two nullable JSONB columns to the `Studies` ORM model (`db/models.py`). Alembic migration `96ee206715d7` generated and applied — columns are live in the DB.
+- **Studies API hardened (`api/studies.py`):**
+  - `StudyCreateRequest` and `StudyUpdateRequest` now include `copilot_messages` and `personas_data` fields.
+  - `_serialize_study()` now returns both fields in all responses.
+  - **User isolation enforced:** `list_studies` returns only the authenticated user's studies + demo studies. Unauthenticated callers receive only demo studies (`is_demo=True`), never all studies.
+  - `get_study` and `delete_study` return 404 for cross-user access.
+  - `update_study` returns 403 for cross-user access. Auto-create path (for seamless workflow init) preserved.
+  - Helper `_user_owns_study()` centralises ownership logic.
+- **User list endpoint (`api/auth.py`):** Added `GET /api/auth/users` returning all registered users with full profile data (`id`, `email`, `full_name`, `avatar_url`, `is_active`, `is_verified`, `auth_provider`, `created_at`, `updated_at`). Requires valid JWT, no admin role.
+- **`UserProfileResponse` extended:** Added `updated_at` field.
+- **Frontend state restoration (`StudyWorkflowView.tsx`):** Added `useEffect` on `studyId` mount that loads the study from DB and restores: `currentStep`, `promptInput`, `copilotMessages` (with deduplication), `suggestedRoles`, `script_questions`, `personas_data`. Role-selection panel is shown automatically if last assistant message is a goal card.
+- **Step change now persists copilot_messages + personas_data** via `copilotMessagesRef.current` (capture-at-call-time to avoid stale closures).
+- **Persona generation now persists `personas_data`** alongside `persona_ids` so personas survive page refresh.
+- **`api.ts` & Auth Synchronization with Neon Postgres:**
+  - Prioritized the backend FastAPI auth API (`/api/auth/signup`, `/api/auth/signin`, `/api/auth/google`) so all user registrations and logins are committed directly to `public.users` in Neon PostgreSQL and issued real HMAC-SHA256 JWTs.
+  - Added `POST /api/auth/sync` endpoint in `auth.py` and `api.syncUser()` helper in `api.ts` to seamlessly upsert users registered via OTP or external auth into the PostgreSQL database.
+  - Added `scripts/dev.js`, `dev.cmd`, `dev.ps1` and updated `package.json` so running `npm run dev` (or `npm run frontend` / `dev.cmd`) concurrently boots both the FastAPI backend on port 8000 and the Vite frontend on port 5173.
+  - Verified live database state in Neon Cloud: confirmed `Users` (1 row) and `Studies` (1 row) active.
+
+**Tests:** 41/41 frontend tests green; 143/143 backend pytest tests green.
+
+### Maintenance (2026-08-25) — Dataset Sources Integration, Deterministic Profiling & OpenRouter Health Diagnostics
+
+**What was built:**
+
+- **OpenRouter Service & Server-Side Health Diagnostics (`apps/backend/bebshax/llm/` & `api/`):**
+  - Updated `openrouter_adapter.py` with `health_check(model)` executing real lightweight completions to OpenRouter to measure latency and test authentication without leaking secret tokens.
+  - Implemented dynamic API key lookup from `os.environ.get("OPENROUTER_API_KEY")` so keys set after startup are immediately available.
+  - Created `openrouter_service.py` supporting role-specific model routing (`MODEL_PERSONA`, `MODEL_REASONING`, `MODEL_EXTRACTION`, `MODEL_CRITIC`, `MODEL_BROWSER`).
+  - Created `api/openrouter_health.py` exposing `GET /api/health/openrouter` and `POST /api/health/openrouter/test`.
+- **Database Persistence & Alembic Migration:**
+  - Added `DatasetSources` and `DatasetPersonaRuns` ORM models to `apps/backend/bebshax/db/models.py`.
+  - Created Alembic migration `99b3c3047dec_add_dataset_sources_and_dataset_persona_.py` and upgraded Neon Postgres database schema to head.
+- **Dataset Ingestion, Security & Profiling Package (`apps/backend/bebshax/datasets/`):**
+  - `security.py`: Server-side SSRF validation with strict IP range filtering (blocking 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.169.254, loopback, internal domains) and 25MB streaming limit.
+  - `parser.py`: Safe parsing for CSV, TSV, JSON, JSONL, and Excel (XLSX).
+  - `profiler.py`: Deterministic statistical calculation of numeric distributions (min, max, mean, median, std, p25, p75, IQR) and categorical distributions with frequencies and percentages.
+  - `segmenter.py`: Empirical segment discovery and mathematical persona quota calculation (`calculate_segment_persona_distribution`) using the largest remainder method.
+  - `validator.py`: Programmatic constraint validator classifying synthesized personas into `VALID`, `WARNING`, `CONTRADICTION`, and `INVALID` without LLM hallucinations.
+  - `service.py`: Complete lifecycle management for dataset URLs and uploads.
+- **FastAPI Dataset REST Router (`apps/backend/bebshax/api/datasets.py`):**
+  - Endpoints: `GET /api/datasets`, `POST /api/datasets/url`, `POST /api/datasets/upload`, `GET /api/datasets/{id}`, `POST /api/datasets/{id}/refresh`, `POST /api/datasets/{id}/query`, `DELETE /api/datasets/{id}`, `POST /api/datasets/{id}/generate-personas`.
+  - Installed `python-multipart` for multipart form file uploads.
+- **R8 Review for `python-multipart`:**
+  - *Why:* Required by Starlette/FastAPI to parse `multipart/form-data` file uploads for CSV/JSON/TSV/XLSX research dataset uploads.
+  - *What it provides:* Streaming multipart parser with memory/disk threshold management.
+  - *License:* Apache 2.0 (Permissive).
+  - *Activity:* Active standard library for FastAPI file uploads.
+  - *Necessity:* Essential for binary and tabular file uploads to `/api/datasets/upload`.
+- **Frontend Dataset Laboratory & Diagnostics (`apps/frontend/`):**
+  - Defined types in `types/dataset.ts`.
+  - Added full API methods and mock fixtures to `services/api.ts` and `mocks/fixtures.ts`.
+  - Created `OpenRouterDiagnosticModal.tsx`: Live developer diagnostic panel with zero key leakage, connection tester, and latency meter.
+  - Created `DatasetSourcesView.tsx`: Comprehensive dataset management view with summary cards, table/cards, Add Dataset modal (URL & Upload), Dataset Detail modal (Overview, Inferred Schema, Descriptive Statistics, Discovered Segments), and Evidence-Grounded Persona Synthesis modal with mathematical quota allocation.
+  - Added `Dataset Sources` to primary navigation in `DashboardLayout.tsx`.
+  - Created Vitest tests in `tests/DatasetSources.test.tsx`.
+
+**Tests:** 10/10 test files passed (45/45 frontend tests green); 153/153 backend pytest tests green.
+

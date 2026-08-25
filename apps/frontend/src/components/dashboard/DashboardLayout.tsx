@@ -3,6 +3,7 @@ import {
   PenSquare,
   LayoutGrid,
   Contact2,
+  Database,
   ChevronDown,
   ChevronRight,
   PanelLeft,
@@ -16,11 +17,12 @@ import { StudiesDashboardView } from './views/StudiesDashboardView';
 import { PersonaLibraryView } from './views/PersonaLibraryView';
 import { StudyWorkflowView } from './views/StudyWorkflowView';
 import { ModelRouterView } from './views/ModelRouterView';
+import { DatasetSourcesView } from './views/DatasetSourcesView';
 import { StudyType, Study } from '../../types';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 
-export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'router' | 'study-workflow';
+export type DashboardTab = 'new-study' | 'dashboard' | 'personas' | 'datasets' | 'router' | 'study-workflow';
 
 interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
@@ -31,6 +33,9 @@ const parseDashboardPath = (path: string): {
   studyId?: string;
   step?: number;
 } => {
+  if (path.startsWith('/dataset') || path.startsWith('/data-sources')) {
+    return { tab: 'datasets' };
+  }
   if (path.startsWith('/persona-library') || path.startsWith('/personas')) {
     return { tab: 'personas' };
   }
@@ -175,6 +180,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       id: 'personas' as DashboardTab,
       label: 'Persona Library',
       icon: <Contact2 size={16} />,
+    },
+    {
+      id: 'datasets' as DashboardTab,
+      label: 'Dataset Sources',
+      icon: <Database size={16} />,
     },
   ];
 
@@ -699,6 +709,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             }}
           />
         )}
+
+        {activeTab === 'datasets' && <DatasetSourcesView />}
 
         {activeTab === 'router' && <ModelRouterView />}
 
