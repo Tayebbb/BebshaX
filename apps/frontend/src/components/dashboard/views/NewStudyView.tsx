@@ -148,7 +148,7 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
           role="alert"
           style={{
             width: '100%',
-            maxWidth: '720px',
+            maxWidth: '1020px',
             background: 'rgba(239, 68, 68, 0.1)',
             border: '1px solid rgba(239, 68, 68, 0.3)',
             borderRadius: '12px',
@@ -172,15 +172,15 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
         onSubmit={handleSubmit}
         style={{
           width: '100%',
-          maxWidth: '720px',
+          maxWidth: '1020px',
           background: '#0D1111',
           border: isFocused ? '1px solid rgba(20, 184, 166, 0.6)' : '1px solid #202727',
           borderRadius: '24px',
-          padding: '20px 24px 18px 24px',
+          padding: '22px 26px 20px 26px',
           position: 'relative',
-          marginBottom: '40px',
+          marginBottom: '32px',
           boxShadow: isFocused
-            ? '0 0 24px rgba(20, 184, 166, 0.15), 0 8px 32px rgba(0,0,0,0.5)'
+            ? '0 0 28px rgba(20, 184, 166, 0.16), 0 8px 32px rgba(0,0,0,0.5)'
             : '0 4px 20px rgba(0, 0, 0, 0.35)',
           transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
@@ -249,10 +249,10 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-          gap: '14px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))',
+          gap: '16px',
           width: '100%',
-          maxWidth: '720px',
+          maxWidth: '1020px',
         }}
       >
         {studyTypes.map((item) => {
