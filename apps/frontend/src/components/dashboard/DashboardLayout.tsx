@@ -731,9 +731,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
         {activeTab === 'personas' && (
           <PersonaLibraryView
+            studyId={activeStudyId}
             onStartInterviewWithPersona={(pId) => {
               handleStartStudy('interviews', `Interview with persona ${pId}`);
             }}
+            onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}
+            onNavigateToDatasets={() => navigate('/datasets')}
+            onNavigateToSegmentation={() => navigate(`/research/${activeStudyId || 'study_default'}/segmentation`)}
           />
         )}
 

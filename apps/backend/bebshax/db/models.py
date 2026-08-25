@@ -156,31 +156,76 @@ class Businesses(Base):
 
 
 class Personas(Base):
-    """Synthetic persona skeleton.
-
-    Full attribute schema (observed/inferred/synthetic provenance, persona
-    details, memory hooks) arrives in Phase 8. This is the skeleton.
-
-    persona_id is used in LLMRequests.persona_id (not as FK, to allow
-    logging failed generations) and as a cross-table reference during
-    interviews (Phase 10).
-    """
+    """Synthetic customer persona grounded in study segments, dataset distributions, and research evidence."""
 
     __tablename__ = "personas"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    business_id: Mapped[str] = mapped_column(String(64), ForeignKey("businesses.id"), index=True)
+    business_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("businesses.id"), nullable=True, index=True
+    )
+    study_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    segment_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    generation_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(256), index=True)
-    status: Mapped[str] = mapped_column(String(64), default="draft")  # draft, active, archived
+    status: Mapped[str] = mapped_column(
+        String(64), default="ready"
+    )  # ready, needs_review, draft, active, archived
     version: Mapped[int] = mapped_column(default=1)
     generation_model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    archetype: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    demographics: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    quote: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    goals: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    needs: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    pain_points: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    behaviors: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    preferences: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    motivations: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    objections: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    commercial_profile: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    technology_profile: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    evidence_citations: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    dataset_refs: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    grounding_score: Mapped[float] = mapped_column(Float, default=0.88)
+    confidence: Mapped[float] = mapped_column(Float, default=0.85)
+    validation_warnings: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    is_synthetic: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
 
     # Relationship
-    business: Mapped[Businesses] = relationship("Businesses", back_populates="personas")
+    business: Mapped[Optional[Businesses]] = relationship("Businesses", back_populates="personas")
 
 
 class Studies(Base):
@@ -478,3 +523,39 @@ class MarketSegments(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
+
+
+class PersonaGenerationRuns(Base):
+    """Audit and lifecycle record for a synthetic persona generation run."""
+
+    __tablename__ = "persona_generation_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    study_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    segmentation_run_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(64), default="pending"
+    )  # pending, loading_segments, preparing_context, generating_personas, validating_personas, saving_personas, completed, failed
+    configuration: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    target_count: Mapped[int] = mapped_column(default=0)
+    generated_count: Mapped[int] = mapped_column(default=0)
+    valid_count: Mapped[int] = mapped_column(default=0)
+    warning_count: Mapped[int] = mapped_column(default=0)
+    dataset_versions: Mapped[list[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    evidence_snapshot: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+

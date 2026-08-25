@@ -489,3 +489,33 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
   - Frontend (`SegmentationView.test.tsx`): banner metrics, readiness assessment, run trigger, progress stepper, deep dive tab navigation, side-by-side comparison modal, search filtering, and JSON/CSV export.
 
 **Tests:** 13/13 frontend test suites passed (60/60 tests green); 170/170 backend pytest tests green.
+
+---
+
+### Part 5 (2026-08-26) — Synthetic Persona Generation & Persona Library
+
+**What was built:**
+
+- **Database Persistence & Alembic Migration (`apps/backend/bebshax/db/models.py` & Alembic):**
+  - Extended `Personas` table with study-scoped columns: `study_id`, `user_id`, `segment_id`, `generation_run_id`, `archetype`, `quote`, `goals`, `needs`, `pain_points`, `behaviors`, `preferences`, `motivations`, `objections`, `commercial_profile`, `technology_profile`, `evidence_citations`, `dataset_refs`, `grounding_score`, `confidence`, `validation_warnings`, `is_synthetic`, and made legacy `business_id` nullable.
+  - Created `PersonaGenerationRuns` table tracking historical runs with `configuration`, `status`, `target_count`, `generated_count`, `valid_count`, `warning_count`, `dataset_versions` (with content SHA-256 hashes), `evidence_snapshot`, and timestamps.
+  - Created and applied Alembic migration `8d9e0f1a2b3c_add_persona_generation_runs_and_update_personas.py` to head on PostgreSQL.
+- **Deterministic Persona Generation & Grounding Engine (`apps/backend/bebshax/personas/`):**
+  - `validator.py`: Pure algorithmic range validation verifying age bounds ($\pm 2$ years of segment demographics), monthly budget limits, required attributes (goals, pain points, behaviors), and calculates deterministic grounding score clamped to $[0.50, 0.98]$ with status marking (`ready` vs `needs_review`).
+  - `generator.py`: Largest Remainder quota allocator supporting both population-weighted (matching segment percentages) and equal distributions; prompt engineering via `LLMService` (`TaskType.PERSONA_GENERATION`); resilient fallback template with Bangladeshi student/candidate personas grounded in local currency (BDT) and wallets (bKash/Nagad).
+  - `service.py`: Orchestrator managing run lifecycle, duplicate-run locking, dataset content hash snapshotting, evidence claim citation linking, persona persistence, and single-persona regeneration.
+- **FastAPI Persona REST Router (`apps/backend/bebshax/api/personas.py`):**
+  - Study-scoped endpoints: `GET /api/studies/{id}/personas`, `POST /api/studies/{id}/personas/generate`, `GET /api/studies/{id}/personas/{persona_id}`, `POST /api/studies/{id}/personas/{persona_id}/regenerate`, `GET /api/studies/{id}/persona-runs`, `GET /api/studies/{id}/persona-runs/{run_id}`, `DELETE /api/studies/{id}/persona-runs/{run_id}`.
+  - Enforced zero-trust ownership verification (`_verify_study_access`) returning `404 Not Found` for unowned studies, personas, and runs.
+- **Teal / Cyan Persona Library UI (`apps/frontend/`):**
+  - Built `PersonaLibraryView.tsx` with summary metrics banner (Total Synthetic Personas, Represented Segments, Avg Grounding Score, Ready to Interview), persona cards grid with geometric initials avatars, Synthetic tags, and visual grounding meters.
+  - Generation Modal with quota distribution selector (`Population-weighted` vs `Equal distribution`) and live 5-step progress stepper.
+  - Deep Dive Inspector Modal with 5 tabs: `Profile & Traits`, `Commercial & WTP`, `Technology Profile`, `Evidence Citations`, and `Dataset Provenance`, plus individual persona regeneration.
+  - Search, filter by segment/status/run/grounding, and JSON / CSV export buttons.
+  - Connected `/persona-library` navigation and header buttons in `DashboardLayout.tsx` and `StudyWorkflowView.tsx`.
+- **Automated Tests:**
+  - Backend: `test_persona_generation_engine.py` and `test_persona_ownership_idor.py` covering quota allocation, deterministic grounding calculation, range checks, lifecycle runs, and cross-user IDOR isolation (**177/177 pytest passed**).
+  - Frontend: `PersonaLibraryView.test.tsx` verifying card rendering, metrics, modal stepper, deep dive tab switching, search filtering, regeneration, and export (**14/14 test suites, 65/65 vitest passed**).
+
+**Tests:** 14/14 frontend test suites passed (65/65 tests green); 177/177 backend pytest tests green.
+

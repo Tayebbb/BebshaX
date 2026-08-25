@@ -23,6 +23,7 @@ import {
   RefreshCw,
   Database,
   PieChart,
+  User,
 } from 'lucide-react';
 import { useNavigation } from '../../../context/NavigationContext';
 import { Study, ResearchGoal, StudyType, Persona, ConversationTurn, PersonaRoleSuggestion } from '../../../types';
@@ -774,6 +775,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             }}
           >
             <PieChart size={14} /> Market Segments
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/persona-library')}
+            data-testid="study-workflow-personas-btn"
+            style={{
+              background: 'rgba(20, 184, 166, 0.12)',
+              border: '1px solid rgba(20, 184, 166, 0.3)',
+              color: '#14B8A6',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.18s ease',
+            }}
+          >
+            <User size={14} /> Persona Library
           </button>
 
           {/* Exit Button */}

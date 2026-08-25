@@ -17,6 +17,9 @@ import {
   ResearchRun,
   ClaimDetail,
   SourceDetail,
+  SyntheticPersona,
+  StudyPersonasResponse,
+  GeneratePersonasPayload,
 } from '../types';
 import {
   AuthResponse,
@@ -3409,7 +3412,431 @@ export const api = {
       }
     }
   },
+
+  // -------------------------------------------------------------------------
+  // Part 5: Synthetic Personas & Persona Library
+  // -------------------------------------------------------------------------
+
+  async getStudyPersonas(
+    studyId: string,
+    options?: {
+      segment_id?: string;
+      status?: string;
+      generation_run_id?: string;
+      search?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<StudyPersonasResponse> {
+    if (!this.isMockMode()) {
+      try {
+        const params = new URLSearchParams();
+        if (options?.segment_id) params.append('segment_id', options.segment_id);
+        if (options?.status) params.append('status', options.status);
+        if (options?.generation_run_id) params.append('generation_run_id', options.generation_run_id);
+        if (options?.search) params.append('search', options.search);
+        if (options?.limit) params.append('limit', String(options.limit));
+        if (options?.offset) params.append('offset', String(options.offset));
+
+        const res = await fetch(`${API_BASE}/studies/${studyId}/personas?${params.toString()}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    // Default mock response
+    return {
+      personas: [
+        {
+          id: 'per_mock_1',
+          study_id: studyId,
+          segment_id: 'seg_1',
+          segment_name: 'Budget-Conscious Students',
+          generation_run_id: 'pgen_mock_1',
+          name: 'Nadia Rahman',
+          status: 'ready',
+          version: 1,
+          generation_model: 'qwen3.5-grounded',
+          archetype: 'Budget-Conscious Student Planner',
+          demographics: {
+            age: 21,
+            occupation: 'Undergraduate Student (BBA)',
+            location: 'Dhaka, Bangladesh',
+            education: "Bachelor's 3rd Year",
+            income_or_budget: '৳350/mo',
+          },
+          bio: 'Nadia is a 21-year-old marketing undergraduate at Dhaka University who manages a tight student budget and prioritizes affordable digital study aids.',
+          quote: 'I need an intelligent tool that keeps my exam milestones on track without costing more than ৳350/month.',
+          goals: [
+            'Maintain a 3.7+ CGPA across midterm exams',
+            'Synchronize study schedules across group assignments and peer tutoring',
+            'Eliminate exam crunch panic through daily micro-milestones',
+          ],
+          needs: [
+            'Micro-billing support for bKash / Nagad mobile wallet',
+            'Lightweight offline mobile checklist sync',
+            'Automated revision reminders 3 days before exam dates',
+          ],
+          pain_points: [
+            'Expensive international SaaS subscriptions requiring dual-currency credit cards',
+            'Fragmented study materials scattered across Messenger groups and PDF drives',
+            'Inability to gauge remaining revision time vs total syllabus volume',
+          ],
+          behaviors: [
+            'Studies ~4.5 hours daily with peak concentration between 9 PM and midnight',
+            'Checks phone for schedule notifications during transit',
+            'Shares study timetables with two study partners',
+          ],
+          preferences: [
+            'Dark mode UI with high contrast readability',
+            'Visual milestone progress bars over complex text tables',
+          ],
+          motivations: [
+            'Securing a corporate internship through strong academic standing',
+            'Minimizing stress and late-night cramming',
+          ],
+          objections: [
+            'Skeptical of auto-debit renewals that are difficult to cancel',
+            'Will abandon tools that lag on mobile data connections',
+          ],
+          commercial_profile: {
+            monthly_budget_bdt: 350,
+            budget_range: '৳250–৳500',
+            price_sensitivity: 'High',
+            payment_preference: 'bKash / Nagad Mobile Wallet',
+            willingness_to_pay: '৳250–৳400 / month',
+          },
+          technology_profile: {
+            primary_devices: ['Android Smartphone (Samsung A15)', 'Windows Laptop'],
+            platforms: ['WhatsApp', 'Messenger', 'Google Drive'],
+            familiarity: 'High',
+          },
+          evidence_citations: [
+            {
+              claim_id: 'clm_1',
+              claim_text: 'Student segment exhibits high willingness to pay when capped below ৳400/month with local wallet billing.',
+              category: 'pricing',
+              confidence: 0.92,
+            },
+          ],
+          dataset_refs: [
+            { variable: 'monthly_budget', value: 350, source: 'Empirical Segment Distribution' },
+            { variable: 'age', value: 21, source: 'Empirical Segment Distribution' },
+          ],
+          grounding_score: 0.94,
+          confidence: 0.90,
+          validation_warnings: [],
+          is_synthetic: true,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'per_mock_2',
+          study_id: studyId,
+          segment_id: 'seg_2',
+          segment_name: 'Exam-Driven Achievers',
+          generation_run_id: 'pgen_mock_1',
+          name: 'Tanvir Ahmed',
+          status: 'ready',
+          version: 1,
+          generation_model: 'qwen3.5-grounded',
+          archetype: 'High-Urgency Exam Candidate',
+          demographics: {
+            age: 23,
+            occupation: 'BCS / Job Candidate',
+            location: 'Chittagong, Bangladesh',
+            education: 'Master Candidate',
+            income_or_budget: '৳750/mo',
+          },
+          bio: 'Tanvir is a 23-year-old graduate preparing for competitive exams who is willing to pay premium rates for verified question banks and adaptive diagnostic feedback.',
+          quote: 'I am ready to pay if the platform gives me clear diagnostic insights on where my syllabus weaknesses are.',
+          goals: [
+            'Rank in top 5% of BCS preliminary candidates',
+            'Master full syllabus coverage with zero gaps',
+          ],
+          needs: [
+            'Adaptive question banks and error log analysis',
+            'Mock exam simulations with rank comparisons',
+          ],
+          pain_points: [
+            'Generic practice books lacking explanatory answer keys',
+            'No feedback on which syllabus subjects require extra focus',
+          ],
+          behaviors: [
+            'Studies 7+ hours daily in structured 90-minute blocks',
+            'Tracks daily question solve velocity',
+          ],
+          preferences: [
+            'Detailed analytics dashboard with weak-topic drilldowns',
+          ],
+          motivations: [
+            'Career stability through civil service admission',
+          ],
+          objections: [
+            'Requires verified past paper authenticity before subscribing',
+          ],
+          commercial_profile: {
+            monthly_budget_bdt: 750,
+            budget_range: '৳500–৳1200',
+            price_sensitivity: 'Moderate',
+            payment_preference: 'bKash / Credit Card',
+            willingness_to_pay: '৳600–৳1000 / month',
+          },
+          technology_profile: {
+            primary_devices: ['Android Tablet', 'Windows Laptop'],
+            platforms: ['Telegram Study Channels', 'Google Drive'],
+            familiarity: 'High',
+          },
+          evidence_citations: [
+            {
+              claim_id: 'clm_2',
+              claim_text: 'Aspirants demonstrate 2.5x higher WTP for real-time diagnostic error tracking and mock exam percentile scoring.',
+              category: 'willingness_to_pay',
+              confidence: 0.89,
+            },
+          ],
+          dataset_refs: [
+            { variable: 'monthly_budget', value: 750, source: 'Empirical Segment Distribution' },
+          ],
+          grounding_score: 0.91,
+          confidence: 0.88,
+          validation_warnings: [],
+          is_synthetic: true,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'per_mock_3',
+          study_id: studyId,
+          segment_id: 'seg_1',
+          segment_name: 'Tech-Forward Professionals',
+          generation_run_id: 'pgen_mock_1',
+          name: 'Sarah Chen',
+          status: 'ready',
+          version: 1,
+          generation_model: 'qwen3.5-grounded',
+          archetype: 'Senior Product Manager & Early Adopter',
+          demographics: {
+            age: 29,
+            occupation: 'Senior Product Manager',
+            location: 'Dhaka (Gulshan), Bangladesh',
+            education: 'MBA',
+            income_or_budget: '৳2500/mo',
+          },
+          bio: 'Sarah is an experienced product leader focused on rapid user research and AI validation tools.',
+          quote: 'I need high-signal behavioral evidence before investing engineering bandwidth.',
+          goals: [
+            'Shorten validation cycles by 60%',
+            'Test pricing elasticity accurately',
+          ],
+          needs: [
+            'Empirical citation tracking',
+            'Automated interview transcripts',
+          ],
+          pain_points: [
+            'Superficial AI hallucinated personas',
+          ],
+          behaviors: [
+            'Daily dashboard user',
+            'Relies heavily on CSV data exports',
+          ],
+          preferences: [
+            'Clean research telemetry and visual charts',
+          ],
+          motivations: [
+            'Building validated high-impact products',
+          ],
+          objections: [
+            'Unverified grounding claims',
+          ],
+          commercial_profile: {
+            monthly_budget_bdt: 2500,
+            price_sensitivity: 'Low',
+            payment_preference: 'Corporate Credit Card',
+            willingness_to_pay: '৳2000–৳3500 / month',
+          },
+          technology_profile: {
+            primary_devices: ['MacBook Pro', 'iPhone 15 Pro'],
+            platforms: ['Slack', 'Linear', 'Notion'],
+            familiarity: 'High',
+          },
+          evidence_citations: [
+            {
+              claim_id: 'clm_3',
+              claim_text: 'Product leaders prioritize evidence-backed synthetic interviews over manual recruiting.',
+              category: 'demand_validation',
+              confidence: 0.95,
+            },
+          ],
+          dataset_refs: [
+            { variable: 'monthly_budget', value: 2500, source: 'Empirical Segment Distribution' },
+          ],
+          grounding_score: 0.96,
+          confidence: 0.92,
+          validation_warnings: [],
+          is_synthetic: true,
+          created_at: new Date().toISOString(),
+        },
+      ],
+      total: 3,
+      represented_segments: 2,
+      average_grounding_score: 0.94,
+    };
+  },
+
+  async getStudyPersonaDetail(studyId: string, personaId: string): Promise<SyntheticPersona> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/personas/${personaId}`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    const list = await this.getStudyPersonas(studyId);
+    const found = list.personas.find((p) => p.id === personaId);
+    if (found) return found;
+    throw new Error('Persona not found');
+  },
+
+  async generateSyntheticPersonas(
+    studyId: string,
+    payload: GeneratePersonasPayload
+  ): Promise<{ run: PersonaGenerationRun; personas: SyntheticPersona[] }> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/personas/generate`, {
+          method: 'POST',
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    const list = await this.getStudyPersonas(studyId);
+    return {
+      run: {
+        id: `pgen_${Date.now()}`,
+        study_id: studyId,
+        status: 'completed',
+        configuration: {
+          personas_per_segment: payload.personas_per_segment || 2,
+          target_count: payload.target_count || 4,
+          distribution_strategy: payload.distribution_strategy || 'population_weighted',
+        },
+        target_count: payload.target_count || 4,
+        generated_count: list.personas.length,
+        valid_count: list.personas.length,
+        warning_count: 0,
+        dataset_versions: [{ dataset_id: 'ds_1', name: 'Empirical Study Dataset', content_hash: 'dshash_123', row_count: 1200 }],
+        evidence_snapshot: { claim_count: 6, top_claims: [{ id: 'clm_1', claim_text: 'Verified market claims' }] },
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      },
+      personas: list.personas,
+    };
+  },
+
+  async regenerateStudyPersona(studyId: string, personaId: string): Promise<SyntheticPersona> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/personas/${personaId}/regenerate`, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    const persona = await this.getStudyPersonaDetail(studyId, personaId);
+    return {
+      ...persona,
+      version: persona.version + 1,
+      name: `${persona.name} (v${persona.version + 1})`,
+      updated_at: new Date().toISOString(),
+    };
+  },
+
+  async listStudyPersonaRuns(studyId: string): Promise<{ runs: PersonaGenerationRun[] }> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/persona-runs`, {
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return await res.json();
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+
+    return {
+      runs: [
+        {
+          id: 'pgen_mock_1',
+          study_id: studyId,
+          status: 'completed',
+          configuration: {
+            personas_per_segment: 2,
+            target_count: 4,
+            distribution_strategy: 'population_weighted',
+          },
+          target_count: 4,
+          generated_count: 4,
+          valid_count: 4,
+          warning_count: 0,
+          dataset_versions: [{ dataset_id: 'ds_1', name: 'Empirical Study Dataset', content_hash: 'dshash_123', row_count: 1200 }],
+          evidence_snapshot: { claim_count: 6, top_claims: [{ id: 'clm_1', claim_text: 'Verified market claims' }] },
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        },
+      ],
+    };
+  },
+
+  async deleteStudyPersonaRun(studyId: string, runId: string): Promise<void> {
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/studies/${studyId}/persona-runs/${runId}`, {
+          method: 'DELETE',
+          headers: this.getAuthHeaders(),
+        });
+        if (res.ok) {
+          lastKnownLive = true;
+          return;
+        }
+      } catch {
+        lastKnownLive = false;
+      }
+    }
+  },
 };
+
 
 
 
