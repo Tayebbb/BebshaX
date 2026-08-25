@@ -20,15 +20,108 @@ export interface QuoteHighlight {
   sentiment: 'positive' | 'neutral' | 'negative';
 }
 
+export interface EvidenceFinding {
+  title: string;
+  claim: string;
+  confidence: number;
+  source: string;
+}
+
+export interface DatasetFinding {
+  name: string;
+  insight: string;
+  variables: string[];
+}
+
+export interface MarketSegmentSummary {
+  name: string;
+  percentage: number;
+  description: string;
+}
+
+export interface PersonaOverviewItem {
+  name: string;
+  archetype: string;
+  segment: string;
+  key_takeaway: string;
+  grounding_score?: number;
+}
+
+export interface InterviewFinding {
+  topic: string;
+  finding: string;
+  supporting_personas: string[];
+  turn_citations: string[];
+}
+
+export interface PainPointItem {
+  pain_point: string;
+  severity: string;
+  frequency: string;
+}
+
+export interface CustomerNeedItem {
+  need: string;
+  priority: string;
+  context: string;
+}
+
+export interface BehavioralResultItem {
+  test_type: string;
+  scenario: string;
+  decision: string;
+  average_likelihood: number;
+  key_objection: string;
+  key_motivator: string;
+}
+
+export interface PricingSignalItem {
+  price_point: string;
+  sentiment: string;
+  acceptable_range: string;
+}
+
 export interface StudyReport {
+  id?: string;
+  study_id?: string;
+  user_id?: string;
+  version?: number;
+  title?: string;
   executive_summary: string;
   key_findings: string[];
-  sentiment_score: number; // e.g. 84 (%)
-  demand_signal: 'High' | 'Moderate' | 'Low';
-  quote_highlights: QuoteHighlight[];
+  target_market_summary?: string;
+  market_context_summary?: string;
+  evidence_findings?: EvidenceFinding[];
+  dataset_findings?: DatasetFinding[];
+  market_segments_summary?: MarketSegmentSummary[];
+  persona_overview?: PersonaOverviewItem[];
+  interview_findings?: InterviewFinding[];
+  major_pain_points?: PainPointItem[];
+  customer_needs?: CustomerNeedItem[];
+  behavioral_results?: BehavioralResultItem[];
+  pricing_signals?: PricingSignalItem[];
+  major_risks?: string[];
+  opportunities?: string[];
+  strongest_segments?: string[];
   recommendations: string[];
-  completed_personas_count: number;
-  avg_interview_turns: number;
+  validation_summary?: string;
+  limitations?: string;
+  metrics?: {
+    total_interviews?: number;
+    total_personas?: number;
+    total_claims?: number;
+    confidence_score?: number;
+    demand_score?: number;
+    [key: string]: any;
+  };
+  sentiment_score?: number;
+  demand_signal?: 'High' | 'Moderate' | 'Low';
+  quote_highlights?: QuoteHighlight[];
+  completed_personas_count?: number;
+  avg_interview_turns?: number;
+  is_synthetic?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface StudyInterview {

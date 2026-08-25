@@ -28,14 +28,12 @@ import {
 interface SegmentationViewProps {
   studyId: string;
   onNavigateToEvidence?: () => void;
-  onNavigateToDatasets?: () => void;
   onProceedToPersonas?: (selectedSegmentId?: string) => void;
 }
 
 export const SegmentationView: React.FC<SegmentationViewProps> = ({
   studyId,
   onNavigateToEvidence,
-  onNavigateToDatasets,
   onProceedToPersonas,
 }) => {
   const [readiness, setReadiness] = useState<SegmentationReadiness | null>(null);
@@ -478,14 +476,6 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             Run segmentation above or upload empirical study data to discover meaningful customer clusters.
           </p>
           <div className="flex items-center justify-center gap-3">
-            {onNavigateToDatasets && (
-              <button
-                onClick={onNavigateToDatasets}
-                className="px-4 py-2 rounded-lg bg-[#111616] border border-[#202727] text-xs text-teal-400 hover:border-teal-500 transition-colors"
-              >
-                Connect Data Lab
-              </button>
-            )}
             {onNavigateToEvidence && (
               <button
                 onClick={onNavigateToEvidence}

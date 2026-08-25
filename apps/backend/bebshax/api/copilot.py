@@ -580,7 +580,6 @@ async def generate_study_personas(body: GeneratePersonasRequest, request: Reques
     llm_router = getattr(request.app.state, "llm_router", None)
     study_prompt = body.study_prompt or "General product/service research study"
     selected_roles = [r for r in body.roles if r.selected or r.count > 0]
-
     if not selected_roles:
         selected_roles = body.roles[:3] if body.roles else []
 
@@ -588,20 +587,57 @@ async def generate_study_personas(body: GeneratePersonasRequest, request: Reques
 
     if llm_router is not None and selected_roles:
         for role in selected_roles:
-            count = max(1, min(role.count, 5))  # cap at 5 per role for performance
+            count = max(1, min(role.count, 5))
             try:
                 personas = await _generate_persona_via_llm(llm_router, role, study_prompt, count)
                 all_personas.extend(personas)
             except Exception:
-                # Fallback: generate a skeleton persona for this role
                 all_personas.append(_make_skeleton_persona(role, study_prompt))
-        if all_personas:
-            return all_personas
 
-    # Full fallback: return generic skeletons
-    if not selected_roles:
-        return []
-    return [_make_skeleton_persona(r, study_prompt) for r in selected_roles[:5]]
+    if not all_personas:
+        all_personas = [_make_skeleton_persona(r, study_prompt) for r in selected_roles[:5]]
+
+    # If study_id provided, persist personas into DB Personas table and update Studies record
+    db_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
+    if db_sessionmaker and body.study_id and all_personas:
+        try:
+            async with db_sessionmaker() as db_session:
+                from bebshax.db.models import Personas, Studies
+                study = await db_session.get(Studies, body.study_id)
+                for p in all_personas:
+                    p_id = p.get("id") or f"per_{uuid.uuid4().hex[:12]}"
+                    p["id"] = p_id
+                    p["study_id"] = body.study_id
+                    existing = await db_session.get(Personas, p_id)
+                    if not existing:
+                        db_p = Personas(
+                            id=p_id,
+                            study_id=body.study_id,
+                            user_id=study.user_id if study else None,
+                            name=p.get("name", "Target User"),
+                            status="active",
+                            version=1,
+                            generation_model=p.get("generation_model", "copilot/llm"),
+                            archetype=p.get("archetype", p.get("role_title", "User")),
+                            demographics=p.get("demographics", {}),
+                            bio=p.get("description", ""),
+                            quote=p.get("tagline", ""),
+                            goals=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Goals"] or ["Efficiency", "Convenience"],
+                            needs=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Needs"] or ["Frictionless onboarding"],
+                            pain_points=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Pain Points"] or ["Manual workarounds", "High cost"],
+                            grounding_score=float(p.get("grounding_ratio", 0.92)),
+                        )
+                        db_session.add(db_p)
+                if study:
+                    study.personas_data = all_personas
+                    study.persona_ids = [p["id"] for p in all_personas]
+                    study.persona_count = len(all_personas)
+                    study.step = max(study.step or 1, 2)
+                await db_session.commit()
+        except Exception:
+            pass
+
+    return all_personas
 
 
 def _make_skeleton_persona(role: PersonaRoleSuggestion, study_prompt: str) -> dict[str, Any]:

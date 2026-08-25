@@ -3,7 +3,6 @@ import {
   PenSquare,
   LayoutGrid,
   Contact2,
-  Database,
   ChevronDown,
   ChevronRight,
   PanelLeft,
@@ -19,7 +18,6 @@ import { StudiesDashboardView } from './views/StudiesDashboardView';
 import { PersonaLibraryView } from './views/PersonaLibraryView';
 import { StudyWorkflowView } from './views/StudyWorkflowView';
 import { ModelRouterView } from './views/ModelRouterView';
-import { DatasetSourcesView } from './views/DatasetSourcesView';
 import { EvidenceLaboratoryView } from './views/EvidenceLaboratoryView';
 import { SegmentationView } from './views/SegmentationView';
 import { InterviewsView } from './views/InterviewsView';
@@ -42,7 +40,6 @@ export type DashboardTab =
   | 'behavioral-tests'
   | 'behavioral-test-detail'
   | 'behavioral-compare'
-  | 'datasets'
   | 'router'
   | 'study-workflow'
   | 'evidence'
@@ -103,7 +100,7 @@ const parseDashboardPath = (path: string): {
     return { tab: 'evidence', studyId };
   }
   if (path.startsWith('/dataset') || path.startsWith('/data-sources')) {
-    return { tab: 'datasets' };
+    return { tab: 'dashboard' };
   }
   if (path.startsWith('/persona-library') || path.startsWith('/personas')) {
     return { tab: 'personas' };
@@ -231,7 +228,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     else if (tab === 'personas') navigate('/persona-library');
     else if (tab === 'interviews') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`);
     else if (tab === 'behavioral-tests') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests`);
-    else if (tab === 'datasets') navigate('/datasets');
     else if (tab === 'router') navigate('/router');
     else if (tab === 'study-workflow') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
   };
@@ -296,11 +292,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       id: 'behavioral-tests' as DashboardTab,
       label: 'Behavioral Testing',
       icon: <Sliders size={16} />,
-    },
-    {
-      id: 'datasets' as DashboardTab,
-      label: 'Dataset Sources',
-      icon: <Database size={16} />,
     },
   ];
 
@@ -855,7 +846,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               setShowCreateBehavioralModal(true);
             }}
             onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}
-            onNavigateToDatasets={() => navigate('/datasets')}
             onNavigateToSegmentation={() => navigate(`/research/${activeStudyId || 'study_default'}/segmentation`)}
           />
         )}
@@ -922,8 +912,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           />
         )}
 
-        {activeTab === 'datasets' && <DatasetSourcesView />}
-
         {activeTab === 'router' && <ModelRouterView />}
 
         {activeTab === 'study-workflow' && (
@@ -949,7 +937,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             <SegmentationView
               studyId={activeStudyId || 'study_default'}
               onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}
-              onNavigateToDatasets={() => navigate(`/datasets`)}
               onProceedToPersonas={() => {
                 navigate(`/research/${activeStudyId || 'study_default'}/step3`);
               }}

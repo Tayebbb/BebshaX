@@ -28,7 +28,6 @@ interface PersonaLibraryViewProps {
   onStartInterviewWithPersona?: (personaId: string) => void;
   onTestBehaviorWithPersona?: (personaId: string) => void;
   onNavigateToEvidence?: () => void;
-  onNavigateToDatasets?: () => void;
   onNavigateToSegmentation?: () => void;
 }
 
@@ -37,7 +36,6 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   onStartInterviewWithPersona,
   onTestBehaviorWithPersona,
   onNavigateToEvidence,
-  onNavigateToDatasets: _onNavigateToDatasets,
   onNavigateToSegmentation: _onNavigateToSegmentation,
 }) => {
   // Studies and active context

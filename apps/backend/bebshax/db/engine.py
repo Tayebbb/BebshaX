@@ -98,13 +98,23 @@ async def init_database(
     from bebshax.db.models import (  # noqa: F401
         Base,
         Businesses,
+        DatasetCandidates,
         DatasetPersonaRuns,
         DatasetSources,
+        EvidenceChunks,
+        EvidenceClaims,
+        EvidenceSources,
         LLMRequests,
+        MarketSegments,
         ModelRegistry,
+        PersonaGenerationRuns,
         Personas,
+        ResearchPlans,
+        ResearchRuns,
         SavedAudiences,
+        SegmentationRuns,
         Studies,
+        StudyReports,
     )
     from bebshax.behavioral.orm import (  # noqa: F401
         BehavioralInsights,

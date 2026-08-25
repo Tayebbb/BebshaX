@@ -1022,7 +1022,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
             ) : (
               <button
                 onClick={handleRunSimulation}
-                disabled={isSubmitting || getActivePersonaCount() === 0}
+                disabled={isSubmitting || (populationType === 'selected_personas' && selectedPersonaIds.length === 0)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',

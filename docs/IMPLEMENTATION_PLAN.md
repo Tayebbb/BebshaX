@@ -611,5 +611,31 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 **Tests:** 16/16 frontend test suites passed (72/72 tests green); 195/195 backend pytest tests green; Vite build complete.
 
+### Master Workflow Implementation & End-to-End Product Rebuild (2026-08-26)
+
+- **Objective:** Rebuilt BebshaX into a complete, unified end-to-end research platform. Connected every stage of the pipeline: Prompt Input → Context Refinement & Evidence Gathering → Grounded Persona Generation → Dynamic Script Questions → Synthetic Interviews & Transcripts → Structured Insights & Behavioral Testing → 20-Section Comprehensive Decision Report.
+- **Database & Backend Architecture:**
+  - Added `StudyReports` database model (`apps/backend/bebshax/db/models.py`) with 20 sections, JSON schema enforcement, multi-versioning, metrics, and timestamps.
+  - Added Alembic migration `e7f1a2b3c4d5_add_study_reports_table.py`.
+  - Created `StudyReportService` (`apps/backend/bebshax/research/report_service.py`) utilizing `LLMService` with `TaskType.REPORT_GENERATION` and deterministic grounded fallback.
+  - Added study endpoints (`apps/backend/bebshax/api/studies.py`):
+    - `POST /api/studies/{study_id}/reports/generate` (Versioned report generation)
+    - `GET /api/studies/{study_id}/reports` (List versions with IDOR enforcement)
+    - `GET /api/studies/{study_id}/reports/latest` (Retrieve latest study report)
+    - `GET /api/studies/{study_id}/reports/{report_id}` (Get specific version)
+    - `POST /api/studies/{study_id}/script/generate` (Dynamic interview question generation)
+    - `POST /api/studies/{study_id}/research/run` (Autonomous background research trigger)
+  - Added batch synthetic interview execution endpoint `POST /api/studies/{study_id}/interviews/batch-run` (`apps/backend/bebshax/api/interviews.py`) running multi-persona simulations with persisted conversation turns and turn provenance numbers.
+  - Added PostgreSQL persistence in `generate_study_personas` (`apps/backend/bebshax/api/copilot.py`).
+- **Frontend & Master Workflow UI:**
+  - Completely redesigned `StudyWorkflowView.tsx` into a 5-step stepper (`Context` → `Personas` → `Script` → `Interviews` → `Report`) in a sleek Teal/Cyan theme.
+  - Completely removed obsolete manual "Dataset Sources" navigation and views per the automated research directive.
+  - Integrated live Copilot dialogue, automated role suggestions, grounded persona cards with attribute and provenance inspection, dynamic script generation with full question editing, batch multi-persona interviews with live transcripts, and rich 20-section report synthesis with markdown export.
+- **Verification & Testing:**
+  - Backend: `apps/backend/tests/test_study_reports_and_master_workflow.py` testing report generation, versioning, IDOR authorization, dynamic scripts, and batch interviews (**198/198 pytest tests green**).
+  - Adapter boundary test `apps/backend/tests/llm/test_boundary.py` verified (**R1 compliance preserved**).
+  - Frontend: All 16 vitest test suites passed (**71/71 tests green**).
+  - Frontend production bundle build verified (`npm run build` green).
+
 
 

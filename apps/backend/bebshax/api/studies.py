@@ -11,8 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
 from bebshax.api.auth import get_optional_current_user
-from bebshax.db.models import Studies, SavedAudiences
+from bebshax.db.models import Studies, SavedAudiences, StudyReports
 from bebshax.utils.title_generator import generate_deterministic_study_title
+from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+from bebshax.research.report_service import StudyReportService
 
 router = APIRouter(tags=["studies"])
 
@@ -116,6 +118,48 @@ def _serialize_audience(a: SavedAudiences) -> dict[str, Any]:
         "created_at": a.created_at.isoformat() if a.created_at else datetime.now(timezone.utc).isoformat(),
         "updated_at": a.updated_at.isoformat() if a.updated_at else datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _serialize_report(r: StudyReports) -> dict[str, Any]:
+    return {
+        "id": r.id,
+        "study_id": r.study_id,
+        "user_id": r.user_id,
+        "version": r.version,
+        "title": r.title,
+        "executive_summary": r.executive_summary,
+        "key_findings": r.key_findings or [],
+        "target_market_summary": r.target_market_summary,
+        "market_context_summary": r.market_context_summary,
+        "evidence_findings": r.evidence_findings or [],
+        "dataset_findings": r.dataset_findings or [],
+        "market_segments_summary": r.market_segments_summary or [],
+        "persona_overview": r.persona_overview or [],
+        "interview_findings": r.interview_findings or [],
+        "major_pain_points": r.major_pain_points or [],
+        "customer_needs": r.customer_needs or [],
+        "behavioral_results": r.behavioral_results or [],
+        "pricing_signals": r.pricing_signals or [],
+        "major_risks": r.major_risks or [],
+        "opportunities": r.opportunities or [],
+        "strongest_segments": r.strongest_segments or [],
+        "recommendations": r.recommendations or [],
+        "validation_summary": r.validation_summary,
+        "limitations": r.limitations,
+        "metrics": r.metrics or {},
+        "is_synthetic": r.is_synthetic,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    }
+
+
+class GenerateReportRequest(BaseModel):
+    title: Optional[str] = None
+
+
+class GenerateScriptRequest(BaseModel):
+    prompt: Optional[str] = None
+    question_count: int = Field(default=5, ge=3, le=10)
 
 
 def _user_owns_study(study: Studies, current_user: Optional[Users]) -> bool:
@@ -385,3 +429,224 @@ async def delete_audience(
     await session.delete(audience)
     await session.commit()
     return {"success": True, "deleted_id": audience_id}
+
+
+# ============================================================================
+# Dynamic Script Questions Generation
+# ============================================================================
+
+@router.post("/studies/{study_id}/script/generate")
+async def generate_script_questions(
+    study_id: str,
+    payload: Optional[GenerateScriptRequest] = None,
+    request: Request = None,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Generate dynamic, context-specific interview script questions for a study."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized for this study")
+
+    prompt = (payload and payload.prompt) or study.prompt or study.title or "Business Idea"
+    target_aud = study.target_audience or "Target User"
+    pricing = study.pricing_hypothesis or "Market Pricing"
+    q_count = (payload and payload.question_count) or 5
+
+    llm_service = getattr(request.app.state, "llm_service", None) if request else None
+
+    generated_questions = []
+    if llm_service:
+        try:
+            sys_prompt = (
+                "You are BebshaX Research Script Architect. Generate high-impact, open-ended qualitative "
+                "interview questions for validating a customer discovery hypothesis. "
+                "Do not ask leading questions. Focus on discovering current habits, existing workarounds, "
+                "frustrations, willingness to pay, and decision-making criteria. "
+                "Return ONLY a JSON array of strings, e.g. [\"Question 1\", \"Question 2\", ...]."
+            )
+            user_msg = (
+                f"Business Idea: {prompt}\n"
+                f"Target Audience: {target_aud}\n"
+                f"Pricing Hypothesis: {pricing}\n"
+                f"Generate exactly {q_count} sequential interview questions in JSON array format."
+            )
+            req = LLMRequest(
+                task=TaskType.INTERVIEW_PROBING,
+                messages=[
+                    ChatMessage(role="system", content=sys_prompt),
+                    ChatMessage(role="user", content=user_msg),
+                ],
+                json_mode=True,
+                temperature=0.4,
+            )
+            res = await llm_service.complete(req)
+            import json, re
+            cleaned = res.text.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
+                cleaned = re.sub(r"\n?```$", "", cleaned).strip()
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list) and len(parsed) >= 2:
+                generated_questions = [str(q).strip() for q in parsed if str(q).strip()]
+            elif isinstance(parsed, dict) and "questions" in parsed and isinstance(parsed["questions"], list):
+                generated_questions = [str(q).strip() for q in parsed["questions"] if str(q).strip()]
+        except Exception:
+            pass
+
+    if not generated_questions:
+        generated_questions = [
+            f"How do you currently handle tasks related to {prompt}, and what is the most frustrating part of that process?",
+            f"What other tools, services, or manual workarounds have you tried, and why did they fall short?",
+            f"If an automated solution solved this completely for you, how would that change your daily or weekly workflow?",
+            f"When considering a solution like this at {pricing}, what would make it an immediate yes vs an easy pass?",
+            "What potential concerns or hesitations would you have before trusting this in your daily routine?",
+        ]
+
+    study.script_questions = generated_questions
+    study.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+
+    return {
+        "study_id": study_id,
+        "questions": generated_questions,
+        "count": len(generated_questions),
+    }
+
+
+# ============================================================================
+# Autonomous Research Trigger & Status
+# ============================================================================
+
+@router.post("/studies/{study_id}/research/run")
+async def trigger_study_research(
+    study_id: str,
+    request: Request = None,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Trigger autonomous research and dataset discovery for a study in background."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized for this study")
+
+    research_engine = getattr(request.app.state, "research_engine", None) if request else None
+    if not research_engine:
+        # Fallback inline engine if not registered
+        from bebshax.research.service import ResearchEngineService
+        llm_service = getattr(request.app.state, "llm_service", None) if request else None
+        vector_engine = getattr(request.app.state, "vector_engine", None) if request else None
+        research_engine = ResearchEngineService(session=session, llm_service=llm_service, vector_engine=vector_engine)
+
+    effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
+    run = await research_engine.run_study_research(
+        study_id=study_id,
+        user_id=effective_user_id,
+        business_idea=study.prompt or study.title or "Business Idea",
+        target_market=study.target_audience or "Target Market",
+    )
+
+    return {
+        "run_id": run.id,
+        "study_id": study_id,
+        "status": run.status,
+        "source_count": run.source_count,
+        "claim_count": run.claim_count,
+        "dataset_candidate_count": run.dataset_candidate_count,
+    }
+
+
+# ============================================================================
+# Comprehensive Study Reports Persistence & Generation
+# ============================================================================
+
+@router.get("/studies/{study_id}/reports")
+async def list_study_reports(
+    study_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict[str, Any]]:
+    """List all report versions for a study."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized for this study")
+
+    stmt = select(StudyReports).where(StudyReports.study_id == study_id).order_by(StudyReports.version.desc())
+    reports = list((await session.execute(stmt)).scalars().all())
+    return [_serialize_report(r) for r in reports]
+
+
+@router.get("/studies/{study_id}/reports/latest")
+async def get_latest_study_report(
+    study_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Get the latest report version for a study."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized for this study")
+
+    stmt = select(StudyReports).where(StudyReports.study_id == study_id).order_by(StudyReports.version.desc()).limit(1)
+    report = (await session.execute(stmt)).scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail=f"No reports generated for study '{study_id}' yet")
+    return _serialize_report(report)
+
+
+@router.get("/studies/{study_id}/reports/{report_id}")
+async def get_study_report_by_id(
+    study_id: str,
+    report_id: str,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Get a specific report version by ID."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized for this study")
+
+    report = await session.get(StudyReports, report_id)
+    if not report or report.study_id != study_id:
+        raise HTTPException(status_code=404, detail=f"Report '{report_id}' not found for study '{study_id}'")
+    return _serialize_report(report)
+
+
+@router.post("/studies/{study_id}/reports/generate", status_code=status.HTTP_201_CREATED)
+async def generate_study_report(
+    study_id: str,
+    payload: Optional[GenerateReportRequest] = None,
+    request: Request = None,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Synthesize and persist a comprehensive research report for the study."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized for this study")
+
+    llm_service = getattr(request.app.state, "llm_service", None) if request else None
+    report_service = StudyReportService(session=session, llm_service=llm_service)
+
+    effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
+    custom_title = payload.title if payload else None
+
+    report = await report_service.generate_report(
+        study_id=study_id,
+        user_id=effective_user_id,
+        custom_title=custom_title,
+    )
+
+    return _serialize_report(report)
