@@ -1,5 +1,7 @@
 """FastAPI application entry point: `uvicorn bebshax.main:app`."""
 
+import logging
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -21,6 +23,7 @@ from bebshax.db.models import Base, Businesses, LLMRequests, ModelRegistry, Pers
 from bebshax.db.sink import ProvenanceSink
 from bebshax.interview.engine import InterviewEngine
 from bebshax.interview.orm import Conversations, ConversationTurns
+from bebshax.llm.adapters.base import ProviderAdapter
 from bebshax.llm.adapters.factory import (
     build_default_adapters,
     build_embedding_backend,
@@ -30,6 +33,33 @@ from bebshax.memory.service import MemoryService
 from bebshax.persona.evidence import EvidenceStore
 from bebshax.persona.generation import PersonaEngine
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
+
+logger = logging.getLogger(__name__)
+
+
+async def warn_if_local_tier_down(adapters: Mapping[str, ProviderAdapter]) -> bool:
+    """H2: the emergency pool is local-first — losing Ollama must be loud, not silent.
+
+    Returns True when the local tier is up (has ≥1 route).
+    """
+    ollama = adapters.get("ollama")
+    if ollama is None:
+        logger.warning("local tier: no 'ollama' adapter registered — EMERGENCY_FALLBACK has no local route")
+        return False
+    try:
+        candidates = await ollama.candidates()
+    except Exception as exc:  # candidates() is defensive, but never let startup die here
+        logger.warning("local tier: Ollama candidate discovery failed (%s)", exc)
+        return False
+    if not candidates:
+        logger.warning(
+            "local tier DOWN: Ollama daemon unreachable or has no models — "
+            "EMERGENCY_FALLBACK has no local route and the offline drill will fail. "
+            "Start it with `ollama serve`."
+        )
+        return False
+    logger.info("local tier up: %d Ollama model(s) available", len(candidates))
+    return True
 
 
 @asynccontextmanager
@@ -41,6 +71,7 @@ async def _lifespan(app: FastAPI):
     sink = ProvenanceSink(sessionmaker_)  # fail-soft: DB issues never fail LLM calls
     await sink.start()
     llm_router = PoolRouter(adapters, on_provenance=sink)
+    app.state.local_tier_up = await warn_if_local_tier_down(adapters)
 
     app.state.llm_adapters = adapters
     app.state.llm_router = llm_router

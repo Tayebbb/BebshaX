@@ -98,6 +98,7 @@ Low answer quality is deliberately absent — it is handled by the evaluation la
 
 - **Finding:** with VS Code + browser + Docker running, free RAM sits near 1–2 GB, so the 6.6 GB model cannot load (`"model requires more system memory (1.8 GiB) than is available"` was observed even for the 2.5 GB model until WSL was shut down). The fully-GPU-resident small models are therefore the _only_ dependable local tier; `qwen3.5` remains installed but the router's TIMEOUT/SERVER_ERROR policies simply advance past it when it fails.
 - Ops note: `wsl --shutdown` frees the Docker VM's RAM when the local tier is needed and Docker isn't (Docker restarts on demand for Phase 6 work).
+- Ops note (H2, 2026-08-26): the Ollama daemon has **no autostart** on the dev machine — after a reboot run `ollama serve` (or launch the desktop app). The backend logs a startup WARNING and sets `app.state.local_tier_up=False` when the local tier contributes no routes.
 
 ## Verification
 

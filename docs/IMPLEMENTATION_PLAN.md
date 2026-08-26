@@ -53,6 +53,13 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — H2: local Ollama tier restored + loud startup probe
+
+- Ops: daemon started and verified live (`smoke_ollama.py` → SMOKE OK via `ollama/llama3.2:3b`); **no autostart exists** — ops note added to docs/ROUTING.md.
+- `main.py` lifespan now runs `warn_if_local_tier_down()`: WARNING + `app.state.local_tier_up=False` when the local tier has zero routes (emergency pool is local-first, so silence was the H2 failure mode).
+- Tests: `test_local_tier_warning.py` (4 cases incl. discovery-exception path), wiring assertion in `test_app_wiring.py`, and a new suite-wide `tests/conftest.py` autouse fixture pinning `OLLAMA_API_BASE` to an unroutable port — the unit suite is now hermetic w.r.t. a locally running daemon.
+- Audit H2 ticked (assignments + fix log). Suite: 204 passed.
+
 ### Maintenance (2026-08-26) — Conformance sweep: B1 fixed, phantom TaskType, llm_service wiring, R3 re-route, router validation restored
 
 Owner instruction: keep the OpenRouter adapter/pool position **for testing purposes only**; fix everything else flagged by the conformance check.
