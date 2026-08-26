@@ -9,9 +9,12 @@ import re
 import random
 import uuid
 from typing import Any, Literal, Optional
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from bebshax.api.auth import get_optional_current_user
+from bebshax.api.studies import _user_owns_study
+from bebshax.auth.models import Users
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
 logger = logging.getLogger(__name__)
@@ -587,8 +590,23 @@ async def _generate_persona_via_llm(
 
 
 @router.post("/study/generate-personas", response_model=list[dict[str, Any]])
-async def generate_study_personas(body: GeneratePersonasRequest, request: Request) -> list[dict[str, Any]]:
+async def generate_study_personas(
+    body: GeneratePersonasRequest,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+) -> list[dict[str, Any]]:
     """Generates and grounds synthetic personas conditioned on study prompt and selected roles via LLM."""
+    # Ownership gate BEFORE any LLM spend or writes: a client-supplied
+    # study_id must never inject personas into another tenant's study.
+    if body.study_id:
+        gate_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
+        if gate_sessionmaker:
+            from bebshax.db.models import Studies
+            async with gate_sessionmaker() as gate_session:
+                study_row = await gate_session.get(Studies, body.study_id)
+            if study_row is not None and not _user_owns_study(study_row, current_user):
+                raise HTTPException(status_code=404, detail="study not found")
+
     llm_router = getattr(request.app.state, "llm_router", None)
     study_prompt = body.study_prompt or "General product/service research study"
     selected_roles = [r for r in body.roles if r.selected or r.count > 0]

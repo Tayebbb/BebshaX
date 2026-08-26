@@ -74,15 +74,14 @@ def _serialize_segment(s: MarketSegments) -> dict[str, Any]:
 
 
 async def _verify_study_access(session: AsyncSession, study_id: str, current_user: Optional[Users]) -> Studies:
-    """Verify study exists and caller has access. Return 404 for unowned studies."""
+    """Verify study exists and caller has access. Return 404 for unowned studies.
+
+    Delegates to the canonical `_user_owns_study` rule — anonymous callers
+    only pass for demo / anonymous-tenant studies (never any owned study).
+    """
     study_res = await session.execute(select(Studies).where(Studies.id == study_id))
     study = study_res.scalars().first()
-    if not study:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Study '{study_id}' not found.",
-        )
-    if current_user and study.user_id and study.user_id != current_user.id:
+    if not study or not _user_owns_study(study, current_user):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Study '{study_id}' not found.",

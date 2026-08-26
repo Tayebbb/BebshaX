@@ -54,6 +54,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 ## Implementation log
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
+<<<<<<< HEAD
 ### Maintenance (2026-08-27) — H3 piece 2: personas carry an honest cached/live label
 
 - **Audit item:** 🟠 **H3**, the last open item on the Sazid track. Pieces 1 and 3 landed 2026-08-26; this is piece 2 — the `"cached"` labelling the audit called "the spec's core honesty requirement".
@@ -89,6 +90,11 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - **Suite (from the repo root):** 345 passed, 1 failed, 3 deselected. The failure — `test_study_reports_and_master_workflow.py::test_dynamic_script_and_batch_interviews`, `assert 2 >= 4` — **predates this change and is unrelated to it**; it is in the interview/study area last touched by `e5b4081` (B6 Stage 2 fallout repair). Left for its owner rather than patched from outside the lane.
 - **Doc repairs in the same commit:** restored the **H8** row, which had been deleted from the Sazid section of AUDIT_ASSIGNMENTS.md although the fix landed 2026-08-26 (the section listed 10 items under an "(11)" heading and `L6`'s "pairs with Sazid's H8" pointed at nothing). Progress table corrected 6 → 10 for Sazid and 31 → 35 overall, to match the section's own checkboxes.
 - **Remaining on the Sazid track:** H3 piece 2 (`"cached"` labelling) only. It cannot be closed unilaterally — it needs the response-shape agreement and the UI from Shehab.
+=======
+### Maintenance (2026-08-27) — API row-scoping hardening, B6 stage 3 complete (pipeline item 2/5)
+
+- Closed every gap from the tenancy audit: new `bebshax/tenancy.py` is the single policy table (`PUBLIC_OWNER_IDS`, `STUDY_ANON_OWNER_IDS`, `owner_accessible`, `allowed_owner_ids`) with the two deliberate deltas documented. Weak per-router `_verify_study_access` copies in datasets/segmentation now delegate to the canonical `_user_owns_study`; the `if user_id:` anonymous-collapse pattern is gone from `datasets/service.py` (`_tenant_filter` on list/get/delete/**refresh**) and `persona/store.py` list filters; `DELETE /audiences/{id}` enforces its (previously unused) auth dep; the 4 legacy conversation endpoints, `GET /personas/{id}(/memories)`, copilot `generate-personas` (gate BEFORE LLM spend), and `GET /provenance` (outerjoin to persona owners) are now owner-gated; client-supplied identity is dead — `POST/PATCH /studies` + `/audiences` stamp `user_id` from the token only, `?user_id=` list params are ignored, and PATCH mass-assignment excludes `id`/`user_id`. Anonymous demo mode keeps working via the shared pool (NULL/`usr_default`/`anonymous`/`usr_system_holder` rows). Verified by independent code-reviewer sub-agent over 2 rounds (7/10 → **PASS 9/10**; both round-1 HIGHs — refresh bypass, invisible `usr_default` imports — fixed + regression-pinned). 9-test hardening file added; the old integration test that codified `payload.user_id` spoofing rewritten to the token contract. 350 backend tests green, ruff clean. Merged with Sazid's concurrent B6 correction (`b62cc0f`: write endpoints now require strict auth → 401; my `_owner_accessible` gates retained on top). Follow-up noted: stamp `conv.user_id` at legacy conversation start; persona-delete orphans LLMRequests metadata into the shared pool.
+>>>>>>> aff9b67b4d9f132a23b00503e8f3ff21ec4d6b4f
 
 ### Maintenance (2026-08-27) — README refreshed to match shipped state (docs only)
 

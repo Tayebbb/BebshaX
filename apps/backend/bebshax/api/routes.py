@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from typing import Any, Optional
-from fastapi import APIRouter, Query, Request
-from sqlalchemy import select, func, desc
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import select, func, desc, or_
 
-from bebshax.db.models import LLMRequests
+from bebshax.api.auth import get_optional_current_user
+from bebshax.auth.models import Users
+from bebshax.db.models import LLMRequests, Personas
 from bebshax.llm.pools import POOLS
+from bebshax.tenancy import PUBLIC_OWNER_IDS
 
 router = APIRouter(tags=["routing"])
 
@@ -105,14 +108,32 @@ async def get_provenance(
     pool: Optional[str] = Query(default=None),
     persona_id: Optional[str] = Query(default=None),
     success: Optional[bool] = Query(default=None),
+    current_user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict[str, Any]:
-    """Query recent LLM provenance records from persistence sink."""
+    """Query recent LLM provenance records from persistence sink.
+
+    Tenant-scoped (B6 stage 3): rows tied to a persona are only visible to
+    that persona's owner; infra rows (no persona, or orphaned persona id)
+    and shared/system personas are visible to everyone.
+    """
     sessionmaker_ = getattr(request.app.state, "db_sessionmaker", None)
     if not sessionmaker_:
         return {"items": [], "total": 0}
 
     async with sessionmaker_() as session:
         query = select(LLMRequests).order_by(desc(LLMRequests.created_at))
+
+        # Same shared-owner set as every row-scoping rule (bebshax.tenancy).
+        scope_terms = [
+            LLMRequests.persona_id.is_(None),  # infra calls (health, eval)
+            Personas.id.is_(None),  # orphaned persona ids (deleted rows)
+            Personas.owner_id.in_(PUBLIC_OWNER_IDS),
+        ]
+        if current_user:
+            scope_terms.append(Personas.owner_id == current_user.id)
+        query = query.outerjoin(Personas, LLMRequests.persona_id == Personas.id).where(
+            or_(*scope_terms)
+        )
 
         if task:
             query = query.where(LLMRequests.task == task)
