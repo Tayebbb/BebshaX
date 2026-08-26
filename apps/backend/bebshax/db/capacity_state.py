@@ -114,3 +114,77 @@ async def load_todays_consumption(
     requests = {p: int(c) for p, c, _ in rows}
     tokens = {p: int(t or 0) for p, _, t in rows}
     return requests, tokens
+
+
+# Providers whose latency observations are NOT freellmpool routing targets:
+# "ollama" is the local adapter (never in the freellmpool catalog) and
+# "freellmpool" is the virtual name stamped on failed attempts before a
+# concrete serving provider is known. "openrouter" attempts stay IN — the
+# direct adapter hits the same upstream as freellmpool's openrouter targets,
+# so its measurements are valid signal for them.
+_NON_ROUTE_PROVIDERS = ("ollama", "freellmpool")
+
+
+async def load_recent_route_observations(
+    sessionmaker_: sessionmaker[AsyncSession],
+    days: int = 3,
+    limit: int = 500,
+    per_target_cap: int = 8,
+) -> list[tuple[str, str, float]]:
+    """Seed data for freellmpool's routing="fast" metrics: recent successful
+    per-target latency observations as (provider, model, latency_ms),
+    CHRONOLOGICAL so EWMA replay weights the newest measurements most.
+
+    Only successful attempts carry a concrete serving provider/model — failed
+    freellmpool attempts are stamped with the virtual "freellmpool/auto" and
+    cannot be attributed to a target, so failures are re-learned live (one
+    failure re-marks a target; BebshaX-level cooldowns also still apply).
+    `per_target_cap` keeps the NEWEST few observations per target so seeded
+    ok-counts can never dilute live failure signal — the "first live failure
+    re-marks a target" invariant stays true at any traffic volume.
+
+    Measurement seat: persisted attempt latency wraps the whole adapter call
+    including freellmpool's internal failover past dead targets, so a winning
+    target's seeded EWMA can be inflated by its predecessors' failures —
+    directionally correct, self-correcting live.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        async with sessionmaker_() as session:
+            rows = (
+                await session.execute(
+                    select(LLMRequests.created_at, LLMRequests.attempts)
+                    .where(
+                        LLMRequests.created_at >= cutoff,
+                        LLMRequests.success.is_(True),
+                    )
+                    .order_by(LLMRequests.created_at.desc())
+                    .limit(limit)
+                )
+            ).all()
+
+        # Walk newest→oldest applying the per-target cap, then flip to
+        # chronological for the EWMA replay.
+        capped: list[tuple[str, str, float]] = []
+        seen: dict[tuple[str, str], int] = {}
+        for _, attempts in rows:  # rows are newest-first
+            for a in attempts or []:
+                if not isinstance(a, dict) or not a.get("success"):
+                    continue
+                provider = a.get("provider")
+                model = a.get("model")
+                latency = a.get("latency_ms")
+                if not provider or not model or not isinstance(latency, (int, float)):
+                    continue
+                if provider in _NON_ROUTE_PROVIDERS:
+                    continue
+                key = (str(provider), str(model))
+                if seen.get(key, 0) >= per_target_cap:
+                    continue
+                seen[key] = seen.get(key, 0) + 1
+                capped.append((key[0], key[1], float(latency)))
+        capped.reverse()  # oldest → newest
+        return capped
+    except Exception:
+        logger.warning("route-latency seed failed — fast routing starts cold", exc_info=True)
+        return []

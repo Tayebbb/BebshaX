@@ -53,6 +53,23 @@ class FreellmpoolAdapter(ProviderAdapter):
             await self._pool.aclose()
             self._pool = None
 
+    async def seed_metrics(self, observations: list[tuple[str, str, float]]) -> int:
+        """Replay persisted per-target latency observations (provider, model,
+        latency_ms; CHRONOLOGICAL) into the pool's routing metrics, so
+        routing="fast" ranks by measured speed from the first request after
+        a restart instead of re-learning per process (fast-routing memory).
+
+        Success-only by design: failed attempts are stamped with the virtual
+        route and can't be attributed to a target; a stale-healthy target is
+        re-marked by its first live failure (the loader's per-target cap
+        keeps that invariant true). Returns observations applied.
+        """
+        pool = await self._get_pool()
+        for provider, model, latency_ms in observations:
+            # Metrics keys are freellmpool Target.name == "provider/model".
+            pool.metrics.record_success(f"{provider}/{model}", float(latency_ms))
+        return len(observations)
+
     async def candidates(self) -> list[RouteCandidate]:
         # supports_json=True: the pool contains JSON-capable targets; strict
         # response_format enforcement is refined with the Phase-5 registry.

@@ -183,6 +183,23 @@ async def _lifespan(app: FastAPI):
     cooldown_store = CooldownStore(sessionmaker_)
     initial_cooldowns = await cooldown_store.load_active()
 
+    # Fast-routing memory: freellmpool's routing="fast" ranks by in-process
+    # smoothed latency and forgets everything on restart — replay recent
+    # measured per-target latencies from llm_requests so the first request
+    # after boot already routes by evidence. Fail-soft: seeding problems
+    # must never block startup.
+    from bebshax.db.capacity_state import load_recent_route_observations
+
+    try:
+        _fl_adapter = adapters.get("freellmpool")
+        if _fl_adapter is not None and hasattr(_fl_adapter, "seed_metrics"):
+            _route_obs = await load_recent_route_observations(sessionmaker_)
+            if _route_obs:
+                _n = await _fl_adapter.seed_metrics(_route_obs)
+                logger.info("freellmpool fast-routing metrics seeded from %d observations", _n)
+    except Exception:
+        logger.warning("freellmpool metric seeding failed — fast routing starts cold", exc_info=True)
+
     def _on_provenance(record):
         try:
             ledger.record(record)
