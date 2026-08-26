@@ -1,0 +1,315 @@
+/* ==========================================================================
+   BebshaX New Study — cinematic study launcher (scoped ns-*)
+   Same design language as the interview workspace: layered darkness,
+   selective glass, mono kickers, rare teal accent, no cheap visuals.
+   ========================================================================== */
+
+.ns-root {
+  --ns-line: rgba(32, 39, 39, 0.9);
+  --ns-line-soft: rgba(32, 39, 39, 0.55);
+  --ns-accent: #14b8a6;
+  --ns-accent-line: rgba(20, 184, 166, 0.4);
+  --ns-accent-soft: rgba(20, 184, 166, 0.1);
+  --ns-text-dim: #8d9999;
+  --ns-text-faint: #5b6666;
+  --ns-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px 64px;
+  width: 100%;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Ambient depth — transform/opacity only */
+.ns-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.ns-ambient::before,
+.ns-ambient::after {
+  content: '';
+  position: absolute;
+  width: 55vmax;
+  height: 55vmax;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.13;
+  will-change: transform;
+}
+.ns-ambient::before {
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.55), transparent 65%);
+  top: -30vmax;
+  left: -12vmax;
+  animation: ns-drift-a 52s var(--ns-ease) infinite alternate;
+}
+.ns-ambient::after {
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.35), transparent 65%);
+  bottom: -32vmax;
+  right: -14vmax;
+  animation: ns-drift-b 64s var(--ns-ease) infinite alternate;
+}
+@keyframes ns-drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(7vmax, 6vmax, 0) scale(1.1); }
+}
+@keyframes ns-drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1.04); }
+  to   { transform: translate3d(-8vmax, -5vmax, 0) scale(0.96); }
+}
+
+.ns-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 980px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: ns-scene-in 0.7s var(--ns-ease) both;
+}
+@keyframes ns-scene-in {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Header */
+.ns-kicker {
+  font: 600 0.66rem var(--font-mono);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ns-text-faint);
+  margin-bottom: 14px;
+}
+.ns-title {
+  font: 700 clamp(2rem, 4vw, 2.9rem) 'Space Grotesk', var(--font-sans);
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+  margin: 0 0 12px;
+  text-align: center;
+  background: linear-gradient(135deg, #ffffff 30%, #99f6e4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.ns-sub {
+  font: 400 0.95rem/1.55 var(--font-sans);
+  color: var(--ns-text-dim);
+  margin: 0 0 34px;
+  text-align: center;
+}
+
+/* Error banner */
+.ns-error {
+  width: 100%;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 12px;
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #f87171;
+  font: 500 0.86rem var(--font-sans);
+  animation: ns-scene-in 0.3s var(--ns-ease) both;
+}
+
+/* Composer — frosted glass instrument */
+.ns-composer {
+  width: 100%;
+  border-radius: 22px;
+  border: 1px solid var(--ns-line);
+  background: rgba(13, 17, 17, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 22px 24px 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.25s var(--ns-ease), box-shadow 0.45s var(--ns-ease);
+  margin-bottom: 14px;
+}
+.ns-composer:focus-within {
+  border-color: var(--ns-accent-line);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(20, 184, 166, 0.18),
+    0 0 46px rgba(20, 184, 166, 0.08);
+}
+.ns-textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font: 400 1.02rem/1.6 var(--font-sans);
+  resize: none;
+  min-height: 76px;
+  caret-color: #2dd4bf;
+}
+.ns-textarea::placeholder { color: var(--ns-text-faint); }
+.ns-composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ns-line-soft);
+}
+.ns-hint {
+  font: 500 0.66rem var(--font-mono);
+  color: var(--ns-text-faint);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ns-kbd {
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--ns-line);
+  background: rgba(255, 255, 255, 0.03);
+  font: 600 0.62rem var(--font-mono);
+  color: var(--ns-text-dim);
+}
+.ns-send {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  border: none;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(140deg, #2dd4bf, #0d9488);
+  color: #041110;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.2s var(--ns-ease), box-shadow 0.2s var(--ns-ease), filter 0.2s var(--ns-ease);
+  box-shadow: 0 4px 16px rgba(20, 184, 166, 0.3);
+}
+.ns-send:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 6px 22px rgba(20, 184, 166, 0.42); }
+.ns-send:disabled {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ns-text-faint);
+  cursor: default;
+  box-shadow: none;
+}
+
+/* Example prompt chips */
+.ns-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+.ns-example {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ns-line-soft);
+  background: rgba(13, 17, 17, 0.55);
+  color: var(--ns-text-dim);
+  font: 500 0.74rem var(--font-sans);
+  cursor: pointer;
+  transition: color 0.2s var(--ns-ease), border-color 0.2s var(--ns-ease), background 0.2s var(--ns-ease);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ns-example:hover:not(:disabled) {
+  color: #5eead4;
+  border-color: var(--ns-accent-line);
+  background: var(--ns-accent-soft);
+}
+.ns-example:disabled { opacity: 0.4; cursor: default; }
+
+/* Study-type selector */
+.ns-section-label {
+  align-self: flex-start;
+  font: 600 0.64rem var(--font-mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ns-text-faint);
+  margin-bottom: 12px;
+}
+.ns-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(216px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+.ns-card {
+  position: relative;
+  text-align: left;
+  background: rgba(13, 17, 17, 0.6);
+  border: 1px solid var(--ns-line);
+  border-radius: 16px;
+  padding: 18px 17px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: inherit;
+  transition: background 0.22s var(--ns-ease), border-color 0.22s var(--ns-ease), box-shadow 0.22s var(--ns-ease);
+}
+.ns-card:hover { background: #111616; border-color: rgba(20, 184, 166, 0.3); }
+.ns-card.ns-selected {
+  background: var(--ns-accent-soft);
+  border-color: var(--ns-accent-line);
+  box-shadow: 0 4px 20px rgba(20, 184, 166, 0.1), inset 0 0 0 1px rgba(20, 184, 166, 0.12);
+}
+.ns-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.ns-card-title {
+  font: 600 0.92rem 'Space Grotesk', var(--font-sans);
+  color: #ffffff;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+}
+.ns-card-desc {
+  font: 400 0.76rem/1.5 var(--font-sans);
+  color: var(--ns-text-dim);
+  margin: 0;
+}
+.ns-check {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ns-accent);
+  color: #041110;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.22s var(--ns-ease), transform 0.22s var(--ns-ease);
+}
+.ns-card.ns-selected .ns-check { opacity: 1; transform: scale(1); }
+
+@media (max-width: 720px) {
+  .ns-root { padding: 26px 14px 44px; justify-content: flex-start; }
+  .ns-composer { padding: 16px 16px 12px; border-radius: 17px; }
+  .ns-hint { display: none; }
+  .ns-examples { margin-bottom: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ns-ambient::before,
+  .ns-ambient::after { animation: none !important; }
+  .ns-inner, .ns-error { animation-duration: 1ms !important; }
+}
