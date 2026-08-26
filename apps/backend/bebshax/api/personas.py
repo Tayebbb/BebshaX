@@ -59,6 +59,11 @@ class StudyGeneratePersonasRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _serialize_persona(p: Personas, segment_name: Optional[str] = None) -> dict[str, Any]:
+    detailed = getattr(p, "detailed_attributes", {}) or {}
+    commercial = p.commercial_profile or {}
+    domain_attrs = detailed.get("domain_attributes", {})
+    constraints = detailed.get("constraints") or commercial.get("constraints", {})
+
     return {
         "id": p.id,
         "study_id": p.study_id,
@@ -74,7 +79,9 @@ def _serialize_persona(p: Personas, segment_name: Optional[str] = None) -> dict[
         "tagline": getattr(p, "tagline", None),
         "country_code": getattr(p, "country_code", "BD") or "BD",
         "personality": getattr(p, "personality", {}) or {},
-        "detailed_attributes": getattr(p, "detailed_attributes", {}) or {},
+        "detailed_attributes": detailed,
+        "domain_attributes": domain_attrs,
+        "constraints": constraints,
         "demographics": p.demographics or {},
         "bio": p.bio,
         "quote": p.quote,
@@ -85,7 +92,7 @@ def _serialize_persona(p: Personas, segment_name: Optional[str] = None) -> dict[
         "preferences": p.preferences or [],
         "motivations": p.motivations or [],
         "objections": p.objections or [],
-        "commercial_profile": p.commercial_profile or {},
+        "commercial_profile": commercial,
         "technology_profile": p.technology_profile or {},
         "evidence_citations": p.evidence_citations or [],
         "dataset_refs": p.dataset_refs or [],
@@ -96,6 +103,7 @@ def _serialize_persona(p: Personas, segment_name: Optional[str] = None) -> dict[
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
+
 
 
 def _serialize_persona_run(r: PersonaGenerationRuns) -> dict[str, Any]:

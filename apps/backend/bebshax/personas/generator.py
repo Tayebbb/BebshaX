@@ -32,6 +32,8 @@ class GeneratedPersonaDraft(BaseModel):
         "neuroticism": 50,
     })
     detailed_attributes: dict[str, Any] = Field(default_factory=dict)
+    domain_attributes: dict[str, Any] = Field(default_factory=dict)
+    constraints: dict[str, Any] = Field(default_factory=dict)
     goals: list[str]
     needs: list[str]
     pain_points: list[str]
@@ -100,6 +102,186 @@ def calculate_segment_quotas(
                 quotas[sid] -= 1
 
     return quotas
+
+
+def detect_study_domain(study_context: dict[str, Any]) -> str:
+    """Intelligently determine business domain from study title, prompt, and audience."""
+    blob = (
+        str(study_context.get("title", "")) + " "
+        + str(study_context.get("prompt", "")) + " "
+        + str(study_context.get("target_audience", "")) + " "
+        + str(study_context.get("pricing_hypothesis", ""))
+    ).lower()
+
+    if any(w in blob for w in ["food", "delivery", "meal", "canteen", "restaurant", "dining", "lunch", "dinner", "hospital worker", "snack"]):
+        return "food_delivery"
+    if any(w in blob for w in ["saas", "software", "productivity", "workflow", "dashboard", "b2b", "automation", "notion", "spreadsheet", "project management"]):
+        return "saas_productivity"
+    if any(w in blob for w in ["fitness", "workout", "gym", "exercise", "health", "diet", "nutrition", "training", "wellness"]):
+        return "fitness_health"
+    if any(w in blob for w in ["exam", "student", "study", "prep", "university", "course", "learning", "tutor", "education", "edtech", "syllabus"]):
+        return "edtech_learning"
+    if any(w in blob for w in ["fintech", "payment", "bank", "wallet", "credit", "loan", "investment", "ecommerce", "shopping", "retail", "shop"]):
+        return "fintech_ecommerce"
+    if any(w in blob for w in ["ride", "transport", "commute", "bike", "car", "taxi", "bus", "metro", "transit", "mobility"]):
+        return "mobility_transport"
+
+    return "general"
+
+
+def generate_domain_specific_profile(
+    domain: str,
+    median_budget: int,
+    index: int,
+    currency: str = "BDT",
+) -> tuple[dict[str, Any], dict[str, Any], list[str], list[str], list[str]]:
+    """Produce business-specific domain attributes, explicit constraints, and tailored goals/needs/pains."""
+    if domain == "food_delivery":
+        domain_attrs = {
+            "food_source": "Mostly home-cooked; hospital canteen/nearby stalls when shifts overrun; occasional delivery",
+            "meal_timing": "Main meal before shift, snack near 11 PM, tea around 3 AM, breakfast after shift",
+            "payment_method": "bKash for mobile payments with cash backup",
+            "delivery_frequency": "1–3 times per week during urgent shifts or late hours",
+            "preferred_cuisine": "Bangladeshi home-style meals, khichuri, light snacks, milk tea",
+            "delivery_concerns": ["Late delivery during night hours", "Food hygiene and packaging safety", "Unpredictable delivery surge fees"],
+            "ordering_channel": "Smartphone mobile app / messaging with instant status tracking",
+            "price_sensitivity": "High (under ৳150–250 per meal)",
+        }
+        domain_goals = [
+            "Access reliable, hygienic late-night food during unexpected overtime shifts",
+            "Keep daily meal expenditure strictly within monthly allowance limits",
+            "Avoid disruptions caused by irregular canteen hours",
+        ]
+        domain_needs = [
+            f"Predictable pricing aligned with ৳{median_budget}/month food budget",
+            "Guaranteed delivery punctuality during late-night hours with real-time ETA",
+            "Instant bKash/Nagad payment confirmation with zero hidden charges",
+        ]
+        domain_pains = [
+            "Canteen closing unexpectedly during emergency late shifts",
+            "Cold or stale food delivered after long waiting times",
+            "High minimum order limits and surge pricing on standard food delivery apps",
+        ]
+
+    elif domain == "saas_productivity":
+        domain_attrs = {
+            "current_tools": ["Google Sheets", "Notion", "WhatsApp Business", "bKash merchant"],
+            "workflow": "Manual spreadsheet data entry with daily evening reconciliation",
+            "subscription_behavior": "Low to Moderate tolerance; strictly prefers monthly billing over annual commitments",
+            "productivity_problems": ["Data scattered across chat and disconnected sheets", "Manual invoice reconciliation errors"],
+            "switching_barrier": "Learning curve for non-technical team members and fear of vendor lock-in",
+            "desired_features": ["Automated bKash payment matching", "One-click Bengali invoice generation", "Offline mobile backup"],
+            "tech_familiarity": "Moderate to High",
+            "decision_style": "Comparative trial with team before committing",
+        }
+        domain_goals = [
+            "Automate repetitive manual spreadsheet tracking and client invoicing",
+            "Eliminate reconciliation discrepancies without buying expensive enterprise software",
+            "Keep software subscriptions under ৳{median_budget}/month",
+        ]
+        domain_needs = [
+            "Seamless integration with local payment gateways (bKash/Nagad)",
+            "Simple, clutter-free dashboard that works smoothly on mobile and desktop",
+            "Transparent pricing without seat-based surprise rate hikes",
+        ]
+        domain_pains = [
+            "Complex Western SaaS products requiring international credit cards",
+            "Over-engineered software with bloated features that slow down daily workflow",
+            "Lack of responsive local customer support when payment sync fails",
+        ]
+
+    elif domain == "fitness_health":
+        domain_attrs = {
+            "exercise_habits": "Home bodyweight workouts, brisk morning walks, and weekend badminton",
+            "fitness_goals": ["Build consistent stamina", "Improve posture after long desk hours", "Maintain healthy weight"],
+            "workout_frequency": "3–4 times per week (30–45 minutes per session)",
+            "current_fitness_solution": "YouTube workout videos and basic mobile step tracker",
+            "spending_behavior": "Resistant to expensive annual gym contracts; open to affordable micro-guidance",
+            "health_preferences": "Home-based low-equipment routines with realistic local dietary tips",
+            "schedule_fit": "Early morning before work (6:30 AM) or evening (8:00 PM)",
+            "barriers": ["Unpredictable overtime work schedule", "Lack of personalized progress tracking"],
+        }
+        domain_goals = [
+            "Maintain an active physical routine despite a demanding work schedule",
+            "Receive practical workout routines that require zero expensive gym equipment",
+            "Track measurable health progress without spending over ৳{median_budget}/month",
+        ]
+        domain_needs = [
+            "Short, high-efficiency workout sessions that fit into 30-minute windows",
+            "Nutrition suggestions based on easily available Bangladeshi foods",
+            "Gentle habit reminders that don't cause notification fatigue",
+        ]
+        domain_pains = [
+            "Expensive gym memberships with long commutes through heavy traffic",
+            "Generic Western diet plans recommending costly, inaccessible ingredients",
+            "Losing motivation when work deadlines interrupt exercise consistency",
+        ]
+
+    elif domain == "edtech_learning":
+        domain_attrs = {
+            "study_schedule": "Evening study blocks (7:00 PM – 11:30 PM) plus weekend review sessions",
+            "learning_style": "Video lessons paired with timed practice quizzes and past exam papers",
+            "current_study_tools": ["YouTube playlists", "Shared Google Drive batch folders", "Telegram study groups"],
+            "exam_priorities": ["University semester finals", "Competitive job recruitment exams (BCS / Bank jobs)"],
+            "monthly_education_budget": f"৳{median_budget} BDT",
+            "device_access": "Android smartphone and shared family laptop",
+            "switching_barrier": "Skepticism toward unverified question banks without verified answer keys",
+        }
+        domain_goals = [
+            "Master difficult syllabus topics efficiently within limited preparation time",
+            "Access high-quality mock tests and structured topic summaries",
+            "Keep monthly educational tool expenses strictly within ৳{median_budget} BDT",
+        ]
+        domain_needs = [
+            "Clear, concise video explanations in Bangla with chapter markers",
+            "Offline downloadable study notes for studying during power outages or commutes",
+            "Instant doubt clearance and step-by-step math/logic explanations",
+        ]
+        domain_pains = [
+            "Expensive coaching centers with rigid schedules and high commute time",
+            "Pirated, disorganized study materials with incorrect answer keys",
+            "Slow mobile internet causing buffering on live lecture streams",
+        ]
+
+    else:  # General / Fintech / E-commerce
+        domain_attrs = {
+            "primary_channel": "Mobile-first digital app and messaging",
+            "payment_preference": "bKash / Nagad Mobile Wallet",
+            "shopping_frequency": "Bi-weekly or monthly as needed",
+            "adoption_barrier": "Trust in product quality, return policy, and reliable delivery",
+            "price_sensitivity": "High to Moderate",
+            "decision_style": "Comparative research based on peer reviews and transparent pricing",
+        }
+        domain_goals = [
+            "Reduce friction in daily commercial and service transactions",
+            "Ensure financial security and transparent pricing on all digital platforms",
+            f"Maintain monthly expenditure within ৳{median_budget} budget limits",
+        ]
+        domain_needs = [
+            "Fast, reliable mobile service with instant payment confirmation",
+            "Honest, transparent terms with no hidden platform fees",
+            "Responsive customer support via chat or hotline",
+        ]
+        domain_pains = [
+            "Unreliable service execution and difficult refund processes",
+            "Platforms that require international payment cards instead of local MFS",
+            "Aggressive spam notifications and non-transparent pricing surges",
+        ]
+
+    # Explicit Behavioral & Financial Constraints
+    constraints = {
+        "max_monthly_budget": median_budget,
+        "max_transaction_bdt": int(median_budget * 0.45),
+        "subscription_tolerance": "Low" if median_budget <= 500 else "Moderate",
+        "time_tolerance": "Low (requires under 10 minutes to complete tasks)",
+        "technology_tolerance": "Medium",
+        "switching_tolerance": "Low (requires verified peer proof before switching)",
+        "preferred_payment_method": domain_attrs.get("payment_method", "bKash Mobile Wallet"),
+        "price_sensitivity": "High" if median_budget <= 500 else "Moderate",
+        "risk_tolerance": "Low to Moderate",
+    }
+
+    return domain_attrs, constraints, domain_goals, domain_needs, domain_pains
 
 
 _RICH_ARCHETYPE_TEMPLATES = [
@@ -329,7 +511,7 @@ def _generate_deterministic_persona_fallback(
     study_context: dict[str, Any],
     evidence_claims: list[Any],
 ) -> GeneratedPersonaDraft:
-    """Generate a high-fidelity synthetic persona matching the rich 45+ attribute specification."""
+    """Generate a high-fidelity synthetic persona matching the rich 45+ attribute specification and dynamic domain."""
     template = _RICH_ARCHETYPE_TEMPLATES[index % len(_RICH_ARCHETYPE_TEMPLATES)]
     seg_name = getattr(segment, "name", "Target User")
     seg_char = getattr(segment, "characteristics", {}) or {}
@@ -337,6 +519,7 @@ def _generate_deterministic_persona_fallback(
     demo = seg_char.get("demographics", {}) or {}
     behav = seg_char.get("behavior", {}) or {}
 
+    domain = detect_study_domain(study_context)
     name = template["name"]
     tagline = template.get("tagline", f"The Grounded {seg_name} Representative")
     country_code = template.get("country_code", "BD")
@@ -360,6 +543,11 @@ def _generate_deterministic_persona_fallback(
     budget_range = f"৳{econ.get('min', 250)}–৳{econ.get('max', 750)}"
     currency = econ.get("currency", "BDT")
 
+    # Domain-adapted attributes, constraints, goals, needs, and pain points
+    domain_attrs, constraints, dom_goals, dom_needs, dom_pains = generate_domain_specific_profile(
+        domain, median_budget, index, currency
+    )
+
     # Grounded citations
     matched_citations = []
     for c in evidence_claims[:3]:
@@ -382,19 +570,25 @@ def _generate_deterministic_persona_fallback(
     }))
 
     detailed_attributes = dict(template.get("detailed_attributes", {}))
+    # Inject domain attributes into detailed attributes
+    detailed_attributes["domain_attributes"] = domain_attrs
+    detailed_attributes["constraints"] = constraints
+    for k, v in domain_attrs.items():
+        if isinstance(v, (str, int, float, list)):
+            detailed_attributes[k] = v
 
-    goals = [
+    goals = dom_goals or [
         "Maintain stability and predictability across demanding daily routines",
         "Reduce operational friction and avoid unverified services",
         "Protect monthly household budget through reliable spending choices",
     ]
 
-    needs = seg_char.get("needs") or [
+    needs = seg_char.get("needs") or dom_needs or [
         f"Predictable pricing aligned with {currency} {median_budget}/mo budget",
         "Seamless mobile access with low-bandwidth optimization and offline backup",
     ]
 
-    pain_points = [
+    pain_points = dom_pains or [
         "Unpredictable service disruptions during late hours or urgent deadlines",
         "Fragmented tools requiring complex payment setup without mobile wallet support",
         "Hesitation with unverified platforms that overpromise and underdeliver",
@@ -402,7 +596,7 @@ def _generate_deterministic_persona_fallback(
 
     behaviors = [
         f"Spends active hours balancing professional tasks with personal duties",
-        "Prefers instant mobile wallet (bKash/Nagad) confirmation for every purchase",
+        f"Prefers instant mobile wallet ({constraints.get('preferred_payment_method', 'bKash')}) confirmation for every purchase",
         "Relies on established peer recommendations before trying new digital services",
     ]
 
@@ -425,8 +619,9 @@ def _generate_deterministic_persona_fallback(
         "monthly_budget_bdt": median_budget,
         "budget_range": budget_range,
         "price_sensitivity": "High" if median_budget <= 500 else "Moderate",
-        "payment_preference": detailed_attributes.get("payment_method", "bKash / Nagad Mobile Wallet"),
+        "payment_preference": constraints.get("preferred_payment_method", "bKash / Nagad Mobile Wallet"),
         "willingness_to_pay": f"{currency} {econ.get('min', 250)}–{econ.get('max', 750)} / month",
+        "constraints": constraints,
     }
 
     technology_profile = {
@@ -472,6 +667,8 @@ def _generate_deterministic_persona_fallback(
         quote=quote,
         personality=personality,
         detailed_attributes=detailed_attributes,
+        domain_attributes=domain_attrs,
+        constraints=constraints,
         goals=goals,
         needs=needs,
         pain_points=pain_points,
@@ -499,7 +696,7 @@ async def generate_personas_for_study(
     evidence_claims: list[Any] | None = None,
     llm_service: Optional[LLMService] = None,
 ) -> list[GeneratedPersonaDraft]:
-    """Generate grounded synthetic customer personas across study segments with full personality and lifestyle profiles."""
+    """Generate grounded synthetic customer personas across study segments with full personality, lifestyle, domain attributes, and explicit constraints."""
     if not segments:
         raise ValueError("Cannot generate personas: study has no market segments. Run segmentation first.")
 
@@ -511,6 +708,7 @@ async def generate_personas_for_study(
         "target_audience": getattr(study, "target_audience", "Target Consumers"),
         "pricing_hypothesis": getattr(study, "pricing_hypothesis", "Market pricing"),
     }
+    detected_domain = detect_study_domain(study_ctx)
 
     all_generated: list[GeneratedPersonaDraft] = []
     global_idx = 0
@@ -531,6 +729,7 @@ async def generate_personas_for_study(
         # LLM-assisted generation
         prompt_payload = {
             "study_context": study_ctx,
+            "detected_domain": detected_domain,
             "segment": {
                 "name": seg_name,
                 "cluster_label": getattr(seg, "cluster_label", "cluster_0"),
@@ -546,17 +745,19 @@ async def generate_personas_for_study(
 
         system_prompt = (
             "You are BebshaX's synthetic customer persona synthesis engine. Generate realistic, data-grounded "
-            "synthetic personas strictly matching the provided market segment characteristics and evidence findings.\n"
+            "synthetic personas strictly matching the provided market segment characteristics, business domain, and evidence findings.\n"
             "Rules:\n"
             "1. Output valid JSON with key 'personas' containing an array of persona objects.\n"
             "2. Each persona must include:\n"
             "   - name, age, occupation, location, country_code (e.g. 'BD'), tagline (e.g. 'The Steady Night Caregiver'), bio (2-3 sentences), quote (1 sentence)\n"
             "   - personality: object with integer scores (0-100) for openness, conscientiousness, extroversion, agreeableness, neuroticism\n"
-            "   - detailed_attributes: object with hobbies, origin_country, commute_mode, food_source, meal_timing, payment_method, work_schedule, workplace_setting, activity_level, adaptability_level, anxiety_level, attention_focus, belief_system, communication_style, community_engagement, coping_strategies, core_motivators, cultural_affiliations, cultural_traditions, daily_activities, decision_style, family_dynamics, financial_attitude, financial_profile, general_risk, growth_mindset, household_structure, introversion_level, language_preferences, learning_style, life_priorities, motivation_goals, personal_independence, personal_values, planning_horizon, religious_practices, schedule_flexibility, self_discipline, sleep_schedule, social_identity, social_values, spiritual_outlook, tech_interest, technology_usage, time_management, urban_living, value_risk, work_ethic\n"
+            "   - domain_attributes: object tailored to the business domain (e.g. food delivery: food_source, meal_timing, delivery_frequency, delivery_concerns; SaaS: current_tools, workflow, switching_barrier, desired_features; fitness: exercise_habits, fitness_goals, workout_frequency)\n"
+            "   - constraints: object with max_monthly_budget, subscription_tolerance, switching_tolerance, preferred_payment_method, price_sensitivity\n"
+            "   - detailed_attributes: object with hobbies, commute_mode, work_schedule, communication_style, coping_strategies, daily_activities, decision_style, financial_attitude, tech_interest, technology_usage, time_management\n"
             "   - goals (array of 2-4 items), needs (array), pain_points (array), behaviors (array), preferences (array), motivations (array), objections (array)\n"
             "   - monthly_budget_bdt (number), price_sensitivity, primary_devices (array), platforms (array), tech_familiarity\n"
             "3. Ages and budgets must strictly fall within the segment's specified bounds.\n"
-            "4. Ground every persona authentically in their regional lifestyle and practical daily reality."
+            "4. Ground every persona authentically in their regional lifestyle, domain behavior, and practical daily reality."
         )
 
         request = LLMRequest(
@@ -583,6 +784,7 @@ async def generate_personas_for_study(
                 continue
 
             for p_raw in personas_list[:count_for_seg]:
+                fallback_draft = _generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims)
                 fallback_template = _RICH_ARCHETYPE_TEMPLATES[global_idx % len(_RICH_ARCHETYPE_TEMPLATES)]
                 name = p_raw.get("name") or fallback_template["name"]
                 age = int(p_raw.get("age", fallback_template.get("age", 25)))
@@ -591,7 +793,7 @@ async def generate_personas_for_study(
                 tagline = p_raw.get("tagline") or fallback_template.get("tagline", f"The Grounded {seg_name} Representative")
                 country_code = p_raw.get("country_code") or fallback_template.get("country_code", "BD")
                 origin_country = p_raw.get("origin_country") or fallback_template.get("origin_country", "Bangladesh")
-                budget_num = int(p_raw.get("monthly_budget_bdt", 450))
+                budget_num = int(p_raw.get("monthly_budget_bdt", fallback_draft.commercial_profile.get("monthly_budget_bdt", 450)))
 
                 personality_raw = p_raw.get("personality", {})
                 personality = {
@@ -602,11 +804,28 @@ async def generate_personas_for_study(
                     "neuroticism": int(personality_raw.get("neuroticism", fallback_template["personality"]["neuroticism"])),
                 }
 
+                domain_attrs = dict(fallback_draft.domain_attributes)
+                if isinstance(p_raw.get("domain_attributes"), dict):
+                    for k, v in p_raw["domain_attributes"].items():
+                        if v:
+                            domain_attrs[k] = v
+
+                constraints = dict(fallback_draft.constraints)
+                if isinstance(p_raw.get("constraints"), dict):
+                    for k, v in p_raw["constraints"].items():
+                        if v:
+                            constraints[k] = v
+                constraints["max_monthly_budget"] = budget_num
+
                 detailed_attributes = dict(fallback_template.get("detailed_attributes", {}))
                 if isinstance(p_raw.get("detailed_attributes"), dict):
                     for k, v in p_raw["detailed_attributes"].items():
                         if v:
                             detailed_attributes[k] = v
+                detailed_attributes["domain_attributes"] = domain_attrs
+                detailed_attributes["constraints"] = constraints
+                for k, v in domain_attrs.items():
+                    detailed_attributes[k] = v
 
                 matched_citations = []
                 for c in claims[:3]:
@@ -617,15 +836,23 @@ async def generate_personas_for_study(
                         "confidence": getattr(c, "confidence", 0.85),
                     })
 
+                commercial_prof = {
+                    "monthly_budget_bdt": budget_num,
+                    "price_sensitivity": p_raw.get("price_sensitivity", "High" if budget_num <= 500 else "Moderate"),
+                    "payment_preference": p_raw.get("payment_preference", constraints.get("preferred_payment_method", "bKash Mobile Wallet")),
+                    "willingness_to_pay": f"৳{budget_num}/mo",
+                    "constraints": constraints,
+                }
+
                 validation = validate_synthetic_persona(
                     {
                         "name": name,
                         "demographics": {"age": age, "occupation": occupation, "location": location},
-                        "goals": p_raw.get("goals", ["Stay organized and reliable"]),
-                        "needs": p_raw.get("needs", ["Affordable pricing and mobile access"]),
-                        "pain_points": p_raw.get("pain_points", ["Service unreliability and hidden fees"]),
-                        "behaviors": p_raw.get("behaviors", ["Heavy mobile daily user"]),
-                        "commercial_profile": {"monthly_budget_bdt": budget_num},
+                        "goals": p_raw.get("goals", fallback_draft.goals),
+                        "needs": p_raw.get("needs", fallback_draft.needs),
+                        "pain_points": p_raw.get("pain_points", fallback_draft.pain_points),
+                        "behaviors": p_raw.get("behaviors", fallback_draft.behaviors),
+                        "commercial_profile": commercial_prof,
                         "evidence_citations": matched_citations,
                     },
                     seg_char,
@@ -650,19 +877,16 @@ async def generate_personas_for_study(
                         quote=p_raw.get("quote") or "I need a dependable, cost-effective service.",
                         personality=personality,
                         detailed_attributes=detailed_attributes,
-                        goals=p_raw.get("goals") or ["Maintain routine stability", "Protect monthly savings"],
-                        needs=p_raw.get("needs") or ["Transparent pricing", "Mobile wallet integration"],
-                        pain_points=p_raw.get("pain_points") or ["High unexpected fees", "Late service failures"],
-                        behaviors=p_raw.get("behaviors") or ["Uses mobile daily for coordination"],
-                        preferences=p_raw.get("preferences") or ["Clean distraction-free UI"],
-                        motivations=p_raw.get("motivations") or ["Consistency and reliability"],
-                        objections=p_raw.get("objections") or ["Hesitant about recurring long-term commitments"],
-                        commercial_profile={
-                            "monthly_budget_bdt": budget_num,
-                            "price_sensitivity": p_raw.get("price_sensitivity", "High"),
-                            "payment_preference": p_raw.get("payment_preference", detailed_attributes.get("payment_method", "bKash Mobile Wallet")),
-                            "willingness_to_pay": f"৳{budget_num}/mo",
-                        },
+                        domain_attributes=domain_attrs,
+                        constraints=constraints,
+                        goals=p_raw.get("goals") or fallback_draft.goals,
+                        needs=p_raw.get("needs") or fallback_draft.needs,
+                        pain_points=p_raw.get("pain_points") or fallback_draft.pain_points,
+                        behaviors=p_raw.get("behaviors") or fallback_draft.behaviors,
+                        preferences=p_raw.get("preferences") or fallback_draft.preferences,
+                        motivations=p_raw.get("motivations") or fallback_draft.motivations,
+                        objections=p_raw.get("objections") or fallback_draft.objections,
+                        commercial_profile=commercial_prof,
                         technology_profile={
                             "primary_devices": p_raw.get("primary_devices", ["Android Smartphone"]),
                             "platforms": p_raw.get("platforms", ["WhatsApp", "Messenger", "bKash"]),
@@ -684,3 +908,4 @@ async def generate_personas_for_study(
                 global_idx += 1
 
     return all_generated
+

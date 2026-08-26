@@ -359,6 +359,113 @@ class InterviewEngine:
 
         return matched_topic, updated_topics
 
+    def _detect_contradiction(
+        self,
+        persona: Any,
+        question: str,
+        reply: str,
+    ) -> tuple[bool, Optional[str], Optional[str], float]:
+        """Structurally check for contradictions against persona commercial constraints and identity."""
+        comm = getattr(persona, "commercial_profile", {}) or {}
+        max_budget = comm.get("monthly_budget_bdt") or 500
+        reply_lower = reply.lower()
+        question_lower = question.lower()
+
+        # Extract money numbers from question/reply (e.g. ৳2000, 2000 tk, 2000 bdt, 2000 taka)
+        numbers = [int(n) for n in re.findall(r"(?:৳|tk|bdt|\$)?\s*(\d{3,6})\b", question_lower + " " + reply_lower)]
+        
+        # Check budget contradiction: if high amount (> 2.5x budget) and reply expresses unconditional acceptance
+        for num in numbers:
+            if num >= max_budget * 2.5:
+                # If reply says yes/happy/afford/pay without expressing hesitation
+                acceptance_words = ["i would gladly", "i will pay", "i can easily afford", "happily pay", "sure, ৳" + str(num), "no problem paying"]
+                if any(w in reply_lower for w in acceptance_words):
+                    details = f"Persona accepted ৳{num} proposal, which exceeds stated monthly budget of ৳{max_budget} BDT by {round(num / max_budget, 1)}x."
+                    follow_up = f"What changed your willingness to pay from your usual ৳{max_budget}/month budget to ৳{num}?"
+                    return True, details, follow_up, 0.60
+
+        return False, None, None, 0.90
+
+    def _classify_memory_type(self, topic: str, question: str, reply: str) -> str:
+        """Map exchange to one of the 15 specification memory categories."""
+        combined = (question + " " + reply).lower()
+        if any(w in combined for w in ["switch", "replace", "cancel", "move from", "stop using"]):
+            return "switching_reason"
+        if any(w in combined for w in ["competitor", "alternative", "other app", "existing tool", "google sheet", "excel"]):
+            return "alternative"
+        if any(w in combined for w in ["cost", "price", "budget", "expensive", "cheap", "taka", "bdt", "afford"]):
+            return "budget"
+        if any(w in combined for w in ["frustrat", "struggle", "annoy", "hate", "issue", "problem", "late", "broke"]):
+            return "frustration"
+        if any(w in combined for w in ["prefer", "favorite", "like", "love", "wish", "enjoy"]):
+            return "preference"
+        if any(w in combined for w in ["trust", "secure", "privacy", "verify", "scam", "safe", "reputation"]):
+            return "trust"
+        if any(w in combined for w in ["hesitat", "doubt", "worry", "risk", "objection", "skeptic"]):
+            return "objection"
+        if any(w in combined for w in ["decide", "buy", "purchase", "choose", "trigger", "commit"]):
+            return "decision"
+        if any(w in combined for w in ["bought", "purchased", "ordered", "subscribed", "spent"]):
+            return "purchase"
+        if any(w in combined for w in ["limit", "cannot", "won't", "never", "only if", "unless", "must have", "constraint"]):
+            return "constraint"
+        if any(w in combined for w in ["goal", "aim", "target", "aspire", "hope to", "plan to"]):
+            return "goal"
+        if any(w in combined for w in ["need", "require", "essential", "must"]):
+            return "need"
+        if any(w in combined for w in ["daily", "usually", "routine", "every day", "habit", "always"]):
+            return "habit"
+        if any(w in combined for w in ["once", "happened", "last time", "last week", "yesterday", "experienced"]):
+            return "experience"
+        if any(w in combined for w in ["think", "feel", "believe", "in my view", "opinion"]):
+            return "opinion"
+        return "behavior"
+
+
+    def _evaluate_decision_state(
+        self,
+        prior_state: Optional[dict[str, str]],
+        topic: str,
+        question: str,
+        reply: str,
+        persona: Any,
+    ) -> dict[str, str]:
+        """Compute evolving customer research decision state across turns."""
+        state = dict(prior_state or {
+            "problem_awareness": "High",
+            "problem_severity": "High",
+            "product_interest": "Medium",
+            "trust": "Medium",
+            "purchase_intent": "Low",
+            "switching_intent": "Medium",
+            "price_acceptance": "Low",
+        })
+
+        lower = reply.lower()
+        if topic == "pain_points" or "frustrat" in lower or "struggle" in lower:
+            state["problem_awareness"] = "High"
+            state["problem_severity"] = "High"
+        if "trust" in lower or "verify" in lower or "reputation" in lower:
+            if "don't trust" in lower or "hesitant" in lower or "doubt" in lower:
+                state["trust"] = "Low"
+            else:
+                state["trust"] = "Medium"
+        if topic == "pricing_budget":
+            if "too expensive" in lower or "cannot afford" in lower or "outside my budget" in lower:
+                state["price_acceptance"] = "Low"
+                state["purchase_intent"] = "Low"
+            elif "fair" in lower or "reasonable" in lower or "willing" in lower:
+                state["price_acceptance"] = "Medium"
+                state["purchase_intent"] = "Medium"
+        if topic == "purchase_decision" or topic == "feature_reactions":
+            if "would switch" in lower or "would use" in lower or "definitely need" in lower:
+                state["switching_intent"] = "High"
+                state["product_interest"] = "High"
+            elif "already have" in lower or "not convinced" in lower:
+                state["switching_intent"] = "Low"
+
+        return state
+
     def generate_suggested_questions(
         self,
         conversation: Conversations,
@@ -447,9 +554,21 @@ class InterviewEngine:
         reply = normalize_reply(result.text, persona_name=getattr(persona, "name", None))
         latency_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 
-        # Classify topic
+        # Classify topic & memory category
         topic, updated_topics = self._classify_topic(
             interviewer_message + " " + reply, conversation.topics_explored
+        )
+        memory_kind = self._classify_memory_type(topic, interviewer_message, reply)
+
+        # Structural Contradiction Detection
+        has_contradiction, contradiction_details, follow_up_guidance, confidence = self._detect_contradiction(
+            persona, interviewer_message, reply
+        )
+
+        # Evaluate Dynamic Decision State
+        prior_state = (prior_turns[-1].metadata_json.get("decision_state") if prior_turns and hasattr(prior_turns[-1], "metadata_json") and isinstance(prior_turns[-1].metadata_json, dict) else None)
+        decision_state = self._evaluate_decision_state(
+            prior_state, topic, interviewer_message, reply, persona
         )
 
         next_turn = len(prior_turns) + 1
@@ -478,6 +597,7 @@ class InterviewEngine:
                     role="interviewer",
                     content=interviewer_message,
                     topic=topic,
+                    metadata_json={"decision_state": decision_state},
                     created_at=datetime.now(timezone.utc),
                 )
             )
@@ -492,24 +612,34 @@ class InterviewEngine:
                     latency_ms=round(latency_ms, 2),
                     served_by=f"{result.provider}/{result.model}",
                     retrieved_memories=retrieved_memories,
+                    metadata_json={
+                        "contradiction_detected": has_contradiction,
+                        "contradiction_details": contradiction_details,
+                        "follow_up_guidance": follow_up_guidance,
+                        "confidence": confidence,
+                        "memory_kind": memory_kind,
+                        "decision_state": decision_state,
+                    },
                     created_at=datetime.now(timezone.utc),
                 )
             )
             await session.commit()
 
-        # Record episodic memory
+        # Record episodic/semantic memory with 15-category classification
         if self._memory is not None:
             await self._memory.remember(
                 conversation.persona_id,
-                f'Interview exchange about {topic}: Researcher asked "{interviewer_message}" and I answered "{reply[:180]}"',
+                f'Interview {memory_kind} on {topic}: Researcher asked "{interviewer_message}" and I stated "{reply[:180]}"',
                 kind="episodic",
-                importance=0.45,
+                importance=0.65 if has_contradiction or memory_kind in ("budget", "decision", "frustration", "objection") else 0.45,
             )
 
         # Generate suggested questions for next turn
         suggested_questions = self.generate_suggested_questions(
             conversation, persona, prior_turns
         )
+        if follow_up_guidance:
+            suggested_questions.insert(0, follow_up_guidance)
 
         return {
             "reply": reply,
@@ -523,7 +653,13 @@ class InterviewEngine:
             "is_finished": is_auto_finished,
             "suggested_questions": suggested_questions,
             "retrieved_memories": retrieved_memories,
+            "contradiction_detected": has_contradiction,
+            "contradiction_details": contradiction_details,
+            "confidence": confidence,
+            "memory_kind": memory_kind,
+            "decision_state": decision_state,
         }
+
 
     async def complete(self, conversation_id: str) -> dict[str, Any]:
         """Complete the interview, synthesize findings, and extract structured insights with turn provenance."""
