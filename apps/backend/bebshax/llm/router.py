@@ -27,6 +27,29 @@ from bebshax.llm.types import LLMRequest, LLMResult, TaskType
 DEFAULT_COOLDOWN_SECONDS = 60.0
 
 
+def _apply_preference(
+    entries: list[Entry], request: LLMRequest, provenance: ProvenanceRecord
+) -> list[Entry]:
+    """§7 model selection: stable-partition preferred routes to the front.
+    Preference is advisory — never exclusive — so fallback to Auto is free."""
+    if request.preferred_provider is None and request.preferred_model is None:
+        return entries
+
+    def _matches(entry: Entry) -> bool:
+        cand = entry[1]
+        return (
+            request.preferred_provider is None or cand.provider == request.preferred_provider
+        ) and (request.preferred_model is None or cand.model == request.preferred_model)
+
+    preferred = [e for e in entries if _matches(e)]
+    rest = [e for e in entries if not _matches(e)]
+    provenance.routing_path.append(
+        f"[preference {request.preferred_provider or '*'}/{request.preferred_model or '*'}: "
+        f"{len(preferred)} route(s) prioritized]"
+    )
+    return preferred + rest
+
+
 class PoolRouter(LLMService):
     def __init__(
         self,
@@ -116,6 +139,7 @@ class PoolRouter(LLMService):
                             entries.append((adapter, cand))
                     if self._ranker is not None:
                         entries = self._ranker(entries)
+                    entries = _apply_preference(entries, request, provenance)
                     eligible = filter_eligible(
                         entries, request, provenance, extra_skip_reason=self._cooling_reason
                     )

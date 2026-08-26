@@ -172,3 +172,33 @@ async def test_is_cooling_is_public_and_truthful() -> None:
     warm = _route("ollama", "m").candidate
     assert router.is_cooling(cooling) is True
     assert router.is_cooling(warm) is False
+
+
+async def test_preferred_model_is_prioritized_over_pool_order() -> None:
+    """§7 model selection: an explicit preference wins over configured order."""
+    router, _ = _router(
+        [_route("freellmpool", "auto")],
+        [_route("ollama", "llama3.2:3b")],
+    )
+    result = await router.complete(
+        _request(preferred_provider="ollama", preferred_model="llama3.2:3b")
+    )
+    assert (result.provider, result.model) == ("ollama", "llama3.2:3b")
+    assert any("preference ollama/llama3.2:3b" in step for step in result.provenance.routing_path)
+
+
+async def test_unavailable_preference_degrades_to_auto() -> None:
+    """§7: a preference is advisory — missing route falls back to Auto order."""
+    router, _ = _router(
+        [_route("freellmpool", "auto")],
+        [_route("ollama", "m")],
+    )
+    result = await router.complete(_request(preferred_model="gpt-nonexistent"))
+    assert (result.provider, result.model) == ("freellmpool", "auto")
+
+
+async def test_no_preference_is_pure_auto() -> None:
+    router, _ = _router([_route("freellmpool", "auto")], [_route("ollama", "m")])
+    result = await router.complete(_request())
+    assert result.provider == "freellmpool"
+    assert not any("preference" in step for step in result.provenance.routing_path)

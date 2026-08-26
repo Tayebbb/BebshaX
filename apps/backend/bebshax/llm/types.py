@@ -54,6 +54,11 @@ class LLMRequest(BaseModel):
     temperature: float | None = None
     persona_id: str | None = None
     conversation_id: str | None = None
+    # §7 model selection: None = Auto (router decides). A preference PRIORITIZES
+    # matching routes — eligibility, policies and fallback still apply, so an
+    # unavailable preferred model degrades to Auto instead of failing.
+    preferred_provider: str | None = None
+    preferred_model: str | None = None
 
 
 class LLMResult(BaseModel):

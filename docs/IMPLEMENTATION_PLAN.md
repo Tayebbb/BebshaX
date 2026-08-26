@@ -55,6 +55,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended *below* Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-08-26) — §7 model selection: explicit preference + Auto
+
+- `LLMRequest.preferred_provider/preferred_model` (None = Auto); `PoolRouter` stable-partitions preferred routes to the front AFTER quota ranking — advisory, so eligibility/policies/fallback still apply and a missing preference degrades to Auto. Preference visible in `routing_path`. 3 router tests; 263 passed. First increment of the unified-workspace gap plan (assessment in chat 2026-08-26).
+
 ### Maintenance (2026-08-26) — Live E2E validation + AI plan §10 capacity layer
 
 - Live run (real server, Neon DB, Ollama up): business → persona (17 provenance-classed attrs, `codestral-latest`) → interview (in-character, `openrouter/deepseek-v4-flash`, memory retrieved). Quality matches the plan.
