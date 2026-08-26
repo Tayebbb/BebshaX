@@ -63,6 +63,14 @@ class RoutingChaosSimulator:
     def _setup_adapters(self) -> dict[str, ChaosFakeAdapter]:
         random.seed(self.seed)
         adapters = {
+            # Keyless-openrouter equivalent: registered, contributes no routes.
+            "openrouter": ChaosFakeAdapter(
+                name="openrouter",
+                candidates=[],
+                failure_prob=0.0,
+                latency_ms=0.0,
+                fail_kind=FailureKind.PROVIDER_UNAVAILABLE,
+            ),
             "freellmpool": ChaosFakeAdapter(
                 name="freellmpool",
                 candidates=[

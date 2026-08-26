@@ -26,6 +26,7 @@ def _route(provider: str, model: str, behaviors: list | None = None, **cand) -> 
 
 def _router(remote_routes, local_routes, **kwargs):
     adapters = {
+        "openrouter": FakeAdapter([]),  # registered but keyless → contributes no routes
         "freellmpool": FakeAdapter(remote_routes),
         "ollama": FakeAdapter(local_routes),
     }
@@ -108,15 +109,11 @@ async def test_provenance_hook_receives_pool_on_failure_too() -> None:
     assert captured and captured[0].pool == "reasoning"
     assert captured[0].success is False
 
-import warnings
-
-def test_unknown_adapter_in_pool_config_warns() -> None:
-    """Unknown adapters in pool config emit a warning (not ValueError) — pools are forward-compatible."""
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+def test_unknown_adapter_in_pool_config_raises() -> None:
+    """Pool configs referencing unregistered adapters are a wiring bug — fail loudly at construction."""
+    with pytest.raises(ValueError, match="missing"):
         PoolRouter(
             {"only": FakeAdapter([])},
             pools={"p": PoolConfig(name="p", adapters=["missing"])},
             task_pool_map={},
         )
-    assert any("missing" in str(warning.message) for warning in w), "Expected warning about missing adapter"

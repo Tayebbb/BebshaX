@@ -137,13 +137,14 @@ class ProvenanceSink:
                 records = [
                     LLMRequests(
                         request_id=r.request_id,
-                        task=r.task.value,  # TaskType enum → string
+                        task=str(r.task),  # ProvenanceRecord.task is already a str
                         pool=r.pool,
                         persona_id=r.persona_id,
                         conversation_id=r.conversation_id,
                         created_at=r.created_at,
                         routing_path=r.routing_path,
-                        attempts=[a.model_dump() for a in r.attempts],
+                        # mode="json" → datetimes become ISO strings (JSON column)
+                        attempts=[a.model_dump(mode="json") for a in r.attempts],
                         served_by_provider=r.served_by_provider,
                         request_model=r.served_by_model,  # OTel naming
                         response_model=r.served_by_model,
@@ -159,9 +160,11 @@ class ProvenanceSink:
                 self.total_written += len(batch)
         except Exception as e:
             self.total_db_errors += 1
-            if self.total_db_errors % self.log_interval == 0:
+            # Always log the FIRST error; rate-limit the rest (audit finding B1).
+            if self.total_db_errors == 1 or self.total_db_errors % self.log_interval == 0:
                 logger.error(
-                    f"ProvenanceSink: DB error (1 per {self.log_interval}): {e}"
+                    f"ProvenanceSink: DB error #{self.total_db_errors} "
+                    f"(logging 1 per {self.log_interval} after the first): {e}"
                 )
             self.total_dropped += len(batch)
 

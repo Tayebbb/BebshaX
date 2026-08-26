@@ -53,6 +53,20 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — Conformance sweep: B1 fixed, phantom TaskType, llm_service wiring, R3 re-route, router validation restored
+
+Owner instruction: keep the OpenRouter adapter/pool position **for testing purposes only**; fix everything else flagged by the conformance check.
+
+- **B1 fixed (audit)** — `db/sink.py`: `str(r.task)` instead of `r.task.value`; first DB error now always logged. Fixing it exposed a **second total-loss bug**: `attempts` serialized raw datetimes into the JSON column (`TypeError`) — fixed with `model_dump(mode="json")`. Round-trip test added (`test_insert_batch_writes_row_round_trip`).
+- **Phantom `TaskType.INTERVIEW_PROBING`** in `api/studies.py` (AttributeError at request time) → `STRUCTURED_OUTPUT`. New invariant test `tests/llm/test_task_type_references.py` scans the package for `TaskType.X` references and fails on non-members.
+- **`app.state.llm_service` was never set** — 8 call sites across studies/personas/evidence/segmentation resolved `None` and silently served fallback content. `main.py` now aliases it to `llm_router`; integration fixture updated to match.
+- **R3 re-route** — `datasets/service.py` persona synthesis no longer calls `OpenRouterService.generate_structured()` (adapter-direct, no provenance/fallback); it takes an injected `LLMService` and issues `PERSONA_GENERATION` requests; `api/datasets.py` passes `app.state.llm_router`. `openrouter_service.py` itself remains for health diagnostics + testing.
+- **PoolRouter validation restored** — unknown adapter names in pool config raise `ValueError` again (warn-and-skip reverted); tests register a keyless-openrouter stub instead. Bogus `PoolRouter([])` fallback removed from `api/interviews.py`.
+- **`python-multipart` declared** in `pyproject.toml` (was used by upload endpoints but never declared — broke collection with 14 errors; R8 review was already in this log).
+- **`persona/schema.py`**: missing `Any` import (broke `GeneratedPersona.model_validate` at runtime — 22 test failures).
+- **Docs synced:** D7 → 18 task types (PROJECT_CONTEXT), ROUTING.md + AI_IMPLEMENTATION_PLAN.md pool tables/task counts, audit B1 ticked (assignments + fix log).
+- Suite: **200 passed** (was: 14 collection errors).
+
 ### Maintenance — auth-aware landing CTAs (2026-08-24)
 
 - Bug: the hero CTA "Generate your first persona" did nothing for a signed-in user — `Hero` declared `onOpenApp` but destructured nothing (a zero-arg arrow is assignable to `React.FC<HeroProps>`, so `tsc` stayed silent), so the button always ran `navigate('/auth/signup')` and `AuthPage`'s `isAuthenticated` effect bounced straight back to `/`. Same defect in `FinalCTA`; `InteractiveDemo` never received `onOpenApp` at all.
@@ -342,11 +356,11 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
   - Endpoints: `GET /api/datasets`, `POST /api/datasets/url`, `POST /api/datasets/upload`, `GET /api/datasets/{id}`, `POST /api/datasets/{id}/refresh`, `POST /api/datasets/{id}/query`, `DELETE /api/datasets/{id}`, `POST /api/datasets/{id}/generate-personas`.
   - Installed `python-multipart` for multipart form file uploads.
 - **R8 Review for `python-multipart`:**
-  - *Why:* Required by Starlette/FastAPI to parse `multipart/form-data` file uploads for CSV/JSON/TSV/XLSX research dataset uploads.
-  - *What it provides:* Streaming multipart parser with memory/disk threshold management.
-  - *License:* Apache 2.0 (Permissive).
-  - *Activity:* Active standard library for FastAPI file uploads.
-  - *Necessity:* Essential for binary and tabular file uploads to `/api/datasets/upload`.
+  - _Why:_ Required by Starlette/FastAPI to parse `multipart/form-data` file uploads for CSV/JSON/TSV/XLSX research dataset uploads.
+  - _What it provides:_ Streaming multipart parser with memory/disk threshold management.
+  - _License:_ Apache 2.0 (Permissive).
+  - _Activity:_ Active standard library for FastAPI file uploads.
+  - _Necessity:_ Essential for binary and tabular file uploads to `/api/datasets/upload`.
 - **Frontend Dataset Laboratory & Diagnostics (`apps/frontend/`):**
   - Defined types in `types/dataset.ts`.
   - Added full API methods and mock fixtures to `services/api.ts` and `mocks/fixtures.ts`.
@@ -636,6 +650,3 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
   - Adapter boundary test `apps/backend/tests/llm/test_boundary.py` verified (**R1 compliance preserved**).
   - Frontend: All 16 vitest test suites passed (**71/71 tests green**).
   - Frontend production bundle build verified (`npm run build` green).
-
-
-

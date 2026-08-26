@@ -21,16 +21,33 @@ from bebshax.datasets.profiler import profile_dataset
 from bebshax.datasets.security import safe_fetch_dataset_bytes
 from bebshax.datasets.segmenter import calculate_segment_persona_distribution, discover_segments
 from bebshax.datasets.validator import validate_persona_against_constraints
-from bebshax.llm.openrouter_service import get_openrouter_service
-from bebshax.llm.types import ChatMessage
+from bebshax.llm.service import LLMService
+from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
 
 UPLOAD_DIR = Path("data/uploads")
 
 
+def _parse_json_object(text: str) -> dict:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:]
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError("no JSON object found in reply")
+    return json.loads(cleaned[start : end + 1])
+
+
 class DatasetService:
-    def __init__(self, sessionmaker_: sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        sessionmaker_: sessionmaker[AsyncSession],
+        llm: LLMService | None = None,
+    ) -> None:
         self._sessionmaker = sessionmaker_
+        self._llm = llm
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
     async def ingest_from_url(
@@ -334,8 +351,7 @@ class DatasetService:
 
         # 1. Mathematically determine exact persona quotas per segment
         quota_distribution = calculate_segment_persona_distribution(segments, requested_count)
-        openrouter = get_openrouter_service()
-        model_used = openrouter.get_model_for_role("persona")
+        model_used = "offline_fallback"  # updated from the first LLM-served persona
 
         generated_personas: list[dict[str, Any]] = []
         validation_results: list[dict[str, Any]] = []
@@ -371,22 +387,30 @@ class DatasetService:
                     f"Return JSON strictly matching the schema with name, age, occupation, location, income_range, education, description, goals, pain_points, needs, motivations, behaviors, technology_usage, purchase_behavior, personality_traits."
                 )
 
-                try:
-                    res = await openrouter.generate_structured(
-                        messages=[
-                            ChatMessage(
-                                role="system",
-                                content="You are BebshaX's evidence-grounded persona synthesis engine. Generate structured JSON conforming strictly to empirical constraints.",
-                            ),
-                            ChatMessage(role="user", content=prompt),
-                        ],
-                        role="persona",
-                        temperature=0.7,
-                    )
-                    persona_dict = res.get("data", {})
-                except Exception as exc:
-                    # Fallback structured generation when offline
+                if self._llm is None:
                     persona_dict = _generate_offline_fallback_persona(seg, persona_idx)
+                else:
+                    try:
+                        result = await self._llm.complete(
+                            LLMRequest(
+                                task=TaskType.PERSONA_GENERATION,
+                                messages=[
+                                    ChatMessage(
+                                        role="system",
+                                        content="You are BebshaX's evidence-grounded persona synthesis engine. Generate structured JSON conforming strictly to empirical constraints.",
+                                    ),
+                                    ChatMessage(role="user", content=prompt),
+                                ],
+                                json_mode=True,
+                                temperature=0.7,
+                                max_output_tokens=2048,
+                            )
+                        )
+                        persona_dict = _parse_json_object(result.text)
+                        model_used = result.model
+                    except Exception:
+                        # Fallback structured generation when offline
+                        persona_dict = _generate_offline_fallback_persona(seg, persona_idx)
 
                 # 3. Programmatically validate persona against segment constraints
                 val = validate_persona_against_constraints(persona_dict, seg)

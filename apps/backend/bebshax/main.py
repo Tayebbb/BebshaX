@@ -44,6 +44,7 @@ async def _lifespan(app: FastAPI):
 
     app.state.llm_adapters = adapters
     app.state.llm_router = llm_router
+    app.state.llm_service = llm_router  # same object; studies/personas/evidence/segmentation resolve this name
     app.state.db_sessionmaker = sessionmaker_
     app.state.provenance_sink = sink
     app.state.persona_engine = PersonaEngine(llm_router, EvidenceStore())

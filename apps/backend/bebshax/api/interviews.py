@@ -563,11 +563,10 @@ async def batch_run_study_interviews(
     engine = getattr(request.app.state, "interview_engine", None)
     if engine is None:
         from bebshax.interview.engine import InterviewEngine
-        from bebshax.llm.router import PoolRouter
-        llm_router = getattr(request.app.state, "llm_router", None) or PoolRouter([])
+        llm_router = getattr(request.app.state, "llm_router", None)
         session_maker = getattr(request.app.state, "db_sessionmaker", None)
         memory = getattr(request.app.state, "memory_service", None)
-        if session_maker:
+        if session_maker and llm_router:
             engine = InterviewEngine(llm_router, session_maker, memory=memory)
 
     completed_interviews = []
