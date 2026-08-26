@@ -762,5 +762,18 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
   - `apps/backend/tests/api/test_password_policy.py` (4 tests verifying numeric-only rejection, alpha-only rejection, alphanumeric acceptance, and length limit preservation).
 - **Verification:** 4/4 tests green.
 
+---
+
+### Maintenance (2026-08-26) — Demo Mode Seeding & Docs (H3 Pieces 1 & 3)
+
+- **Audit item addressed:** 🟠 **H3** (E2E_AUDIT_2026-08-24.md & AUDIT_ASSIGNMENTS.md).
+- **Changes Applied:**
+  - **Flag-Gated Seeding (Piece 1):** Updated `seed_demo_data()` in `apps/backend/bebshax/db/seed.py` to check `settings.demo_mode` and skip inserting entities unless `demo_mode=True` or `force=True`.
+  - **Documentation & Status (Piece 3):** Created `docs/DEMO.md` detailing demo mode configuration, sample entities, and data source transparency; corrected `PROJECT_CONTEXT.md` to reflect that Phase 13 is in-progress pending Shehab UI cached badges.
+- **Regression Tests:**
+  - `apps/backend/tests/db/test_seed_demo_mode.py` (3 tests verifying skipping when False, running when True, and forced execution).
+- **Verification:** 3/3 tests green; backend suite passing.
+
+
 
 
