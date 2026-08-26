@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 
-def test_create_business_stores_real_columns(api_test_app: TestClient) -> None:
+def test_create_business_stores_real_columns(api_test_app: TestClient, auth_headers) -> None:
     resp = api_test_app.post(
         "/api/businesses",
         json={
@@ -15,6 +15,7 @@ def test_create_business_stores_real_columns(api_test_app: TestClient) -> None:
             "industry": "Logistics",
             "target_market": "Bangladesh couriers",
         },
+        headers=auth_headers,
     )
     assert resp.status_code == 201
     data = resp.json()
@@ -23,22 +24,22 @@ def test_create_business_stores_real_columns(api_test_app: TestClient) -> None:
     # description stays pure user content — no metadata header
     assert data["description"] == "Fuel tracking for couriers."
 
-    listed = {b["id"]: b for b in api_test_app.get("/api/businesses").json()}
+    listed = {b["id"]: b for b in api_test_app.get("/api/businesses", headers=auth_headers).json()}
     assert listed[data["id"]]["industry"] == "Logistics"
     assert listed[data["id"]]["target_market"] == "Bangladesh couriers"
 
 
-def test_description_starting_with_industry_is_not_corrupted(api_test_app: TestClient) -> None:
+def test_description_starting_with_industry_is_not_corrupted(api_test_app: TestClient, auth_headers) -> None:
     # The audit's corruption case: user content that happens to start with "Industry:"
     desc = "Industry: reports are compiled quarterly by our analysts."
-    resp = api_test_app.post("/api/businesses", json={"name": "ReportCo", "description": desc})
+    resp = api_test_app.post("/api/businesses", json={"name": "ReportCo", "description": desc}, headers=auth_headers)
     assert resp.status_code == 201
     data = resp.json()
     assert data["description"] == desc  # untouched
     assert data["industry"] is None  # honest null, not "General Enterprise"
     assert data["target_market"] is None
 
-    listed = {b["id"]: b for b in api_test_app.get("/api/businesses").json()}
+    listed = {b["id"]: b for b in api_test_app.get("/api/businesses", headers=auth_headers).json()}
     assert listed[data["id"]]["description"] == desc
     assert listed[data["id"]]["industry"] is None
 

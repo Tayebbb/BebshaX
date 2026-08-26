@@ -57,7 +57,7 @@ async def test_evaluation_metrics_endpoint(api_test_app: TestClient):
     assert len(metrics["routing_strategies"]) == 4
 
 
-async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
+async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, auth_headers):
     # 1. Create Business
     b_res = api_test_app.post(
         "/api/businesses",
@@ -67,13 +67,14 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
             "industry": "Gig Economy",
             "target_market": "Couriers",
         },
+        headers=auth_headers,
     )
     assert b_res.status_code == 201
     biz = b_res.json()
     biz_id = biz["id"]
 
     # 2. List Businesses
-    blist_res = api_test_app.get("/api/businesses")
+    blist_res = api_test_app.get("/api/businesses", headers=auth_headers)
     assert blist_res.status_code == 200
     assert any(b["id"] == biz_id for b in blist_res.json())
 
@@ -84,24 +85,25 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
             "audience_segment": "High-mileage courier",
             "generation_hints": ["Prioritize vehicle maintenance costs"],
         },
+        headers=auth_headers,
     )
     assert p_gen.status_code == 201
     persona = p_gen.json()
     persona_id = persona["id"]
     assert persona["name"] == "Alex Mercer"
 
-    # 4. List Personas
-    plist_res = api_test_app.get("/api/personas")
+    # 4. List Personas (owner-scoped after B6 stage 3)
+    plist_res = api_test_app.get("/api/personas", headers=auth_headers)
     assert plist_res.status_code == 200
     assert len(plist_res.json()) >= 1
 
     # 5. Get Single Persona
-    p_get = api_test_app.get(f"/api/personas/{persona_id}")
+    p_get = api_test_app.get(f"/api/personas/{persona_id}", headers=auth_headers)
     assert p_get.status_code == 200
     assert p_get.json()["id"] == persona_id
 
     # 6. Check Persona Memories
-    mem_res = api_test_app.get(f"/api/personas/{persona_id}/memories")
+    mem_res = api_test_app.get(f"/api/personas/{persona_id}/memories", headers=auth_headers)
     assert mem_res.status_code == 200
     memories = mem_res.json()
     assert isinstance(memories, list)
@@ -110,6 +112,7 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
     c_res = api_test_app.post(
         "/api/conversations",
         json={"persona_id": persona_id, "objective": "Test new savings feature"},
+        headers=auth_headers,
     )
     assert c_res.status_code == 201
     conv_id = c_res.json()["id"]
@@ -118,6 +121,7 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
     msg_res = api_test_app.post(
         f"/api/conversations/{conv_id}/messages",
         json={"content": "Would you use an automated 5% buffer deduction?"},
+        headers=auth_headers,
     )
     assert msg_res.status_code == 200
     msg_data = msg_res.json()
@@ -135,7 +139,7 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
     assert "Alex" in msg_data["persona_reply"]["content"]
 
     # 9. Get transcript
-    tr_res = api_test_app.get(f"/api/conversations/{conv_id}")
+    tr_res = api_test_app.get(f"/api/conversations/{conv_id}", headers=auth_headers)
     assert tr_res.status_code == 200
     turns = tr_res.json()["turns"]
     assert len(turns) == 2

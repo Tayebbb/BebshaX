@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bebshax.api.auth import get_optional_current_user
+from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.studies import _owner_accessible, _user_owns_study, get_session
 from bebshax.auth.models import Users
 from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
@@ -194,7 +194,7 @@ async def generate_study_personas_endpoint(
     study_id: str,
     body: StudyGeneratePersonasRequest,
     request: Request,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Generate grounded synthetic personas for a study across its market segments."""
@@ -206,7 +206,7 @@ async def generate_study_personas_endpoint(
     try:
         run, personas = await service.create_generation_run(
             study_id=study_id,
-            user_id=current_user.id if current_user else None,
+            user_id=current_user.id,
             segmentation_run_id=body.segmentation_run_id,
             personas_per_segment=body.personas_per_segment,
             target_count=body.target_count,
@@ -264,7 +264,7 @@ async def regenerate_study_persona_endpoint(
     study_id: str,
     persona_id: str,
     request: Request,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Regenerate a single persona to create a new version while preserving grounding."""
@@ -277,7 +277,7 @@ async def regenerate_study_persona_endpoint(
         persona = await service.regenerate_persona(
             study_id=study_id,
             persona_id=persona_id,
-            user_id=current_user.id if current_user else None,
+            user_id=current_user.id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -326,14 +326,14 @@ async def get_study_persona_run_endpoint(
 async def delete_study_persona_run_endpoint(
     study_id: str,
     run_id: str,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Delete a persona generation run and its generated personas."""
     await _verify_study_access(study_id, current_user, session)
     service = PersonaGenerationService(session)
 
-    success = await service.delete_run(study_id=study_id, run_id=run_id, user_id=current_user.id if current_user else None)
+    success = await service.delete_run(study_id=study_id, run_id=run_id, user_id=current_user.id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Persona generation run not found.")
     return {"success": True, "message": "Persona generation run and associated personas deleted."}
@@ -347,11 +347,11 @@ async def delete_study_persona_run_endpoint(
 async def create_business_endpoint(
     body: BusinessCreate,
     request: Request,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
 ) -> dict:
     # M5: industry/target_market are real columns — the description is user
     # content and is never used as a metadata carrier.
-    owner_id = current_user.id if current_user else "usr_system_holder"
+    owner_id = current_user.id
     async with request.app.state.db_sessionmaker() as session:
         business = await create_business(
             session,
@@ -424,15 +424,16 @@ async def generate_persona_endpoint(
     business_id: str,
     body: PersonaGenerateRequest,
     request: Request,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
 ) -> dict:
-    owner_id = current_user.id if current_user else "usr_system_holder"
+    owner_id = current_user.id
     async with request.app.state.db_sessionmaker() as session:
         business = await get_business(session, business_id)
         if business is None:
             raise HTTPException(status_code=404, detail="business not found")
-        # Unconditional owner gate: anonymous callers may only generate under
-        # shared/system businesses — never another tenant's (B6 stage 3).
+        # Owner gate (strict auth upstream): callers may only generate under
+        # their own or shared/system businesses — never another tenant's
+        # (B6 stage 3; _owner_accessible also covers anon-tenant stamps).
         if not _owner_accessible(business.owner_id, current_user):
             raise HTTPException(status_code=404, detail="business not found")
 

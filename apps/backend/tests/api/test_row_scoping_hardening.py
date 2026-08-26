@@ -253,5 +253,12 @@ async def test_generate_under_foreign_business_requires_owner(scoped_app):
         session.add(Businesses(id="biz_owned", name="Private Biz", owner_id="usr_owner"))
         await session.commit()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # writes require auth (Sazid's B6 correction) — anonymous gets 401
         res = await client.post("/api/businesses/biz_owned/personas", json={"hints": "probe"})
-        assert res.status_code == 404
+        assert res.status_code == 401
+        # an authenticated non-owner is still blocked by the owner gate
+        other = {"Authorization": f"Bearer {create_access_token({'sub': 'usr_other'})}"}
+        res_other = await client.post(
+            "/api/businesses/biz_owned/personas", json={"hints": "probe"}, headers=other
+        )
+        assert res_other.status_code == 404

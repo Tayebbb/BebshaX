@@ -40,31 +40,52 @@ async def app_client(tmp_path, monkeypatch, evidence_store, persona_json):
         app.state.persona_engine = PersonaEngine(
             SingleAdapterLLMService(adapter), evidence_store
         )
-        yield client
+        # Seed test user for auth
+        from bebshax.auth.models import Users
+        from bebshax.auth.security import create_access_token
+        user_id = "usr_test_fixture"
+        async with app.state.db_sessionmaker() as session:
+            existing = await session.get(Users, user_id)
+            if not existing:
+                session.add(Users(
+                    id=user_id,
+                    email="fixture@test.local",
+                    full_name="Test Fixture User",
+                    auth_provider="email",
+                    is_active=True,
+                    is_verified=True,
+                ))
+                await session.commit()
+        headers = {"Authorization": f"Bearer {create_access_token(user_id)}"}
+        yield client, headers
     get_settings.cache_clear()
 
 
 async def test_full_persona_flow_over_http(app_client) -> None:
-    created = app_client.post(
-        "/api/businesses", json={"name": "QuickBite", "description": "Food delivery in Dhaka"}
+    client, headers = app_client
+    created = client.post(
+        "/api/businesses", json={"name": "QuickBite", "description": "Food delivery in Dhaka"},
+        headers=headers,
     )
     assert created.status_code == 201
     business_id = created.json()["id"]
 
-    listed = app_client.get("/api/businesses")
+    listed = client.get("/api/businesses", headers=headers)
     assert any(b["id"] == business_id for b in listed.json())
 
-    generated = app_client.post(f"/api/businesses/{business_id}/personas", json={})
+    generated = client.post(f"/api/businesses/{business_id}/personas", json={}, headers=headers)
     assert generated.status_code == 201, generated.text
     persona = generated.json()
     assert persona["name"] == "Rina Akter"
     assert all("provenance_class" in a for a in persona["attributes"])
 
-    fetched = app_client.get(f"/api/personas/{persona['id']}")
+    fetched = client.get(f"/api/personas/{persona['id']}", headers=headers)
     assert fetched.status_code == 200
     assert fetched.json()["occupation"] == "university student"
 
 
 async def test_unknown_business_and_persona_return_404(app_client) -> None:
-    assert app_client.post("/api/businesses/nope/personas", json={}).status_code == 404
-    assert app_client.get("/api/personas/nope").status_code == 404
+    client, headers = app_client
+    assert client.post("/api/businesses/nope/personas", json={}, headers=headers).status_code == 404
+    assert client.get("/api/personas/nope").status_code == 404
+

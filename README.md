@@ -6,6 +6,8 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 
 **Team members start here:** [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) (single source of truth) → [RULES.md](RULES.md) (binding engineering rules) → [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md) (machine setup) → [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md) (your track).
 
+**Current workstream is audit remediation, not new phases:** [docs/E2E_AUDIT_2026-08-24.md](docs/E2E_AUDIT_2026-08-24.md) holds the evidence for all 41 findings; [docs/AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md) says who fixes what. Find your name there before starting anything.
+
 **Working with an AI agent?** It auto-loads [AGENTS.md](AGENTS.md). To build the next milestone, just tell it: **“Implement phase N”** — specs live in [docs/PHASES.md](docs/PHASES.md).
 
 ## Repository layout
@@ -17,14 +19,22 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 | `services` (inside backend) | `bebshax.llm` policy layer → adapters → freellmpool / Ollama |
 | `data/raw` · `data/processed` · `data/metadata` | Datasets (reproducible via `scripts/`, not committed) |
 | `scripts/` | Setup, dataset, and evaluation tooling |
-| `docs/` | [AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md) · [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) |
+| `docs/` | [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) · [E2E_AUDIT_2026-08-24.md](docs/E2E_AUDIT_2026-08-24.md) · [AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md) · [DEMO.md](docs/DEMO.md) |
 
-## Quickstart (state: Phases 1–11 ✅ — remaining: 12-completion (live wiring), 13 integration/demo, 14 testing, 15 docs)
+## Quickstart (state: Phases 1–12 ✅ · 13 integration/demo 🟡 in progress — remaining: 14 testing, 15 docs)
 
 ```powershell
 # Backend
 python -m venv .venv
 .venv\Scripts\pip install -e "apps/backend[dev]"
+
+# Required before the API will start (see "Secrets" below)
+copy .env.example .env
+# then generate a real value:
+.venv\Scripts\python -c "import secrets; print(secrets.token_urlsafe(48))"
+# paste it into BEBSHAX_JWT_SECRET in .env
+
+# Tests — run from the REPO ROOT, not from apps/backend
 .venv\Scripts\python -m pytest apps/backend/tests -q
 
 # Run the API
@@ -41,7 +51,13 @@ npm run dev
 # → http://localhost:5173
 ```
 
-Configuration is environment-driven (`BEBSHAX_*` variables; see [.env.example](.env.example)). Provider API keys are **optional** — add whatever legitimate free-tier keys the team has; keyless providers work with none.
+### Secrets and migrations (read before first run)
+
+Configuration is environment-driven (`BEBSHAX_*` variables; see [.env.example](.env.example)).
+
+- **`BEBSHAX_JWT_SECRET` is mandatory.** The app **fails fast on startup** without it (≥32 chars, and the burned git-history value is rejected outright — audit finding B4). Generate your own; never reuse a teammate's.
+- **Provider API keys are optional** — add whatever legitimate free-tier keys you personally own; keyless providers work with none.
+- **Run `alembic upgrade head` after every pull that touches `alembic/`.** Startup and CI both hard-fail on drift (audit finding H6), so a stale local DB now surfaces immediately instead of 500-ing at request time.
 
 ---
 
@@ -59,11 +75,13 @@ Everything below is enforced by [AGENTS.md](AGENTS.md), [RULES.md](RULES.md), te
 
 | Who | Track | Completed Phases | Up Next | You own (nobody else touches) |
 |---|---|---|---|---|
-| **Tayeb** | A — LLM infra | 1, 2, 3, 4, 5 ✅ | Phase 8 (Persona engine), Phase 10 | `apps/backend/bebshax/llm/**`, `docs/ROUTING.md` |
-| **Sazid** | B — Data layer | 6, 7 ✅ | Phase 9 (Memory engine) | `apps/backend/bebshax/db/**`, `alembic/`, `data/**`, dataset scripts |
-| **Shehab** | C — Frontend & Eval | 11, 12-foundation ✅ | Phase 12 (live wiring) | `apps/frontend/**`, `apps/backend/bebshax/evaluation/**`, `docs/API_CONTRACT.md`, `docs/EVALUATION.md` |
+| **Tayeb** | A — LLM infra | 1, 2, 3, 4, 5, 8, 9, 10 ✅ | Audit: 8/8 done — joint contract session (B2, H4, H5, M10, L13) | `apps/backend/bebshax/llm/**`, `apps/backend/bebshax/api/**` (except evaluation), `docs/ROUTING.md` |
+| **Sazid** | B — Data layer & auth | 6, 7 ✅ | Audit: H3 piece 2 (blocked on Shehab UI), L14 | `apps/backend/bebshax/db/**`, `alembic/`, `apps/backend/bebshax/auth/**`, `api/auth.py`, `data/**`, dataset scripts |
+| **Shehab** | C — Frontend & Eval | 11, 12 ✅ | Audit: 16/16 done — Phase 13 `"cached"` labelling | `apps/frontend/**`, `apps/backend/bebshax/evaluation/**`, `docs/API_CONTRACT.md`, `docs/EVALUATION.md` |
 
 Stay inside your paths. Need to change something outside them → PR + ping the owner. Full matrix and the convergence order for phases 8–15: [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md).
+
+`bebshax/api/**` and `bebshax/auth/**` were unowned until the audit — which is exactly where every blocker came from. Ownership is now assigned in the table above and in [docs/AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md#blocking-decision); all three still need to tick the agreement box there.
 
 ## 3. How to build your phase
 
