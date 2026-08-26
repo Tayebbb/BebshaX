@@ -39,10 +39,10 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | ----------------- | -------: | ---: |
 | Joint (all three) |        5 |    0 |
 | Tayeb | 8 | 8 |
-| Sazid | 11 | 3 |
+| Sazid | 11 | 4 |
 | Shehab | 16 | 0 |
 | Already closed | 1 | 1 |
-| **Total** | **41** | **12** |
+| **Total** | **41** | **13** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -81,8 +81,8 @@ Decide in this order, in one sitting:
 
 **Do B3 and B4 first, today. Nothing else on anyone's list starts until they are closed** — the repo is public and these are live account takeover.
 
-- [ ] 🔴 **B3** — `/api/auth/google` accepts a `credential` field and never validates it; it trusts the client-supplied `email`. Anyone who knows a user's email owns that account, and an empty body logs you in as `google.user@example.com`. Verify the Google token properly or delete the endpoint. → `api/auth.py`
-  > **BLOCKED (2026-08-26):** `api.ts:993` calls `/auth/google`. Deletion gated on Shehab migrating to `/api/auth/sync`.
+- [x] 🔴 **B3** — `/api/auth/google` accepts a `credential` field and never validates it; it trusts the client-supplied `email`. Anyone who knows a user's email owns that account, and an empty body logs you in as `google.user@example.com`. Verify the Google token properly or delete the endpoint. → `api/auth.py` — **DONE 2026-08-26** (Part 1: deleted unverified `/api/auth/google` endpoint, tests in `test_auth_google_removed.py`; Part 2: `/api/auth/sync` now requires and verifies real Neon session token server-side against Neon `/get-session`, client-supplied email rejected from lookup, tests in `test_auth_sync_verification.py`; frontend diffs for `api.ts`, `AuthPage.tsx`, `AuthModal.tsx` handed off to Shehab)
+
 - [x] 🔴 **B4** — `JWT_SECRET` is a string literal in source on a public repo; a forged token was accepted by `/auth/me`. Move to `Settings` + `.env` with a startup check that fails fast, and add `iss`/`aud` validation. **The new secret must be genuinely new — the old one is in git history and is permanently burned.** → `auth/security.py`, `config.py` — **DONE 2026-08-26** (`config.py` fail-fast validation, `security.py` iss/aud + dual-key rotation, 8 regression tests in `test_jwt_secret.py`)
 - [x] 🔴 **B1** — 100 % silent provenance loss. `ProvenanceRecord.task` is a `str` but the sink calls `r.task.value`; the `AttributeError` is swallowed, and the log guard `total_db_errors % 100 == 0` hides the first 99 failures. Fix is `str(r.task)` **plus** logging the first error **plus** a round-trip test asserting `total_written == 1`. → `db/sink.py`, `tests/db/test_sink.py` — **DONE 2026-08-26** (by Tayeb's agent at owner instruction; also fixed a second serialization bug — see audit fix log)
 - [~] 🔴 **B6** — `Businesses` and `Personas` have no `owner_id`, so tenancy is impossible even if auth were added. Add the columns + migration; Tayeb wires `Depends(get_current_user)` row scoping in `api/**`. → `db/models.py` + migration — **Stage 1 landed 2026-08-26** (nullable `owner_id` columns + FKs on `businesses`/`personas` + migration `8d648b892fd3`, 6 tests in `test_owner_id.py`); Stage 2 gated on B4 prod deployment.

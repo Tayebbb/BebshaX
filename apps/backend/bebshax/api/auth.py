@@ -1,5 +1,6 @@
 from datetime import timedelta
 from typing import Optional
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bebshax.auth.models import Users
 from bebshax.auth.security import create_access_token, decode_access_token
 from bebshax.auth.service import authenticate_user, create_user, get_user_by_email, get_user_by_id
+from bebshax.config import get_settings
 
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -24,9 +26,7 @@ class SignInRequest(BaseModel):
 
 
 class UserSyncRequest(BaseModel):
-    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-    full_name: Optional[str] = None
-    avatar_url: Optional[str] = None
+    neon_token: str = Field(..., min_length=1)
     auth_provider: str = "neon"
 
 
@@ -191,14 +191,49 @@ async def signin(
 
 
 
+async def verify_neon_token(token: str) -> dict:
+    """Calls Neon's session-verification endpoint server-side.
+    Identity comes only from Neon's verified response — never from client claims."""
+    settings = get_settings()
+    base_url = settings.neon_auth_url.rstrip("/")
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            resp = await client.get(
+                f"{base_url}/get-session",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Unable to reach Neon authentication service: {exc}",
+            )
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired Neon session token",
+        )
+    data = resp.json()
+    user = data.get("user")
+    if not user or not user.get("email"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired Neon session token",
+        )
+    return user
+
+
 @auth_router.post("/sync", response_model=AuthResponse)
 async def sync_user(
     payload: UserSyncRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    """Sync, register, or upsert an account authenticated via Neon Auth or external providers."""
-    email = payload.email.strip().lower()
-    full_name = payload.full_name or email.split("@")[0]
+    """Sync a Neon-authenticated user into the local mirror table.
+    Identity comes ONLY from Neon's verified response — never from client input."""
+    neon_user = await verify_neon_token(payload.neon_token)
+    email = neon_user["email"].strip().lower()
+    full_name = neon_user.get("full_name") or neon_user.get("name") or email.split("@")[0]
+    avatar_url = neon_user.get("avatar_url") or neon_user.get("image")
+
     user = await get_user_by_email(session, email)
     if not user:
         user = await create_user(
@@ -206,10 +241,10 @@ async def sync_user(
             email=email,
             full_name=full_name,
             auth_provider=payload.auth_provider,
-            avatar_url=payload.avatar_url,
+            avatar_url=avatar_url,
         )
-    elif payload.avatar_url and not user.avatar_url:
-        user.avatar_url = payload.avatar_url
+    elif avatar_url and not user.avatar_url:
+        user.avatar_url = avatar_url
         await session.commit()
         await session.refresh(user)
 
@@ -218,6 +253,7 @@ async def sync_user(
         access_token=token,
         user=_serialize_user(user),
     )
+
 
 
 @auth_router.get("/me", response_model=UserProfileResponse)

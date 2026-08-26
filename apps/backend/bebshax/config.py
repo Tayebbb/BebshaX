@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_days: int = 365
 
+    neon_auth_url: str = "https://ep-cold-star-azazjakq.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth"
+
     @field_validator("jwt_secret")
     @classmethod
     def secret_must_be_real(cls, v: str) -> str:
