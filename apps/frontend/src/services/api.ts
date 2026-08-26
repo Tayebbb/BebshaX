@@ -559,7 +559,8 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ content: message, message }),
-          signal: AbortSignal.timeout(120000),
+          // Free-tier LLM turns regularly take 60-190s; 120s aborted real replies.
+          signal: AbortSignal.timeout(300000),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -1693,32 +1694,33 @@ export const api = {
     title?: string
   ): Promise<Persona[]> {
     if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/study/generate-personas`, {
-          method: 'POST',
-          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({
-            study_id: studyId,
-            study_prompt: prompt,
-            study_title: title,
-            roles: roles || [],
-          }),
-          signal: AbortSignal.timeout(120000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            data.forEach((p) => {
-              mockStore.personas[p.id] = p;
-            });
-            return data;
-          }
-        }
+      // Live mode: no silent mock substitution. A generation failure must be
+      // visible to the user — fabricated personas would poison their research.
+      const res = await fetch(`${API_BASE}/study/generate-personas`, {
+        method: 'POST',
+        headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          study_id: studyId,
+          study_prompt: prompt,
+          study_title: title,
+          roles: roles || [],
+        }),
+        signal: AbortSignal.timeout(300000),
+      });
+      if (!res.ok) {
         lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Persona generation failed' }));
+        throw new Error(err.detail || 'Persona generation failed');
       }
+      lastKnownLive = true;
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error('Persona generation returned no personas');
+      }
+      data.forEach((p) => {
+        mockStore.personas[p.id] = p;
+      });
+      return data;
     }
 
     const promptLower = (prompt || title || '').toLowerCase();
@@ -4612,7 +4614,9 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ title }),
-          signal: AbortSignal.timeout(120000),
+          // Report synthesis reads every interview + runs LLM synthesis;
+          // 120s aborted real runs mid-generation.
+          signal: AbortSignal.timeout(300000),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -4692,7 +4696,8 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ persona_ids: personaIds, questions }),
-          signal: AbortSignal.timeout(120000),
+          // No AbortSignal: a real batch (personas × questions × 60-190s/turn)
+          // legitimately runs far longer than any fixed timeout.
         });
         if (res.ok) {
           lastKnownLive = true;

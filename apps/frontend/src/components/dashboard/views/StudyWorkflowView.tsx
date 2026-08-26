@@ -71,6 +71,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
   const [isGeneratingPersonas, setIsGeneratingPersonas] = useState<boolean>(false);
+  const [personaGenError, setPersonaGenError] = useState<string | null>(null);
   const [viewingPersona, setViewingPersona] = useState<Persona | null>(null);
 
   // Copilot Multi-turn Conversational States (Step 1)
@@ -102,6 +103,38 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   useEffect(() => {
     copilotMessagesRef.current = copilotMessages;
   }, [copilotMessages]);
+
+  // Restore the interview transcript for the selected persona on refresh:
+  // the turns live in the backend; only the conversation id is kept locally.
+  useEffect(() => {
+    if (!studyId || !activeInterviewPersonaId) return;
+    const storedConvId = localStorage.getItem(
+      `bebshax_conv_${studyId}_${activeInterviewPersonaId}`
+    );
+    if (!storedConvId) {
+      setConversationId(null);
+      setChatMessages([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getConversation(storedConvId)
+      .then((conv) => {
+        if (cancelled || !conv) return;
+        setConversationId(conv.id);
+        setChatMessages(conv.turns || []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          localStorage.removeItem(`bebshax_conv_${studyId}_${activeInterviewPersonaId}`);
+          setConversationId(null);
+          setChatMessages([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [studyId, activeInterviewPersonaId]);
 
   const handleStepChange = (newStep: number) => {
     const clamped = Math.max(1, Math.min(newStep, 5));
@@ -323,6 +356,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   const handleGeneratePersonas = async () => {
     setIsGeneratingPersonas(true);
+    setPersonaGenError(null);
     handleStepChange(2);
 
     const activeRoles = suggestedRoles.filter((r) => r.selected && r.count > 0);
@@ -358,8 +392,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           step: 2,
         });
       }
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setPersonaGenError(
+        err?.message || 'Persona generation failed. Please try again.'
+      );
     } finally {
       setIsGeneratingPersonas(false);
     }
@@ -404,17 +440,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     setInterviewStatusMap(initialMap);
 
     try {
-      await api.runBatchStudyInterviews(studyId, selectedPersonaIds, questions);
-      const completedMap: Record<string, 'completed'> = {};
+      const result = await api.runBatchStudyInterviews(studyId, selectedPersonaIds, questions);
+      // Honest per-persona statuses from the actual backend response —
+      // never mark a persona completed unless its interview really ran.
+      const statusMap: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'> = {};
+      const completedIds = new Set(
+        (result?.interviews || []).map((iv: any) => iv.persona_id).filter(Boolean)
+      );
+      const failedIds = new Set(
+        (result?.failed || []).map((f: any) => f.persona_id).filter(Boolean)
+      );
       personas.forEach((p) => {
-        completedMap[p.id] = 'completed';
+        if (completedIds.has(p.id)) statusMap[p.id] = 'completed';
+        else if (failedIds.has(p.id)) statusMap[p.id] = 'failed';
+        else statusMap[p.id] = selectedPersonaIds.includes(p.id) ? 'failed' : 'pending';
       });
-      setInterviewStatusMap(completedMap);
+      setInterviewStatusMap(statusMap);
       await api.listStudyInterviews(studyId).catch(() => []);
     } catch (err: any) {
-      const failedMap: Record<string, 'completed' | 'failed'> = {};
-      personas.forEach((p, idx) => {
-        failedMap[p.id] = idx === 0 ? 'completed' : 'failed';
+      // Whole-batch failure: everything selected is failed. Nothing "completed".
+      const failedMap: Record<string, 'pending' | 'failed'> = {};
+      personas.forEach((p) => {
+        failedMap[p.id] = selectedPersonaIds.includes(p.id) ? 'failed' : 'pending';
       });
       setInterviewStatusMap(failedMap);
     } finally {
@@ -444,27 +491,45 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       } else {
         const conv = await api.startConversation(activeInterviewPersonaId, study?.prompt || 'User Research Interview');
         setConversationId(conv.id);
+        if (studyId) {
+          localStorage.setItem(`bebshax_conv_${studyId}_${activeInterviewPersonaId}`, conv.id);
+        }
         const res = await api.sendMessage(conv.id, text);
         setChatMessages((prev) => [...prev, res.assistantTurn]);
       }
-    } catch {
-      // fallback response
+    } catch (err: any) {
+      // Honest failure: show the error in the transcript instead of silently
+      // dropping the turn (the user otherwise watches their question vanish).
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `turn_err_${Date.now()}`,
+          role: 'assistant',
+          content: `⚠ Interview turn failed: ${err?.message || 'request timed out'}. Your question was not answered — please retry.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+        },
+      ]);
     } finally {
       setIsSimulating(false);
     }
   };
 
   // Step 5: Report Synthesis
+  const [reportError, setReportError] = useState<string | null>(null);
   const handleGenerateFinalReport = async () => {
     if (!studyId) return;
     setIsGeneratingReport(true);
+    setReportError(null);
     try {
       const rep = await api.generateStudyReport(studyId);
       setReport(rep);
       setAvailableReports((prev) => [rep, ...prev.filter((r) => r.id !== rep.id)]);
       handleStepChange(5);
-    } catch {
-      // fallback report
+    } catch (err: any) {
+      // Honest failure: navigate to the report step and show the error there
+      // instead of leaving the user staring at an unchanged page.
+      setReportError(err?.message || 'Report generation failed. Please retry.');
+      handleStepChange(5);
     } finally {
       setIsGeneratingReport(false);
     }
@@ -965,6 +1030,21 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
            ============================================================ */}
         {currentStep === 2 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {personaGenError && (
+              <div
+                role="alert"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#FCA5A5',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  fontSize: '0.88rem',
+                }}
+              >
+                Persona generation failed: {personaGenError} — no personas were fabricated. Retry when ready.
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>
                 <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#FFFFFF', margin: '0 0 4px 0' }}>
@@ -1494,6 +1574,21 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
            ============================================================ */}
         {currentStep === 5 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            {reportError && (
+              <div
+                role="alert"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#FCA5A5',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  fontSize: '0.88rem',
+                }}
+              >
+                Report generation failed: {reportError}
+              </div>
+            )}
             {/* Header & Export Actions */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>
@@ -1505,12 +1600,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     letterSpacing: '0.06em',
                     padding: '3px 8px',
                     borderRadius: '6px',
-                    background: 'rgba(16, 185, 129, 0.12)',
-                    color: '#10B981',
-                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    background: report ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                    color: report ? '#10B981' : '#FCA5A5',
+                    border: report ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
                   }}
                 >
-                  Decision Report Ready • Version {report?.version || 1} {availableReports.length > 1 ? `(${availableReports.length} versions)` : ''}
+                  {report
+                    ? `Decision Report Ready • Version ${report.version || 1} ${availableReports.length > 1 ? `(${availableReports.length} versions)` : ''}`
+                    : 'No report generated yet'}
                 </span>
                 <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#FFFFFF', margin: '8px 0 4px 0' }}>
                   {report?.title || study?.title || 'Market Research & Validation Report'}
@@ -1567,7 +1664,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px' }}>
                 <div style={{ fontSize: '0.78rem', color: '#8D9999' }}>Demand Signal</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10B981', marginTop: '4px' }}>
-                  {report?.metrics?.demand_score || 85}%
+                  {report?.metrics?.demand_score != null ? `${report.metrics.demand_score}%` : '—'}
                 </div>
               </div>
               <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px' }}>
@@ -1579,7 +1676,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px' }}>
                 <div style={{ fontSize: '0.78rem', color: '#8D9999' }}>Confidence Score</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#14B8A6', marginTop: '4px' }}>
-                  {Math.round((report?.metrics?.confidence_score || 0.92) * 100)}%
+                  {report?.metrics?.confidence_score != null
+                    ? `${Math.round(report.metrics.confidence_score * 100)}%`
+                    : '—'}
                 </div>
               </div>
             </div>

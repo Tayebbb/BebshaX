@@ -163,6 +163,17 @@ class OpenRouterAdapter(ProviderAdapter):
                 "Empty text in OpenRouter message choice",
             )
 
+        # Mechanical truncation signal: the model ran out of output budget
+        # (reasoning models burning the cap on chain-of-thought leak raw,
+        # unusable analysis text). Policy: retry once, then next candidate.
+        if choices[0].get("finish_reason") == "length":
+            raise AttemptFailed(
+                FailureKind.MALFORMED_RESPONSE,
+                PROVIDER,
+                candidate.model,
+                "Output truncated at max_tokens (finish_reason=length)",
+            )
+
         usage_data = data.get("usage", {})
         usage = TokenUsage(
             input_tokens=usage_data.get("prompt_tokens", 0),

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 import random
 import uuid
@@ -11,6 +13,8 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["study_copilot"])
 
@@ -468,7 +472,9 @@ async def suggest_persona_roles(body: SuggestRolesRequest, request: Request) -> 
 
     if llm_router is not None:
         try:
-            prompt = SUGGEST_ROLES_PROMPT.format(study_prompt=body.study_prompt)
+            # NOTE: .replace(), not .format() — the template embeds a JSON example
+            # whose braces make str.format() raise KeyError.
+            prompt = SUGGEST_ROLES_PROMPT.replace("{study_prompt}", body.study_prompt or "")
             chat_messages = [
                 ChatMessage(role="system", content="You are a business research persona strategist. Return only valid JSON arrays."),
                 ChatMessage(role="user", content=prompt),
@@ -537,15 +543,19 @@ async def _generate_persona_via_llm(
     count: int,
 ) -> list[dict[str, Any]]:
     """Use LLM to generate contextual personas for the given role and study prompt."""
-    prompt = PERSONA_GENERATION_PROMPT.format(
-        count=count,
-        study_prompt=study_prompt,
-        role_title=role.role,
-        role_description=role.description,
-        role_id=role.id,
+    # NOTE: .replace(), not .format() — the template embeds a JSON example
+    # whose braces make str.format() raise KeyError (this silently disabled the
+    # LLM path entirely; every persona was a skeleton until 2026-08-26).
+    prompt = (
+        PERSONA_GENERATION_PROMPT
+        .replace("{count}", str(count))
+        .replace("{study_prompt}", study_prompt or "")
+        .replace("{role_title}", role.role or "")
+        .replace("{role_description}", role.description or "")
+        .replace("{role_id}", role.id or "")
     )
     chat_messages = [
-        ChatMessage(role="system", content="You are a synthetic persona generator. Return ONLY a valid JSON array, no markdown."),
+        ChatMessage(role="system", content="You are a synthetic persona generator. Return ONLY a valid JSON array, no markdown. Keep every description under 40 words so the full array always fits in the response."),
         ChatMessage(role="user", content=prompt),
     ]
     llm_req = LLMRequest(
@@ -553,6 +563,7 @@ async def _generate_persona_via_llm(
         messages=chat_messages,
         json_mode=True,
         temperature=0.8,
+        max_output_tokens=4096,
     )
     result = await llm_router.complete(llm_req)
     cleaned = result.text.strip()
@@ -587,13 +598,21 @@ async def generate_study_personas(body: GeneratePersonasRequest, request: Reques
     all_personas: list[dict[str, Any]] = []
 
     if llm_router is not None and selected_roles:
-        for role in selected_roles:
-            count = max(1, min(role.count, 5))
+        async def _one_role(role: PersonaRoleSuggestion) -> list[dict[str, Any]]:
+            count = max(1, min(role.count, 3))
             try:
-                personas = await _generate_persona_via_llm(llm_router, role, study_prompt, count)
-                all_personas.extend(personas)
+                return await _generate_persona_via_llm(llm_router, role, study_prompt, count)
             except Exception:
-                all_personas.append(_make_skeleton_persona(role, study_prompt))
+                logger.warning(
+                    "LLM persona generation failed for role %s; emitting skeleton fallback",
+                    role.id,
+                    exc_info=True,
+                )
+                return [_make_skeleton_persona(role, study_prompt)]
+
+        results = await asyncio.gather(*(_one_role(r) for r in selected_roles))
+        for personas in results:
+            all_personas.extend(personas)
 
     if not all_personas:
         all_personas = [_make_skeleton_persona(r, study_prompt) for r in selected_roles[:5]]
@@ -606,7 +625,11 @@ async def generate_study_personas(body: GeneratePersonasRequest, request: Reques
                 from bebshax.db.models import Personas, Studies
                 study = await db_session.get(Studies, body.study_id)
                 for p in all_personas:
-                    p_id = p.get("id") or f"per_{uuid.uuid4().hex[:12]}"
+                    # SERVER owns persona identity. LLM-suggested ids like
+                    # "user_003" collide across studies and hijack other
+                    # studies' rows (observed live: a demo persona leaked
+                    # into a fresh study's interview batch).
+                    p_id = f"per_{uuid.uuid4().hex[:12]}"
                     p["id"] = p_id
                     p["study_id"] = body.study_id
                     existing = await db_session.get(Personas, p_id)
@@ -636,7 +659,7 @@ async def generate_study_personas(body: GeneratePersonasRequest, request: Reques
                             goals=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Goals"] or ["Efficiency", "Convenience"],
                             needs=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Needs"] or ["Frictionless onboarding"],
                             pain_points=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Pain Points"] or ["Manual workarounds", "High cost"],
-                            grounding_score=float(p.get("grounding_ratio", 0.92)),
+                            grounding_score=float(p.get("grounding_ratio", 0.0)),
                         )
                         db_session.add(db_p)
                 if study:
@@ -690,8 +713,10 @@ def _make_skeleton_persona(role: PersonaRoleSuggestion, study_prompt: str) -> di
                 "evidence": None,
             }
         ],
-        "consistency_score": 0.85,
-        "grounding_ratio": 0.80,
+        # Honest scores: a skeleton has no evidence behind it. Never fabricate
+        # grounding/consistency for template output.
+        "consistency_score": 0.0,
+        "grounding_ratio": 0.0,
         "critic_notes": "Skeleton persona — regenerate with LLM for full detail.",
         "generation_model": "bebshax/skeleton-fallback",
         "created_at": "2026-08-24T22:00:00Z",

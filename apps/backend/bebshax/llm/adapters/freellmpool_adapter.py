@@ -115,6 +115,22 @@ class FreellmpoolAdapter(ProviderAdapter):
                 "empty response",
             )
 
+        # Mechanical truncation signal: completion consumed the entire output
+        # budget, so the reply is cut mid-thought (observed live: reasoning
+        # models leak truncated chain-of-thought). Same policy as other
+        # malformed responses: retry once, then advance.
+        if (
+            request.max_output_tokens is not None
+            and reply.completion_tokens is not None
+            and reply.completion_tokens >= request.max_output_tokens
+        ):
+            raise AttemptFailed(
+                FailureKind.MALFORMED_RESPONSE,
+                reply.provider_id or PROVIDER,
+                reply.model or VIRTUAL_MODEL,
+                f"output truncated at max_tokens ({reply.completion_tokens}/{request.max_output_tokens})",
+            )
+
         notes = [f"freellmpool internal attempts: {reply.attempts}"]
         if reply.cached:
             notes.append("served from freellmpool response cache")

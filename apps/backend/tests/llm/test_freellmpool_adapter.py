@@ -120,3 +120,25 @@ async def test_timeout_and_connection_errors_map() -> None:
 
 async def test_empty_reply_is_malformed_response() -> None:
     await _expect_failure(_reply(text="   "), FailureKind.MALFORMED_RESPONSE)
+
+
+async def test_truncated_reply_is_malformed_response() -> None:
+    """completion_tokens >= max_output_tokens ⇒ output was cut mid-thought."""
+    adapter = FreellmpoolAdapter(pool=StubPool(_reply(completion_tokens=64)))
+    [candidate] = await adapter.candidates()
+    with pytest.raises(AttemptFailed) as exc:
+        await adapter.complete(candidate, _request(max_output_tokens=64))
+    assert exc.value.kind == FailureKind.MALFORMED_RESPONSE
+    assert "truncated" in exc.value.detail
+
+
+async def test_reply_under_budget_is_not_truncated() -> None:
+    _, completion = await _complete(
+        _reply(completion_tokens=63), _request(max_output_tokens=64)
+    )
+    assert completion.text == "hello"
+
+
+async def test_no_budget_means_no_truncation_check() -> None:
+    _, completion = await _complete(_reply(completion_tokens=5000), _request())
+    assert completion.text == "hello"

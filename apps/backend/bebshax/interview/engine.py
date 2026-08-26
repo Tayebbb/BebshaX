@@ -545,7 +545,10 @@ class InterviewEngine:
             LLMRequest(
                 task=TaskType.PERSONA_INTERVIEW,
                 messages=messages,
-                max_output_tokens=450,
+                # 900, not 450: reasoning models spend budget on hidden
+                # chain-of-thought before the visible reply; 450 caused live
+                # truncation (adapters now classify that as MALFORMED_RESPONSE).
+                max_output_tokens=900,
                 temperature=0.7,
                 persona_id=conversation.persona_id,
                 conversation_id=conversation_id,

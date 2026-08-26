@@ -370,10 +370,10 @@ Respond ONLY with valid JSON."""
             task=TaskType.STRUCTURED_OUTPUT,
             messages=[ChatMessage(role="user", content=prompt)],
             temperature=0.3,
-            max_tokens=1500,
+            max_output_tokens=1500,
         )
         res = await llm_service.complete(req)
-        content = res.content.strip()
+        content = res.text.strip()
 
         # Parse JSON
         if "```json" in content:

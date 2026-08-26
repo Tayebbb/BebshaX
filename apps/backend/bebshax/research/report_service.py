@@ -8,6 +8,7 @@ into a multi-section executive decision report with versioning and provenance tr
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -35,6 +36,8 @@ from bebshax.db.models import (
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+
+logger = logging.getLogger(__name__)
 
 
 REPORT_SYSTEM_PROMPT = """You are BebshaX Chief Research Intelligence Officer.
@@ -209,8 +212,10 @@ class StudyReportService:
                     "total_interviews": len(conversations),
                     "total_personas": len(personas),
                     "total_claims": len(evidence_claims),
-                    "confidence_score": 0.92,
-                    "demand_score": 85,
+                    # Honest absence: scores are only present when the LLM
+                    # synthesis computed them from the actual study data.
+                    "confidence_score": None,
+                    "demand_score": None,
                 },
             ),
             is_synthetic=True,
@@ -347,7 +352,7 @@ class StudyReportService:
                     f'  "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"],\n'
                     f'  "validation_summary": "Synthesis of validation score and product-market fit signal",\n'
                     f'  "limitations": "Clear disclosure of synthetic simulation boundaries and dataset coverage",\n'
-                    f'  "metrics": {{"total_interviews": {len(conversations)}, "total_personas": {len(personas)}, "total_claims": {len(evidence_claims)}, "confidence_score": 0.92, "demand_score": 84}}\n'
+                    f'  "metrics": {{"total_interviews": {len(conversations)}, "total_personas": {len(personas)}, "total_claims": {len(evidence_claims)}, "confidence_score": <float 0.0-1.0: YOUR assessment of evidence coverage — lower it when interviews are few or claims are thin>, "demand_score": <integer 0-100: YOUR assessment of demand strength derived ONLY from the interview answers and pricing signals above>}}\n'
                     f"}}"
                 )
 
@@ -359,6 +364,11 @@ class StudyReportService:
                     ],
                     json_mode=True,
                     temperature=0.4,
+                    # The 20-section report JSON does not fit provider default
+                    # output caps (~1024 tokens); without this the JSON was
+                    # silently truncated and every report fell back to the
+                    # deterministic template.
+                    max_output_tokens=8000,
                 )
                 result = await self.llm_service.complete(llm_req)
                 cleaned = result.text.strip()
@@ -369,7 +379,10 @@ class StudyReportService:
                 if isinstance(parsed, dict) and "executive_summary" in parsed:
                     return parsed
             except Exception:
-                pass
+                logger.warning(
+                    "LLM report synthesis failed; falling back to deterministic report",
+                    exc_info=True,
+                )
 
         # Deterministic grounded fallback
         return self._generate_deterministic_report(
@@ -618,8 +631,8 @@ class StudyReportService:
                 "Highlight speed and concrete evidence in all initial marketing copy and product onboarding.",
             ],
             "validation_summary": (
-                f"Overall validation signal: Positive (85/100). The simulation and evidence base support proceeding "
-                f"to product development with the recommended positioning."
+                "Template synthesis — LLM report synthesis was unavailable, so no validation score was "
+                "computed. The sections above are deterministic summaries of the stored study data."
             ),
             "limitations": (
                 "Notice: This report synthesizes real research evidence with exploratory synthetic persona simulations. "
@@ -629,7 +642,8 @@ class StudyReportService:
                 "total_interviews": len(conversations),
                 "total_personas": len(personas),
                 "total_claims": len(evidence_claims),
-                "confidence_score": 0.92,
-                "demand_score": 85,
+                # Honest absence — a deterministic template cannot score demand.
+                "confidence_score": None,
+                "demand_score": None,
             },
         }

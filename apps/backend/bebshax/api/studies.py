@@ -540,14 +540,13 @@ async def trigger_study_research(
         from bebshax.research.service import ResearchEngineService
         llm_service = getattr(request.app.state, "llm_service", None) if request else None
         vector_engine = getattr(request.app.state, "vector_engine", None) if request else None
-        research_engine = ResearchEngineService(session=session, llm_service=llm_service, vector_engine=vector_engine)
+        research_engine = ResearchEngineService(llm_service=llm_service, vector_engine=vector_engine)
 
     effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
     run = await research_engine.run_study_research(
-        study_id=study_id,
+        session=session,
+        study=study,
         user_id=effective_user_id,
-        business_idea=study.prompt or study.title or "Business Idea",
-        target_market=study.target_audience or "Target Market",
     )
 
     return {
