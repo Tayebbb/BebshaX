@@ -18,6 +18,7 @@ async def create_business(
     description: str | None,
     industry: str | None = None,
     target_market: str | None = None,
+    owner_id: str = "usr_system_holder",
 ) -> Businesses:
     business = Businesses(
         id=uuid.uuid4().hex,
@@ -25,6 +26,7 @@ async def create_business(
         description=description,
         industry=industry,
         target_market=target_market,
+        owner_id=owner_id,
     )
     session.add(business)
     await session.commit()
@@ -40,17 +42,23 @@ async def list_businesses(session: AsyncSession) -> list[Businesses]:
     return list(result.scalars())
 
 
-async def save_persona(session: AsyncSession, profile: PersonaProfile) -> None:
+async def save_persona(
+    session: AsyncSession,
+    profile: PersonaProfile,
+    owner_id: str = "usr_system_holder",
+) -> None:
     session.add(
         Personas(
             id=profile.id,
             business_id=profile.business_id,
+            owner_id=getattr(profile, "owner_id", None) or owner_id,
             name=profile.name,
             status=profile.status,
             version=profile.version,
             generation_model=profile.generation_model,
         )
     )
+
     session.add(
         PersonaDetails(
             persona_id=profile.id,

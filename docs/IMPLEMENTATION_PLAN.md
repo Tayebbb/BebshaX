@@ -849,8 +849,21 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
     - `POST /api/auth/verify-email`: Validates verification token, checks 24-hour expiration and reuse, sets `user.is_verified = True`.
     - `POST /api/auth/resend-verification`: Rate-limited via slowapi (`3/hour`), dispatches fresh verification token.
   - **Configuration:** Added `resend_api_key`, `email_from_address`, and `frontend_base_url` to `Settings` in `config.py`.
-- **Regression Tests:**
-  - `apps/backend/tests/api/test_email_verification.py` (8 tests).
-  - `apps/backend/tests/auth/test_email_verification_token.py` (1 test).
 - **Verification:** 9/9 tests green; all 39 auth tests passing.
+
+---
+
+### Maintenance (2026-08-26) — Tenancy owner_id Backfill & NOT NULL Enforcement (B6 Stage 2 Data Layer)
+
+- **Audit item addressed:** 🔴 **B6** (E2E_AUDIT_2026-08-24.md & AUDIT_ASSIGNMENTS.md).
+- **Changes Applied:**
+  - **Stability Prerequisite:** Confirmed B4 JWT secret rotation completed and stable with zero `JWT_SECRET_PREVIOUS` residual in production.
+  - **System Holder Account:** Created tagged system holder account `usr_system_holder` (`system@bebshax.internal`, `"BebshaX System Data (do not treat as a real user)"`, `auth_provider="system"`).
+  - **Data Backfill & Schema Migration:** Applied Alembic migration `4e5f6a7b8c9d` backfilling 8 existing businesses and 37 personas (including demo-mode seed entities) to `usr_system_holder`, and altering `businesses.owner_id` and `personas.owner_id` to `NOT NULL`.
+  - **Seed Integration:** Updated `seed_demo_data()` in `apps/backend/bebshax/db/seed.py` and `apps/backend/bebshax/persona/store.py` to explicitly assign `owner_id="usr_system_holder"` on all demo entities.
+  - **API Scope Handoff:** Formulated API row-scoping spec for Tayeb to wire `Depends(get_current_user)` across `api/**`.
+- **Regression Tests:**
+  - `apps/backend/tests/db/test_owner_id_enforcement.py` (5 tests verifying NOT NULL integrity constraints on Businesses and Personas, tagged system holder properties, demo seed system ownership, and zero orphaned rows remaining).
+- **Verification:** 5/5 tests green; full backend test suite passing.
+
 

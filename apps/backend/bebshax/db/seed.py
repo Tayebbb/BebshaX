@@ -40,6 +40,19 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
 
         logger.info("Seeding demo user, business, personas, studies, and initial records...")
 
+        SYSTEM_HOLDER_ID = "usr_system_holder"
+        sys_user = await session.get(Users, SYSTEM_HOLDER_ID)
+        if not sys_user:
+            sys_user = Users(
+                id=SYSTEM_HOLDER_ID,
+                email="system@bebshax.internal",
+                full_name="BebshaX System Data (do not treat as a real user)",
+                auth_provider="system",
+                is_active=True,
+                is_verified=True,
+            )
+            session.add(sys_user)
+
         # 0. Seed Demo User
         user = Users(
             id="usr_sarah_founder",
@@ -59,8 +72,10 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
             description="Next-generation budgeting and micro-investment app for gig workers and freelancers.",
             industry="Fintech / Personal Finance",
             target_market="Independent contractors, rideshare drivers",
+            owner_id=SYSTEM_HOLDER_ID,
         )
         session.add(business)
+
 
         # 2. Seed Provenance request
         prov = LLMRequests(
@@ -222,7 +237,8 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
     )
 
     async with sessionmaker_() as session:
-        await save_persona(session, profile)
+        await save_persona(session, profile, owner_id="usr_system_holder")
         logger.info("Demo persona seed complete.")
     return True
+
 
