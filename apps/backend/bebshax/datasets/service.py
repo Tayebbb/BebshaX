@@ -473,6 +473,7 @@ class DatasetService:
                     id=p_id,
                     study_id=study_id,
                     user_id=user_id,
+                    owner_id=user_id or "usr_system_holder",
                     segment_id=p_data.get("segment_id"),
                     generation_run_id=run_id,
                     name=p_data.get("name", "Synthetic Persona"),

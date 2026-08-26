@@ -37,8 +37,8 @@ async def pg_env():
     maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     business_id, persona_id = uuid.uuid4().hex, uuid.uuid4().hex
     async with maker() as session:
-        session.add(Businesses(id=business_id, name="itest", description=None))
-        session.add(Personas(id=persona_id, business_id=business_id, name="itest-persona"))
+        session.add(Businesses(id=business_id, name="itest", description=None, owner_id="usr_system_holder"))
+        session.add(Personas(id=persona_id, business_id=business_id, name="itest-persona", owner_id="usr_system_holder"))
         await session.commit()
     yield maker, persona_id
     async with maker() as session:  # cleanup

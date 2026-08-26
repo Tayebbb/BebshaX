@@ -39,7 +39,7 @@ async def test_behavioral_api_crud_and_runs(tmp_path, monkeypatch):
         # Create user & study
         user = Users(id="usr_owner", email="owner@test.com", full_name="Owner User", hashed_password="hash", is_active=True, is_verified=True)
         study = Studies(id="std_owner", user_id="usr_owner", title="Owner Study", prompt="Testing behavioral")
-        persona = Personas(id="p_owner_1", study_id="std_owner", name="Persona 1")
+        persona = Personas(id="p_owner_1", study_id="std_owner", owner_id="usr_owner", name="Persona 1")
         session.add_all([user, study, persona])
         await session.commit()
 

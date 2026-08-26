@@ -36,6 +36,7 @@ async def full_study_context(session_maker):
             id="per_nadia",
             study_id="std_meal_prep",
             user_id="usr_tester",
+            owner_id="usr_tester",
             segment_id="seg_budget_students",
             name="Nadia Rahman",
             version=1,

@@ -38,14 +38,14 @@ async def test_user_a_cannot_access_user_b_interviews(tmp_path, monkeypatch):
         # User A setup
         user_a = Users(id="usr_a", email="usera@example.com", hashed_password="hashed_pw_a", full_name="User A")
         study_a = Studies(id="std_a", user_id="usr_a", title="Study A", status="in_progress")
-        persona_a = Personas(id="per_a", study_id="std_a", user_id="usr_a", name="Persona A", version=1)
+        persona_a = Personas(id="per_a", study_id="std_a", user_id="usr_a", owner_id="usr_a", name="Persona A", version=1)
         conv_a = Conversations(id="conv_a", study_id="std_a", user_id="usr_a", persona_id="per_a", objective="Obj A", status="active")
         ins_a = InterviewInsights(id="ins_a", interview_id="conv_a", study_id="std_a", user_id="usr_a", persona_id="per_a", type="pain_point", title="Insight A", description="Desc A")
 
         # User B setup
         user_b = Users(id="usr_b", email="userb@example.com", hashed_password="hashed_pw_b", full_name="User B")
         study_b = Studies(id="std_b", user_id="usr_b", title="Study B", status="in_progress")
-        persona_b = Personas(id="per_b", study_id="std_b", user_id="usr_b", name="Persona B", version=1)
+        persona_b = Personas(id="per_b", study_id="std_b", user_id="usr_b", owner_id="usr_b", name="Persona B", version=1)
         conv_b = Conversations(id="conv_b", study_id="std_b", user_id="usr_b", persona_id="per_b", objective="Obj B", status="active")
         ins_b = InterviewInsights(id="ins_b", interview_id="conv_b", study_id="std_b", user_id="usr_b", persona_id="per_b", type="pricing", title="Insight B", description="Desc B")
 

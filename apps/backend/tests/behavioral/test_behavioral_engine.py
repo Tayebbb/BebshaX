@@ -69,6 +69,7 @@ async def test_simulate_persona_pricing_grounding(session_maker: sessionmaker[As
         persona = Personas(
             id="p_behav_1",
             study_id="std_behav_1",
+            owner_id="usr_system_holder",
             name="Nadia Rahman",
             demographics={"age": "22", "occupation": "University Student", "income_level": "Modest (৳4000/mo allowance)"},
             commercial_profile={"monthly_budget_bdt": "400", "payment_method": "bKash"},
@@ -229,8 +230,8 @@ async def test_full_test_run_execution(session_maker: sessionmaker[AsyncSession]
         study = Studies(id="std_behav_run", title="Study Run Test", prompt="Food App")
         session.add(study)
 
-        p1 = Personas(id="p_run_1", study_id="std_behav_run", name="Tanvir Ahmed", commercial_profile={"monthly_budget_bdt": "600"})
-        p2 = Personas(id="p_run_2", study_id="std_behav_run", name="Sadia Islam", commercial_profile={"monthly_budget_bdt": "300"})
+        p1 = Personas(id="p_run_1", study_id="std_behav_run", owner_id="usr_system_holder", name="Tanvir Ahmed", commercial_profile={"monthly_budget_bdt": "600"})
+        p2 = Personas(id="p_run_2", study_id="std_behav_run", owner_id="usr_system_holder", name="Sadia Islam", commercial_profile={"monthly_budget_bdt": "300"})
         session.add_all([p1, p2])
 
         test = BehavioralTests(

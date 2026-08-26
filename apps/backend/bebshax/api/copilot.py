@@ -638,6 +638,7 @@ async def generate_study_personas(body: GeneratePersonasRequest, request: Reques
                             id=p_id,
                             study_id=body.study_id,
                             user_id=study.user_id if study else None,
+                            owner_id=(study.user_id if study else None) or "usr_system_holder",
                             name=p.get("name", "Target User"),
                             status="active",
                             version=1,

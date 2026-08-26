@@ -1,4 +1,4 @@
-"""B6 Stage 1: owner_id columns. Must FAIL before fix, PASS after."""
+"""B6: owner_id columns. Stage 1 added them nullable; stage 2 enforced NOT NULL."""
 from bebshax.db.models import Businesses, Personas
 
 
@@ -10,14 +10,14 @@ def test_personas_has_owner_id():
     assert hasattr(Personas, "owner_id")
 
 
-def test_businesses_owner_id_nullable():
+def test_businesses_owner_id_not_null():
     c = Businesses.__table__.c.get("owner_id")
-    assert c is not None and c.nullable is True
+    assert c is not None and c.nullable is False
 
 
-def test_personas_owner_id_nullable():
+def test_personas_owner_id_not_null():
     c = Personas.__table__.c.get("owner_id")
-    assert c is not None and c.nullable is True
+    assert c is not None and c.nullable is False
 
 
 def test_businesses_owner_id_fk():

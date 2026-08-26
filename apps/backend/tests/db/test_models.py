@@ -18,6 +18,7 @@ async def test_create_business(async_session: AsyncSession) -> None:
         id=business_id,
         name="Test Business",
         description="A test business",
+        owner_id="usr_system_holder",
     )
 
     async_session.add(business)
@@ -137,6 +138,7 @@ async def test_persona_with_business_fk(async_session: AsyncSession) -> None:
     business = Businesses(
         id=business_id,
         name="Test Business",
+        owner_id="usr_system_holder",
     )
     async_session.add(business)
     await async_session.flush()
@@ -145,6 +147,7 @@ async def test_persona_with_business_fk(async_session: AsyncSession) -> None:
         id=persona_id,
         business_id=business_id,
         name="John Doe",
+        owner_id="usr_system_holder",
         status="active",
         version=1,
         generation_model="gpt-4",
@@ -190,6 +193,7 @@ async def test_datetime_defaults(async_session: AsyncSession) -> None:
     business = Businesses(
         id=business_id,
         name="Test Business",
+        owner_id="usr_system_holder",
     )
     async_session.add(business)
     await async_session.commit()

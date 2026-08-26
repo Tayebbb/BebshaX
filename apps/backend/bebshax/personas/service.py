@@ -200,6 +200,7 @@ class PersonaGenerationService:
                     id=persona_id,
                     study_id=study_id,
                     user_id=user_id,
+                    owner_id=user_id or "usr_system_holder",
                     segment_id=matched_sid,
                     generation_run_id=run_id,
                     name=draft.name,

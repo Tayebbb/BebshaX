@@ -75,6 +75,7 @@ async def test_persona_endpoints_idor_protection():
             id="per_a_1",
             study_id=study_a.id,
             user_id=user_a.id,
+            owner_id=user_a.id,
             segment_id=seg_a.id,
             generation_run_id=run_a.id,
             name="Tanvir Ahmed",

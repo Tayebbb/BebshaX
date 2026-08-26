@@ -142,3 +142,33 @@ def test_sync_rejects_missing_emailverified_field():
         assert response.status_code == 401
 
 
+def test_sync_rejects_unknown_auth_provider():
+    """auth_provider must be constrained to known values, not client-supplied."""
+    response = client.post(
+        "/api/auth/sync",
+        json={"neon_token": "valid-token", "auth_provider": "definitely-not-real"},
+    )
+    assert response.status_code == 422
+
+
+def test_sync_accepts_known_auth_provider_values():
+    with patch("bebshax.api.auth.verify_neon_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = {
+            "user": {
+                "id": "neon_enum_user_1",
+                "email": "enumtest@example.com",
+                "name": "Enum Test",
+                "emailVerified": True,
+            },
+            "session": {"token": "valid-token"},
+        }
+        response = client.post(
+            "/api/auth/sync",
+            json={"neon_token": "valid-token", "auth_provider": "neon"},
+        )
+        assert response.status_code == 200
+        assert response.json()["user"]["auth_provider"] == "neon"
+
+
+
+
