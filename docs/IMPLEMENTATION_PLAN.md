@@ -53,8 +53,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
-> **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended *below* Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
+> **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
+### Maintenance (2026-08-26) — Cinematic interview workspace (frontend redesign)
 
+- Rebuilt the authenticated interview experience as `components/interview/InterviewWorkspace` (+ scoped `interview.css` token layer): research-transcript typography instead of chat bubbles, breathing persona identity orb + SIMULATION ACTIVE/COMPLETE status, CSS-only ambient backdrop (transform/opacity, paused when tab hidden, reduced-motion aware), frosted-glass composer with focus illumination, honest long-latency thinking state with elapsed-seconds counter, presentation-only word reveal of received replies, per-turn provenance (`T·latency·route`) on hover, engine-suggested question chips, context rail (objective/turn progress/live topic coverage/participant demographics/grounding/synthesis insights with turn-jump refs) that collapses to an off-canvas panel ≤1120px, taxonomy-aware failure panels (413 context-window / 503 no-route / finished) that return the unanswered question to the composer. **Found & fixed during audit:** the old `InterviewWorkspaceView` was 906 lines of dead Tailwind classnames (Tailwind was never installed — rendered unstyled) and crashed on the live backend (`data.interview.status` vs the flat `_serialize_interview` contract) — it had never worked against the real API. Old view deleted; DashboardLayout re-pointed; workspace test rewritten against the real flat contract + a new honest-failure test; jsdom `matchMedia` polyfill in test setup. Live-verified end-to-end (fresh Rashedul interview: empty state → suggestion → 27s…185s honest wait → in-character reply with `kilo/nvidia/nemotron-3-super-120b:free` route → topics lit → 2/14). 76 frontend tests + tsc + build green.
 ### Maintenance (2026-08-26) — Top-3 QA recommendations: async batch jobs, numeric contradiction detection, H9 verification gate
 
 - Batch interviews are now a background job (202 + job_id, `GET .../batch-run/{job_id}` polling, per-persona honest statuses, 404 for restart-lost jobs) with a polling UI — live-verified 202 <1 s vs the prior 12.8-min blocking request. Contradiction detector compares the persona's own prior money-rate claims (monthly-normalized, currency+period cues, ≥3× on shared spend topic) — 10 tests incl. the live-observed 120/day-vs-25k/month case + end-to-end `ask()` metadata wiring; live turn recorded honest `contradiction_detected: false` for a consistent answer. H9: signup issues no session outside demo_mode, unverified signin → 403 EMAIL_NOT_VERIFIED, `/auth/sync` flips `is_verified` after server-side Neon verification, frontend commits sessions only through verify→Neon token→sync→JWT and reports OTP-send failures honestly — browser-verified (no token after signup, bypass dead, wrong code rejected, verified signin lands). Suite 293 backend + 71 frontend. Details in [E2E_AUDIT_2026-08-24.md](E2E_AUDIT_2026-08-24.md).
@@ -794,7 +796,6 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
 - **Verification:** 4/4 tests green; full backend suite passing.
 
 ---
-
 
 ### Maintenance (2026-08-26) — Shehab Track Audit Completion (16 Items: B5, H1, M1, M7, L1–L11, L15)
 

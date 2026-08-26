@@ -1,13 +1,12 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { InterviewsView } from '../src/components/dashboard/views/InterviewsView';
-import { InterviewWorkspaceView } from '../src/components/dashboard/views/InterviewWorkspaceView';
+import { InterviewWorkspace } from '../src/components/interview/InterviewWorkspace';
 import { StartInterviewModal } from '../src/components/dashboard/modals/StartInterviewModal';
 import { api } from '../src/services/api';
 import {
   SyntheticPersona,
   Interview,
-  InterviewDetailResponse,
 } from '../src/types';
 
 vi.mock('../src/services/api', () => ({
@@ -83,8 +82,10 @@ const mockInterview: Interview = {
   created_at: new Date().toISOString(),
 };
 
-const mockDetail: InterviewDetailResponse = {
-  interview: mockInterview,
+// The backend returns the interview FLAT (turns/insights/suggestions at the
+// top level) — this mirrors bebshax.api.interviews._serialize_interview.
+const mockDetail = {
+  ...mockInterview,
   turns: [
     {
       id: 't_1',
@@ -104,7 +105,7 @@ const mockDetail: InterviewDetailResponse = {
       created_at: new Date().toISOString(),
     },
   ],
-  insights: [
+  structured_insights: [
     {
       id: 'ins_1',
       type: 'pain_point',
@@ -119,11 +120,6 @@ const mockDetail: InterviewDetailResponse = {
   suggested_questions: [
     'How much would you pay per month for an alternative meal service?',
     'What payment method do you use most frequently?',
-  ],
-  topics: [
-    { id: 'pain_points', label: 'Problem Discovery & Friction', status: 'explored' },
-    { id: 'pricing_budget', label: 'Pricing & Budget Tolerance', status: 'explored' },
-    { id: 'current_behavior', label: 'Current Habits & Workarounds', status: 'not_explored' },
   ],
 };
 
@@ -199,23 +195,24 @@ describe('Adaptive Persona Interviews (Part 6)', () => {
     });
   });
 
-  it('renders InterviewWorkspaceView with transcript, suggestions, and synthesis tab', async () => {
+  it('renders InterviewWorkspace with transcript, suggestions, provenance and insights', async () => {
     vi.mocked(api.getStudyInterviewDetail).mockResolvedValue(mockDetail);
     vi.mocked(api.getStudyPersonaDetail).mockResolvedValue(mockPersona);
     vi.mocked(api.sendInterviewMessage).mockResolvedValue({
       reply: '৳2,000 is way above my ৳400 monthly allowance.',
       turn_number: 4,
-      total_turns: 4,
+      turn_count: 4,
       max_turns: 14,
       is_finished: false,
       topic: 'pricing_budget',
       topics_explored: { pain_points: 'explored', pricing_budget: 'explored' },
       suggested_questions: ['What if it were ৳250/mo?'],
       latency_ms: 250,
+      served_by: 'openrouter/qwen3.5',
     });
 
     render(
-      <InterviewWorkspaceView
+      <InterviewWorkspace
         studyId="study_123"
         interviewId="int_001"
         onBackToInterviews={vi.fn()}
@@ -228,11 +225,17 @@ describe('Adaptive Persona Interviews (Part 6)', () => {
       expect(screen.getByText(/I usually eat at the dorm canteen/i)).toBeDefined();
     });
 
-    // Check suggested question pill
-    const suggestionPill = screen.getByText('How much would you pay per month for an alternative meal service?');
-    expect(suggestionPill).toBeDefined();
+    // Provenance is honest and visible: the concrete serving route.
+    expect(screen.getByText(/openrouter\/qwen3\.5/)).toBeDefined();
 
-    // Click suggestion to send message
+    // Structured insights render with turn references.
+    expect(screen.getByText('Hostel Dining Monotony')).toBeDefined();
+    expect(screen.getByText('T2')).toBeDefined();
+
+    // Suggested question chip sends the real message.
+    const suggestionPill = screen.getByText(
+      'How much would you pay per month for an alternative meal service?'
+    );
     fireEvent.click(suggestionPill);
 
     await waitFor(() => {
@@ -243,14 +246,40 @@ describe('Adaptive Persona Interviews (Part 6)', () => {
       );
     });
 
-    // Switch to Synthesis tab
-    const synthesisTabBtn = screen.getByText('Synthesis & Insights');
-    fireEvent.click(synthesisTabBtn);
+    // The persona's reply lands in the transcript with its new suggestion.
+    await waitFor(() => {
+      expect(screen.getByText(/way above my ৳400 monthly allowance/i)).toBeDefined();
+    });
+  });
+
+  it('returns the question to the composer and shows an honest error when a turn fails', async () => {
+    vi.mocked(api.getStudyInterviewDetail).mockResolvedValue(mockDetail);
+    vi.mocked(api.getStudyPersonaDetail).mockResolvedValue(mockPersona);
+    vi.mocked(api.sendInterviewMessage).mockRejectedValue(
+      new Error('No LLM route could serve this request')
+    );
+
+    render(
+      <InterviewWorkspace
+        studyId="study_123"
+        interviewId="int_001"
+        onBackToInterviews={vi.fn()}
+      />
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('Research Findings: Nadia Rahman')).toBeDefined();
-      expect(screen.getByText('Hostel Dining Monotony')).toBeDefined();
-      expect(screen.getByText('Turn #2')).toBeDefined();
+      expect(screen.getByText(/dorm canteen/i)).toBeDefined();
     });
+
+    const input = screen.getByLabelText(/Interview question for/i);
+    fireEvent.change(input, { target: { value: 'Would you pay 500 taka?' } });
+    fireEvent.click(screen.getByLabelText('Send question'));
+
+    await waitFor(() => {
+      // Failure is classified (no fabricated persona reply) …
+      expect(screen.getByText('No model route available')).toBeDefined();
+    });
+    // … and the unanswered question is preserved in the composer for retry.
+    expect((input as HTMLTextAreaElement).value).toBe('Would you pay 500 taka?');
   });
 });

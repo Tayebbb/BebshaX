@@ -70,15 +70,15 @@ result.provenance    # the full audit trail
 
 Source: [apps/backend/bebshax/llm/router.py](../apps/backend/bebshax/llm/router.py) + [apps/backend/bebshax/llm/service.py](../apps/backend/bebshax/llm/service.py).
 
-| #   | Step                   | Where                                                                          | In plain English                                                                                                                                                               |
-| --- | ---------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | **Task → pool**        | [pools.py](../apps/backend/bebshax/llm/pools.py)                               | A lookup table, not `if/else`. `PERSONA_INTERVIEW` → `conversation` pool.                                                                                                      |
-| 2   | **Throttle**           | `asyncio.Semaphore` per pool                                                   | Each pool has a concurrency cap (e.g. `reasoning` = 2) so we don't hammer free tiers.                                                                                          |
-| 3   | **Collect candidates** | adapter `.candidates()`                                                        | Ask each adapter in the pool what routes it can serve _right now_. Ollama discovers models live from `/api/tags`.                                                              |
+| #   | Step                   | Where                                                                          | In plain English                                                                                                                                                                                                                                                       |
+| --- | ---------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Task → pool**        | [pools.py](../apps/backend/bebshax/llm/pools.py)                               | A lookup table, not `if/else`. `PERSONA_INTERVIEW` → `conversation` pool.                                                                                                                                                                                              |
+| 2   | **Throttle**           | `asyncio.Semaphore` per pool                                                   | Each pool has a concurrency cap (e.g. `reasoning` = 2) so we don't hammer free tiers.                                                                                                                                                                                  |
+| 3   | **Collect candidates** | adapter `.candidates()`                                                        | Ask each adapter in the pool what routes it can serve _right now_. Ollama discovers models live from `/api/tags`.                                                                                                                                                      |
 | 4   | **Rank**               | `ranker` hook                                                                  | Production = the §10 quota-aware ranker. An explicit per-request preference (`LLMRequest.preferred_provider/preferred_model`, None = **Auto**) is then prioritized — advisory, never exclusive, so an unavailable preferred model degrades to Auto instead of failing. |
-| 5   | **Pre-flight filter**  | `filter_eligible()` + [estimator.py](../apps/backend/bebshax/llm/estimator.py) | Drop routes that are cooling down, can't do JSON/tools, or whose context window is smaller than our token estimate. **Ineligible routes are never called.**                    |
-| 6   | **Attempt loop**       | `attempt_candidates()`                                                         | Try candidate #1. If it fails, look up the failure kind in `FAILURE_POLICIES` → retry once / move on / cool it down / surface immediately. Then candidate #2, #3…              |
-| 7   | **Record**             | [provenance.py](../apps/backend/bebshax/llm/provenance.py)                     | Write every candidate considered, every attempt, latencies, tokens, and the final serving model — **on success _and_ on failure**.                                             |
+| 5   | **Pre-flight filter**  | `filter_eligible()` + [estimator.py](../apps/backend/bebshax/llm/estimator.py) | Drop routes that are cooling down, can't do JSON/tools, or whose context window is smaller than our token estimate. **Ineligible routes are never called.**                                                                                                            |
+| 6   | **Attempt loop**       | `attempt_candidates()`                                                         | Try candidate #1. If it fails, look up the failure kind in `FAILURE_POLICIES` → retry once / move on / cool it down / surface immediately. Then candidate #2, #3…                                                                                                      |
+| 7   | **Record**             | [provenance.py](../apps/backend/bebshax/llm/provenance.py)                     | Write every candidate considered, every attempt, latencies, tokens, and the final serving model — **on success _and_ on failure**.                                                                                                                                     |
 
 ### The critical guarantee (R2)
 
@@ -227,13 +227,13 @@ What GitHub gateways like _uni-api_ / _one-api_ offer — rotating across free p
 
 Capacity comes from **one legitimate key per provider** (Groq, Gemini, Mistral, Cerebras, GitHub Models, Cloudflare, NVIDIA, Cohere, HF, …) plus routing that drains all daily quotas _evenly_:
 
-| Piece | Status | Where |
-| ----------------------------- | --- | ---------------------------------------------------------------- |
-| `scripts/measure_capacity.py` | ✅ | replays a live traffic mix; reports tokens/provider               |
-| Quota ledger                  | ✅ | [quota.py](../apps/backend/bebshax/llm/quota.py) — `PROVIDER_QUOTAS` data table + in-memory day counters seeded from `llm_requests` at startup |
-| Quota-aware ranker            | ✅ | `quota_aware_ranker(ledger)` wired into `PoolRouter` in `create_app`; capped providers sink, stable sort keeps pool order otherwise |
-| Persistent cooldowns          | ✅ | `model_registry.cooldown_until` via [capacity_state.py](../apps/backend/bebshax/db/capacity_state.py); restored at startup, survive restarts |
-| `GET /api/routing/capacity`   | ✅ | used today / caps / remaining fraction per concrete provider     |
+| Piece                         | Status | Where                                                                                                                                          |
+| ----------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/measure_capacity.py` | ✅     | replays a live traffic mix; reports tokens/provider                                                                                            |
+| Quota ledger                  | ✅     | [quota.py](../apps/backend/bebshax/llm/quota.py) — `PROVIDER_QUOTAS` data table + in-memory day counters seeded from `llm_requests` at startup |
+| Quota-aware ranker            | ✅     | `quota_aware_ranker(ledger)` wired into `PoolRouter` in `create_app`; capped providers sink, stable sort keeps pool order otherwise            |
+| Persistent cooldowns          | ✅     | `model_registry.cooldown_until` via [capacity_state.py](../apps/backend/bebshax/db/capacity_state.py); restored at startup, survive restarts   |
+| `GET /api/routing/capacity`   | ✅     | used today / caps / remaining fraction per concrete provider                                                                                   |
 
 Quota numbers in `PROVIDER_QUOTAS` marked "verify at signup" are conservative placeholders — correct them as keys are added.
 
@@ -254,7 +254,7 @@ Honest ceiling: real-time + free tiers is bounded by the _sum of per-minute limi
 | Routing strategy experiments + evaluation metrics                                        | ✅ Phase 11                                                                                                 |
 | **Registry-driven ranking** (quality/latency/health scores feeding the `ranker` hook)    | ⬜ open — hook exists, scores not wired                                                                     |
 | **Tool calling**                                                                         | ⬜ open — no adapter advertises `supports_tools`, so `TOOL_CALLING` fails explicitly rather than pretending |
-| **Quota-aware capacity layer** (ledger, ranker, persistent cooldowns, capacity endpoint) | ✅ built 2026-08-26, live-verified — see [§10](#10-capacity-making-the-free-tiers-last)              |
+| **Quota-aware capacity layer** (ledger, ranker, persistent cooldowns, capacity endpoint) | ✅ built 2026-08-26, live-verified — see [§10](#10-capacity-making-the-free-tiers-last)                     |
 | Full test matrix / acceptance tests                                                      | ⬜ Phase 14                                                                                                 |
 
 ---

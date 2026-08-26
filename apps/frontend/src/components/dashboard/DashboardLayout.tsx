@@ -21,7 +21,7 @@ import { ModelRouterView } from './views/ModelRouterView';
 import { EvidenceLaboratoryView } from './views/EvidenceLaboratoryView';
 import { SegmentationView } from './views/SegmentationView';
 import { InterviewsView } from './views/InterviewsView';
-import { InterviewWorkspaceView } from './views/InterviewWorkspaceView';
+import { InterviewWorkspace } from '../interview/InterviewWorkspace';
 import { BehavioralTestingView } from './views/BehavioralTestingView';
 import { BehavioralTestDetailView } from './views/BehavioralTestDetailView';
 import { BehavioralComparisonView } from './views/BehavioralComparisonView';
@@ -862,7 +862,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         )}
 
         {activeTab === 'interview-workspace' && activeInterviewId && (
-          <InterviewWorkspaceView
+          <InterviewWorkspace
             studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
             interviewId={activeInterviewId}
             onBackToInterviews={() => navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`)}

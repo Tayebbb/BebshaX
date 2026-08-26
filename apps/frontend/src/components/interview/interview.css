@@ -1,0 +1,755 @@
+/* ==========================================================================
+   BebshaX Interview Workspace — cinematic simulation environment
+   Scope: all classes prefixed iv- ; consumes the global token layer in
+   index.css and adds workspace-local tokens. No Tailwind.
+   ========================================================================== */
+
+.iv-root {
+  /* Local tokens (surfaces darker than the dashboard chrome for depth) */
+  --iv-bg: #050707;
+  --iv-surface: rgba(13, 17, 17, 0.72);
+  --iv-surface-solid: #0d1111;
+  --iv-surface-raised: rgba(17, 22, 22, 0.85);
+  --iv-glass: rgba(10, 13, 13, 0.55);
+  --iv-line: rgba(32, 39, 39, 0.9);
+  --iv-line-soft: rgba(32, 39, 39, 0.5);
+  --iv-accent: #14b8a6;
+  --iv-accent-soft: rgba(20, 184, 166, 0.14);
+  --iv-accent-line: rgba(20, 184, 166, 0.35);
+  --iv-gold: #f6c878;
+  --iv-gold-soft: rgba(246, 200, 120, 0.12);
+  --iv-danger: #ef4444;
+  --iv-danger-soft: rgba(239, 68, 68, 0.08);
+  --iv-text: #f4f7f7;
+  --iv-text-dim: #8d9999;
+  --iv-text-faint: #5b6666;
+  --iv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --iv-t-micro: 220ms;
+  --iv-t-move: 480ms;
+  --iv-t-scene: 780ms;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 76px);
+  overflow: hidden;
+  background: var(--iv-bg);
+  color: var(--iv-text);
+  isolation: isolate;
+}
+
+/* --------------------------------------------------------------------------
+   Ambient simulation backdrop — pure CSS, transform/opacity only.
+   -------------------------------------------------------------------------- */
+.iv-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.iv-ambient::before,
+.iv-ambient::after {
+  content: '';
+  position: absolute;
+  width: 60vmax;
+  height: 60vmax;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.16;
+  will-change: transform;
+}
+.iv-ambient::before {
+  background: radial-gradient(circle at center, rgba(20, 184, 166, 0.5), transparent 65%);
+  top: -28vmax;
+  right: -18vmax;
+  animation: iv-drift-a 46s var(--iv-ease) infinite alternate;
+}
+.iv-ambient::after {
+  background: radial-gradient(circle at center, rgba(34, 211, 238, 0.32), transparent 65%);
+  bottom: -30vmax;
+  left: -16vmax;
+  animation: iv-drift-b 58s var(--iv-ease) infinite alternate;
+}
+.iv-root.iv-paused .iv-ambient::before,
+.iv-root.iv-paused .iv-ambient::after {
+  animation-play-state: paused;
+}
+@keyframes iv-drift-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-9vmax, 7vmax, 0) scale(1.12); }
+}
+@keyframes iv-drift-b {
+  from { transform: translate3d(0, 0, 0) scale(1.05); }
+  to   { transform: translate3d(8vmax, -6vmax, 0) scale(0.95); }
+}
+
+/* --------------------------------------------------------------------------
+   Header — active participant identity
+   -------------------------------------------------------------------------- */
+.iv-header {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 26px;
+  border-bottom: 1px solid var(--iv-line-soft);
+  background: var(--iv-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.iv-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--iv-text-dim);
+  font: 600 0.78rem var(--font-sans);
+  cursor: pointer;
+  transition: color var(--iv-t-micro) var(--iv-ease), background var(--iv-t-micro) var(--iv-ease);
+}
+.iv-back:hover { color: var(--iv-text); background: rgba(255, 255, 255, 0.04); }
+
+.iv-id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.iv-orb {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font: 700 1rem 'Space Grotesk', var(--font-sans);
+  color: #041110;
+  background: linear-gradient(140deg, #2dd4bf, #0e7490);
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.35), 0 4px 18px rgba(13, 148, 136, 0.25);
+}
+.iv-orb::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  animation: iv-orb-breathe 4.5s var(--iv-ease) infinite;
+}
+.iv-root.iv-complete .iv-orb::after { animation: none; opacity: 0.35; }
+@keyframes iv-orb-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50%      { transform: scale(1.12); opacity: 0.25; }
+}
+.iv-id-name {
+  font: 700 1.05rem 'Space Grotesk', var(--font-sans);
+  letter-spacing: -0.01em;
+  color: var(--iv-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.iv-id-role {
+  font: 500 0.74rem var(--font-sans);
+  color: var(--iv-text-dim);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.iv-sim-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--iv-accent-line);
+  background: var(--iv-accent-soft);
+  color: #5eead4;
+  font: 600 0.66rem var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.iv-sim-status .iv-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2dd4bf;
+  animation: iv-pulse 2.2s ease-in-out infinite;
+}
+.iv-sim-status.iv-done {
+  border-color: rgba(246, 200, 120, 0.35);
+  background: var(--iv-gold-soft);
+  color: var(--iv-gold);
+}
+.iv-sim-status.iv-done .iv-dot { background: var(--iv-gold); animation: none; }
+@keyframes iv-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.8); }
+}
+.iv-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.iv-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--iv-line);
+  background: transparent;
+  color: var(--iv-text-dim);
+  font: 600 0.74rem var(--font-sans);
+  cursor: pointer;
+  transition: all var(--iv-t-micro) var(--iv-ease);
+  white-space: nowrap;
+}
+.iv-ghost-btn:hover:not(:disabled) { color: var(--iv-text); border-color: var(--iv-accent-line); }
+.iv-ghost-btn:disabled { opacity: 0.45; cursor: default; }
+.iv-ghost-btn.iv-primary {
+  border-color: var(--iv-accent-line);
+  background: var(--iv-accent-soft);
+  color: #5eead4;
+}
+.iv-ghost-btn.iv-primary:hover:not(:disabled) { background: rgba(20, 184, 166, 0.22); }
+
+/* --------------------------------------------------------------------------
+   Body — conversation stage + context rail
+   -------------------------------------------------------------------------- */
+.iv-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.iv-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.iv-scroll {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #223030 transparent;
+  padding: 34px 28px 12px;
+}
+.iv-scroll::-webkit-scrollbar { width: 8px; }
+.iv-scroll::-webkit-scrollbar-thumb { background: #223030; border-radius: 4px; }
+.iv-thread {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+/* Transcript turns — typographic, not bubbles */
+.iv-turn {
+  animation: iv-enter var(--iv-t-move) var(--iv-ease) both;
+}
+@keyframes iv-enter {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.iv-turn-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.iv-speaker {
+  font: 700 0.68rem var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.iv-turn.iv-you .iv-speaker { color: var(--iv-text-faint); }
+.iv-turn.iv-persona .iv-speaker { color: #5eead4; }
+.iv-turn-meta {
+  font: 500 0.64rem var(--font-mono);
+  color: var(--iv-text-faint);
+  opacity: 0;
+  transition: opacity var(--iv-t-micro) var(--iv-ease);
+}
+.iv-turn:hover .iv-turn-meta,
+.iv-turn:focus-within .iv-turn-meta { opacity: 1; }
+.iv-turn-body {
+  font: 400 0.95rem/1.72 var(--font-sans);
+  color: var(--iv-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.iv-turn.iv-you .iv-turn-body {
+  color: #c8d4d4;
+  border-left: 2px solid var(--iv-line);
+  padding-left: 16px;
+}
+.iv-turn.iv-persona .iv-turn-body { padding-left: 0; }
+.iv-turn-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity var(--iv-t-micro) var(--iv-ease), transform var(--iv-t-micro) var(--iv-ease);
+}
+.iv-turn:hover .iv-turn-actions,
+.iv-turn:focus-within .iv-turn-actions { opacity: 1; transform: translateY(0); }
+.iv-mini-btn {
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--iv-line-soft);
+  background: transparent;
+  color: var(--iv-text-faint);
+  font: 600 0.66rem var(--font-sans);
+  cursor: pointer;
+  transition: all var(--iv-t-micro) var(--iv-ease);
+}
+.iv-mini-btn:hover { color: var(--iv-text); border-color: var(--iv-line); }
+.iv-turn.iv-flash {
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px var(--iv-accent-line);
+  padding: 10px 14px;
+  margin: -10px -14px;
+}
+
+/* Thinking state (honest long-latency wait) */
+.iv-thinking {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: iv-enter var(--iv-t-move) var(--iv-ease) both;
+}
+.iv-thinking-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: 500 0.84rem var(--font-sans);
+  color: var(--iv-text-dim);
+}
+.iv-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 17px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #2dd4bf, #0e7490);
+  animation: iv-cursor-breathe 1.4s ease-in-out infinite;
+}
+@keyframes iv-cursor-breathe {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+.iv-thinking-sub {
+  font: 500 0.68rem var(--font-mono);
+  color: var(--iv-text-faint);
+}
+
+/* Empty state — cinematic introduction */
+.iv-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: 40px 24px;
+  animation: iv-scene-in var(--iv-t-scene) var(--iv-ease) both;
+}
+@keyframes iv-scene-in {
+  from { opacity: 0; transform: translate3d(0, 22px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.iv-empty-orb {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 700 1.8rem 'Space Grotesk', var(--font-sans);
+  color: #041110;
+  background: linear-gradient(140deg, #2dd4bf, #0e7490);
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.4), 0 0 60px rgba(20, 184, 166, 0.25);
+  margin-bottom: 14px;
+}
+.iv-empty-kicker {
+  font: 600 0.68rem var(--font-mono);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--iv-text-faint);
+}
+.iv-empty-title {
+  font: 800 clamp(1.9rem, 4.2vw, 3rem) 'Unbounded', 'Space Grotesk', var(--font-sans);
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  color: var(--iv-text);
+  text-transform: uppercase;
+}
+.iv-empty-sub {
+  font: 400 0.95rem/1.6 var(--font-sans);
+  color: var(--iv-text-dim);
+  max-width: 400px;
+}
+.iv-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 22px;
+  max-width: 640px;
+}
+.iv-suggestion {
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--iv-line);
+  background: var(--iv-surface);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #c8d4d4;
+  font: 500 0.8rem/1.45 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--iv-t-micro) var(--iv-ease);
+  max-width: 300px;
+}
+.iv-suggestion:hover:not(:disabled) {
+  border-color: var(--iv-accent-line);
+  color: var(--iv-text);
+  background: var(--iv-surface-raised);
+}
+.iv-suggestion:disabled { opacity: 0.4; cursor: default; }
+
+/* Composer — floating frosted-glass instrument */
+.iv-composer-zone {
+  position: relative;
+  z-index: 2;
+  padding: 10px 28px 22px;
+}
+.iv-chips {
+  max-width: 720px;
+  margin: 0 auto 10px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.iv-chips::-webkit-scrollbar { display: none; }
+.iv-chip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--iv-line-soft);
+  background: rgba(13, 17, 17, 0.6);
+  color: var(--iv-text-dim);
+  font: 500 0.72rem var(--font-sans);
+  cursor: pointer;
+  transition: all var(--iv-t-micro) var(--iv-ease);
+  white-space: nowrap;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.iv-chip:hover:not(:disabled) { color: #5eead4; border-color: var(--iv-accent-line); }
+.iv-chip:disabled { opacity: 0.4; cursor: default; }
+.iv-composer {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 13px 14px 13px 20px;
+  border-radius: 18px;
+  border: 1px solid var(--iv-line);
+  background: var(--iv-surface-raised);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  transition: border-color var(--iv-t-micro) var(--iv-ease), box-shadow var(--iv-t-move) var(--iv-ease);
+}
+.iv-composer:focus-within {
+  border-color: var(--iv-accent-line);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(20, 184, 166, 0.18), 0 0 42px rgba(20, 184, 166, 0.07);
+}
+.iv-input {
+  flex: 1;
+  min-height: 22px;
+  max-height: 140px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--iv-text);
+  font: 400 0.92rem/1.55 var(--font-sans);
+  caret-color: #2dd4bf;
+}
+.iv-input::placeholder { color: var(--iv-text-faint); }
+.iv-send {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: none;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(140deg, #2dd4bf, #0d9488);
+  color: #041110;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform var(--iv-t-micro) var(--iv-ease), opacity var(--iv-t-micro) var(--iv-ease), box-shadow var(--iv-t-micro) var(--iv-ease);
+}
+.iv-send:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(20, 184, 166, 0.35); }
+.iv-send:active:not(:disabled) { transform: translateY(0); }
+.iv-send:disabled { opacity: 0.35; cursor: default; }
+.iv-composer-note {
+  max-width: 720px;
+  margin: 8px auto 0;
+  text-align: center;
+  font: 500 0.64rem var(--font-mono);
+  color: var(--iv-text-faint);
+}
+
+/* Context rail */
+.iv-rail {
+  width: 292px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--iv-line-soft);
+  background: var(--iv-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #223030 transparent;
+  padding: 22px 20px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.iv-rail-section-title {
+  font: 700 0.64rem var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--iv-text-faint);
+  margin-bottom: 10px;
+}
+.iv-rail-block { animation: iv-enter var(--iv-t-move) var(--iv-ease) both; }
+.iv-kv { display: flex; flex-direction: column; gap: 9px; }
+.iv-kv-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.iv-kv-k { font: 500 0.72rem var(--font-sans); color: var(--iv-text-dim); }
+.iv-kv-v { font: 600 0.74rem var(--font-sans); color: var(--iv-text); text-align: right; }
+.iv-kv-v.iv-mono { font: 600 0.68rem var(--font-mono); }
+.iv-progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  margin-top: 8px;
+}
+.iv-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #0d9488, #2dd4bf);
+  transition: width var(--iv-t-scene) var(--iv-ease);
+}
+.iv-topic-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.iv-topic {
+  padding: 5px 10px;
+  border-radius: 999px;
+  font: 500 0.68rem var(--font-sans);
+  border: 1px solid var(--iv-line-soft);
+  color: var(--iv-text-faint);
+  transition: all var(--iv-t-move) var(--iv-ease);
+}
+.iv-topic.iv-explored {
+  border-color: var(--iv-accent-line);
+  color: #5eead4;
+  background: var(--iv-accent-soft);
+}
+.iv-trait-list { display: flex; flex-direction: column; gap: 8px; }
+.iv-trait {
+  font: 500 0.78rem/1.5 var(--font-sans);
+  color: #c8d4d4;
+  padding-left: 14px;
+  position: relative;
+}
+.iv-trait::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--iv-accent);
+  opacity: 0.6;
+}
+.iv-quote {
+  font: 400 italic 0.82rem/1.6 var(--font-sans);
+  color: var(--iv-text-dim);
+  border-left: 2px solid var(--iv-accent-line);
+  padding-left: 13px;
+}
+.iv-grounding {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 600 0.7rem var(--font-mono);
+  color: var(--iv-gold);
+}
+
+/* Insights (synthesis) */
+.iv-insight {
+  border: 1px solid var(--iv-line-soft);
+  border-radius: 14px;
+  background: rgba(13, 17, 17, 0.55);
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color var(--iv-t-micro) var(--iv-ease);
+}
+.iv-insight:hover { border-color: var(--iv-line); }
+.iv-insight-type {
+  font: 700 0.6rem var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #5eead4;
+}
+.iv-insight-title { font: 700 0.82rem var(--font-sans); color: var(--iv-text); }
+.iv-insight-desc { font: 400 0.76rem/1.55 var(--font-sans); color: var(--iv-text-dim); }
+.iv-insight-turns { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+.iv-turn-ref {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--iv-line-soft);
+  background: transparent;
+  color: var(--iv-text-faint);
+  font: 600 0.62rem var(--font-mono);
+  cursor: pointer;
+  transition: all var(--iv-t-micro) var(--iv-ease);
+}
+.iv-turn-ref:hover { color: #5eead4; border-color: var(--iv-accent-line); }
+.iv-summary {
+  font: 400 0.85rem/1.7 var(--font-sans);
+  color: #c8d4d4;
+  white-space: pre-wrap;
+}
+.iv-finding { font: 500 0.8rem/1.55 var(--font-sans); color: #c8d4d4; }
+
+/* Error / failure states — honest, taxonomy-aware */
+.iv-error {
+  max-width: 720px;
+  margin: 0 auto 12px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 14px;
+  background: var(--iv-danger-soft);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 14px 18px;
+  animation: iv-enter var(--iv-t-move) var(--iv-ease) both;
+}
+.iv-error-title {
+  font: 700 0.72rem var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fca5a5;
+  margin-bottom: 5px;
+}
+.iv-error-body { font: 400 0.8rem/1.55 var(--font-sans); color: #e5b3b3; }
+.iv-error-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* Loading scene */
+.iv-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  animation: iv-scene-in var(--iv-t-scene) var(--iv-ease) both;
+}
+.iv-loading-ring {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid rgba(45, 212, 191, 0.18);
+  border-top-color: #2dd4bf;
+  animation: iv-spin 0.9s linear infinite;
+}
+@keyframes iv-spin { to { transform: rotate(360deg); } }
+.iv-loading-text { font: 500 0.8rem var(--font-sans); color: var(--iv-text-dim); }
+
+/* Rail toggle (tablet/mobile) */
+.iv-rail-toggle { display: none; }
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+@media (max-width: 1120px) {
+  .iv-rail {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    width: min(330px, 88vw);
+    transform: translateX(103%);
+    transition: transform var(--iv-t-move) var(--iv-ease);
+    border-left: 1px solid var(--iv-line);
+    background: rgba(8, 10, 10, 0.92);
+    box-shadow: -24px 0 60px rgba(0, 0, 0, 0.5);
+  }
+  .iv-rail.iv-open { transform: translateX(0); }
+  .iv-rail-toggle { display: inline-flex; }
+  .iv-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    background: rgba(0, 0, 0, 0.55);
+    border: none;
+    cursor: pointer;
+    animation: iv-fade var(--iv-t-micro) var(--iv-ease) both;
+  }
+  @keyframes iv-fade { from { opacity: 0; } to { opacity: 1; } }
+}
+@media (max-width: 720px) {
+  .iv-root { height: calc(100vh - 64px); }
+  .iv-header { padding: 10px 14px; gap: 10px; flex-wrap: wrap; }
+  .iv-id-name { font-size: 0.92rem; }
+  .iv-orb { width: 38px; height: 38px; font-size: 0.85rem; }
+  .iv-scroll { padding: 22px 16px 8px; }
+  .iv-composer-zone { padding: 8px 12px 14px; }
+  .iv-composer { border-radius: 15px; padding: 10px 10px 10px 15px; }
+  .iv-sim-status { display: none; }
+  .iv-empty-title { font-size: 1.5rem; }
+  .iv-header-actions .iv-label { display: none; }
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion — render final states, keep feedback instant
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .iv-ambient::before,
+  .iv-ambient::after,
+  .iv-orb::after,
+  .iv-sim-status .iv-dot,
+  .iv-cursor { animation: none !important; }
+  .iv-turn,
+  .iv-thinking,
+  .iv-empty,
+  .iv-rail-block,
+  .iv-error,
+  .iv-loading { animation-duration: 1ms !important; }
+  .iv-rail { transition-duration: 1ms; }
+  .iv-loading-ring { animation-duration: 1.6s; }
+}

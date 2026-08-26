@@ -35,14 +35,14 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 
 ## Progress
 
-| Owner             | Assigned | Done |
-| ----------------- | -------: | ---: |
-| Joint (all three) |        5 |    0 |
-| Tayeb | 8 | 8 |
-| Sazid | 11 | 6 |
-| Shehab | 16 | 16 |
-| Already closed | 1 | 1 |
-| **Total** | **41** | **31** |
+| Owner             | Assigned |   Done |
+| ----------------- | -------: | -----: |
+| Joint (all three) |        5 |      0 |
+| Tayeb             |        8 |      8 |
+| Sazid             |       11 |      6 |
+| Shehab            |       16 |     16 |
+| Already closed    |        1 |      1 |
+| **Total**         |   **41** | **31** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
