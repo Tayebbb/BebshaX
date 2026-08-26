@@ -39,10 +39,10 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | ----------------- | -------: | ---: |
 | Joint (all three) |        5 |    0 |
 | Tayeb | 8 | 8 |
-| Sazid | 11 | 4 |
+| Sazid | 11 | 5 |
 | Shehab | 16 | 0 |
 | Already closed | 1 | 1 |
-| **Total** | **41** | **13** |
+| **Total** | **41** | **14** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -87,7 +87,8 @@ Decide in this order, in one sitting:
 - [x] 🔴 **B1** — 100 % silent provenance loss. `ProvenanceRecord.task` is a `str` but the sink calls `r.task.value`; the `AttributeError` is swallowed, and the log guard `total_db_errors % 100 == 0` hides the first 99 failures. Fix is `str(r.task)` **plus** logging the first error **plus** a round-trip test asserting `total_written == 1`. → `db/sink.py`, `tests/db/test_sink.py` — **DONE 2026-08-26** (by Tayeb's agent at owner instruction; also fixed a second serialization bug — see audit fix log)
 - [~] 🔴 **B6** — `Businesses` and `Personas` have no `owner_id`, so tenancy is impossible even if auth were added. Add the columns + migration; Tayeb wires `Depends(get_current_user)` row scoping in `api/**`. → `db/models.py` + migration — **Stage 1 landed 2026-08-26** (nullable `owner_id` columns + FKs on `businesses`/`personas` + migration `8d648b892fd3`, 6 tests in `test_owner_id.py`); Stage 2 gated on B4 prod deployment.
 - [ ] 🟠 **H3** — Demo mode is unimplemented but marked ✅. The flag is only echoed by `/api/health`; `seed_demo_data` runs unconditionally regardless of it; nothing is labelled `"cached"`; `docs/DEMO.md` does not exist. → `config.py`, `db/seed.py`, new `docs/DEMO.md`
-- [~] 🟠 **H6** — Migration drift. The local DB was brought to head on 2026-08-24, but **no CI guard exists**, so `/api/auth/*` still 500s on every other machine until each person runs the upgrade manually. Add `alembic current == heads` or fail. → CI + alembic
+- [x] 🟠 **H6** — Migration drift. The local DB was brought to head on 2026-08-24, but **no CI guard exists**, so `/api/auth/*` still 500s on every other machine until each person runs the upgrade manually. Add `alembic current == heads` or fail. → CI + alembic — **DONE 2026-08-26** (CI guard in `ci.yml` + local-dev fail-fast check in `main.py`, 2 tests in `test_migration_drift_guard.py`)
+
 - [ ] 🟠 **H7** — No rate limiting, throttling or lockout on `/auth/signin`. PBKDF2 at 100 k rounds is also a DoS amplifier without it. → `api/auth.py`
 - [ ] 🟠 **H8** — Password policy is length-only; `"password1"` returns `201`. → `api/auth.py`
 - [ ] 🟠 **H9** — The UI promises "We'll send a verification link" and none is ever sent; `is_verified` stays `false` forever and is never checked at signin, while Google users get `is_verified=true` from an endpoint that verifies nothing. Either implement verification or remove the promise — coordinate the copy change with Shehab. → auth backend

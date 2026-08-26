@@ -29,8 +29,16 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
-    # Consumed from Phase 6 (database); docker-compose pgvector service on 5433.
     database_url: str = "postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax"
+
+    @property
+    def sync_database_url(self) -> str:
+        url = self.database_url
+        if "+asyncpg" in url:
+            return url.replace("+asyncpg", "")
+        if "+aiosqlite" in url:
+            return url.replace("+aiosqlite", "")
+        return url
 
     # Phase 9: memory embedding backend — "local" (deterministic hash, offline)
     # or "freellmpool" (requires embedding_model pin; see docs/PERSONA_ENGINE.md)

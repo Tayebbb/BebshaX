@@ -729,3 +729,17 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
   - `apps/backend/tests/test_auth_sync_verification.py` (4 tests, verifying rejection of missing token, rejection of invalid token, authoritative identity from verified Neon user, and exclusion of client-claimed email field).
 - **Verification:** All 18 auth tests in backend suite passed cleanly.
 
+---
+
+### Maintenance (2026-08-26) — Migration Drift Guard (H6)
+
+- **Audit item addressed:** 🟠 **H6** (E2E_AUDIT_2026-08-24.md & AUDIT_ASSIGNMENTS.md).
+- **Changes Applied:**
+  - **Local Dev Guard:** Added `check_migrations_current()` in `apps/backend/bebshax/main.py` using Alembic's Python API (`Config`, `ScriptDirectory`, `MigrationContext`).
+  - **Lifespan Integration:** Hooked `check_migrations_current(settings.sync_database_url)` into `_lifespan` in `apps/backend/bebshax/main.py` for local dev environments (`localhost` / `development`), producing a loud fatal message and exiting immediately with `SystemExit(1)` and instructions to run `alembic upgrade head` instead of mysterious 500 runtime errors.
+  - **Config Helper:** Added `sync_database_url` property in `apps/backend/bebshax/config.py`.
+- **Regression Tests:**
+  - `apps/backend/tests/db/test_migration_drift_guard.py` (2 tests asserting `SystemExit` when behind head and clean startup when at head).
+- **Verification:** 2/2 tests green.
+
+
