@@ -75,7 +75,10 @@ class UserProfileResponse(BaseModel):
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    expires_in_days: int = 7
+    # Derived, never restated: this used to be a hardcoded 7 while
+    # settings.jwt_expire_days was 365, so the API told every client a lifetime
+    # 52x shorter than the token it had just issued.
+    expires_in_days: int = Field(default_factory=lambda: get_settings().jwt_expire_days)
     verification_required: bool = False
     user: UserProfileResponse
 
@@ -337,6 +340,18 @@ async def signin(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is disabled.",
         )
+    # H9: the verification link is only meaningful if an unverified account
+    # cannot sign in. Gated on environment (Settings.email_verification_enforced)
+    # so the local demo keeps working; production and staging enforce.
+    if get_settings().email_verification_enforced and not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Email address not verified. Check your inbox for the "
+                "verification link, or request a new one at "
+                "/api/auth/resend-verification."
+            ),
+        )
 
     token = create_access_token(user_id=user.id)
     return AuthResponse(
@@ -417,7 +432,9 @@ async def sync_user(
             session=session,
             email=email,
             full_name=full_name,
-            auth_provider=payload.auth_provider,
+            # Not payload.auth_provider: identity was proven by Neon, so the
+            # provider is Neon regardless of what the client claimed.
+            auth_provider="neon",
             avatar_url=avatar_url,
         )
 

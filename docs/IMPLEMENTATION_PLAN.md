@@ -55,6 +55,18 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 <<<<<<< HEAD
+### Maintenance (2026-08-27) — Deep verification of the 11 Sazid audit items: 5 defects found behind DONE ticks
+
+- **Why:** the track showed 11/11. Verifying each item against the code rather than its completion note found five real defects, two of them serious. Nine items were sound.
+- **Serious 1 — token lifetime lied to every client (B4/M7).** `jwt_expire_days` defaulted to **365** while `AuthResponse.expires_in_days` was a hardcoded **7**; measured on a live token, 365 days. B4 hardened signing and never examined expiry, so the audit's "7-day non-revocable" premise was itself wrong by 52x. Fixed: default is 7, and the response field now derives from the same setting via `default_factory`, so they cannot drift apart again.
+- **Serious 2 — H9 was never enforced.** The verification pipeline was built end to end and then not wired to anything: `signin` checked `is_active` only, and no code read `is_verified` as a precondition. Fixed: signin rejects unverified accounts with an actionable 403, behind `Settings.email_verification_enforced` (production/staging enforce; development/local do not, so the offline demo drill still passes; `BEBSHAX_REQUIRE_EMAIL_VERIFICATION` overrides). **Frontend dependency:** turning it on needs Shehab's "check your email" state or the block reads as a bare 403.
+- **Tenancy hazard (B6):** `save_persona`/`create_business` defaulted `owner_id` to `"usr_system_holder"`, which is in `PUBLIC_OWNER_IDS` — forgetting the argument silently published the row to every user. Both live call sites passed it, so nothing leaked, but the failure mode was disclosure rather than an error. `owner_id` is now required; omitting it is a `TypeError`.
+- **Two smaller fixes:** a correctly signed token with no `exp` claim never expired (`exp` is now mandatory on the verify path); `/sync` stored the client-supplied `auth_provider` even though Neon proved the identity (now hardcoded `"neon"`).
+- **Verified sound:** B1, B3, B6 row scoping, H3, H6, H7 wiring, H8, M8, L14. `bebshax/tenancy.py` in particular is a real single source of truth with its deltas documented rather than accidental.
+- **Flagged, not changed:** the H7 limiter is in-memory with `get_remote_address` — buckets reset on restart, are per-worker, and collapse to a single bucket behind a proxy. Fine for local/demo, wrong for a real deployment.
+- **Tests:** `tests/test_auth_hardening_audit.py` (11), covering token lifetime parity, the exp gap, environment-driven verification enforcement, and the owner_id signature. Suite: **369 passed, 1 failed, 3 deselected** — the failure is the known cwd-dependent `test_run_evaluation_cli.py` in Shehab's lane.
+- **Client-visible change:** sessions now last 7 days instead of 365. That is the intended behaviour and matches what the API already claimed, but users will be signed out weekly where they previously were not.
+
 ### Maintenance (2026-08-27) — H3 piece 2: personas carry an honest cached/live label
 
 - **Audit item:** 🟠 **H3**, the last open item on the Sazid track. Pieces 1 and 3 landed 2026-08-26; this is piece 2 — the `"cached"` labelling the audit called "the spec's core honesty requirement".

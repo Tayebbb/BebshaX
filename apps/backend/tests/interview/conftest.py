@@ -35,7 +35,7 @@ def session_maker(async_engine):
 @pytest_asyncio.fixture
 async def stored_persona(session_maker) -> PersonaProfile:
     async with session_maker() as session:
-        business = await create_business(session, "QuickBite", "food delivery in Dhaka")
+        business = await create_business(session, "QuickBite", "food delivery in Dhaka", owner_id="usr_system_holder")
         profile = PersonaProfile(
             business_id=business.id,
             name="Rina Akter",
@@ -50,7 +50,7 @@ async def stored_persona(session_maker) -> PersonaProfile:
                 PersonaAttribute(key="pain_point", value="late deliveries"),
             ],
         )
-        await save_persona(session, profile)
+        await save_persona(session, profile, owner_id="usr_system_holder")
         return profile
 
 

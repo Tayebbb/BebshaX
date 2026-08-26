@@ -50,7 +50,7 @@ def _profile(pid: str) -> PersonaProfile:
 async def test_save_persona_defaults_to_live(memory_sessionmaker):
     """A persona saved without an explicit label is live — it came from inference."""
     async with memory_sessionmaker() as session:
-        await save_persona(session, _profile("per_live_01"))
+        await save_persona(session, _profile("per_live_01"), owner_id="usr_system_holder")
         await session.commit()
 
     async with memory_sessionmaker() as session:
@@ -65,7 +65,10 @@ async def test_save_persona_records_cached_when_asked(memory_sessionmaker):
     """The seeder's explicit 'cached' must survive to the row."""
     async with memory_sessionmaker() as session:
         await save_persona(
-            session, _profile("per_cached_01"), data_source=DATA_SOURCE_CACHED
+            session,
+            _profile("per_cached_01"),
+            owner_id="usr_system_holder",
+            data_source=DATA_SOURCE_CACHED,
         )
         await session.commit()
 
@@ -108,7 +111,10 @@ async def test_serializer_exposes_data_source(memory_sessionmaker):
 
     async with memory_sessionmaker() as session:
         await save_persona(
-            session, _profile("per_ser_01"), data_source=DATA_SOURCE_CACHED
+            session,
+            _profile("per_ser_01"),
+            owner_id="usr_system_holder",
+            data_source=DATA_SOURCE_CACHED,
         )
         await session.commit()
 

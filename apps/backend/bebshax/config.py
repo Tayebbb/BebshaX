@@ -60,9 +60,26 @@ class Settings(BaseSettings):
     jwt_issuer: str = "bebshax-api"
     jwt_audience: str = "bebshax-client"
     jwt_algorithm: str = "HS256"
-    jwt_expire_days: int = 365
+    # 7 days, matching what AuthResponse reports to the client. These two used
+    # to disagree — tokens lived 365 days while the API claimed 7 — so the
+    # response now derives from this value instead of restating it (M7/B4).
+    jwt_expire_days: int = 7
 
     neon_auth_url: str = "https://ep-cold-star-azazjakq.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth"
+
+    # H9 enforcement. Sending a verification link means nothing if an unverified
+    # account can sign in anyway, which was the audit's actual complaint. Default
+    # follows `environment`: real deployments enforce, local/demo does not, so the
+    # offline demo drill keeps working. Set explicitly to override.
+    # Flipping this on for the frontend needs Shehab's "check your email" state —
+    # without it a blocked signin surfaces as a bare 403.
+    require_email_verification: bool | None = None
+
+    @property
+    def email_verification_enforced(self) -> bool:
+        if self.require_email_verification is not None:
+            return self.require_email_verification
+        return self.environment in ("production", "staging")
 
     @field_validator("jwt_secret")
     @classmethod
