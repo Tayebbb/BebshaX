@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
 from bebshax.api.auth import get_optional_current_user
+from bebshax.api.jobs import get_job, start_job
 from bebshax.db.models import Studies, SavedAudiences, StudyReports
+from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.tenancy import PUBLIC_OWNER_IDS as _PUBLIC_OWNER_IDS
 from bebshax.tenancy import STUDY_ANON_OWNER_IDS as _STUDY_ANON_OWNER_IDS
 from bebshax.tenancy import owner_accessible as _tenancy_owner_accessible
@@ -684,3 +686,78 @@ async def generate_study_report(
     )
 
     return _serialize_report(report)
+
+
+# ---------------------------------------------------------------------------
+# Async report-generation jobs: synthesis reads every interview and runs LLM
+# calls on a 150 s task budget — beyond comfortable HTTP timeouts. POST
+# starts a background job (202), the UI polls; the report row is persisted
+# by the service, only job STATUS is in-memory.
+# ---------------------------------------------------------------------------
+
+@router.post("/studies/{study_id}/reports/generate/jobs", status_code=202)
+async def start_report_generation_job(
+    study_id: str,
+    payload: Optional[GenerateReportRequest] = None,
+    request: Request = None,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Start report synthesis in the background; poll the job endpoint."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized for this study")
+
+    app = request.app
+    sessionmaker_ = getattr(app.state, "db_sessionmaker", None)
+    if sessionmaker_ is None:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    llm_service = getattr(app.state, "llm_service", None)
+    effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
+    custom_title = payload.title if payload else None
+
+    async def _runner(job: dict[str, Any]) -> None:
+        # The request session is gone by now — the job owns its own session.
+        async with sessionmaker_() as job_session:
+            report_service = StudyReportService(session=job_session, llm_service=llm_service)
+            report = await report_service.generate_report(
+                study_id=study_id,
+                user_id=effective_user_id,
+                custom_title=custom_title,
+            )
+            job["result"] = _serialize_report(report)
+
+    job = start_job(
+        app,
+        kind="report_generation",
+        scope_id=study_id,
+        runner=_runner,
+        # Honest domain failures (R2/R6) pass their message through.
+        user_safe_exceptions=(ContextWindowExceeded, AllCandidatesFailed),
+    )
+    return {"job_id": job["job_id"], "study_id": study_id, "status": job["status"]}
+
+
+@router.get("/studies/{study_id}/reports/generate/jobs/{job_id}")
+async def get_report_generation_job(
+    study_id: str,
+    job_id: str,
+    request: Request = None,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Poll a report-generation job. 404 for unknown/lost jobs (e.g. restart)."""
+    study = await session.get(Studies, study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    if not _user_owns_study(study, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized for this study")
+    job = get_job(request.app, job_id, kind="report_generation", scope_id=study_id)
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail="job not found (it may have been lost in a server restart)",
+        )
+    return job

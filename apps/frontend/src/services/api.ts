@@ -3966,22 +3966,98 @@ export const api = {
     throw new Error('Persona not found');
   },
 
+  /** Poll an async generation job until it terminates. Returns job.result.
+   * Job-level failures throw an Error with `isJobFailure = true` so callers
+   * can distinguish "the backend honestly reported failure" from "the
+   * network died". Transient poll errors are tolerated (the job keeps
+   * running server-side); only a 404 — genuine job loss — fails fast. */
+  async pollGenerationJob<T>(pollUrl: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<T> {
+    const interval = opts?.intervalMs ?? 2500;
+    const deadline = Date.now() + (opts?.timeoutMs ?? 600000);
+    let transientFailures = 0;
+    for (;;) {
+      try {
+        const res = await fetch(pollUrl, {
+          headers: this.getAuthHeaders(),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (res.status === 404) {
+          const err = await res.json().catch(() => ({ detail: 'job not found' }));
+          throw Object.assign(new Error(err.detail || 'job not found'), { isJobFailure: true });
+        }
+        if (!res.ok) throw new Error(`poll ${res.status}`);
+        transientFailures = 0;
+        const job = await res.json();
+        if (job.status === 'completed') return job.result as T;
+        if (job.status === 'failed') {
+          throw Object.assign(new Error(job.error || 'generation job failed'), { isJobFailure: true });
+        }
+      } catch (e) {
+        if ((e as { isJobFailure?: boolean })?.isJobFailure) throw e;
+        // Transient blip — the job is still running server-side; a 10-minute
+        // wait must survive a dropped poll or two.
+        transientFailures += 1;
+        if (transientFailures >= 4) throw e;
+      }
+      if (Date.now() > deadline) {
+        // The backend is alive and the job may still be running — only the
+        // client stopped waiting. Propagate as a job-level outcome so callers
+        // never degrade this into fabricated mock success.
+        throw Object.assign(
+          new Error('generation is taking longer than expected — it continues in the background'),
+          { isJobFailure: true }
+        );
+      }
+      await new Promise((r) => setTimeout(r, interval));
+    }
+  },
+
   async generateSyntheticPersonas(
     studyId: string,
     payload: GeneratePersonasPayload
   ): Promise<{ run: PersonaGenerationRun; personas: SyntheticPersona[] }> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/personas/generate`, {
+        // Job endpoint first: generation runs for minutes at free-tier
+        // latency — the POST returns 202 immediately and we poll.
+        const jobRes = await fetch(`${API_BASE}/studies/${studyId}/personas/generate/jobs`, {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload),
         });
-        if (res.ok) {
+        if (jobRes.status === 202) {
+          const { job_id } = await jobRes.json();
           lastKnownLive = true;
-          return await res.json();
+          try {
+            return await this.pollGenerationJob(
+              `${API_BASE}/studies/${studyId}/personas/generate/jobs/${job_id}`
+            );
+          } catch (e) {
+            // An honest backend-reported failure (e.g. "run segmentation
+            // first") must reach the user — never be swallowed into a
+            // fabricated "completed" mock run. The backend responded fine,
+            // so live status is untouched.
+            if ((e as { isJobFailure?: boolean })?.isJobFailure) throw e;
+            lastKnownLive = false;
+            throw e;
+          }
         }
-      } catch {
+        // Older backend without job endpoints — fall back to the sync call.
+        if (jobRes.status === 404 || jobRes.status === 405) {
+          const res = await fetch(`${API_BASE}/studies/${studyId}/personas/generate`, {
+            method: 'POST',
+            headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) {
+            lastKnownLive = true;
+            return await res.json();
+          }
+        }
+      } catch (e) {
+        // Honest backend-reported job failures propagate to the user; only
+        // genuine connectivity loss degrades to the mock fallback below.
+        if ((e as { isJobFailure?: boolean })?.isJobFailure) throw e;
         lastKnownLive = false;
       }
     }
@@ -4663,22 +4739,44 @@ export const api = {
   async generateStudyReport(studyId: string, title?: string): Promise<StudyReport> {
     if (!this.isMockMode()) {
       try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/reports/generate`, {
+        // Job endpoint first: synthesis reads every interview + runs LLM
+        // calls (150s budget) — 202 + poll instead of one long request.
+        const jobRes = await fetch(`${API_BASE}/studies/${studyId}/reports/generate/jobs`, {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ title }),
-          // Report synthesis reads every interview + runs LLM synthesis;
-          // 120s aborted real runs mid-generation.
-          signal: AbortSignal.timeout(300000),
         });
-        if (res.ok) {
+        if (jobRes.status === 202) {
+          const { job_id } = await jobRes.json();
           lastKnownLive = true;
-          return await res.json();
+          return await this.pollGenerationJob<StudyReport>(
+            `${API_BASE}/studies/${studyId}/reports/generate/jobs/${job_id}`,
+            { timeoutMs: 300000 }
+          );
         }
-        const err = await res.json().catch(() => ({ detail: 'Report generation failed' }));
+        // Older backend without job endpoints — fall back to the sync call.
+        if (jobRes.status === 404 || jobRes.status === 405) {
+          const res = await fetch(`${API_BASE}/studies/${studyId}/reports/generate`, {
+            method: 'POST',
+            headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ title }),
+            // Report synthesis reads every interview + runs LLM synthesis;
+            // 120s aborted real runs mid-generation.
+            signal: AbortSignal.timeout(300000),
+          });
+          if (res.ok) {
+            lastKnownLive = true;
+            return await res.json();
+          }
+          const err = await res.json().catch(() => ({ detail: 'Report generation failed' }));
+          throw new Error(err.detail || 'Report generation failed');
+        }
+        const err = await jobRes.json().catch(() => ({ detail: 'Report generation failed' }));
         throw new Error(err.detail || 'Report generation failed');
       } catch (e) {
-        lastKnownLive = false;
+        // Honest job failures mean the backend responded fine — only genuine
+        // connectivity loss should mark it dead.
+        if (!(e as { isJobFailure?: boolean })?.isJobFailure) lastKnownLive = false;
         throw e;
       }
     }

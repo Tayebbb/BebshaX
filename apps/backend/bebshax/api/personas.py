@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_current_user, get_optional_current_user
+from bebshax.api.jobs import get_job, start_job
 from bebshax.api.studies import _owner_accessible, _user_owns_study, get_session
 from bebshax.auth.models import Users
 from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
@@ -232,6 +233,85 @@ async def generate_study_personas_endpoint(
         "run": _serialize_persona_run(run),
         "personas": [_serialize_persona(p, seg_map.get(p.segment_id or "")) for p in personas],
     }
+
+
+# ---------------------------------------------------------------------------
+# Async persona-generation jobs: a run generates N personas across segments
+# at real free-tier LLM latency (minutes) — beyond any sane HTTP timeout.
+# POST starts a background job (202), the UI polls. Personas/run rows are
+# persisted by the service as it completes; only job STATUS is in-memory.
+# ---------------------------------------------------------------------------
+
+@router.post("/studies/{study_id}/personas/generate/jobs", status_code=202)
+async def start_persona_generation_job(
+    study_id: str,
+    body: StudyGeneratePersonasRequest,
+    request: Request,
+    current_user: Users = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Start persona generation in the background; poll the job endpoint."""
+    await _verify_study_access(study_id, current_user, session)
+
+    app = request.app
+    llm_service = getattr(app.state, "llm_service", None)
+    sessionmaker_ = getattr(app.state, "db_sessionmaker", None)
+    if sessionmaker_ is None:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    user_id = current_user.id
+    cfg = body  # detach before request scope ends
+
+    async def _runner(job: dict[str, Any]) -> None:
+        # The request session is gone by now — the job owns its own session.
+        async with sessionmaker_() as job_session:
+            service = PersonaGenerationService(job_session, llm_service=llm_service)
+            run, personas = await service.create_generation_run(
+                study_id=study_id,
+                user_id=user_id,
+                segmentation_run_id=cfg.segmentation_run_id,
+                personas_per_segment=cfg.personas_per_segment,
+                target_count=cfg.target_count,
+                distribution_strategy=cfg.distribution_strategy,
+            )
+            seg_stmt = select(MarketSegments.id, MarketSegments.name).where(
+                MarketSegments.study_id == study_id
+            )
+            seg_map = {sid: sname for sid, sname in (await job_session.execute(seg_stmt)).all()}
+            job["result"] = {
+                "run": _serialize_persona_run(run),
+                "personas": [
+                    _serialize_persona(p, seg_map.get(p.segment_id or "")) for p in personas
+                ],
+            }
+
+    job = start_job(
+        app,
+        kind="persona_generation",
+        scope_id=study_id,
+        runner=_runner,
+        # Honest domain failures (R2/R6) pass their message through.
+        user_safe_exceptions=(PersonaGenerationFailed, ContextWindowExceeded, AllCandidatesFailed),
+    )
+    return {"job_id": job["job_id"], "study_id": study_id, "status": job["status"]}
+
+
+@router.get("/studies/{study_id}/personas/generate/jobs/{job_id}")
+async def get_persona_generation_job(
+    study_id: str,
+    job_id: str,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Poll a persona-generation job. 404 for unknown/lost jobs (e.g. restart)."""
+    await _verify_study_access(study_id, current_user, session)
+    job = get_job(request.app, job_id, kind="persona_generation", scope_id=study_id)
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail="job not found (it may have been lost in a server restart)",
+        )
+    return job
 
 
 @router.get("/studies/{study_id}/personas/{persona_id}")
