@@ -38,11 +38,11 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | Owner             | Assigned |  Done |
 | ----------------- | -------: | ----: |
 | Joint (all three) |        5 |     0 |
-| Tayeb             |        8 |     7 |
+| Tayeb             |        8 |     8 |
 | Sazid             |       11 |     1 |
 | Shehab            |       16 |     0 |
 | Already closed    |        1 |     1 |
-| **Total**         |   **41** | **9** |
+| **Total**         |   **41** | **10** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -72,7 +72,7 @@ Decide in this order, in one sitting:
 - [x] 🟡 **M5** — `industry`/`target_market` stuffed into the description string and re-parsed with `desc.startswith("Industry:")`. Any description starting with "Industry:" corrupts. Needs real columns — coordinate the migration with Sazid. → `api/personas.py` — **DONE 2026-08-26** (columns + migration `c4d5e6f7a8b9` with legacy-data extraction; **Sazid: please review the migration** — it touches your alembic territory, applied at owner instruction)
 - [x] 🟡 **M6** — `CORS allow_origins=["*"]` together with `allow_credentials=True` — invalid per spec and unsafe. → `main.py` — **DONE 2026-08-26** (explicit origins via `BEBSHAX_CORS_ORIGINS`, 3 tests; see audit fix log)
 - [x] 🟡 **M9** — Memories for a non-existent persona return `200 []` instead of `404`; a missing `memory_service` returns the same, so the two are indistinguishable. → `api/personas.py` — **DONE 2026-08-26** (404 for unknown persona, 503 for missing service; 2 tests)
-- [ ] 🟡 **M11** — CI has no lint, no standalone type-check, **no secret scan** (would have caught B4), no migration-drift check (H6), no coverage floor, and `--if-present` silently passes when a script disappears. → `.github/workflows/ci.yml`
+- [x] 🟡 **M11** — CI has no lint, no standalone type-check, **no secret scan** (would have caught B4), no migration-drift check (H6), no coverage floor, and `--if-present` silently passes when a script disappears. → `.github/workflows/ci.yml` — **DONE 2026-08-26** (5 jobs; gitleaks allowlists ONLY the burned B4 literal until Sazid's fix; drift job covers H6's CI half)
 - [x] ⚪ **L12** — Cross-provider reply-format drift: one free model answered in Markdown persona-script form while others used plain first person. Correctly not an infra failure per R2/D3, but an open Phase-11 normalisation gap. → `interview/` composition — **DONE 2026-08-26** (deterministic `normalize_reply` — think-blocks/fences/speaker labels only, content untouched; 11 tests)
 
 ---

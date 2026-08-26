@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import random
+import uuid
 from typing import Any, Literal, Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field

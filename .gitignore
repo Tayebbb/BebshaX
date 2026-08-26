@@ -29,3 +29,8 @@ data/uploads/*
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# coverage artifacts (M11 gate)
+.coverage*
+htmlcov/
+coverage.xml

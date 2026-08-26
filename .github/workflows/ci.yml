@@ -15,20 +15,91 @@ jobs:
           python-version: "3.12"
       - name: Install backend
         run: pip install -e "apps/backend[dev]"
-      - name: Unit tests (no network)
-        run: python -m pytest apps/backend/tests -q
+      - name: Lint (bug-tier rules — syntax errors, undefined names)
+        run: python -m ruff check apps/backend/bebshax apps/backend/tests
+      - name: Unit tests (no network) + coverage floor
+        run: python -m pytest apps/backend/tests -q --cov=bebshax --cov-fail-under=68
+
+  typecheck:
+    # Advisory until the pre-existing type debt is burned down (audit M11) —
+    # failures are surfaced in the job log but do not block the merge yet.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend + pyright
+        run: |
+          pip install -e "apps/backend[dev]"
+          pip install pyright
+      - name: Pyright
+        run: pyright --pythonpath "$(which python)" apps/backend/bebshax
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history — leaked-then-deleted secrets still count
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  migration-drift:
+    # H6 guard: the migration chain must apply cleanly from zero and the
+    # running head must equal the script head.
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: bebshax
+          POSTGRES_PASSWORD: bebshax
+          POSTGRES_DB: bebshax
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U bebshax" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      BEBSHAX_DATABASE_URL: postgresql+asyncpg://bebshax:bebshax@localhost:5432/bebshax
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend
+        run: pip install -e "apps/backend[dev]"
+      - name: Apply all migrations from zero
+        working-directory: apps/backend
+        run: python -m alembic upgrade head
+      - name: Verify current == heads
+        working-directory: apps/backend
+        run: |
+          current=$(python -m alembic current | grep -oE '^[0-9a-f]+' | head -1)
+          head=$(python -m alembic heads | grep -oE '^[0-9a-f]+' | head -1)
+          echo "current=$current head=$head"
+          test -n "$current" && test "$current" = "$head"
+      - name: DB integration tests (pgvector round-trip)
+        working-directory: apps/backend
+        run: python -m pytest tests/memory/test_pg_integration.py -q -m integration
 
   frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Frontend build + tests (skips until apps/frontend exists)
-        run: |
-          if [ -f apps/frontend/package.json ]; then
-            cd apps/frontend
-            npm ci
-            npm run build --if-present
-            npm test --if-present -- --run
-          else
-            echo "apps/frontend not created yet (Phase 12) — skipping"
-          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # M11: no --if-present — a vanished script must FAIL, not silently pass.
+      - name: Install
+        working-directory: apps/frontend
+        run: npm ci
+      - name: Build
+        working-directory: apps/frontend
+        run: npm run build
+      - name: Tests
+        working-directory: apps/frontend
+        run: npm test -- --run

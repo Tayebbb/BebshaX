@@ -53,6 +53,12 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — M11: CI gates (lint, coverage floor, secret scan, migration drift)
+
+- ci.yml → 5 jobs: ruff bug-tier lint + 68% coverage floor (at 70.6%), advisory pyright, gitleaks full-history scan (`.gitleaks.toml` allowlists only the burned B4 literal, removal tracked), pgvector migration-drift job (H6's CI half), frontend without `--if-present`.
+- R8: `ruff` (MIT, astral-sh) + `pytest-cov` (MIT, pytest-dev) added to dev extras only.
+- The new lint gate immediately caught a latent `NameError` (undefined `uuid`) in `api/copilot.py` — fixed. Audit M11 ticked; Tayeb's audit items now 8/8.
+
 ### Maintenance (2026-08-26) — M5: business metadata columns
 
 - `businesses.industry`/`target_market` real columns; migration `c4d5e6f7a8b9` (+legacy header extraction, exact-format-only); endpoints stop stuffing/parsing description; honest nulls. Fixture `api_test_app` moved to shared tests/conftest.py. 4 tests. Applied live. Audit M5 ticked; migration flagged for Sazid's review.

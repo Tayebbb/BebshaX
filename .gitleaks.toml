@@ -1,0 +1,10 @@
+# Gitleaks config — default rules plus a tracked allowlist.
+[extend]
+useDefault = true
+
+[allowlist]
+description = """B4: this JWT literal is already public in git history and is
+permanently burned (tracked as audit finding B4, owner Sazid). Allowlisting it
+keeps the scan green for every NEW secret while B4 is being fixed.
+REMOVE THIS ALLOWLIST IN THE SAME COMMIT AS THE B4 FIX."""
+regexes = ['''bebshax-super-secret-jwt-signing-key-2026-auth-v1''']
