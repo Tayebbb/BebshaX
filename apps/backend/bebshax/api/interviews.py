@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -535,7 +537,71 @@ async def post_message(conversation_id: str, body: MessageIn, request: Request) 
     }
 
 
-@router.post("/studies/{study_id}/interviews/batch-run", status_code=201)
+# ---------------------------------------------------------------------------
+# Batch interview jobs (async): a batch of N personas × M questions runs for
+# many minutes at real free-tier latency, far beyond any sane HTTP timeout.
+# The POST starts a background job and returns immediately; the UI polls.
+# Registry is in-memory (dev-scale): a restart loses job STATUS, never data —
+# completed interviews are persisted as conversations as they finish.
+# ---------------------------------------------------------------------------
+
+def _batch_registry(app) -> dict[str, dict[str, Any]]:
+    reg = getattr(app.state, "interview_batch_jobs", None)
+    if reg is None:
+        reg = {}
+        app.state.interview_batch_jobs = reg
+        app.state.interview_batch_tasks = set()
+    return reg
+
+
+async def _run_batch_job(
+    app,
+    job: dict[str, Any],
+    personas: list[dict[str, str]],
+    questions: list[str],
+    study_id: str,
+    study_goal: str,
+    study_prompt: Optional[str],
+    user_id: str,
+) -> None:
+    engine = getattr(app.state, "interview_engine", None)
+    for p in personas:
+        entry = job["personas"][p["id"]]
+        if engine is None:
+            entry["status"] = "failed"
+            entry["error"] = "interview engine unavailable (LLM router / DB not wired)"
+            continue
+        entry["status"] = "in_progress"
+        try:
+            conv = await engine.start(
+                persona_id=p["id"],
+                objective=study_goal,
+                study_id=study_id,
+                user_id=user_id,
+                custom_objective=study_prompt,
+                length_tier="standard",
+            )
+            for q in questions:
+                await engine.ask(conv.id, q)
+            await engine.complete(conv.id)
+            entry["status"] = "completed"
+            entry["interview_id"] = conv.id
+            job["completed_count"] += 1
+        except Exception as exc:
+            logger.warning(
+                "batch-run job %s: interview failed for persona %s",
+                job["job_id"], p["id"], exc_info=True,
+            )
+            entry["status"] = "failed"
+            entry["error"] = f"{exc.__class__.__name__}: interview failed"
+            job["failed_count"] += 1
+    job["status"] = "completed" if job["failed_count"] == 0 else (
+        "completed_with_failures" if job["completed_count"] > 0 else "failed"
+    )
+    job["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
+@router.post("/studies/{study_id}/interviews/batch-run", status_code=202)
 async def batch_run_study_interviews(
     study_id: str,
     payload: Optional[BatchInterviewRunRequest] = None,
@@ -543,7 +609,7 @@ async def batch_run_study_interviews(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Execute synthetic interviews across all study personas using the approved script questions."""
+    """Start a background batch-interview job across study personas; poll its status endpoint."""
     study = await _get_study_and_verify_access(session, study_id, current_user)
     effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
 
@@ -569,67 +635,71 @@ async def batch_run_study_interviews(
             "What would be your biggest hesitation or barrier before adopting this?",
         ]
 
-    engine = getattr(request.app.state, "interview_engine", None)
-    if engine is None:
+    if getattr(request.app.state, "interview_engine", None) is None:
         from bebshax.interview.engine import InterviewEngine
         llm_router = getattr(request.app.state, "llm_router", None)
         session_maker = getattr(request.app.state, "db_sessionmaker", None)
         memory = getattr(request.app.state, "memory_service", None)
         if session_maker and llm_router:
-            engine = InterviewEngine(llm_router, session_maker, memory=memory)
+            request.app.state.interview_engine = InterviewEngine(llm_router, session_maker, memory=memory)
 
-    # Post-audit fix: batch interviews run through the REAL engine (ask/complete)
-    # or fail honestly per persona. The old code called a nonexistent
-    # engine.post_message, swallowed the AttributeError, and persisted canned
-    # template transcripts with invented insights (same class as M4/H1).
-    completed_interviews: list[dict[str, Any]] = []
-    failed: list[dict[str, Any]] = []
+    # Detach plain values before the request session closes.
+    personas_data = [{"id": p.id, "name": p.name} for p in personas]
 
-    for persona in personas:
-        if engine is None:
-            failed.append(
-                {
-                    "persona_id": persona.id,
-                    "persona_name": persona.name,
-                    "error": "interview engine unavailable (LLM router / DB not wired)",
-                }
-            )
-            continue
-        try:
-            conv = await engine.start(
-                persona_id=persona.id,
-                objective=study.goal or "demand_validation",
-                study_id=study_id,
-                user_id=effective_user_id,
-                custom_objective=study.prompt,
-                length_tier="standard",
-            )
-            for q in questions:
-                await engine.ask(conv.id, q)
-            await engine.complete(conv.id)  # persists summary/findings/insights
-            completed_conv, turns = await engine.transcript(conv.id)
-            completed_interviews.append(_serialize_interview(completed_conv, persona, turns=turns))
-        except Exception as exc:
-            logger.warning(
-                "batch-run: interview failed for persona %s", persona.id, exc_info=True
-            )
-            # Generic message to the client — internals belong in logs/provenance.
-            failed.append(
-                {
-                    "persona_id": persona.id,
-                    "persona_name": persona.name,
-                    "error": f"{exc.__class__.__name__}: interview failed",
-                }
-            )
+    job_id = f"bjob_{uuid.uuid4().hex[:12]}"
+    job: dict[str, Any] = {
+        "job_id": job_id,
+        "study_id": study_id,
+        "status": "running",
+        "total_personas": len(personas_data),
+        "completed_count": 0,
+        "failed_count": 0,
+        "question_count": len(questions),
+        "personas": {
+            p["id"]: {"persona_id": p["id"], "persona_name": p["name"], "status": "pending"}
+            for p in personas_data
+        },
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "finished_at": None,
+    }
+    registry = _batch_registry(request.app)
+    registry[job_id] = job
+    # Keep only the most recent jobs.
+    while len(registry) > 50:
+        registry.pop(next(iter(registry)))
+
+    task = asyncio.create_task(
+        _run_batch_job(
+            request.app, job, personas_data, list(questions),
+            study_id, study.goal or "demand_validation", study.prompt, effective_user_id,
+        )
+    )
+    request.app.state.interview_batch_tasks.add(task)
+    task.add_done_callback(request.app.state.interview_batch_tasks.discard)
 
     return {
+        "job_id": job_id,
         "study_id": study_id,
-        "completed_count": len(completed_interviews),
-        "failed_count": len(failed),
-        "failed": failed,
-        "total_personas": len(personas),
-        "interviews": completed_interviews,
+        "status": "running",
+        "total_personas": job["total_personas"],
+        "personas": job["personas"],
     }
+
+
+@router.get("/studies/{study_id}/interviews/batch-run/{job_id}")
+async def get_batch_run_status(
+    study_id: str,
+    job_id: str,
+    request: Request = None,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Poll a batch interview job. 404 for unknown/lost jobs (e.g. after a restart)."""
+    await _get_study_and_verify_access(session, study_id, current_user)
+    job = _batch_registry(request.app).get(job_id)
+    if not job or job["study_id"] != study_id:
+        raise HTTPException(status_code=404, detail="batch job not found (it may have been lost in a server restart)")
+    return job
 
 
 @router.get("/conversations/{conversation_id}")

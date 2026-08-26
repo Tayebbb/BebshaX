@@ -62,6 +62,7 @@ class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in_days: int = 7
+    verification_required: bool = False
     user: UserProfileResponse
 
 
@@ -174,6 +175,15 @@ async def signup(
         auth_provider="email",
     )
 
+    # H9: no session until the email is verified (via Neon OTP → /auth/sync).
+    # demo_mode keeps the keyless/offline dev flow usable.
+    if not get_settings().demo_mode:
+        return AuthResponse(
+            access_token="",
+            verification_required=True,
+            user=_serialize_user(user),
+        )
+
     token = create_access_token(user_id=user.id)
     return AuthResponse(
         access_token=token,
@@ -197,6 +207,17 @@ async def signin(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is disabled.",
+        )
+
+    # H9: unverified email accounts get no session outside demo_mode.
+    if (
+        user.auth_provider == "email"
+        and not user.is_verified
+        and not get_settings().demo_mode
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="EMAIL_NOT_VERIFIED: verify your email address to sign in.",
         )
 
     token = create_access_token(user_id=user.id)
@@ -279,17 +300,22 @@ async def sync_user(
             auth_provider=payload.auth_provider,
             avatar_url=avatar_url,
         )
-    else:
-        updated = False
-        if full_name and user.full_name != full_name:
-            user.full_name = full_name
-            updated = True
-        if avatar_url and user.avatar_url != avatar_url:
-            user.avatar_url = avatar_url
-            updated = True
-        if updated:
-            await session.commit()
-            await session.refresh(user)
+
+    updated = False
+    # Neon proved emailVerified server-side above — persist that fact so
+    # backend email/password signins pass the H9 gate from now on.
+    if not user.is_verified:
+        user.is_verified = True
+        updated = True
+    if full_name and user.full_name != full_name:
+        user.full_name = full_name
+        updated = True
+    if avatar_url and user.avatar_url != avatar_url:
+        user.avatar_url = avatar_url
+        updated = True
+    if updated:
+        await session.commit()
+        await session.refresh(user)
 
     token = create_access_token(user_id=user.id)
     return AuthResponse(

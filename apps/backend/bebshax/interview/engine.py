@@ -56,6 +56,54 @@ _TOPIC_DEFINITIONS = [
     ("purchase_decision", "Decision Factors & Buying Trigger", ["decide", "buy", "switch", "purchase", "choose", "trigger", "recommend", "convince"]),
 ]
 
+# --- Numeric self-consistency helpers (deterministic, format-level) ---------
+
+_MONEY_NUM = re.compile(r"(\d[\d,]{0,8})(?:\s*(?:৳|tk\b|bdt\b|taka\b))?", re.IGNORECASE)
+_CURRENCY_CUE = re.compile(r"৳|\btk\b|\bbdt\b|\btaka\b", re.IGNORECASE)
+_DAY_CUE = re.compile(r"per day|a day|/day|daily|each day|every day|yesterday", re.IGNORECASE)
+_MONTH_CUE = re.compile(r"per month|a month|/month|monthly|/mo\b|month\b", re.IGNORECASE)
+_SPEND_TOPIC_WORDS = ("lunch", "food", "meal", "spend", "budget", "cost", "pay", "price")
+
+
+def _shares_spend_topic(a: str, b: str) -> bool:
+    # Both texts must be about spending — not necessarily via the same word
+    # ("cost me 120 taka" vs "spend 25,000 on lunch").
+    return any(w in a for w in _SPEND_TOPIC_WORDS) and any(w in b for w in _SPEND_TOPIC_WORDS)
+
+
+def _extract_money_rates(text: str) -> list[tuple[float, str]]:
+    """Extract (monthly-normalized amount, raw snippet) money-rate claims.
+
+    An amount counts only with a currency cue nearby AND a period cue — in the
+    same sentence, or (day cues only) anywhere in the turn: "Yesterday I got
+    biryani. It cost 120 taka." puts the cue one sentence earlier.
+    """
+    rates: list[tuple[float, str]] = []
+    turn_has_day_cue = bool(_DAY_CUE.search(text))
+    for sentence in re.split(r"[.!?]", text):
+        if not sentence.strip():
+            continue
+        day = _DAY_CUE.search(sentence)
+        month = _MONTH_CUE.search(sentence)
+        if not day and not month and not turn_has_day_cue:
+            continue
+        for m in _MONEY_NUM.finditer(sentence):
+            raw_num = m.group(1).replace(",", "")
+            if not raw_num.isdigit():
+                continue
+            amount = float(raw_num)
+            if amount < 10:  # not a plausible BDT money rate
+                continue
+            window = sentence[max(0, m.start() - 30): m.end() + 45]
+            if not _CURRENCY_CUE.search(window):
+                continue
+            snippet = sentence[max(0, m.start() - 15): m.end() + 40].strip()
+            if month and (not day or abs(month.start() - m.start()) < abs(day.start() - m.start())):
+                rates.append((amount, snippet))
+            elif day or turn_has_day_cue:
+                rates.append((amount * 30.0, snippet))
+    return rates
+
 
 def build_identity_card(profile: Any) -> str:
     """Build deterministic identity block from either PersonaProfile or Personas DB model."""
@@ -364,6 +412,7 @@ class InterviewEngine:
         persona: Any,
         question: str,
         reply: str,
+        prior_persona_texts: Optional[list[str]] = None,
     ) -> tuple[bool, Optional[str], Optional[str], float]:
         """Structurally check for contradictions against persona commercial constraints and identity."""
         comm = getattr(persona, "commercial_profile", {}) or {}
@@ -383,6 +432,32 @@ class InterviewEngine:
                     details = f"Persona accepted ৳{num} proposal, which exceeds stated monthly budget of ৳{max_budget} BDT by {round(num / max_budget, 1)}x."
                     follow_up = f"What changed your willingness to pay from your usual ৳{max_budget}/month budget to ৳{num}?"
                     return True, details, follow_up, 0.60
+
+        # Numeric self-consistency: the persona's own prior spend-rate claims
+        # (observed live: "120 taka" per day in turn 1 vs "25,000-30,000 BDT a
+        # month on lunch" in turn 2 — a 7x contradiction no reader should trust).
+        current_rates = _extract_money_rates(reply_lower)
+        if current_rates and prior_persona_texts:
+            for prior_text in prior_persona_texts:
+                prior_lower = prior_text.lower()
+                if not _shares_spend_topic(prior_lower, reply_lower):
+                    continue
+                for prior_monthly, prior_raw in _extract_money_rates(prior_lower):
+                    for cur_monthly, cur_raw in current_rates:
+                        if prior_monthly <= 0 or cur_monthly <= 0:
+                            continue
+                        ratio = max(prior_monthly, cur_monthly) / min(prior_monthly, cur_monthly)
+                        if ratio >= 3.0:
+                            details = (
+                                f"Numeric self-contradiction: persona earlier claimed {prior_raw} "
+                                f"(≈৳{prior_monthly:,.0f}/month) but now claims {cur_raw} "
+                                f"(≈৳{cur_monthly:,.0f}/month) — {ratio:.1f}x apart."
+                            )
+                            follow_up = (
+                                f"Earlier you mentioned {prior_raw}, but just now you said {cur_raw}. "
+                                "Which is closer to what you actually spend?"
+                            )
+                            return True, details, follow_up, 0.65
 
         return False, None, None, 0.90
 
@@ -563,9 +638,11 @@ class InterviewEngine:
         )
         memory_kind = self._classify_memory_type(topic, interviewer_message, reply)
 
-        # Structural Contradiction Detection
+        # Structural Contradiction Detection (includes the persona's own prior
+        # numeric claims, not just profile constraints)
+        prior_persona_texts = [t.content for t in prior_turns if t.role == "persona"]
         has_contradiction, contradiction_details, follow_up_guidance, confidence = self._detect_contradiction(
-            persona, interviewer_message, reply
+            persona, interviewer_message, reply, prior_persona_texts=prior_persona_texts
         )
 
         # Evaluate Dynamic Decision State

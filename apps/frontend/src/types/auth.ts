@@ -13,6 +13,7 @@ export interface AuthResponse {
   access_token: string;
   token_type: string;
   expires_in_days: number;
+  verification_required?: boolean;
   user: User;
 }
 

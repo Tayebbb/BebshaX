@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { User, GoogleAuthData } from '../types/auth';
 import { api } from '../services/api';
+import { neonAuth } from '../services/neonAuth';
 
 interface AuthContextType {
   user: User | null;
@@ -40,6 +41,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return null;
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  // H9: credentials held in memory only until OTP verification commits the
+  // session (needed for the Neon sign-in that proves emailVerified).
+  const pendingCredsRef = useRef<{ email: string; password: string } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -90,14 +94,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const signin = async (email: string, password: string) => {
-    const res = await api.signin({ email, password });
-    setToken(res.access_token);
-    setUser(res.user);
+    try {
+      const res = await api.signin({ email, password });
+      setToken(res.access_token);
+      setUser(res.user);
+    } catch (err: any) {
+      if (err?.code === 'EMAIL_NOT_VERIFIED') {
+        pendingCredsRef.current = { email, password };
+      }
+      throw err;
+    }
   };
 
   const signup = async (fullName: string, email: string, password: string) => {
     const res = await api.signup({ full_name: fullName, email, password });
-    if (res.user?.is_verified) {
+    // H9: no session until the email is verified — keep credentials pending
+    // so verifyEmailOtp can complete the Neon sign-in + backend sync.
+    pendingCredsRef.current = { email, password };
+    if (!res.verification_required && res.access_token && res.user?.is_verified) {
+      // demo_mode backend issues a session directly.
+      api.setAuthToken(res.access_token);
+      api.setStoredUser(res.user);
       setToken(res.access_token);
       setUser(res.user);
     }
@@ -121,9 +138,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const verifyEmailOtp = async (email: string, otp: string): Promise<void> => {
+    // 1. Prove the code against Neon (the real OTP authority).
     const res = await api.verifyEmailOtp(email, otp);
-    if (res.token) setToken(res.token);
-    setUser(res.user);
+
+    // 2. Obtain a Neon session token: the verify response may carry one;
+    // otherwise sign in with the pending credentials.
+    let neonToken = res.token || null;
+    if (!neonToken && pendingCredsRef.current?.email === email) {
+      try {
+        const neonRes = await neonAuth.signIn({
+          email,
+          password: pendingCredsRef.current.password,
+        });
+        neonToken = neonRes.token || null;
+      } catch {
+        neonToken = null;
+      }
+    }
+
+    // 3. Server-side sync: backend verifies the Neon token + emailVerified
+    // and mints the real app JWT. No sync → no session (honest failure).
+    if (neonToken) {
+      const synced = await api.syncUser({ neon_token: neonToken });
+      if (synced) {
+        pendingCredsRef.current = null;
+        setToken(synced.access_token);
+        setUser(synced.user);
+        return;
+      }
+    }
+
+    // 4. Fallback: retry the normal backend signin — works once /auth/sync
+    // (or a previous verification) has flipped is_verified.
+    if (pendingCredsRef.current?.email === email) {
+      const retry = await api.signin({
+        email,
+        password: pendingCredsRef.current.password,
+      });
+      pendingCredsRef.current = null;
+      setToken(retry.access_token);
+      setUser(retry.user);
+      return;
+    }
+
+    throw new Error(
+      'Email verified, but no session could be established. Please sign in.'
+    );
   };
 
   const resetPasswordWithOtp = async (

@@ -60,6 +60,26 @@ def test_sync_uses_verified_email_not_claimed_email():
         assert response.json()["user"]["email"] == "real-verified@example.com"
 
 
+def test_sync_marks_mirror_user_verified():
+    """H9: a Neon-verified session flips is_verified on the mirror row so
+    backend email/password signins pass the verification gate afterwards."""
+    with patch("bebshax.api.auth.verify_neon_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = {
+            "user": {
+                "email": "h9-flip@example.com",
+                "name": "Flip User",
+                "emailVerified": True,
+            }
+        }
+        response = client.post(
+            "/api/auth/sync", json={"neon_token": "valid-token", "auth_provider": "neon"}
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["user"]["is_verified"] is True
+        assert body["access_token"]
+
+
 
 def test_sync_no_longer_accepts_client_supplied_email_field():
     """The old UserSyncRequest.email field must be gone — confirms the schema

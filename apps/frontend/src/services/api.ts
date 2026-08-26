@@ -772,9 +772,7 @@ export const api = {
   },
 
   async syncUser(data: {
-    email: string;
-    full_name?: string;
-    avatar_url?: string | null;
+    neon_token: string;
     auth_provider?: string;
   }): Promise<AuthResponse | null> {
     if (this.isMockMode()) return null;
@@ -782,7 +780,10 @@ export const api = {
       const res = await fetch(`${API_BASE}/auth/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          neon_token: data.neon_token,
+          auth_provider: data.auth_provider || 'neon',
+        }),
         signal: AbortSignal.timeout(10000),
       });
       if (res.ok) {
@@ -810,10 +811,9 @@ export const api = {
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
-          this.setAuthToken(result.access_token);
-          this.setStoredUser(result.user);
           lastKnownLive = true;
-          // Optionally register with Neon Auth in background
+          // H9: NO session is stored at signup. The session is only committed
+          // after Neon's OTP verification succeeds (AuthContext.verifyEmailOtp).
           neonAuth.signUp({
             email: data.email,
             password: data.password,
@@ -832,34 +832,21 @@ export const api = {
           throw backendErr;
         }
 
-        // 2. Secondary: Try Neon Auth registration and sync back to backend
-        try {
-          const neonRes = await neonAuth.signUp({
-            email: data.email,
-            password: data.password,
-            name: data.full_name,
-          });
-          // Sync user to backend database
-          const synced = await this.syncUser({
-            email: data.email,
-            full_name: data.full_name,
-            auth_provider: 'neon',
-          });
-          if (synced) return synced;
-
-          const token = neonRes.token || `neon_sess_${Date.now()}`;
-          this.setAuthToken(token);
-          this.setStoredUser(neonRes.user);
-          lastKnownLive = true;
-          return {
-            access_token: token,
-            token_type: 'bearer',
-            expires_in_days: 7,
-            user: neonRes.user,
-          };
-        } catch (neonErr: any) {
-          throw neonErr || backendErr;
-        }
+        // 2. Secondary: backend unreachable — register with Neon Auth only.
+        // Still no session until the email is verified.
+        const neonRes = await neonAuth.signUp({
+          email: data.email,
+          password: data.password,
+          name: data.full_name,
+        });
+        lastKnownLive = false;
+        return {
+          access_token: '',
+          token_type: 'bearer',
+          expires_in_days: 0,
+          verification_required: true,
+          user: neonRes.user,
+        } as AuthResponse;
       }
     }
 
@@ -902,37 +889,39 @@ export const api = {
         }
         if (res.status === 401 || res.status === 403) {
           const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.detail || 'Invalid email or password.');
+          const detail: string = errorData.detail || 'Invalid email or password.';
+          if (detail.includes('EMAIL_NOT_VERIFIED')) {
+            const err = new Error(
+              'Your email address is not verified yet. Enter the 6-digit code we send you to finish signing in.'
+            ) as Error & { code: string };
+            err.code = 'EMAIL_NOT_VERIFIED';
+            throw err;
+          }
+          throw new Error(detail);
         }
       } catch (backendErr: any) {
+        if (backendErr.code === 'EMAIL_NOT_VERIFIED') {
+          throw backendErr;
+        }
         if (backendErr.message && (backendErr.message.includes('Invalid email') || backendErr.message.includes('disabled'))) {
           throw backendErr;
         }
 
-        // 2. Secondary: Neon Auth authentication fallback, followed by sync
+        // 2. Secondary: Neon Auth authentication fallback — a session only
+        // exists if Neon authenticates AND the server-side /auth/sync
+        // (which verifies the Neon token + emailVerified) mints a real JWT.
         try {
           const neonRes = await neonAuth.signIn({
             email: data.email,
             password: data.password,
           });
-          const synced = await this.syncUser({
-            email: data.email,
-            full_name: neonRes.user.full_name,
-            avatar_url: neonRes.user.avatar_url,
-            auth_provider: 'neon',
-          });
-          if (synced) return synced;
-
-          const token = neonRes.token || `neon_sess_${Date.now()}`;
-          this.setAuthToken(token);
-          this.setStoredUser(neonRes.user);
-          lastKnownLive = true;
-          return {
-            access_token: token,
-            token_type: 'bearer',
-            expires_in_days: 7,
-            user: neonRes.user,
-          };
+          if (neonRes.token) {
+            const synced = await this.syncUser({ neon_token: neonRes.token });
+            if (synced) return synced;
+          }
+          throw new Error(
+            'Signed in with Neon, but the BebshaX backend is unreachable to establish a session. Please try again.'
+          );
         } catch (neonErr: any) {
           throw neonErr || backendErr;
         }
@@ -1101,20 +1090,9 @@ export const api = {
     otp: string
   ): Promise<{ user: User; token?: string | null }> {
     if (!this.isMockMode()) {
-      const res = await neonAuth.verifyEmailOtp({ email, otp });
-      // Sync verified user to backend database
-      const synced = await this.syncUser({
-        email: res.user.email,
-        full_name: res.user.full_name,
-        avatar_url: res.user.avatar_url,
-        auth_provider: 'neon',
-      });
-      if (synced) {
-        return { user: synced.user, token: synced.access_token };
-      }
-      if (res.token) this.setAuthToken(res.token);
-      this.setStoredUser(res.user);
-      return res;
+      // Pure verification against Neon. Session commit (Neon token →
+      // server-side /auth/sync → app JWT) is AuthContext.verifyEmailOtp's job.
+      return await neonAuth.verifyEmailOtp({ email, otp });
     }
     const user: User = {
       id: `usr_${Date.now().toString(36)}`,
@@ -4692,12 +4670,12 @@ export const api = {
   ): Promise<any> {
     if (!this.isMockMode()) {
       try {
+        // Starts a background job (202); progress comes from getBatchRunStatus.
         const res = await fetch(`${API_BASE}/studies/${studyId}/interviews/batch-run`, {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ persona_ids: personaIds, questions }),
-          // No AbortSignal: a real batch (personas × questions × 60-190s/turn)
-          // legitimately runs far longer than any fixed timeout.
+          signal: AbortSignal.timeout(30000),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -4710,7 +4688,25 @@ export const api = {
         throw e;
       }
     }
-    return { study_id: studyId, completed_count: 3, total_personas: 3, interviews: [] };
+    return { job_id: `bjob_mock_${Date.now()}`, study_id: studyId, status: 'running', total_personas: 3, personas: {} };
+  },
+
+  async getBatchRunStatus(studyId: string, jobId: string): Promise<any> {
+    if (!this.isMockMode()) {
+      const res = await fetch(`${API_BASE}/studies/${studyId}/interviews/batch-run/${jobId}`, {
+        headers: this.getAuthHeaders(),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `Batch status failed (${res.status})` }));
+        const e = new Error(err.detail || 'Batch status failed') as Error & { status?: number };
+        e.status = res.status;
+        throw e;
+      }
+      lastKnownLive = true;
+      return await res.json();
+    }
+    return { job_id: jobId, study_id: studyId, status: 'completed', completed_count: 3, failed_count: 0, personas: {} };
   },
 };
 

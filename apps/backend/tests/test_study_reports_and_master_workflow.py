@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -272,7 +274,7 @@ async def test_dynamic_script_and_batch_interviews():
             assert len(script_data["questions"]) >= 3
             assert script_data["study_id"] == "std_script_01"
 
-            # 2. Run batch synthetic interviews
+            # 2. Start batch synthetic interviews (async job) and poll it
             res_batch = await client.post(
                 "/api/studies/std_script_01/interviews/batch-run",
                 headers=headers,
@@ -284,16 +286,49 @@ async def test_dynamic_script_and_batch_interviews():
                     ],
                 },
             )
-            assert res_batch.status_code in (200, 201)
-            batch_data = res_batch.json()
-            assert batch_data["completed_count"] == 1
-            assert batch_data["failed_count"] == 0
-            assert len(batch_data["interviews"]) == 1
-            interview = batch_data["interviews"][0]
+            assert res_batch.status_code == 202
+            start_data = res_batch.json()
+            job_id = start_data["job_id"]
+            assert start_data["status"] == "running"
+            assert start_data["total_personas"] == 1
+            assert start_data["personas"]["per_samiul"]["status"] in ("pending", "in_progress")
+
+            # Poll until the background task finishes (FakeAdapter is instant).
+            job = None
+            for _ in range(100):
+                await asyncio.sleep(0.05)
+                res_status = await client.get(
+                    f"/api/studies/std_script_01/interviews/batch-run/{job_id}",
+                    headers=headers,
+                )
+                assert res_status.status_code == 200
+                job = res_status.json()
+                if job["status"] != "running":
+                    break
+            assert job is not None and job["status"] == "completed"
+            assert job["completed_count"] == 1
+            assert job["failed_count"] == 0
+            entry = job["personas"]["per_samiul"]
+            assert entry["status"] == "completed"
+            interview_id = entry["interview_id"]
+
+            # Unknown job ids are an honest 404 (e.g. lost in a restart).
+            res_missing = await client.get(
+                "/api/studies/std_script_01/interviews/batch-run/bjob_nope",
+                headers=headers,
+            )
+            assert res_missing.status_code == 404
+
+            # 3. The interview itself was persisted with REAL engine turns —
+            # the fabricated-transcript fallback no longer exists.
+            res_iv = await client.get(
+                f"/api/studies/std_script_01/interviews/{interview_id}",
+                headers=headers,
+            )
+            assert res_iv.status_code == 200
+            interview = res_iv.json()
             assert interview["persona_id"] == "per_samiul"
             assert interview["turn_count"] >= 4  # 2 questions × (interviewer + persona)
-            # Post-audit honesty: persona turns carry the REAL adapter reply and the
-            # concrete serving route — never the old canned template text.
             persona_turns = [t for t in interview["turns"] if t["role"] == "persona"]
             assert persona_turns and all(
                 "I compare prices manually" in t["content"] for t in persona_turns

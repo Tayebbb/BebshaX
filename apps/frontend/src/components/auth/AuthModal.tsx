@@ -93,9 +93,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
     } catch (err: any) {
       if (err.code === 'EMAIL_NOT_VERIFIED' || err.message?.includes('Email not verified')) {
-        await sendOtp(email, 'email-verification').catch(() => {});
-        setSuccessMessage(`We sent a 6-digit verification code to ${email}.`);
-        setCountdown(30);
+        const sent = await sendOtp(email, 'email-verification').catch(() => false);
+        if (sent) {
+          setSuccessMessage(`We sent a 6-digit verification code to ${email}.`);
+          setCountdown(30);
+        } else {
+          setErrorMessage(`Your email is not verified and we could not send a code to ${email}. Use "Resend" to retry.`);
+        }
         setView('verify-otp');
       } else {
         setErrorMessage(err.message || 'Invalid email or password.');
@@ -120,18 +124,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       setIsLoading(true);
       await signup(fullName, email, password);
-      await sendOtp(email, 'email-verification').catch(() => {});
-      setSuccessMessage(`We sent a 6-digit verification code to ${email}.`);
-      setCountdown(30);
+      const sent = await sendOtp(email, 'email-verification').catch(() => false);
+      if (sent) {
+        setSuccessMessage(`We sent a 6-digit verification code to ${email}.`);
+        setCountdown(30);
+      } else {
+        setErrorMessage(`Account created, but we could not send a verification code to ${email}. Use "Resend" to retry.`);
+      }
       setOtp('');
       setView('verify-otp');
     } catch (err: any) {
       if (err.message?.includes('already exists')) {
         setErrorMessage('An account with this email already exists. Please sign in.');
       } else if (err.code === 'EMAIL_NOT_VERIFIED' || err.message?.includes('verification')) {
-        await sendOtp(email, 'email-verification').catch(() => {});
-        setSuccessMessage(`Please enter the 6-digit verification code sent to ${email}.`);
-        setCountdown(30);
+        const sent = await sendOtp(email, 'email-verification').catch(() => false);
+        if (sent) {
+          setSuccessMessage(`Please enter the 6-digit verification code sent to ${email}.`);
+          setCountdown(30);
+        } else {
+          setErrorMessage(`We could not send a verification code to ${email}. Use "Resend" to retry.`);
+        }
         setView('verify-otp');
       } else {
         setErrorMessage(err.message || 'Registration failed. Email might already exist.');

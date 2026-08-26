@@ -428,10 +428,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     }
   };
 
-  // Step 4: Batch Interviews Execution
+  // Step 4: Batch Interviews Execution (async job + polling)
+  const batchPollCancelledRef = useRef<boolean>(false);
+  useEffect(() => {
+    return () => {
+      batchPollCancelledRef.current = true;
+    };
+  }, []);
+
   const handleRunBatchInterviews = async () => {
     if (!studyId) return;
     setIsBatchRunning(true);
+    batchPollCancelledRef.current = false;
 
     const initialMap: Record<string, 'in_progress'> = {};
     personas.forEach((p) => {
@@ -439,23 +447,43 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     });
     setInterviewStatusMap(initialMap);
 
-    try {
-      const result = await api.runBatchStudyInterviews(studyId, selectedPersonaIds, questions);
-      // Honest per-persona statuses from the actual backend response —
-      // never mark a persona completed unless its interview really ran.
-      const statusMap: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'> = {};
-      const completedIds = new Set(
-        (result?.interviews || []).map((iv: any) => iv.persona_id).filter(Boolean)
-      );
-      const failedIds = new Set(
-        (result?.failed || []).map((f: any) => f.persona_id).filter(Boolean)
-      );
+    const applyJobStatuses = (job: any) => {
+      const map: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'> = {};
       personas.forEach((p) => {
-        if (completedIds.has(p.id)) statusMap[p.id] = 'completed';
-        else if (failedIds.has(p.id)) statusMap[p.id] = 'failed';
-        else statusMap[p.id] = selectedPersonaIds.includes(p.id) ? 'failed' : 'pending';
+        const entry = job?.personas?.[p.id];
+        map[p.id] = entry ? entry.status : 'pending';
       });
-      setInterviewStatusMap(statusMap);
+      setInterviewStatusMap(map);
+    };
+
+    try {
+      const start = await api.runBatchStudyInterviews(studyId, selectedPersonaIds, questions);
+      const jobId = start?.job_id;
+      if (!jobId) throw new Error('Batch job did not start');
+      applyJobStatuses(start);
+
+      // Poll until the job leaves "running" (real batches run for many minutes).
+      let job: any = start;
+      while (!batchPollCancelledRef.current && job?.status === 'running') {
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          job = await api.getBatchRunStatus(studyId, jobId);
+          applyJobStatuses(job);
+        } catch (pollErr: any) {
+          if (pollErr?.status === 404) {
+            // Job lost (e.g. backend restart) — everything unfinished is failed.
+            setInterviewStatusMap((prev) => {
+              const map = { ...prev };
+              Object.keys(map).forEach((pid) => {
+                if (map[pid] === 'in_progress' || map[pid] === 'pending') map[pid] = 'failed';
+              });
+              return map;
+            });
+            break;
+          }
+          // Transient poll error: keep polling.
+        }
+      }
       await api.listStudyInterviews(studyId).catch(() => []);
     } catch (err: any) {
       // Whole-batch failure: everything selected is failed. Nothing "completed".
