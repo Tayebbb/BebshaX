@@ -53,6 +53,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — M2: routes/status de-fabricated
+
+- New public `PoolRouter.pool_utilization()` + `is_cooling()`; endpoint stops reaching into privates, stops inventing `active_requests=0`/`max(count,1)`/substring-guessed types. 4 tests. Audit M2 ticked.
+
 ### Maintenance (2026-08-26) — M4: no fabricated interview metadata
 
 - Both interview message endpoints stop inventing `latency_ms=750` / `served_by="ollama/fallback"` defaults; engine's real measured values pass through (`None` = honest absence). E2E now pins real latency/route/memories. Audit M4 ticked.

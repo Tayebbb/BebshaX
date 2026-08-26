@@ -11,10 +11,21 @@ from bebshax.llm.pools import POOLS
 
 router = APIRouter(tags=["routing"])
 
+# M2: adapter kind is registry data, not substring guessing. Unknown → "unknown".
+_ADAPTER_KIND = {
+    "freellmpool": "aggregator",  # one adapter fronting many providers
+    "ollama": "local",
+    "openrouter": "remote_api",
+}
+
 
 @router.get("/routes/status")
 async def get_routes_status(request: Request) -> dict[str, Any]:
-    """Snapshot of provider health and concurrency pool utilization."""
+    """Snapshot of provider health and concurrency pool utilization.
+
+    M2 honesty rules: no invented counts (empty pools report 0), no guessed
+    provider types, no private router internals — only public APIs.
+    """
     adapters = getattr(request.app.state, "llm_adapters", {})
     router_instance = getattr(request.app.state, "llm_router", None)
 
@@ -23,46 +34,42 @@ async def get_routes_status(request: Request) -> dict[str, Any]:
 
     adapter_candidates_map: dict[str, list] = {}
     for name, adapter in adapters.items():
-        type_ = "keyless"
-        if "ollama" in name.lower():
-            type_ = "local_fallback"
-        elif "groq" in name.lower() or "openai" in name.lower() or "anthropic" in name.lower():
-            type_ = "free_tier_key"
-
         try:
             candidates = await adapter.candidates()
         except Exception:
             candidates = []
         adapter_candidates_map[name] = candidates
 
-        active_cooldowns = 0
-        if router_instance and hasattr(router_instance, "_cooling_reason"):
-            active_cooldowns = sum(
-                1 for c in candidates if router_instance._cooling_reason(c) is not None
-            )
+        # None = router not wired — same honest-absence convention as active_requests
+        active_cooldowns = None
+        if router_instance is not None and hasattr(router_instance, "is_cooling"):
+            active_cooldowns = sum(1 for c in candidates if router_instance.is_cooling(c))
 
         providers_status.append(
             {
                 "name": name,
-                "type": type_,
+                "type": _ADAPTER_KIND.get(name, "unknown"),
                 "status": "healthy" if len(candidates) > 0 else "degraded",
                 "available_models": len(candidates),
                 "active_cooldowns": active_cooldowns,
             }
         )
 
-    # Map pools
+    utilization: dict[str, dict[str, int]] = {}
+    if router_instance is not None and hasattr(router_instance, "pool_utilization"):
+        utilization = router_instance.pool_utilization()
+
     for pool_name, pool_def in POOLS.items():
         candidates_count = sum(
             len(adapter_candidates_map.get(a_name, [])) for a_name in pool_def.adapters
         )
-        max_concurrency = pool_def.max_concurrency
         pools_status.append(
             {
                 "name": pool_name,
-                "max_concurrency": max_concurrency,
-                "active_requests": 0,
-                "candidates_count": max(candidates_count, 1),
+                "max_concurrency": pool_def.max_concurrency,
+                # None = router not wired (honest absence), never a made-up 0
+                "active_requests": utilization.get(pool_name, {}).get("active_requests"),
+                "candidates_count": candidates_count,
             }
         )
 

@@ -38,11 +38,11 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | Owner             | Assigned |  Done |
 | ----------------- | -------: | ----: |
 | Joint (all three) |        5 |     0 |
-| Tayeb             |        8 |     4 |
+| Tayeb             |        8 |     5 |
 | Sazid             |       11 |     1 |
 | Shehab            |       16 |     0 |
 | Already closed    |        1 |     1 |
-| **Total**         |   **41** | **6** |
+| **Total**         |   **41** | **7** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -67,7 +67,7 @@ Decide in this order, in one sitting:
 ## Tayeb — LLM infrastructure, `api/**`, repo-wide gates (8)
 
 - [x] 🟠 **H2** — Ollama is unreachable, so the local fallback tier and the offline drill are both dead. `EMERGENCY_FALLBACK` currently has no route at all. → `llm/adapters/ollama_adapter.py` + ops — **DONE 2026-08-26** (daemon up + smoke OK + startup warning `warn_if_local_tier_down`; see audit fix log)
-- [ ] 🟡 **M2** — `/api/routes/status` fabricates: `active_requests` hardcoded `0`, `max(count, 1)` hides empty pools, provider `type` guessed by substring match, and it reaches into the router's private `_cooling_reason`. → `api/routes.py`
+- [x] 🟡 **M2** — `/api/routes/status` fabricates: `active_requests` hardcoded `0`, `max(count, 1)` hides empty pools, provider `type` guessed by substring match, and it reaches into the router's private `_cooling_reason`. → `api/routes.py` — **DONE 2026-08-26** (public `pool_utilization()`/`is_cooling()` on PoolRouter; measured counts; registry-table types; 4 tests)
 - [x] 🟡 **M4** — Interview responses hardcode `latency_ms: 750` and invent `retrieved_memories` placeholder strings instead of the memories actually retrieved. The memory feature's only UI surface is fake. → `api/interviews.py` — **DONE 2026-08-26** (engine returns real values; API fabricated fallbacks removed; e2e asserts real latency/route/memories)
 - [ ] 🟡 **M5** — `industry`/`target_market` stuffed into the description string and re-parsed with `desc.startswith("Industry:")`. Any description starting with "Industry:" corrupts. Needs real columns — coordinate the migration with Sazid. → `api/personas.py`
 - [x] 🟡 **M6** — `CORS allow_origins=["*"]` together with `allow_credentials=True` — invalid per spec and unsafe. → `main.py` — **DONE 2026-08-26** (explicit origins via `BEBSHAX_CORS_ORIGINS`, 3 tests; see audit fix log)

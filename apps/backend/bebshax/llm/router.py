@@ -54,6 +54,21 @@ class PoolRouter(LLMService):
         self._semaphores = {
             name: asyncio.Semaphore(p.max_concurrency) for name, p in self._pools.items()
         }
+        self._active_requests: dict[str, int] = {name: 0 for name in self._pools}
+
+    def is_cooling(self, cand: RouteCandidate) -> bool:
+        """Public cooling check — observability endpoints must not touch privates."""
+        return self._cooling_reason(cand) is not None
+
+    def pool_utilization(self) -> dict[str, dict[str, int]]:
+        """Real per-pool concurrency snapshot: {pool: {max_concurrency, active_requests}}."""
+        return {
+            name: {
+                "max_concurrency": pool.max_concurrency,
+                "active_requests": self._active_requests[name],
+            }
+            for name, pool in self._pools.items()
+        }
 
     def _cooling_reason(self, cand: RouteCandidate) -> str | None:
         until = self._cooldown_until.get((cand.provider, cand.model))
@@ -82,21 +97,25 @@ class PoolRouter(LLMService):
         started = time.perf_counter()
         try:
             async with self._semaphores[pool_name]:
-                entries: list[Entry] = []
-                for adapter_name in pool.adapters:
-                    adapter = self._adapters.get(adapter_name)
-                    if adapter is None:
-                        continue  # adapter not configured (e.g., openrouter key not set)
-                    for cand in await adapter.candidates():
-                        entries.append((adapter, cand))
-                if self._ranker is not None:
-                    entries = self._ranker(entries)
-                eligible = filter_eligible(
-                    entries, request, provenance, extra_skip_reason=self._cooling_reason
-                )
-                return await attempt_candidates(
-                    eligible, request, provenance, on_cooldown=self._start_cooldown
-                )
+                self._active_requests[pool_name] += 1
+                try:
+                    entries: list[Entry] = []
+                    for adapter_name in pool.adapters:
+                        adapter = self._adapters.get(adapter_name)
+                        if adapter is None:
+                            continue
+                        for cand in await adapter.candidates():
+                            entries.append((adapter, cand))
+                    if self._ranker is not None:
+                        entries = self._ranker(entries)
+                    eligible = filter_eligible(
+                        entries, request, provenance, extra_skip_reason=self._cooling_reason
+                    )
+                    return await attempt_candidates(
+                        eligible, request, provenance, on_cooldown=self._start_cooldown
+                    )
+                finally:
+                    self._active_requests[pool_name] -= 1
         finally:
             provenance.total_latency_ms = (time.perf_counter() - started) * 1000
             if self._on_provenance is not None:

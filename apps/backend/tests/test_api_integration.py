@@ -90,12 +90,33 @@ async def test_routes_status_and_provenance(api_test_app: TestClient):
     assert "pools" in data
     assert len(data["providers"]) >= 1
 
+    # M2: types come from the registry table, never substring guessing —
+    # the fixture's "pollinations" adapter has no registry entry.
+    by_name = {p["name"]: p for p in data["providers"]}
+    assert by_name["pollinations"]["type"] == "unknown"
+    assert by_name["ollama"]["type"] == "local"
+    # M2: active_requests is a real measured integer while the system is idle
+    assert all(p["active_requests"] == 0 for p in data["pools"])
+
     # Test provenance list
     prov_resp = api_test_app.get("/api/provenance?limit=10")
     assert prov_resp.status_code == 200
     pdata = prov_resp.json()
     assert "items" in pdata
     assert "total" in pdata
+
+
+async def test_routes_status_reports_empty_pools_honestly(api_test_app: TestClient):
+    # M2: an empty pool must report 0 candidates — the audited code did max(count, 1)
+    app = api_test_app.app
+    saved = app.state.llm_adapters
+    app.state.llm_adapters = {name: FakeAdapter(routes=[]) for name in saved}
+    try:
+        data = api_test_app.get("/api/routes/status").json()
+        assert all(p["candidates_count"] == 0 for p in data["pools"])
+        assert all(p["status"] == "degraded" for p in data["providers"])
+    finally:
+        app.state.llm_adapters = saved
 
 
 async def test_evaluation_metrics_endpoint(api_test_app: TestClient):

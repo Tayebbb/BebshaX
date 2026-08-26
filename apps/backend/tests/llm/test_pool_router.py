@@ -117,3 +117,58 @@ def test_unknown_adapter_in_pool_config_raises() -> None:
             pools={"p": PoolConfig(name="p", adapters=["missing"])},
             task_pool_map={},
         )
+
+
+async def test_pool_utilization_tracks_in_flight_requests() -> None:
+    """M2: active_requests must be measured, never hardcoded."""
+    import asyncio
+
+    gate = asyncio.Event()
+
+    class BlockingAdapter(FakeAdapter):
+        async def complete(self, candidate, request):
+            await gate.wait()
+            return await super().complete(candidate, request)
+
+    blocking = BlockingAdapter([_route("freellmpool", "auto")])
+    router = PoolRouter(
+        {"openrouter": FakeAdapter([]), "freellmpool": blocking, "ollama": FakeAdapter([])}
+    )
+
+    assert all(p["active_requests"] == 0 for p in router.pool_utilization().values())
+
+    task = asyncio.create_task(router.complete(_request()))
+    try:
+        for _ in range(200):  # poll until the request is inside the semaphore
+            if router.pool_utilization()["reasoning"]["active_requests"] == 1:
+                break
+            await asyncio.sleep(0.005)
+        assert router.pool_utilization()["reasoning"]["active_requests"] == 1
+    finally:
+        gate.set()  # never leak a blocked task, even on assertion failure
+    await task
+    assert router.pool_utilization()["reasoning"]["active_requests"] == 0
+
+
+async def test_pool_utilization_drains_to_zero_on_failure() -> None:
+    """M2: the in-flight counter must decrement on the exception path too."""
+    router, _ = _router(
+        [_route("freellmpool", "auto", [FailureKind.SERVER_ERROR])],
+        [_route("ollama", "m", [FailureKind.TIMEOUT])],
+    )
+    with pytest.raises(AllCandidatesFailed):
+        await router.complete(_request())
+    assert router.pool_utilization()["reasoning"]["active_requests"] == 0
+
+
+async def test_is_cooling_is_public_and_truthful() -> None:
+    """M2: observability uses a public API, not the router's privates."""
+    router, _ = _router(
+        [_route("freellmpool", "auto", [FailureKind.RATE_LIMITED])],
+        [_route("ollama", "m")],
+    )
+    await router.complete(_request())  # 429 → freellmpool cools, ollama serves
+    cooling = _route("freellmpool", "auto").candidate
+    warm = _route("ollama", "m").candidate
+    assert router.is_cooling(cooling) is True
+    assert router.is_cooling(warm) is False
