@@ -13,6 +13,8 @@ import {
   FileText,
   Copy,
   MessageSquare,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import {
   Study,
@@ -765,12 +767,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             {/* Role Selection Drawer when ready */}
             {showRoleSelection && (
               <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '16px', padding: '24px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
                       SUGGESTED ROLES FOR YOUR STUDY
                     </h2>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.8rem', color: '#14B8A6', fontWeight: 600 }}>Persona Panel Configured</span>
                       <span style={{ fontSize: '0.82rem', color: '#8D9999' }}>• Grounded in empirical evidence and dataset distributions</span>
                     </div>
@@ -791,6 +793,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
+                      boxShadow: '0 4px 14px rgba(20, 184, 166, 0.25)',
                     }}
                   >
                     <Sparkles size={16} />
@@ -798,51 +801,159 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   </button>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
-                  {suggestedRoles.map((role) => (
-                    <div
-                      key={role.id}
-                      onClick={() => handleToggleRole(role.id)}
-                      style={{
-                        background: role.selected ? 'rgba(20, 184, 166, 0.08)' : '#0D1111',
-                        border: role.selected ? '1px solid #14B8A6' : '1px solid #202727',
-                        borderRadius: '12px',
-                        padding: '14px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: role.selected ? '#22D3EE' : '#FFFFFF' }}>
-                            {role.role}
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <button
-                              type="button"
-                              onClick={(e) => handleDecrementRole(role.id, e)}
-                              style={{ background: '#202727', border: 'none', color: '#FFF', borderRadius: '4px', width: '20px', height: '20px', cursor: 'pointer' }}
+                {/* Stacked Roles List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {suggestedRoles.map((role) => {
+                    const isSelected = !!role.selected && role.count > 0;
+                    return (
+                      <div
+                        key={role.id}
+                        onClick={() => handleToggleRole(role.id)}
+                        style={{
+                          background: isSelected ? 'rgba(20, 184, 166, 0.08)' : '#0D1111',
+                          border: isSelected ? '1px solid #14B8A6' : '1px solid #202727',
+                          borderRadius: '12px',
+                          padding: '14px 18px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '16px',
+                          transition: 'all 0.2s ease',
+                          boxShadow: isSelected ? '0 4px 16px -4px rgba(20, 184, 166, 0.15)' : 'none',
+                        }}
+                      >
+                        {/* Left Info: Checkbox + Role Name + Description */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              width: '22px',
+                              height: '22px',
+                              borderRadius: '6px',
+                              border: isSelected ? '1px solid #14B8A6' : '1px solid #334155',
+                              background: isSelected ? '#14B8A6' : '#161B1B',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            {isSelected && <Check size={14} color="#080909" strokeWidth={3} />}
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span
+                                style={{
+                                  fontSize: '0.86rem',
+                                  fontWeight: 700,
+                                  letterSpacing: '0.04em',
+                                  color: isSelected ? '#22D3EE' : '#FFFFFF',
+                                }}
+                              >
+                                {role.role}
+                              </span>
+                              {isSelected && (
+                                <span
+                                  style={{
+                                    fontSize: '0.7rem',
+                                    padding: '2px 8px',
+                                    borderRadius: '9999px',
+                                    background: 'rgba(20, 184, 166, 0.16)',
+                                    color: '#2DD4BF',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  Active ({role.count})
+                                </span>
+                              )}
+                            </div>
+                            <p
+                              style={{
+                                fontSize: '0.8rem',
+                                color: '#8D9999',
+                                margin: 0,
+                                lineHeight: 1.4,
+                              }}
                             >
-                              -
-                            </button>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 700, padding: '0 4px' }}>{role.count}</span>
-                            <button
-                              type="button"
-                              onClick={(e) => handleIncrementRole(role.id, e)}
-                              style={{ background: '#202727', border: 'none', color: '#FFF', borderRadius: '4px', width: '20px', height: '20px', cursor: 'pointer' }}
-                            >
-                              +
-                            </button>
+                              {role.description}
+                            </p>
                           </div>
                         </div>
-                        <p style={{ fontSize: '0.78rem', color: '#8D9999', marginTop: '8px', lineHeight: 1.4 }}>
-                          {role.description}
-                        </p>
+
+                        {/* Right: Stepper Counter */}
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: '#161B1B',
+                            border: '1px solid #283333',
+                            borderRadius: '8px',
+                            padding: '4px 6px',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <button
+                            type="button"
+                            aria-label={`Decrease ${role.role} count`}
+                            onClick={(e) => handleDecrementRole(role.id, e)}
+                            disabled={role.count <= 0}
+                            style={{
+                              background: role.count > 0 ? '#202727' : 'transparent',
+                              border: 'none',
+                              color: role.count > 0 ? '#FFFFFF' : '#4B5563',
+                              borderRadius: '6px',
+                              width: '26px',
+                              height: '26px',
+                              cursor: role.count > 0 ? 'pointer' : 'not-allowed',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'background 0.15s ease',
+                            }}
+                          >
+                            <Minus size={13} />
+                          </button>
+
+                          <span
+                            style={{
+                              fontSize: '0.88rem',
+                              fontWeight: 700,
+                              minWidth: '20px',
+                              textAlign: 'center',
+                              color: role.count > 0 ? '#22D3EE' : '#64748B',
+                            }}
+                          >
+                            {role.count}
+                          </span>
+
+                          <button
+                            type="button"
+                            aria-label={`Increase ${role.role} count`}
+                            onClick={(e) => handleIncrementRole(role.id, e)}
+                            style={{
+                              background: '#202727',
+                              border: 'none',
+                              color: '#FFFFFF',
+                              borderRadius: '6px',
+                              width: '26px',
+                              height: '26px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'background 0.15s ease',
+                            }}
+                          >
+                            <Plus size={13} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -63,6 +63,14 @@ class GeneratedClaim(BaseModel):
         return v
 
 
+class BigFivePersonality(BaseModel):
+    openness: int = Field(default=50, ge=0, le=100)
+    conscientiousness: int = Field(default=50, ge=0, le=100)
+    extroversion: int = Field(default=50, ge=0, le=100)
+    agreeableness: int = Field(default=50, ge=0, le=100)
+    neuroticism: int = Field(default=50, ge=0, le=100)
+
+
 class GeneratedPersona(BaseModel):
     """Strict schema the model must emit. Groups mirror brief §14."""
 
@@ -81,6 +89,8 @@ class GeneratedPersona(BaseModel):
     technology_usage: list[GeneratedClaim] = Field(default_factory=list)
     purchase_behavior: list[GeneratedClaim] = Field(default_factory=list)
     personality_traits: list[GeneratedClaim] = Field(default_factory=list)
+    personality: BigFivePersonality | None = None
+    detailed_attributes: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("name", "occupation", "location")
     @classmethod
