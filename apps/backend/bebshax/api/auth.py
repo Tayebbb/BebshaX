@@ -237,11 +237,12 @@ async def sync_user(
             detail="Invalid Neon session payload",
         )
 
-    if not neon_user.get("emailVerified", True):
+    if not neon_user.get("emailVerified", False):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email not verified with identity provider",
         )
+
 
     email = (neon_user.get("email") or "").strip().lower()
     if not email:

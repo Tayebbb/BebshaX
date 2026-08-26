@@ -46,12 +46,19 @@ def test_sync_uses_verified_email_not_claimed_email():
     """Even if a client somehow smuggled a claimed email in, only the verified
     value from Neon's response should ever be used to look up/create the user."""
     with patch("bebshax.api.auth.verify_neon_token", new_callable=AsyncMock) as mock_verify:
-        mock_verify.return_value = {"email": "real-verified@example.com", "full_name": "Real User"}
+        mock_verify.return_value = {
+            "user": {
+                "email": "real-verified@example.com",
+                "full_name": "Real User",
+                "emailVerified": True,
+            }
+        }
         response = client.post(
             "/api/auth/sync", json={"neon_token": "valid-token", "auth_provider": "neon"}
         )
         assert response.status_code == 200
         assert response.json()["user"]["email"] == "real-verified@example.com"
+
 
 
 def test_sync_no_longer_accepts_client_supplied_email_field():
@@ -99,4 +106,19 @@ def test_sync_rejects_unverified_email():
             "/api/auth/sync", json={"neon_token": "valid-token", "auth_provider": "neon"}
         )
         assert response.status_code == 401
+
+
+def test_sync_rejects_missing_emailverified_field():
+    """Fail-closed guard: a response with the emailVerified key stripped
+    entirely must be rejected, not silently treated as verified."""
+    with patch("bebshax.api.auth.verify_neon_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = {
+            "user": {"email": "no-field@example.com"},  # emailVerified key absent
+            "session": {"token": "valid-token"},
+        }
+        response = client.post(
+            "/api/auth/sync", json={"neon_token": "valid-token", "auth_provider": "neon"}
+        )
+        assert response.status_code == 401
+
 
