@@ -742,4 +742,17 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
   - `apps/backend/tests/db/test_migration_drift_guard.py` (2 tests asserting `SystemExit` when behind head and clean startup when at head).
 - **Verification:** 2/2 tests green.
 
+---
+
+### Maintenance (2026-08-26) — Password Policy Beyond Length (H8)
+
+- **Audit item addressed:** 🟠 **H8** (E2E_AUDIT_2026-08-24.md & AUDIT_ASSIGNMENTS.md).
+- **Changes Applied:**
+  - **Alphanumeric Password Validator:** Added `password_must_be_alphanumeric_mix` validator to `SignUpRequest` in `apps/backend/bebshax/api/auth.py` requiring at least one letter and at least one digit (`has_letter and has_digit`).
+  - **Copy Consistency:** Matched the exact frontend UI promise displayed to users ("At least 8 characters, alphanumeric") without introducing unadvertised symbol/blocklist scope changes.
+- **Regression Tests:**
+  - `apps/backend/tests/api/test_password_policy.py` (4 tests verifying numeric-only rejection, alpha-only rejection, alphanumeric acceptance, and length limit preservation).
+- **Verification:** 4/4 tests green.
+
+
 

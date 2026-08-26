@@ -14,10 +14,26 @@ from bebshax.config import get_settings
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+from pydantic import BaseModel, Field, field_validator
+
+
 class SignUpRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100)
     email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def password_must_be_alphanumeric_mix(cls, v: str) -> str:
+        has_letter = any(c.isalpha() for c in v)
+        has_digit = any(c.isdigit() for c in v)
+        if not (has_letter and has_digit):
+            raise ValueError(
+                "Password must contain at least one letter and one number "
+                "(matches the requirement shown at signup)."
+            )
+        return v
+
 
 
 class SignInRequest(BaseModel):

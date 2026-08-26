@@ -39,10 +39,10 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | ----------------- | -------: | ---: |
 | Joint (all three) |        5 |    0 |
 | Tayeb | 8 | 8 |
-| Sazid | 11 | 5 |
+| Sazid | 11 | 6 |
 | Shehab | 16 | 0 |
 | Already closed | 1 | 1 |
-| **Total** | **41** | **14** |
+| **Total** | **41** | **15** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -90,7 +90,9 @@ Decide in this order, in one sitting:
 - [x] 🟠 **H6** — Migration drift. The local DB was brought to head on 2026-08-24, but **no CI guard exists**, so `/api/auth/*` still 500s on every other machine until each person runs the upgrade manually. Add `alembic current == heads` or fail. → CI + alembic — **DONE 2026-08-26** (CI guard in `ci.yml` + local-dev fail-fast check in `main.py`, 2 tests in `test_migration_drift_guard.py`)
 
 - [ ] 🟠 **H7** — No rate limiting, throttling or lockout on `/auth/signin`. PBKDF2 at 100 k rounds is also a DoS amplifier without it. → `api/auth.py`
-- [ ] 🟠 **H8** — Password policy is length-only; `"password1"` returns `201`. → `api/auth.py`
+- [x] 🟠 **H8** — Password policy is length-only; `"password1"` returns `201`. → `api/auth.py` — **DONE 2026-08-26** (alphanumeric validator on `SignUpRequest`, 4 tests in `test_password_policy.py`)
+- [ ] 🟠 **H9** — The UI promises "We'll send a verification link" and none is ever sent; `is_verified` stays `false` forever and is never checked at signin, while Google users get `is_verified=true` from an endpoint that verifies nothing. Either implement verification or remove the promise — coordinate the copy change with Shehab. → auth backend
+
 - [ ] 🟠 **H9** — The UI promises "We'll send a verification link" and none is ever sent; `is_verified` stays `false` forever and is never checked at signin, while Google users get `is_verified=true` from an endpoint that verifies nothing. Either implement verification or remove the promise — coordinate the copy change with Shehab. → auth backend
 - [x] 🟡 **M8** — Silent `except Exception: pass` around `seed_demo_data`; seeding can fail completely with zero signal. (The matching swallow in `api/personas.py` is Tayeb's.) → `main.py` — **DONE 2026-08-26** (both halves: startup init/seed failures and the persona memory write now log warnings; fixed by Tayeb's agent at owner instruction during the post-audit sweep)
 - [ ] ⚪ **L14** — Suite deprecations: `StarletteDeprecationWarning` (httpx testclient) plus two numpy/fastparquet warnings. Harmless now, breaks on upgrade. → `pyproject.toml`
