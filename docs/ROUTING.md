@@ -27,15 +27,15 @@ Wired in `create_app` lifespan: `app.state.llm_router = PoolRouter(build_default
 
 ## Pools and task mapping (Phase 5)
 
-| Pool | Adapter order | Concurrency | Tasks |
-|---|---|---|---|
-| `reasoning` | openrouter† → freellmpool → ollama | 2 | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
-| `conversation` | openrouter† → freellmpool → ollama | 5 | PERSONA_INTERVIEW, PERSONA_RESPONSE |
-| `structured` | openrouter† → freellmpool → ollama | 3 | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING |
-| `fast` | openrouter† → freellmpool → ollama | 5 | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION |
-| `long_context` | openrouter† → freellmpool → ollama | 2 | REPORT_GENERATION |
-| `local` | ollama | 2 | (reserved for explicit local-only calls) |
-| `emergency` | **ollama → freellmpool** (local-first) | 2 | EMERGENCY_FALLBACK |
+| Pool           | Adapter order                          | Concurrency | Tasks                                                                                                                             |
+| -------------- | -------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `reasoning`    | openrouter† → freellmpool → ollama     | 2           | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
+| `conversation` | openrouter† → freellmpool → ollama     | 5           | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                                                               |
+| `structured`   | openrouter† → freellmpool → ollama     | 3           | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING                                      |
+| `fast`         | openrouter† → freellmpool → ollama     | 5           | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                                                            |
+| `long_context` | openrouter† → freellmpool → ollama     | 2           | REPORT_GENERATION                                                                                                                 |
+| `local`        | ollama                                 | 2           | (reserved for explicit local-only calls)                                                                                          |
+| `emergency`    | **ollama → freellmpool** (local-first) | 2           | EMERGENCY_FALLBACK                                                                                                                |
 
 † **OpenRouterAdapter is a TESTING-ONLY first preference** (owner decision 2026-08-26). Keyless → it contributes no routes and the pool behaves as before. Free-tier reality at $0: 20 req/min, 50 req/day (extra accounts do not raise limits); `openrouter/auto` in its default model list is the PAID auto-router — do not fund the key. Its pool position contradicts D1/the capacity plan and must be revisited before production (`docs/AI_IMPLEMENTATION_PLAN.md` §10).
 
@@ -47,18 +47,18 @@ Wired in `create_app` lifespan: `app.state.llm_router = PoolRouter(build_default
 
 ## Failure classification
 
-| freellmpool / transport outcome | BebshaX `FailureKind` | Policy |
-|---|---|---|
+| freellmpool / transport outcome                    | BebshaX `FailureKind`     | Policy                                              |
+| -------------------------------------------------- | ------------------------- | --------------------------------------------------- |
 | `ContextWindowExceeded` (caught before its parent) | `CONTEXT_WINDOW_EXCEEDED` | advance to larger-context candidate; never truncate |
-| `AllProvidersExhausted` (client_status=429) | `RATE_LIMITED` | advance + cooldown |
-| `AllProvidersExhausted` (other) | `PROVIDER_UNAVAILABLE` | advance + cooldown |
-| `NoProvidersConfigured` | `PROVIDER_UNAVAILABLE` | advance + cooldown |
-| `ProviderHTTPError` 401/403 | `AUTH_INVALID` | advance + cooldown |
-| `ProviderHTTPError` 404 | `MODEL_UNAVAILABLE` | advance + cooldown |
-| `ProviderHTTPError` 5xx | `SERVER_ERROR` | advance + cooldown |
-| `httpx.TimeoutException` | `TIMEOUT` | advance |
-| `httpx.TransportError` | `CONNECTION` | retry same once, then advance |
-| empty/whitespace reply | `MALFORMED_RESPONSE` | retry same once, then advance |
+| `AllProvidersExhausted` (client_status=429)        | `RATE_LIMITED`            | advance + cooldown                                  |
+| `AllProvidersExhausted` (other)                    | `PROVIDER_UNAVAILABLE`    | advance + cooldown                                  |
+| `NoProvidersConfigured`                            | `PROVIDER_UNAVAILABLE`    | advance + cooldown                                  |
+| `ProviderHTTPError` 401/403                        | `AUTH_INVALID`            | advance + cooldown                                  |
+| `ProviderHTTPError` 404                            | `MODEL_UNAVAILABLE`       | advance + cooldown                                  |
+| `ProviderHTTPError` 5xx                            | `SERVER_ERROR`            | advance + cooldown                                  |
+| `httpx.TimeoutException`                           | `TIMEOUT`                 | advance                                             |
+| `httpx.TransportError`                             | `CONNECTION`              | retry same once, then advance                       |
+| empty/whitespace reply                             | `MALFORMED_RESPONSE`      | retry same once, then advance                       |
 
 Low answer quality is deliberately absent — it is handled by the evaluation layer (Phase 11), never by infrastructure fallback (RULES.md R2).
 
@@ -66,7 +66,7 @@ Low answer quality is deliberately absent — it is handled by the evaluation la
 
 ### freellmpool 0.11.4 — ADOPTED (Phase 3)
 
-- **Why needed:** aggregates ~18–24 legitimate free LLM providers (200+ live routes) behind one API with failover, per-key quota tracking, Retry-After-aware cooldowns, per-route circuit breakers, context-limit learning, and keyless start. This *is* the "aggregate free capacity" requirement.
+- **Why needed:** aggregates ~18–24 legitimate free LLM providers (200+ live routes) behind one API with failover, per-key quota tracking, Retry-After-aware cooldowns, per-route circuit breakers, context-limit learning, and keyless start. This _is_ the "aggregate free capacity" requirement.
 - **What it replaces:** building our own multi-provider router/gateway (explicitly forbidden by the brief §42 / owner rule #12).
 - **License:** MIT. **Activity:** v0.11.4 on PyPI, commits within 3 weeks of adoption, CI, security policy. **Risk:** small project (single-maintainer) → mitigated by the adapter boundary; it is swappable without touching application code, and MIT allows vendoring.
 - **Runtime deps:** `httpx` only.
@@ -86,17 +86,17 @@ Low answer quality is deliberately absent — it is handled by the evaluation la
 
 ## Local fallback (Ollama) — Phase 4
 
-- **Adapter:** `bebshax/llm/adapters/ollama_adapter.py` — plain `httpx` against Ollama's **native `/api/chat`** (no SDK dependency). *Deliberate spec deviation:* the OpenAI-compat endpoint cannot set `options.num_ctx`, and Ollama silently truncates prompts beyond the runtime context — so the adapter pins `num_ctx` to a generous per-request estimate (chars/3 + output + headroom) and **refuses** (`CONTEXT_WINDOW_EXCEEDED`) instead of ever truncating (R2).
+- **Adapter:** `bebshax/llm/adapters/ollama_adapter.py` — plain `httpx` against Ollama's **native `/api/chat`** (no SDK dependency). _Deliberate spec deviation:_ the OpenAI-compat endpoint cannot set `options.num_ctx`, and Ollama silently truncates prompts beyond the runtime context — so the adapter pins `num_ctx` to a generous per-request estimate (chars/3 + output + headroom) and **refuses** (`CONTEXT_WINDOW_EXCEEDED`) instead of ever truncating (R2).
 - **Candidates:** discovered live from `/api/tags` with honest per-model windows from `/api/show`, capped at 16k for the 4 GB card, **sorted smallest-first** — under RAM pressure the small model is the one most likely to load, and resilience is this tier's job.
 - **Measured on the dev machine (2026-08-22, 3-run medians, `data/metadata/ollama_benchmark.json`):**
 
-| Model | Size | Status | tok/s | TTFT |
-|---|---|---|---|---|
-| `llama3.2:3b` | 2.0 GB | ✅ primary local fallback | 25.2 (59.8 warm) | ~2.8 s cold |
-| `qwen3:4b` | 2.5 GB | ✅ secondary (better quality, needs more staging RAM) | 22.4 | 217 ms warm |
-| `qwen3.5:latest` | 6.6 GB | ❌ **unusable under real load** — HTTP 500 / runner OOM with <2 GB free system RAM | — | — |
+| Model            | Size   | Status                                                                             | tok/s            | TTFT        |
+| ---------------- | ------ | ---------------------------------------------------------------------------------- | ---------------- | ----------- |
+| `llama3.2:3b`    | 2.0 GB | ✅ primary local fallback                                                          | 25.2 (59.8 warm) | ~2.8 s cold |
+| `qwen3:4b`       | 2.5 GB | ✅ secondary (better quality, needs more staging RAM)                              | 22.4             | 217 ms warm |
+| `qwen3.5:latest` | 6.6 GB | ❌ **unusable under real load** — HTTP 500 / runner OOM with <2 GB free system RAM | —                | —           |
 
-- **Finding:** with VS Code + browser + Docker running, free RAM sits near 1–2 GB, so the 6.6 GB model cannot load (`"model requires more system memory (1.8 GiB) than is available"` was observed even for the 2.5 GB model until WSL was shut down). The fully-GPU-resident small models are therefore the *only* dependable local tier; `qwen3.5` remains installed but the router's TIMEOUT/SERVER_ERROR policies simply advance past it when it fails.
+- **Finding:** with VS Code + browser + Docker running, free RAM sits near 1–2 GB, so the 6.6 GB model cannot load (`"model requires more system memory (1.8 GiB) than is available"` was observed even for the 2.5 GB model until WSL was shut down). The fully-GPU-resident small models are therefore the _only_ dependable local tier; `qwen3.5` remains installed but the router's TIMEOUT/SERVER_ERROR policies simply advance past it when it fails.
 - Ops note: `wsl --shutdown` frees the Docker VM's RAM when the local tier is needed and Docker isn't (Docker restarts on demand for Phase 6 work).
 
 ## Verification

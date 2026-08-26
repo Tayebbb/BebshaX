@@ -356,11 +356,11 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
   - Endpoints: `GET /api/datasets`, `POST /api/datasets/url`, `POST /api/datasets/upload`, `GET /api/datasets/{id}`, `POST /api/datasets/{id}/refresh`, `POST /api/datasets/{id}/query`, `DELETE /api/datasets/{id}`, `POST /api/datasets/{id}/generate-personas`.
   - Installed `python-multipart` for multipart form file uploads.
 - **R8 Review for `python-multipart`:**
-  - *Why:* Required by Starlette/FastAPI to parse `multipart/form-data` file uploads for CSV/JSON/TSV/XLSX research dataset uploads.
-  - *What it provides:* Streaming multipart parser with memory/disk threshold management.
-  - *License:* Apache 2.0 (Permissive).
-  - *Activity:* Active standard library for FastAPI file uploads.
-  - *Necessity:* Essential for binary and tabular file uploads to `/api/datasets/upload`.
+  - _Why:_ Required by Starlette/FastAPI to parse `multipart/form-data` file uploads for CSV/JSON/TSV/XLSX research dataset uploads.
+  - _What it provides:_ Streaming multipart parser with memory/disk threshold management.
+  - _License:_ Apache 2.0 (Permissive).
+  - _Activity:_ Active standard library for FastAPI file uploads.
+  - _Necessity:_ Essential for binary and tabular file uploads to `/api/datasets/upload`.
 - **Frontend Dataset Laboratory & Diagnostics (`apps/frontend/`):**
   - Defined types in `types/dataset.ts`.
   - Added full API methods and mock fixtures to `services/api.ts` and `mocks/fixtures.ts`.
@@ -650,6 +650,3 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
   - Adapter boundary test `apps/backend/tests/llm/test_boundary.py` verified (**R1 compliance preserved**).
   - Frontend: All 16 vitest test suites passed (**71/71 tests green**).
   - Frontend production bundle build verified (`npm run build` green).
-
-
-

@@ -38,7 +38,7 @@ Two things do the heavy lifting, and they are **different jobs**:
 
 To BebshaX, the entire remote world is a single virtual route called `freellmpool/auto`. The real provider/model that ended up serving (e.g. `llm7/codestral-latest`) is reported back and stored, so provenance never says "auto".
 
-> **Temporary (2026-08-26):** a third adapter, `OpenRouterAdapter`, currently sits as *first preference* in the remote pools — **testing only**, per owner decision. Keyless it contributes no routes and everything behaves as documented here. Its position contradicts §10's capacity math (50 req/day at $0) and must be revisited before production.
+> **Temporary (2026-08-26):** a third adapter, `OpenRouterAdapter`, currently sits as _first preference_ in the remote pools — **testing only**, per owner decision. Keyless it contributes no routes and everything behaves as documented here. Its position contradicts §10's capacity math (50 req/day at $0) and must be revisited before production.
 
 ---
 
@@ -90,15 +90,15 @@ If **nothing** can fit the prompt, we raise `ContextWindowExceeded`. We **never*
 
 Configuration as **data**, so extending it = edit a table + add a test, never add a code branch.
 
-| Pool           | Order                    | Max concurrent | Tasks routed here                                                                            |
-| -------------- | ------------------------ | -------------- | -------------------------------------------------------------------------------------------- |
+| Pool           | Order                              | Max concurrent | Tasks routed here                                                                                                                 |
+| -------------- | ---------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `reasoning`    | openrouter† → freellmpool → ollama | 2              | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
-| `conversation` | openrouter† → freellmpool → ollama | 5              | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                          |
-| `structured`   | openrouter† → freellmpool → ollama | 3              | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING |
-| `fast`         | openrouter† → freellmpool → ollama | 5              | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                       |
-| `long_context` | openrouter† → freellmpool → ollama | 2              | REPORT_GENERATION                                                                            |
-| `local`        | ollama only              | 2              | reserved for explicit local-only work                                                        |
-| `emergency`    | **ollama → freellmpool** | 2              | EMERGENCY_FALLBACK (local **first** — when the internet is the problem)                      |
+| `conversation` | openrouter† → freellmpool → ollama | 5              | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                                                               |
+| `structured`   | openrouter† → freellmpool → ollama | 3              | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING                                      |
+| `fast`         | openrouter† → freellmpool → ollama | 5              | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                                                            |
+| `long_context` | openrouter† → freellmpool → ollama | 2              | REPORT_GENERATION                                                                                                                 |
+| `local`        | ollama only                        | 2              | reserved for explicit local-only work                                                                                             |
+| `emergency`    | **ollama → freellmpool**           | 2              | EMERGENCY_FALLBACK (local **first** — when the internet is the problem)                                                           |
 
 † testing-only first preference — see the note in [§2](#2-the-layer-cake); keyless → contributes no routes.
 
