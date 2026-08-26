@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.studies import _user_owns_study, get_session
+from bebshax.api.studies import _owner_accessible, _user_owns_study, get_session
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
 from bebshax.interview.engine import ConversationNotFound, InterviewFinished, PersonaNotFound
@@ -534,10 +534,43 @@ async def get_study_interview_insights(
 # Legacy Endpoints (Phase 10 & Integration Compatibility)
 # ============================================================================
 
+async def _guard_legacy_persona(
+    request: Request, persona_id: str, current_user: Optional[Users]
+) -> None:
+    """Owner gate for un-nested legacy endpoints: anonymous callers may only
+    touch shared/system personas, never another tenant's (B6 stage 3)."""
+    async with request.app.state.db_sessionmaker() as session:
+        p_row = await session.get(Personas, persona_id)
+    # Missing row falls through — the engine raises PersonaNotFound canonically.
+    if p_row is not None and not _owner_accessible(p_row.owner_id, current_user):
+        raise HTTPException(status_code=404, detail="persona not found")
+
+
+async def _guard_legacy_conversation(
+    request: Request, conversation_id: str, current_user: Optional[Users]
+) -> None:
+    """Owner gate for conversation-id-addressed legacy endpoints — checks the
+    conversation's own tenant stamp, then its persona's owner."""
+    async with request.app.state.db_sessionmaker() as session:
+        conv = await session.get(Conversations, conversation_id)
+        if conv is None:
+            return  # engine raises ConversationNotFound canonically
+        if conv.user_id and not _owner_accessible(conv.user_id, current_user):
+            raise HTTPException(status_code=404, detail="conversation not found")
+        if conv.persona_id:
+            p_row = await session.get(Personas, conv.persona_id)
+            if p_row is not None and not _owner_accessible(p_row.owner_id, current_user):
+                raise HTTPException(status_code=404, detail="conversation not found")
+
+
 @router.post("/personas/{persona_id}/conversations", status_code=201)
 async def start_conversation_under_persona(
-    persona_id: str, body: ConversationCreate, request: Request
+    persona_id: str,
+    body: ConversationCreate,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict:
+    await _guard_legacy_persona(request, persona_id, current_user)
     try:
         conversation = await request.app.state.interview_engine.start(persona_id, body.objective)
     except PersonaNotFound as exc:
@@ -553,9 +586,14 @@ async def start_conversation_under_persona(
 
 
 @router.post("/conversations", status_code=201)
-async def start_conversation(body: ConversationCreate, request: Request) -> dict:
+async def start_conversation(
+    body: ConversationCreate,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+) -> dict:
     if not body.persona_id:
         raise HTTPException(status_code=422, detail="persona_id is required")
+    await _guard_legacy_persona(request, body.persona_id, current_user)
     try:
         conversation = await request.app.state.interview_engine.start(body.persona_id, body.objective)
     except PersonaNotFound as exc:
@@ -571,10 +609,16 @@ async def start_conversation(body: ConversationCreate, request: Request) -> dict
 
 
 @router.post("/conversations/{conversation_id}/messages")
-async def post_message(conversation_id: str, body: MessageIn, request: Request) -> dict[str, Any]:
+async def post_message(
+    conversation_id: str,
+    body: MessageIn,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+) -> dict[str, Any]:
     text = body.content or body.message
     if not text or not text.strip():
         raise HTTPException(status_code=422, detail="message content cannot be empty")
+    await _guard_legacy_conversation(request, conversation_id, current_user)
 
     now_iso = datetime.now(timezone.utc).isoformat()
     try:
@@ -784,7 +828,12 @@ async def get_batch_run_status(
 
 
 @router.get("/conversations/{conversation_id}")
-async def get_conversation(conversation_id: str, request: Request) -> dict:
+async def get_conversation(
+    conversation_id: str,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+) -> dict:
+    await _guard_legacy_conversation(request, conversation_id, current_user)
     try:
         conversation, turns = await request.app.state.interview_engine.transcript(conversation_id)
     except ConversationNotFound as exc:

@@ -24,6 +24,7 @@ from bebshax.datasets.validator import validate_persona_against_constraints
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
+from bebshax.tenancy import PUBLIC_OWNER_IDS
 
 UPLOAD_DIR = Path("data/uploads")
 
@@ -198,6 +199,18 @@ class DatasetService:
 
         return dataset
 
+    @staticmethod
+    def _tenant_filter(user_id: Optional[str]):
+        """Tenant scope for caller-facing queries: unowned (NULL) rows and
+        anonymous/system-tenant stamps (PUBLIC_OWNER_IDS — e.g. candidate
+        imports stamp "usr_default") are shared; authenticated callers
+        additionally see their own rows. Anonymous callers never see another
+        tenant's data (B6 stage 3)."""
+        shared = DatasetSources.user_id.is_(None) | DatasetSources.user_id.in_(PUBLIC_OWNER_IDS)
+        if user_id:
+            return (DatasetSources.user_id == user_id) | shared
+        return shared
+
     async def list_datasets(
         self, user_id: Optional[str] = None, study_id: Optional[str] = None
     ) -> list[DatasetSources]:
@@ -205,24 +218,26 @@ class DatasetService:
             query = select(DatasetSources).order_by(DatasetSources.created_at.desc())
             if study_id:
                 query = query.filter(DatasetSources.study_id == study_id)
-            if user_id:
-                query = query.filter((DatasetSources.user_id == user_id) | (DatasetSources.user_id.is_(None)))
+            query = query.filter(self._tenant_filter(user_id))
             res = await session.execute(query)
             return list(res.scalars().all())
+
+    async def _get_dataset_any(self, dataset_id: str) -> Optional[DatasetSources]:
+        """Unscoped fetch for internal use AFTER an access check has passed."""
+        async with self._sessionmaker() as session:
+            return await session.get(DatasetSources, dataset_id)
 
     async def get_dataset(self, dataset_id: str, user_id: Optional[str] = None) -> Optional[DatasetSources]:
         async with self._sessionmaker() as session:
             query = select(DatasetSources).filter_by(id=dataset_id)
-            if user_id:
-                query = query.filter((DatasetSources.user_id == user_id) | (DatasetSources.user_id.is_(None)))
+            query = query.filter(self._tenant_filter(user_id))
             res = await session.execute(query)
             return res.scalar_one_or_none()
 
     async def delete_dataset(self, dataset_id: str, user_id: Optional[str] = None) -> bool:
         async with self._sessionmaker() as session:
             query = select(DatasetSources).filter_by(id=dataset_id)
-            if user_id:
-                query = query.filter((DatasetSources.user_id == user_id) | (DatasetSources.user_id.is_(None)))
+            query = query.filter(self._tenant_filter(user_id))
             res = await session.execute(query)
             ds = res.scalar_one_or_none()
             if not ds:
@@ -246,8 +261,7 @@ class DatasetService:
         """
         async with self._sessionmaker() as session:
             query = select(DatasetSources).filter_by(id=dataset_id)
-            if user_id:
-                query = query.filter((DatasetSources.user_id == user_id) | (DatasetSources.user_id.is_(None)))
+            query = query.filter(self._tenant_filter(user_id))
             res = await session.execute(query)
             ds = res.scalar_one_or_none()
             if not ds or ds.source_type != "url" or not ds.source_url:
@@ -312,7 +326,9 @@ class DatasetService:
         self, dataset_id: str, filter_col: Optional[str] = None, filter_val: Optional[Any] = None, limit: int = 100
     ) -> dict[str, Any]:
         """Execute deterministic filtering / analysis query on stored dataset records."""
-        ds = await self.get_dataset(dataset_id)
+        # Post-verification internal fetch — the API layer already ran the
+        # tenant-scoped get_dataset check before calling this.
+        ds = await self._get_dataset_any(dataset_id)
         if not ds or not ds.file_path or not os.path.exists(ds.file_path):
             return {"error": "Dataset file not found", "records": [], "count": 0}
 
@@ -341,7 +357,8 @@ class DatasetService:
         business_description: str = "Evidence-grounded user interview validation",
     ) -> dict[str, Any]:
         """Generate evidence-grounded synthetic personas strictly allocated according to dataset segment distribution."""
-        ds = await self.get_dataset(dataset_id)
+        # Post-verification internal fetch (API layer ran the scoped check).
+        ds = await self._get_dataset_any(dataset_id)
         if not ds:
             raise ValueError(f"Dataset '{dataset_id}' not found.")
 

@@ -160,11 +160,27 @@ async def test_memories_without_service_is_503(api_test_app: TestClient):
 
 
 async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
-    # 1. Create study for User A (unauthenticated — user_id in body)
+    # B6 stage 3: identity comes ONLY from the auth token. Client-supplied
+    # user_id (payload or query param) is ignored — impersonation guard.
+    from bebshax.auth.models import Users
+    from bebshax.auth.security import create_access_token
+
+    async with api_test_app.app.state.db_sessionmaker() as session:
+        session.add_all(
+            [
+                Users(id="usr_alice", email="alice@example.com", hashed_password="x", full_name="Alice"),
+                Users(id="usr_bob", email="bob@example.com", hashed_password="x", full_name="Bob"),
+            ]
+        )
+        await session.commit()
+    alice = {"Authorization": f"Bearer {create_access_token({'sub': 'usr_alice'})}"}
+    bob = {"Authorization": f"Bearer {create_access_token({'sub': 'usr_bob'})}"}
+
+    # 1. Create study as Alice — a spoofed payload user_id must be ignored
     s1_resp = api_test_app.post(
         "/api/studies",
         json={
-            "user_id": "usr_alice",
+            "user_id": "usr_bob",  # spoof attempt — token wins
             "title": "Alice's Grocery Delivery Demand Study",
             "type": "interviews",
             "goal": "demand_validation",
@@ -172,6 +188,7 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
             "copilot_messages": [{"role": "user", "content": "grocery delivery idea"}],
             "personas_data": [{"id": "per_1", "name": "Alice Persona"}],
         },
+        headers=alice,
     )
     assert s1_resp.status_code == 201
     s1 = s1_resp.json()
@@ -181,46 +198,45 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     assert s1["copilot_messages"] == [{"role": "user", "content": "grocery delivery idea"}]
     assert s1["personas_data"] == [{"id": "per_1", "name": "Alice Persona"}]
 
-    # 2. Create study for User B
+    # 2. Create study as Bob
     s2_resp = api_test_app.post(
         "/api/studies",
         json={
-            "user_id": "usr_bob",
             "title": "Bob's Fintech Card Study",
             "type": "concept_test",
             "goal": "feature_feedback",
             "persona_count": 3,
         },
+        headers=bob,
     )
     assert s2_resp.status_code == 201
     s2 = s2_resp.json()
     assert s2["user_id"] == "usr_bob"
 
-    # 3. List studies filtered by User A — only Alice's study (no auth JWT used)
-    alice_studies = api_test_app.get("/api/studies?user_id=usr_alice").json()
+    # 3. Alice's list shows only her study — even with an impersonation param
+    alice_studies = api_test_app.get("/api/studies?user_id=usr_bob", headers=alice).json()
     assert any(s["id"] == s1["id"] for s in alice_studies)
     assert not any(s["id"] == s2["id"] for s in alice_studies)
 
-    # 4. List studies filtered by User B
-    bob_studies = api_test_app.get("/api/studies?user_id=usr_bob").json()
+    # 4. Bob's list shows only his study
+    bob_studies = api_test_app.get("/api/studies", headers=bob).json()
     assert any(s["id"] == s2["id"] for s in bob_studies)
     assert not any(s["id"] == s1["id"] for s in bob_studies)
 
-    # 5. Unauthenticated GET /api/studies (no user_id) returns only demo studies (empty here)
-    unauth_studies = api_test_app.get("/api/studies").json()
+    # 5. Anonymous GET /api/studies never leaks owned studies — the ?user_id=
+    #    impersonation param is ignored
+    unauth_studies = api_test_app.get("/api/studies?user_id=usr_alice").json()
     assert not any(s["id"] in (s1["id"], s2["id"]) for s in unauth_studies)
 
-    # 6. Update study — no JWT so current_user=None; study.user_id="usr_alice" → owner check
-    #    With no JWT the ownership guard sees current_user=None and study is not demo → 403
+    # 6. Anonymous update of Alice's study → 403 (payload user_id cannot vouch)
     patch_resp = api_test_app.patch(
         f"/api/studies/{s1['id']}",
         json={"status": "in_progress", "step": 3, "user_id": "usr_alice"},
     )
-    # update_study auto-backfills user_id when study.user_id is already set; with no JWT
-    # current_user=None so _user_owns_study → False → 403
     assert patch_resp.status_code == 403
 
-    # 7. Update succeeds when user_id matches via the study auto-create path (new study_id)
+    # 7. Anonymous auto-create lands in the anonymous tenant (usr_default),
+    #    never a client-claimed identity
     dynamic_new_id = f"new_study_{uuid.uuid4().hex[:8]}"
     patch2_resp = api_test_app.patch(
         f"/api/studies/{dynamic_new_id}",
@@ -228,13 +244,13 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     )
     assert patch2_resp.status_code == 200
     assert patch2_resp.json()["step"] == 2
+    assert patch2_resp.json()["user_id"] == "usr_default"
 
-    # 8. Delete study — same ownership rule applies
+    # 8. Anonymous delete of Bob's study — blocked
     del_resp = api_test_app.delete(f"/api/studies/{s2['id']}")
     assert del_resp.status_code == 403
 
-    # 9. Cleanup: delete studies via same user_id trick (auto-create path gives owner access)
-    #    Just verify that the created studies still exist (delete was blocked)
-    check = api_test_app.get(f"/api/studies?user_id=usr_bob").json()
+    # 9. Bob's study still exists (delete was blocked)
+    check = api_test_app.get("/api/studies", headers=bob).json()
     assert any(s["id"] == s2["id"] for s in check)
 

@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.studies import _user_owns_study, get_session
+from bebshax.api.studies import _owner_accessible, _user_owns_study, get_session
 from bebshax.auth.models import Users
 from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
@@ -24,6 +24,7 @@ from bebshax.persona.store import (
     save_persona,
 )
 from bebshax.personas.service import PersonaGenerationService
+from bebshax.tenancy import allowed_owner_ids
 
 logger = logging.getLogger(__name__)
 
@@ -379,10 +380,14 @@ async def list_businesses_endpoint(
     owner_id = current_user.id if current_user else None
     async with request.app.state.db_sessionmaker() as session:
         businesses = await list_businesses(session, owner_id=owner_id)
-        count_stmt = select(Personas.business_id, func.count(Personas.id))
-        if owner_id:
-            count_stmt = count_stmt.where((Personas.owner_id == owner_id) | (Personas.owner_id == "usr_system_holder"))
-        counts_res = await session.execute(count_stmt.group_by(Personas.business_id))
+        # Same owner scope as the listing itself — counts must never leak
+        # other tenants' persona volumes on shared businesses.
+        count_stmt = (
+            select(Personas.business_id, func.count(Personas.id))
+            .where(Personas.owner_id.in_(allowed_owner_ids(owner_id)))
+            .group_by(Personas.business_id)
+        )
+        counts_res = await session.execute(count_stmt)
         counts_map = dict(counts_res.all())
 
     results = []
@@ -426,7 +431,9 @@ async def generate_persona_endpoint(
         business = await get_business(session, business_id)
         if business is None:
             raise HTTPException(status_code=404, detail="business not found")
-        if current_user and business.owner_id not in (current_user.id, "usr_system_holder"):
+        # Unconditional owner gate: anonymous callers may only generate under
+        # shared/system businesses — never another tenant's (B6 stage 3).
+        if not _owner_accessible(business.owner_id, current_user):
             raise HTTPException(status_code=404, detail="business not found")
 
     engine = request.app.state.persona_engine
@@ -492,13 +499,13 @@ async def get_persona_endpoint(
         profile = await load_persona(session, persona_id)
         if profile is not None:
             p_row = await session.get(Personas, persona_id)
-            if current_user and p_row and p_row.owner_id not in (current_user.id, "usr_system_holder"):
+            if p_row and not _owner_accessible(p_row.owner_id, current_user):
                 raise HTTPException(status_code=404, detail="persona not found")
             return profile.model_dump(mode="json")
         # Otherwise fallback to study-scoped persona row
         p_row = await session.get(Personas, persona_id)
         if p_row is not None:
-            if current_user and p_row.owner_id not in (current_user.id, "usr_system_holder"):
+            if not _owner_accessible(p_row.owner_id, current_user):
                 raise HTTPException(status_code=404, detail="persona not found")
             return _serialize_persona(p_row)
     raise HTTPException(status_code=404, detail="persona not found")
@@ -511,6 +518,7 @@ async def get_persona_memories_endpoint(
     request: Request,
     kind: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    current_user: Optional[Users] = Depends(get_optional_current_user),
 ) -> list[dict]:
     # M9: a missing service and a missing persona must be distinguishable from
     # "persona exists and has no memories yet" — never a blanket `200 []`.
@@ -521,7 +529,11 @@ async def get_persona_memories_endpoint(
     async with request.app.state.db_sessionmaker() as session:
         # save_persona always writes a Personas row, so one PK lookup covers
         # both the legacy profile store and study-scoped personas.
-        if await session.get(Personas, persona_id) is None:
+        p_row = await session.get(Personas, persona_id)
+        if p_row is None:
+            raise HTTPException(status_code=404, detail="persona not found")
+        # Memories are persona-private — same owner gate as the persona itself.
+        if not _owner_accessible(p_row.owner_id, current_user):
             raise HTTPException(status_code=404, detail="persona not found")
 
     memories = await memory_service.list_for_persona(persona_id, kind=kind, limit=limit)

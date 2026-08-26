@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bebshax.auth.models import Users
 from bebshax.api.auth import get_optional_current_user
 from bebshax.db.models import Studies, SavedAudiences, StudyReports
+from bebshax.tenancy import PUBLIC_OWNER_IDS as _PUBLIC_OWNER_IDS
+from bebshax.tenancy import STUDY_ANON_OWNER_IDS as _STUDY_ANON_OWNER_IDS
+from bebshax.tenancy import owner_accessible as _tenancy_owner_accessible
 from bebshax.utils.title_generator import generate_deterministic_study_title
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.research.report_service import StudyReportService
@@ -168,9 +171,18 @@ def _user_owns_study(study: Studies, current_user: Optional[Users]) -> bool:
         return True
     if current_user and study.user_id == current_user.id:
         return True
-    if current_user is None and (not study.user_id or study.user_id in ("usr_default", "anonymous")):
+    if current_user is None and (not study.user_id or study.user_id in _STUDY_ANON_OWNER_IDS):
         return True
     return False
+
+
+def _owner_accessible(owner_id: Optional[str], current_user: Optional[Users]) -> bool:
+    """Row-level access rule for owner-stamped rows (audiences, businesses,
+    personas, conversations): shared/system rows are readable by every caller;
+    owned rows require the owner's token. NOTE the deliberate delta from
+    `_user_owns_study`: studies use the `is_demo` flag and do not grant
+    authenticated users the anonymous tenant — see bebshax/tenancy.py."""
+    return _tenancy_owner_accessible(owner_id, current_user.id if current_user else None)
 
 
 async def get_session(request: Request) -> AsyncSession:
@@ -193,16 +205,23 @@ async def list_studies(
 ) -> list[dict[str, Any]]:
     """List research studies for the current user only (+ public demo studies).
 
-    If no authenticated user can be resolved, returns [] (never all studies).
+    The `user_id` query param is accepted for API compatibility but ignored —
+    identity comes exclusively from the auth token (impersonation guard).
+    Anonymous callers see demo studies plus the shared anonymous tenant.
     """
-    effective_user_id = (current_user.id if current_user else None) or user_id
-    if effective_user_id:
+    del user_id  # never trust client-supplied identity
+    if current_user:
         stmt = select(Studies).where(
-            or_(Studies.user_id == effective_user_id, Studies.is_demo == True)
+            or_(Studies.user_id == current_user.id, Studies.is_demo == True)
         ).order_by(Studies.created_at.desc())
     else:
-        # Unauthenticated — return only public demo studies (never leak all studies)
-        stmt = select(Studies).where(Studies.is_demo == True).order_by(Studies.created_at.desc())
+        stmt = select(Studies).where(
+            or_(
+                Studies.is_demo == True,
+                Studies.user_id.is_(None),
+                Studies.user_id.in_(_PUBLIC_OWNER_IDS),
+            )
+        ).order_by(Studies.created_at.desc())
     result = await session.execute(stmt)
     studies = list(result.scalars().all())
     return [_serialize_study(s) for s in studies]
@@ -233,7 +252,9 @@ async def create_study(
         title = generate_deterministic_study_title(effective_prompt, study_type)
 
     study_id = payload.id or f"study_{uuid.uuid4().hex[:16]}"
-    study_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
+    # Identity comes from the token only — payload.user_id would let any
+    # caller attach rows to another tenant (spoofing).
+    study_user_id = current_user.id if current_user else "usr_default"
 
     study = Studies(
         id=study_id,
@@ -290,8 +311,9 @@ async def update_study(
     """
     study = await session.get(Studies, study_id)
     if not study:
-        # Auto-create — supports seamless workflow initialization
-        study_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
+        # Auto-create — supports seamless workflow initialization.
+        # Identity from the token only (never payload.user_id — spoofing).
+        study_user_id = current_user.id if current_user else "usr_default"
         prompt = (payload.prompt or payload.product_idea or "").strip()
         study_type = payload.type or payload.study_type or "interviews"
         title = payload.title or (generate_deterministic_study_title(prompt, study_type) if prompt else "Untitled Study")
@@ -313,17 +335,22 @@ async def update_study(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to modify this study",
             )
-        # Backfill user_id if it was missing (e.g. created anonymously, now logged in)
+        # Backfill user_id if it was missing (e.g. created anonymously, now logged in).
+        # Only from the verified token — payload.user_id would let anonymous
+        # callers attach unowned studies to an arbitrary tenant.
         if current_user and not study.user_id:
             study.user_id = current_user.id
-        elif payload.user_id and not study.user_id:
-            study.user_id = payload.user_id
 
     update_data = payload.model_dump(exclude_unset=True)
     if "product_idea" in update_data and "prompt" not in update_data:
         update_data["prompt"] = update_data["product_idea"]
     if "study_type" in update_data and "type" not in update_data:
         update_data["type"] = update_data["study_type"]
+
+    # Identity/PK fields are never mass-assignable — a payload user_id would
+    # re-attach the study to an arbitrary tenant (spoofing).
+    update_data.pop("id", None)
+    update_data.pop("user_id", None)
 
     for field, val in update_data.items():
         if val is not None and hasattr(study, field):
@@ -378,14 +405,18 @@ async def list_saved_audiences(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[dict[str, Any]]:
-    """List all saved audiences in the persona library for the user."""
-    effective_user_id = (current_user.id if current_user else None) or user_id
-    if effective_user_id:
+    """List saved audiences for the caller (+ shared/unowned rows).
+
+    The `user_id` query param is ignored — identity comes from the token.
+    """
+    del user_id  # never trust client-supplied identity
+    shared = or_(SavedAudiences.user_id == None, SavedAudiences.user_id.in_(_PUBLIC_OWNER_IDS))
+    if current_user:
         stmt = select(SavedAudiences).where(
-            or_(SavedAudiences.user_id == effective_user_id, SavedAudiences.user_id == None)
+            or_(SavedAudiences.user_id == current_user.id, shared)
         ).order_by(SavedAudiences.created_at.desc())
     else:
-        stmt = select(SavedAudiences).order_by(SavedAudiences.created_at.desc())
+        stmt = select(SavedAudiences).where(shared).order_by(SavedAudiences.created_at.desc())
     result = await session.execute(stmt)
     audiences = list(result.scalars().all())
     return [_serialize_audience(a) for a in audiences]
@@ -399,7 +430,8 @@ async def save_audience(
 ) -> dict[str, Any]:
     """Save an audience to the Persona Library."""
     audience_id = payload.id or f"aud_{uuid.uuid4().hex[:16]}"
-    aud_user_id = (current_user.id if current_user else None) or payload.user_id or "usr_default"
+    # Identity from the token only (never payload.user_id — spoofing).
+    aud_user_id = current_user.id if current_user else "usr_default"
     audience = SavedAudiences(
         id=audience_id,
         user_id=aud_user_id,
@@ -425,6 +457,9 @@ async def delete_audience(
     """Remove a saved audience from the Persona Library."""
     audience = await session.get(SavedAudiences, audience_id)
     if not audience:
+        raise HTTPException(status_code=404, detail=f"Audience '{audience_id}' not found")
+    if not _owner_accessible(audience.user_id, current_user):
+        # 404 (not 403) — do not confirm the row exists to non-owners.
         raise HTTPException(status_code=404, detail=f"Audience '{audience_id}' not found")
     await session.delete(audience)
     await session.commit()

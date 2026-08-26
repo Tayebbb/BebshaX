@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bebshax.db.models import Businesses, Personas
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
 from bebshax.persona.schema import EvidenceItem, PersonaAttribute, PersonaProfile, ProvenanceClass
+from bebshax.tenancy import allowed_owner_ids
 
 
 async def create_business(
@@ -40,9 +41,7 @@ async def get_business(session: AsyncSession, business_id: str) -> Businesses | 
 async def list_businesses(
     session: AsyncSession, owner_id: str | None = None
 ) -> list[Businesses]:
-    query = select(Businesses)
-    if owner_id:
-        query = query.where((Businesses.owner_id == owner_id) | (Businesses.owner_id == "usr_system_holder"))
+    query = select(Businesses).where(Businesses.owner_id.in_(allowed_owner_ids(owner_id)))
     query = query.order_by(Businesses.created_at.desc())
     result = await session.execute(query)
     return list(result.scalars())
@@ -171,8 +170,7 @@ async def list_personas(
     query = select(Personas.id).order_by(Personas.created_at.desc())
     if business_id:
         query = query.where(Personas.business_id == business_id)
-    if owner_id:
-        query = query.where((Personas.owner_id == owner_id) | (Personas.owner_id == "usr_system_holder"))
+    query = query.where(Personas.owner_id.in_(allowed_owner_ids(owner_id)))
     persona_ids = list((await session.execute(query)).scalars().all())
     personas = []
     for pid in persona_ids:
