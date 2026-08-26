@@ -343,9 +343,14 @@ async def delete_study_persona_run_endpoint(
 # ---------------------------------------------------------------------------
 
 @router.post("/businesses", status_code=201)
-async def create_business_endpoint(body: BusinessCreate, request: Request) -> dict:
+async def create_business_endpoint(
+    body: BusinessCreate,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+) -> dict:
     # M5: industry/target_market are real columns — the description is user
     # content and is never used as a metadata carrier.
+    owner_id = current_user.id if current_user else "usr_system_holder"
     async with request.app.state.db_sessionmaker() as session:
         business = await create_business(
             session,
@@ -353,6 +358,7 @@ async def create_business_endpoint(body: BusinessCreate, request: Request) -> di
             body.description or "",
             industry=body.industry,
             target_market=body.target_market,
+            owner_id=owner_id,
         )
     return {
         "id": business.id,
@@ -366,12 +372,17 @@ async def create_business_endpoint(body: BusinessCreate, request: Request) -> di
 
 
 @router.get("/businesses")
-async def list_businesses_endpoint(request: Request) -> list[dict]:
+async def list_businesses_endpoint(
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+) -> list[dict]:
+    owner_id = current_user.id if current_user else None
     async with request.app.state.db_sessionmaker() as session:
-        businesses = await list_businesses(session)
-        counts_res = await session.execute(
-            select(Personas.business_id, func.count(Personas.id)).group_by(Personas.business_id)
-        )
+        businesses = await list_businesses(session, owner_id=owner_id)
+        count_stmt = select(Personas.business_id, func.count(Personas.id))
+        if owner_id:
+            count_stmt = count_stmt.where((Personas.owner_id == owner_id) | (Personas.owner_id == "usr_system_holder"))
+        counts_res = await session.execute(count_stmt.group_by(Personas.business_id))
         counts_map = dict(counts_res.all())
 
     results = []
@@ -393,20 +404,29 @@ async def list_businesses_endpoint(request: Request) -> list[dict]:
 
 @router.get("/personas")
 async def list_personas_legacy_endpoint(
-    request: Request, business_id: Optional[str] = Query(default=None)
+    request: Request,
+    business_id: Optional[str] = Query(default=None),
+    current_user: Optional[Users] = Depends(get_optional_current_user),
 ) -> list[dict]:
+    owner_id = current_user.id if current_user else None
     async with request.app.state.db_sessionmaker() as session:
-        personas = await list_personas(session, business_id=business_id)
+        personas = await list_personas(session, business_id=business_id, owner_id=owner_id)
     return [p.model_dump(mode="json") for p in personas]
 
 
 @router.post("/businesses/{business_id}/personas", status_code=201)
 async def generate_persona_endpoint(
-    business_id: str, body: PersonaGenerateRequest, request: Request
+    business_id: str,
+    body: PersonaGenerateRequest,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict:
+    owner_id = current_user.id if current_user else "usr_system_holder"
     async with request.app.state.db_sessionmaker() as session:
         business = await get_business(session, business_id)
         if business is None:
+            raise HTTPException(status_code=404, detail="business not found")
+        if current_user and business.owner_id not in (current_user.id, "usr_system_holder"):
             raise HTTPException(status_code=404, detail="business not found")
 
     engine = request.app.state.persona_engine
@@ -443,7 +463,7 @@ async def generate_persona_endpoint(
         ) from exc
 
     async with request.app.state.db_sessionmaker() as session:
-        await save_persona(session, profile)
+        await save_persona(session, profile, owner_id=owner_id)
 
     memory_service = getattr(request.app.state, "memory_service", None)
     if memory_service:
@@ -462,17 +482,27 @@ async def generate_persona_endpoint(
 
 
 @router.get("/personas/{persona_id}")
-async def get_persona_endpoint(persona_id: str, request: Request) -> dict:
+async def get_persona_endpoint(
+    persona_id: str,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+) -> dict:
     async with request.app.state.db_sessionmaker() as session:
         # Check if legacy store profile exists
         profile = await load_persona(session, persona_id)
         if profile is not None:
+            p_row = await session.get(Personas, persona_id)
+            if current_user and p_row and p_row.owner_id not in (current_user.id, "usr_system_holder"):
+                raise HTTPException(status_code=404, detail="persona not found")
             return profile.model_dump(mode="json")
         # Otherwise fallback to study-scoped persona row
         p_row = await session.get(Personas, persona_id)
         if p_row is not None:
+            if current_user and p_row.owner_id not in (current_user.id, "usr_system_holder"):
+                raise HTTPException(status_code=404, detail="persona not found")
             return _serialize_persona(p_row)
     raise HTTPException(status_code=404, detail="persona not found")
+
 
 
 @router.get("/personas/{persona_id}/memories")

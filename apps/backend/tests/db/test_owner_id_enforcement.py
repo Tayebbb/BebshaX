@@ -34,19 +34,26 @@ def sessionmaker_factory():
 @pytest.mark.asyncio
 async def test_db_rejects_null_owner_id_on_business(db_session):
     """B6 Stage 2: SQLite/Postgres integrity error when owner_id is None on Businesses."""
+    assert Businesses.__table__.c.owner_id.nullable is False
     with pytest.raises(sqlalchemy.exc.IntegrityError):
-        b = Businesses(id="biz_null_owner", name="No Owner Biz", owner_id=None)
-        db_session.add(b)
+        from sqlalchemy import text
+        await db_session.execute(
+            text("INSERT INTO businesses (id, name, owner_id) VALUES ('biz_null_owner', 'No Owner Biz', NULL)")
+        )
         await db_session.commit()
 
 
 @pytest.mark.asyncio
 async def test_db_rejects_null_owner_id_on_persona(db_session):
     """B6 Stage 2: SQLite/Postgres integrity error when owner_id is None on Personas."""
+    assert Personas.__table__.c.owner_id.nullable is False
     with pytest.raises(sqlalchemy.exc.IntegrityError):
-        p = Personas(id="per_null_owner", name="No Owner Persona", owner_id=None)
-        db_session.add(p)
+        from sqlalchemy import text
+        await db_session.execute(
+            text("INSERT INTO personas (id, name, owner_id) VALUES ('per_null_owner', 'No Owner Persona', NULL)")
+        )
         await db_session.commit()
+
 
 
 @pytest.mark.asyncio

@@ -152,9 +152,13 @@ class Businesses(Base):
     # M5: real columns — previously stuffed into description as "Industry: … | Target Market: …"
     industry: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     target_market: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    # B6 stage 2: tenancy column enforced NOT NULL
+    # B6 stage 2: tenancy column enforced NOT NULL with system holder fallback default
     owner_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+        String(64),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        default="usr_system_holder",
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
@@ -174,8 +178,13 @@ class Personas(Base):
     study_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     owner_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+        String(64),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        default="usr_system_holder",
+        index=True,
     )
+
 
     segment_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     generation_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)

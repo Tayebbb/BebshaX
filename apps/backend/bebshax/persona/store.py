@@ -37,9 +37,16 @@ async def get_business(session: AsyncSession, business_id: str) -> Businesses | 
     return await session.get(Businesses, business_id)
 
 
-async def list_businesses(session: AsyncSession) -> list[Businesses]:
-    result = await session.execute(select(Businesses).order_by(Businesses.created_at.desc()))
+async def list_businesses(
+    session: AsyncSession, owner_id: str | None = None
+) -> list[Businesses]:
+    query = select(Businesses)
+    if owner_id:
+        query = query.where((Businesses.owner_id == owner_id) | (Businesses.owner_id == "usr_system_holder"))
+    query = query.order_by(Businesses.created_at.desc())
+    result = await session.execute(query)
     return list(result.scalars())
+
 
 
 async def save_persona(
@@ -157,11 +164,15 @@ async def load_persona(session: AsyncSession, persona_id: str) -> PersonaProfile
 
 
 async def list_personas(
-    session: AsyncSession, business_id: str | None = None
+    session: AsyncSession,
+    business_id: str | None = None,
+    owner_id: str | None = None,
 ) -> list[PersonaProfile]:
     query = select(Personas.id).order_by(Personas.created_at.desc())
     if business_id:
         query = query.where(Personas.business_id == business_id)
+    if owner_id:
+        query = query.where((Personas.owner_id == owner_id) | (Personas.owner_id == "usr_system_holder"))
     persona_ids = list((await session.execute(query)).scalars().all())
     personas = []
     for pid in persona_ids:
@@ -169,3 +180,4 @@ async def list_personas(
         if p:
             personas.append(p)
     return personas
+
