@@ -575,9 +575,11 @@ export const api = {
             role: 'assistant',
             content: data.persona_reply?.content || data.reply,
             timestamp: data.persona_reply?.timestamp || new Date().toISOString(),
-            latency_ms: data.persona_reply?.latency_ms || 750,
-            served_by: data.persona_reply?.served_by || data.served_by || 'ollama/qwen3.5',
-            retrieved_memories: data.persona_reply?.retrieved_memories || ['Active Persona Context'],
+            // Honest pass-through: absent metadata stays absent (audit M4 hand-off) —
+            // the backend's null must never become a fabricated 750/route/memory.
+            latency_ms: data.persona_reply?.latency_ms ?? undefined,
+            served_by: data.persona_reply?.served_by ?? data.served_by ?? undefined,
+            retrieved_memories: data.persona_reply?.retrieved_memories ?? [],
           };
           const conv = mockStore.conversations[conversationId];
           if (conv) {

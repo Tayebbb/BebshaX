@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -23,6 +24,8 @@ from bebshax.persona.store import (
     save_persona,
 )
 from bebshax.personas.service import PersonaGenerationService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["personas"])
 
@@ -444,7 +447,8 @@ async def generate_persona_endpoint(
                 importance=0.95,
             )
         except Exception:
-            pass
+            # best-effort enrichment — but never silent (M8)
+            logger.warning("identity memory write failed for persona %s", profile.id, exc_info=True)
 
     return profile.model_dump(mode="json")
 

@@ -92,11 +92,12 @@ async def _lifespan(app: FastAPI):
         llm_router, sessionmaker_, memory=app.state.memory_service
     )
 
-    # Automatic table creation, extensions, and demo data initialization on startup
+    # Automatic bootstrap for EMPTY databases only; alembic owns real schema
+    # evolution (see docs/DATABASE_MIGRATION.md). Demo seed is opt-in (H3/M8).
     try:
-        await init_database(db_engine, sessionmaker_, seed=True)
+        await init_database(db_engine, sessionmaker_, seed=settings.demo_mode)
     except Exception:
-        pass  # best-effort on startup (handles offline / cold DB)
+        logger.warning("init_database failed at startup (offline/cold DB?)", exc_info=True)
 
     yield
     await sink.stop()

@@ -201,13 +201,34 @@ async def test_study_reports_idor_security():
 
 @pytest.mark.asyncio
 async def test_dynamic_script_and_batch_interviews():
-    """Verify dynamic script question generation and batch interview execution."""
+    """Verify dynamic script question generation and batch interview execution.
+
+    Batch interviews must run through the REAL engine (post-audit fix): a
+    FakeAdapter-backed router is wired, and the test asserts genuine turns —
+    the fabricated-transcript fallback no longer exists.
+    """
+    from bebshax.interview.engine import InterviewEngine
+    from bebshax.llm.adapters.base import RouteCandidate
+    from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
+    from bebshax.llm.router import PoolRouter
+
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    saved_state = {
+        name: getattr(app.state, name, None)
+        for name in ("db_sessionmaker", "llm_router", "llm_service", "interview_engine")
+    }
     app.state.db_sessionmaker = session_maker
+    fake = FakeAdapter(
+        [FakeRoute(candidate=RouteCandidate(provider="fake", model="scripted"), reply="I compare prices manually across three shops every week.")]
+    )
+    llm_router = PoolRouter({"openrouter": fake, "freellmpool": fake, "ollama": fake})
+    app.state.llm_router = llm_router
+    app.state.llm_service = llm_router
+    app.state.interview_engine = InterviewEngine(llm_router, session_maker)
 
     async with session_maker() as session:
         user = Users(id="usr_user", email="user@bebshax.com", full_name="User", hashed_password="pw")
@@ -237,34 +258,53 @@ async def test_dynamic_script_and_batch_interviews():
     token = create_access_token({"sub": "usr_user", "email": "user@bebshax.com"})
     headers = {"Authorization": f"Bearer {token}"}
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # 1. Generate dynamic script questions
-        res_script = await client.post(
-            "/api/studies/std_script_01/script/generate",
-            headers=headers,
-            json={"prompt": "Price drop alert website for gadgets in Bangladesh", "question_count": 4},
-        )
-        assert res_script.status_code == 200
-        script_data = res_script.json()
-        assert len(script_data["questions"]) >= 3
-        assert script_data["study_id"] == "std_script_01"
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # 1. Generate dynamic script questions
+            res_script = await client.post(
+                "/api/studies/std_script_01/script/generate",
+                headers=headers,
+                json={"prompt": "Price drop alert website for gadgets in Bangladesh", "question_count": 4},
+            )
+            assert res_script.status_code == 200
+            script_data = res_script.json()
+            assert len(script_data["questions"]) >= 3
+            assert script_data["study_id"] == "std_script_01"
 
-        # 2. Run batch synthetic interviews
-        res_batch = await client.post(
-            "/api/studies/std_script_01/interviews/batch-run",
-            headers=headers,
-            json={
-                "persona_ids": ["per_samiul"],
-                "questions": [
-                    "How do you currently track product discounts across shops?",
-                    "Would you pay 100 taka per month for instant SMS alerts?",
-                ],
-            },
-        )
-        assert res_batch.status_code in (200, 201)
-        batch_data = res_batch.json()
-        assert batch_data["completed_count"] == 1
-        assert len(batch_data["interviews"]) == 1
-        assert batch_data["interviews"][0]["persona_id"] == "per_samiul"
-        assert batch_data["interviews"][0]["turn_count"] >= 2
+            # 2. Run batch synthetic interviews
+            res_batch = await client.post(
+                "/api/studies/std_script_01/interviews/batch-run",
+                headers=headers,
+                json={
+                    "persona_ids": ["per_samiul"],
+                    "questions": [
+                        "How do you currently track product discounts across shops?",
+                        "Would you pay 100 taka per month for instant SMS alerts?",
+                    ],
+                },
+            )
+            assert res_batch.status_code in (200, 201)
+            batch_data = res_batch.json()
+            assert batch_data["completed_count"] == 1
+            assert batch_data["failed_count"] == 0
+            assert len(batch_data["interviews"]) == 1
+            interview = batch_data["interviews"][0]
+            assert interview["persona_id"] == "per_samiul"
+            assert interview["turn_count"] >= 4  # 2 questions × (interviewer + persona)
+            # Post-audit honesty: persona turns carry the REAL adapter reply and the
+            # concrete serving route — never the old canned template text.
+            persona_turns = [t for t in interview["turns"] if t["role"] == "persona"]
+            assert persona_turns and all(
+                "I compare prices manually" in t["content"] for t in persona_turns
+            )
+            assert all(t.get("served_by") == "fake/scripted" for t in persona_turns)
+    finally:
+        # Always restore module-level app state — a failed assertion must not
+        # leak the FakeAdapter router into other tests.
+        for name, value in saved_state.items():
+            if value is None:
+                if hasattr(app.state, name):
+                    delattr(app.state, name)
+            else:
+                setattr(app.state, name, value)

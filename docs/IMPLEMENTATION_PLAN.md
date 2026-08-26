@@ -53,6 +53,12 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+> **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended *below* Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
+
+### Maintenance (2026-08-26) — Post-audit sweep: batch-run honesty, schema truth, M8, placement guard
+
+- Batch interviews run through the real engine or fail honestly (`engine.post_message` never existed; the tuple-unpack of `complete()` meant the engine path had NEVER run — all prior batch transcripts were canned). Client-side metadata re-fabrication removed from `api.ts`. `init_database` is alembic-aware (skip/stamp/warn) and seeding is `BEBSHAX_DEMO_MODE`-gated; both M8 swallows now log. New ORM-placement freeze test. DATABASE_MIGRATION.md rewritten. Backend 245 + frontend 71/71 green.
+
 ### Maintenance (2026-08-26) — Merge: audit sweep (Tayeb, 8 items) × security fixes (Sazid, B4+B6)
 
 - Conflicts resolved as the union of both sides: `config.py` keeps the M6 CORS block AND the fail-fast JWT settings; `Businesses` carries `industry`/`target_market` (M5) AND `owner_id` (B6); progress table recomputed (11/41).

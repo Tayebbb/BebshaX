@@ -1,24 +1,19 @@
 # BebshaX Database Migration & Dynamic Switching Guide
 
-BebshaX supports **zero-friction database switching** with automatic schema creation, PostgreSQL extension configuration, and demo data initialization across any database engine.
+BebshaX supports **zero-friction database switching** — with one rule: **alembic migrations are the single source of schema truth.** Startup auto-creation is a bootstrap convenience for *empty* databases only.
 
 ---
 
-## 1. Automatic Schema Initialization on Startup
+## 1. Schema initialization on startup (bootstrap only)
 
-When the backend starts up (`uvicorn bebshax.main:app`), it automatically executes [`init_database`](file:///E:/Github%20Projects/BebshaX/apps/backend/bebshax/db/engine.py):
-1. Detects the database dialect (PostgreSQL, SQLite, MySQL).
-2. Configures required extensions (`CREATE EXTENSION IF NOT EXISTS vector` on PostgreSQL).
-3. Automatically creates all **13 core application tables**:
-   - `users` (Authentication & Google SSO profiles)
-   - `businesses` (Business context)
-   - `personas`, `persona_details`, `persona_attributes`, `persona_evidence` (Empirically grounded personas)
-   - `memory_items` (Episodic, semantic, and reflection memory vectors)
-   - `conversations`, `conversation_turns` (Multi-turn interview simulation transcripts)
-   - `studies` (User-scoped research studies with 5-step state)
-   - `saved_audiences` (Persona library audience groups)
-   - `llm_requests`, `model_registry` (OTel provenance tracking)
-4. Seeds initial demo records (founder user, fintech business, Sarah Chen persona, and sample studies) if the database is newly initialized.
+When the backend starts (`uvicorn bebshax.main:app`), [`init_database`](../apps/backend/bebshax/db/engine.py) runs and:
+
+1. Detects the database dialect (PostgreSQL, SQLite, MySQL) and configures required extensions (`CREATE EXTENSION IF NOT EXISTS vector` on PostgreSQL).
+2. Checks who owns the schema:
+   - **`alembic_version` table present** → alembic owns the schema; `create_all` is **skipped entirely**. Apply changes with `alembic upgrade head`.
+   - **Truly empty database** → all tables are created via `Base.metadata.create_all` **and the current migration head is stamped** into `alembic_version`, so later `alembic upgrade head` runs cleanly instead of fighting the bootstrap.
+   - **Legacy `create_all` schema without `alembic_version`** → missing tables are created, a WARNING is logged, and the revision is deliberately **not** stamped — reconcile manually with `alembic stamp <revision>`.
+3. Seeds demo records **only when `BEBSHAX_DEMO_MODE=true`** (founder user, fintech business, sample persona/studies). Seeding failures are logged, never silent.
 
 ---
 

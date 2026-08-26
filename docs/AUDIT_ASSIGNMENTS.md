@@ -39,10 +39,10 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | ----------------- | -------: | ---: |
 | Joint (all three) |        5 |    0 |
 | Tayeb | 8 | 8 |
-| Sazid | 11 | 2 |
+| Sazid | 11 | 3 |
 | Shehab | 16 | 0 |
 | Already closed | 1 | 1 |
-| **Total** | **41** | **11** |
+| **Total** | **41** | **12** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -91,7 +91,7 @@ Decide in this order, in one sitting:
 - [ ] 🟠 **H7** — No rate limiting, throttling or lockout on `/auth/signin`. PBKDF2 at 100 k rounds is also a DoS amplifier without it. → `api/auth.py`
 - [ ] 🟠 **H8** — Password policy is length-only; `"password1"` returns `201`. → `api/auth.py`
 - [ ] 🟠 **H9** — The UI promises "We'll send a verification link" and none is ever sent; `is_verified` stays `false` forever and is never checked at signin, while Google users get `is_verified=true` from an endpoint that verifies nothing. Either implement verification or remove the promise — coordinate the copy change with Shehab. → auth backend
-- [ ] 🟡 **M8** — Silent `except Exception: pass` around `seed_demo_data`; seeding can fail completely with zero signal. (The matching swallow in `api/personas.py` is Tayeb's.) → `main.py`
+- [x] 🟡 **M8** — Silent `except Exception: pass` around `seed_demo_data`; seeding can fail completely with zero signal. (The matching swallow in `api/personas.py` is Tayeb's.) → `main.py` — **DONE 2026-08-26** (both halves: startup init/seed failures and the persona memory write now log warnings; fixed by Tayeb's agent at owner instruction during the post-audit sweep)
 - [ ] ⚪ **L14** — Suite deprecations: `StarletteDeprecationWarning` (httpx testclient) plus two numpy/fastparquet warnings. Harmless now, breaks on upgrade. → `pyproject.toml`
 
 ---

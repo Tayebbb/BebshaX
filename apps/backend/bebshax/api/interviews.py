@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,11 +18,9 @@ from bebshax.interview.engine import ConversationNotFound, InterviewFinished, Pe
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["interviews"])
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -41,8 +40,16 @@ class InterviewMessageRequest(BaseModel):
 
 
 class BatchInterviewRunRequest(BaseModel):
-    persona_ids: Optional[list[str]] = None
-    questions: Optional[list[str]] = None
+    # Caps bound real LLM spend: N personas × M questions of sequential calls.
+    persona_ids: Optional[list[str]] = Field(default=None, max_length=50)
+    questions: Optional[list[str]] = Field(default=None, max_length=20)
+
+    @field_validator("questions")
+    @classmethod
+    def question_length(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        if v and any(len(q) > 2000 for q in v):
+            raise ValueError("each question must be ≤2000 characters")
+        return v
 
 
 # Backward compatibility
@@ -571,99 +578,55 @@ async def batch_run_study_interviews(
         if session_maker and llm_router:
             engine = InterviewEngine(llm_router, session_maker, memory=memory)
 
-    completed_interviews = []
+    # Post-audit fix: batch interviews run through the REAL engine (ask/complete)
+    # or fail honestly per persona. The old code called a nonexistent
+    # engine.post_message, swallowed the AttributeError, and persisted canned
+    # template transcripts with invented insights (same class as M4/H1).
+    completed_interviews: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
 
     for persona in personas:
-        handled = False
-        if engine:
-            try:
-                conv = await engine.start(
-                    persona_id=persona.id,
-                    objective=study.goal or "demand_validation",
-                    study_id=study_id,
-                    user_id=effective_user_id,
-                    custom_objective=study.prompt,
-                    length_tier="standard",
-                )
-                for q in questions:
-                    await engine.post_message(conversation_id=conv.id, content=q)
-                completed_conv, insights = await engine.complete(conversation_id=conv.id)
-                completed_interviews.append(_serialize_interview(completed_conv, persona))
-                handled = True
-            except Exception:
-                handled = False
-
-        if not handled:
-            import uuid
-            conv_id = f"conv_{uuid.uuid4().hex[:12]}"
-            conv = Conversations(
-                id=conv_id,
-                study_id=study_id,
-                user_id=effective_user_id,
+        if engine is None:
+            failed.append(
+                {
+                    "persona_id": persona.id,
+                    "persona_name": persona.name,
+                    "error": "interview engine unavailable (LLM router / DB not wired)",
+                }
+            )
+            continue
+        try:
+            conv = await engine.start(
                 persona_id=persona.id,
-                persona_version=getattr(persona, "version", 1),
                 objective=study.goal or "demand_validation",
-                custom_objective=study.prompt,
-                status="completed",
-                turn_count=len(questions) * 2,
-                question_count=len(questions),
-                summary=f"Synthetic user research interview with {persona.name} regarding {study.prompt or study.title}.",
-                key_findings=[
-                    f"{persona.name} values transparency and quick onboarding.",
-                    f"{persona.name} showed positive interest in solutions saving daily workflow time.",
-                ],
-                started_at=_utcnow(),
-                completed_at=_utcnow(),
-            )
-            session.add(conv)
-
-            turns = []
-            for turn_idx, q in enumerate(questions):
-                t_user = ConversationTurns(
-                    id=f"trn_{uuid.uuid4().hex[:12]}",
-                    conversation_id=conv_id,
-                    turn_number=turn_idx * 2 + 1,
-                    role="interviewer",
-                    content=q,
-                    created_at=_utcnow(),
-                )
-                t_resp = ConversationTurns(
-                    id=f"trn_{uuid.uuid4().hex[:12]}",
-                    conversation_id=conv_id,
-                    turn_number=turn_idx * 2 + 2,
-                    role="persona",
-                    content=(
-                        f"Speaking as {persona.name}: Regarding '{q}', my primary priority is getting clear value "
-                        f"without unnecessary friction. For {study.prompt or 'this solution'}, if it saves me time and "
-                        f"fits my monthly budget, I would definitely consider using it."
-                    ),
-                    created_at=_utcnow(),
-                )
-                turns.extend([t_user, t_resp])
-                session.add_all([t_user, t_resp])
-
-            insight = InterviewInsights(
-                id=f"ins_{uuid.uuid4().hex[:12]}",
-                interview_id=conv_id,
                 study_id=study_id,
                 user_id=effective_user_id,
-                persona_id=persona.id,
-                type="pricing",
-                title="Core Value Proposition & Willingness to Pay",
-                description=f"{persona.name} expressed positive interest provided pricing is predictable.",
-                supporting_turn_numbers=[2, 4] if len(questions) >= 2 else [2],
-                confidence=0.90,
-                is_synthetic=True,
-                created_at=_utcnow(),
+                custom_objective=study.prompt,
+                length_tier="standard",
             )
-            session.add(insight)
-            await session.commit()
-            await session.refresh(conv)
-            completed_interviews.append(_serialize_interview(conv, persona, turns=turns, insights=[insight]))
+            for q in questions:
+                await engine.ask(conv.id, q)
+            await engine.complete(conv.id)  # persists summary/findings/insights
+            completed_conv, turns = await engine.transcript(conv.id)
+            completed_interviews.append(_serialize_interview(completed_conv, persona, turns=turns))
+        except Exception as exc:
+            logger.warning(
+                "batch-run: interview failed for persona %s", persona.id, exc_info=True
+            )
+            # Generic message to the client — internals belong in logs/provenance.
+            failed.append(
+                {
+                    "persona_id": persona.id,
+                    "persona_name": persona.name,
+                    "error": f"{exc.__class__.__name__}: interview failed",
+                }
+            )
 
     return {
         "study_id": study_id,
         "completed_count": len(completed_interviews),
+        "failed_count": len(failed),
+        "failed": failed,
         "total_personas": len(personas),
         "interviews": completed_interviews,
     }

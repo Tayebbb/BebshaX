@@ -1,6 +1,7 @@
 """Async SQLAlchemy engine and session factory for BebshaX."""
 
 import logging
+from pathlib import Path
 from typing import AsyncGenerator, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
@@ -11,6 +12,21 @@ from sqlalchemy.orm import sessionmaker
 from bebshax.config import Settings
 
 logger = logging.getLogger(__name__)
+
+
+def _alembic_script_head() -> Optional[str]:
+    """Resolve the migration head from the checked-in scripts (no DB access)."""
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        ini = Path(__file__).resolve().parents[2] / "alembic.ini"
+        cfg = Config(str(ini))
+        cfg.set_main_option("script_location", str(ini.parent / "alembic"))
+        return ScriptDirectory.from_config(cfg).get_current_head()
+    except Exception:
+        logger.warning("could not resolve alembic script head for stamping", exc_info=True)
+        return None
 
 
 def normalize_async_database_url(url: str) -> str:
@@ -142,9 +158,43 @@ async def init_database(
             except Exception as exc:
                 logger.info("Notice: PostgreSQL vector extension: %s", exc)
 
-    # 2. Automatically create all tables across all domains
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # 2. Schema: alembic is the single source of truth (docs/DATABASE_MIGRATION.md).
+    #    create_all is a BOOTSTRAP for empty databases only — and is stamped so
+    #    later `alembic upgrade head` runs cleanly instead of fighting create_all.
+    def _inspect_state(sync_conn):
+        from sqlalchemy import inspect as sa_inspect
+        insp = sa_inspect(sync_conn)
+        return insp.has_table("alembic_version"), insp.has_table("businesses")
+
+    async with engine.connect() as conn:
+        alembic_managed, has_app_schema = await conn.run_sync(_inspect_state)
+
+    if alembic_managed:
+        logger.info("alembic_version present — schema owned by alembic; skipping create_all")
+    else:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            head = _alembic_script_head()
+            if not has_app_schema and head:
+                # Fresh database: record the head so alembic and create_all agree.
+                await conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS alembic_version ("
+                        "version_num VARCHAR(32) NOT NULL, "
+                        "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+                    )
+                )
+                await conn.execute(text("DELETE FROM alembic_version"))
+                await conn.execute(
+                    text("INSERT INTO alembic_version (version_num) VALUES (:v)"), {"v": head}
+                )
+                logger.info("fresh database bootstrapped via create_all and stamped at %s", head)
+            elif has_app_schema:
+                logger.warning(
+                    "legacy create_all schema without alembic_version detected — "
+                    "missing tables were created but the revision was NOT stamped; "
+                    "reconcile manually with `alembic stamp <revision>`"
+                )
 
     # 3. Seed demo data if requested and sessionmaker is provided
     if seed and sessionmaker_:
