@@ -79,6 +79,24 @@ async def get_routes_status(request: Request) -> dict[str, Any]:
     }
 
 
+@router.get("/routing/capacity")
+async def get_routing_capacity(request: Request) -> dict[str, Any]:
+    """AI plan §10: per-provider free-tier consumption vs published caps."""
+    ledger = getattr(request.app.state, "quota_ledger", None)
+    if ledger is None:
+        return {"providers": [], "note": "quota ledger not wired"}
+    router_instance = getattr(request.app.state, "llm_router", None)
+    utilization = (
+        router_instance.pool_utilization()
+        if router_instance is not None and hasattr(router_instance, "pool_utilization")
+        else {}
+    )
+    return {
+        "providers": ledger.snapshot(),
+        "pools": utilization,
+    }
+
+
 @router.get("/provenance")
 async def get_provenance(
     request: Request,

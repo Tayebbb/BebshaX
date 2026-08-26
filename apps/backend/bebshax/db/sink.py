@@ -84,42 +84,56 @@ class ProvenanceSink:
         continues pulling from the queue.
         """
         batch: list[ProvenanceRecord] = []
-        last_flush = asyncio.get_event_loop().time()
+        loop = asyncio.get_event_loop()
+        last_flush = loop.time()
+        _IDLE = object()  # idle-timeout marker — must NOT be confused with the None sentinel
 
-        while self.writer_running:
+        while True:
             try:
-                # Drain up to batch_size or wait for batch_timeout_ms
-                timeout_remaining = (
-                    self.batch_timeout_ms / 1000
-                    - (asyncio.get_event_loop().time() - last_flush)
-                )
-
+                timeout_remaining = self.batch_timeout_ms / 1000 - (loop.time() - last_flush)
                 if timeout_remaining > 0:
                     try:
                         record = await asyncio.wait_for(
                             self.queue.get(), timeout=timeout_remaining
                         )
                     except asyncio.TimeoutError:
-                        record = None
+                        record = _IDLE
                 else:
-                    record = None
+                    record = _IDLE
 
-                # Sentinel (None) triggers shutdown
                 if record is None:
+                    # Explicit shutdown sentinel from stop(): final flush, then exit.
                     if batch:
                         await self._insert_batch(batch)
+                        for _ in batch:
+                            self.queue.task_done()
+                    self.queue.task_done()  # the sentinel itself
                     break
+
+                if record is _IDLE:
+                    # Idle tick: flush what we have and keep running. The old code
+                    # treated this as the sentinel — the writer died ~5s after
+                    # startup and silently dropped every later record (found live
+                    # 2026-08-26; unit tests called _insert_batch directly).
+                    if batch:
+                        await self._insert_batch(batch)
+                        for _ in batch:
+                            self.queue.task_done()
+                        batch = []
+                    last_flush = loop.time()
+                    continue
 
                 batch.append(record)
 
                 # Flush on batch full or timeout
                 if len(batch) >= self.batch_size or (
-                    asyncio.get_event_loop().time() - last_flush
-                    >= self.batch_timeout_ms / 1000
+                    loop.time() - last_flush >= self.batch_timeout_ms / 1000
                 ):
                     await self._insert_batch(batch)
+                    for _ in batch:
+                        self.queue.task_done()
                     batch = []
-                    last_flush = asyncio.get_event_loop().time()
+                    last_flush = loop.time()
 
             except Exception as e:
                 logger.exception(f"ProvenanceSink writer: unexpected error: {e}")
@@ -174,7 +188,7 @@ class ProvenanceSink:
         self.writer_task = asyncio.create_task(self._writer())
 
     async def flush(self) -> None:
-        """Wait for queue to drain (for tests)."""
+        """Wait until everything enqueued so far is written or dropped."""
         await self.queue.join()
 
     async def stop(self, timeout_s: float = 5.0) -> None:

@@ -55,6 +55,12 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended *below* Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-08-26) — Live E2E validation + AI plan §10 capacity layer
+
+- Live run (real server, Neon DB, Ollama up): business → persona (17 provenance-classed attrs, `codestral-latest`) → interview (in-character, `openrouter/deepseek-v4-flash`, memory retrieved). Quality matches the plan.
+- **Third provenance-loss bug found live and fixed**: sink writer died on first idle timeout (idle mistaken for shutdown sentinel); `flush()` semantics made real (task_done after write-or-drop). Regression test added.
+- **§10 capacity layer shipped**: `llm/quota.py` (quota data table + ledger seeded from llm_requests), quota-aware ranker in production router, persistent cooldowns (`db/capacity_state.py` → `model_registry.cooldown_until`), `GET /api/routing/capacity`, `scripts/measure_capacity.py`. 8 tests; 260 passed. Live-verified: capacity endpoint reports real consumption; restored cooldowns honoured.
+
 ### Maintenance (2026-08-26) — Post-audit sweep: batch-run honesty, schema truth, M8, placement guard
 
 - Batch interviews run through the real engine or fail honestly (`engine.post_message` never existed; the tuple-unpack of `complete()` meant the engine path had NEVER run — all prior batch transcripts were canned). Client-side metadata re-fabrication removed from `api.ts`. `init_database` is alembic-aware (skip/stamp/warn) and seeding is `BEBSHAX_DEMO_MODE`-gated; both M8 swallows now log. New ORM-placement freeze test. DATABASE_MIGRATION.md rewritten. Backend 245 + frontend 71/71 green.

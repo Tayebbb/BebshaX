@@ -1,5 +1,7 @@
 """Tests for ProvenanceSink: async writer + sync queue."""
 
+import asyncio
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +45,36 @@ async def test_insert_batch_writes_row_round_trip(async_engine) -> None:
     assert len(rows) == 1
     assert rows[0].request_id == "req_b1_roundtrip"
     assert rows[0].task == "PERSONA_GENERATION"
+
+
+@pytest.mark.asyncio
+async def test_writer_survives_idle_timeouts_and_keeps_writing(async_engine) -> None:
+    """Live 2026-08-26 finding: an idle wait_for timeout was treated as the
+    shutdown sentinel — the writer died ~5s after startup and every record
+    enqueued afterwards was silently dropped. This test idles the writer,
+    then enqueues, and requires the row to land.
+    """
+    sessionmaker_ = sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    sink = ProvenanceSink(sessionmaker_, batch_timeout_ms=30)
+    await sink.start()
+    try:
+        await asyncio.sleep(0.15)  # several idle ticks — the old writer is dead by now
+        sink(
+            ProvenanceRecord(
+                request_id="req_after_idle",
+                task=TaskType.PERSONA_INTERVIEW,
+                pool="conversation",
+                success=True,
+            )
+        )
+        await asyncio.wait_for(sink.flush(), timeout=5)
+    finally:
+        await sink.stop()
+    assert sink.total_written == 1
+    assert sink.total_dropped == 0
+    async with sessionmaker_() as session:
+        rows = (await session.execute(select(LLMRequests))).scalars().all()
+    assert [r.request_id for r in rows] == ["req_after_idle"]
 
 
 def test_sink_creation() -> None:

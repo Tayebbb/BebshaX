@@ -70,7 +70,34 @@ async def _lifespan(app: FastAPI):
     sessionmaker_ = create_async_sessionmaker(db_engine)
     sink = ProvenanceSink(sessionmaker_)  # fail-soft: DB issues never fail LLM calls
     await sink.start()
-    llm_router = PoolRouter(adapters, on_provenance=sink)
+
+    # AI plan §10: quota ledger (seeded from today's rows) + quota-aware ranking
+    # + cooldowns that survive restarts. All fail-soft — capacity features must
+    # never take the request path down.
+    from bebshax.db.capacity_state import CooldownStore, load_todays_consumption
+    from bebshax.llm.quota import QuotaLedger, quota_aware_ranker
+
+    ledger = QuotaLedger()
+    seed_requests, seed_tokens = await load_todays_consumption(sessionmaker_)
+    ledger.seed(seed_requests, seed_tokens)
+    cooldown_store = CooldownStore(sessionmaker_)
+    initial_cooldowns = await cooldown_store.load_active()
+
+    def _on_provenance(record):
+        try:
+            ledger.record(record)
+        except Exception:
+            logger.warning("quota ledger record failed", exc_info=True)
+        sink(record)  # unconditional — ledger problems must never cost provenance
+
+    llm_router = PoolRouter(
+        adapters,
+        on_provenance=_on_provenance,
+        ranker=quota_aware_ranker(ledger),
+        initial_cooldowns=initial_cooldowns,
+        on_cooldown_change=cooldown_store.persist,
+    )
+    app.state.quota_ledger = ledger
     app.state.local_tier_up = await warn_if_local_tier_down(adapters)
 
     app.state.llm_adapters = adapters

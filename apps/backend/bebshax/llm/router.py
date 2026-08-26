@@ -5,10 +5,10 @@ order → eligibility (capabilities + context estimate + cooldowns) → attempt
 loop with per-failure-kind policies → cross-adapter fallback (pools end at
 the local adapter; `emergency` starts there).
 
-Ranking is pool order for now; `ranker` is the injection point where the
-Phase-6 model registry's quality/latency/health scores plug in.
-Cooldowns are in-memory `(provider, model) → until`; DB persistence is
-Phase 6 scope.
+Ranking is pool order by default; `ranker` is the injection point — production
+wires the §10 quota-aware ranker there. Cooldowns are in-memory
+`(provider, model) → deadline`, restored from and mirrored to
+`model_registry.cooldown_until` via bebshax.db.capacity_state.
 """
 
 from __future__ import annotations
@@ -37,6 +37,8 @@ class PoolRouter(LLMService):
         ranker: Callable[[list[Entry]], list[Entry]] | None = None,
         cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS,
         clock: Callable[[], float] = time.monotonic,
+        initial_cooldowns: dict[tuple[str, str], float] | None = None,
+        on_cooldown_change: Callable[[str, str, float], None] | None = None,
     ) -> None:
         self._adapters = adapters
         self._pools = pools if pools is not None else POOLS
@@ -45,7 +47,10 @@ class PoolRouter(LLMService):
         self._ranker = ranker
         self._cooldown_seconds = cooldown_seconds
         self._clock = clock
-        self._cooldown_until: dict[tuple[str, str], float] = {}
+        # absolute deadlines in `clock` time — CooldownStore.load_active() converts
+        # wall→deadline; on_cooldown_change receives a DURATION in seconds
+        self._cooldown_until: dict[tuple[str, str], float] = dict(initial_cooldowns or {})
+        self._on_cooldown_change = on_cooldown_change
 
         for pool in self._pools.values():
             unknown = [name for name in pool.adapters if name not in adapters]
@@ -80,6 +85,9 @@ class PoolRouter(LLMService):
         self._cooldown_until[(cand.provider, cand.model)] = (
             self._clock() + self._cooldown_seconds
         )
+        if self._on_cooldown_change is not None:
+            # fire-and-forget persistence — cooldown state must survive restarts
+            self._on_cooldown_change(cand.provider, cand.model, self._cooldown_seconds)
 
     async def complete(self, request: LLMRequest) -> LLMResult:
         pool_name = self._task_pool_map.get(request.task)
