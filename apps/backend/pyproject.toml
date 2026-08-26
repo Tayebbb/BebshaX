@@ -45,7 +45,35 @@ select = ["E9", "F63", "F7", "F82"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# tests/datasets/** imports `scripts.*`, which lives at the repo root. Without
+# this, the suite collects from the repo root but dies with
+# "ModuleNotFoundError: No module named 'scripts'" when run from apps/backend —
+# so results depended on your working directory (the H6 failure mode again).
+pythonpath = ["../.."]
 addopts = "-m 'not integration'"
 markers = [
     "integration: requires network or a live database",
+]
+# L14: deprecations are errors, so a dependency upgrade breaks the suite loudly
+# instead of silently at runtime. Every exemption below is third-party and
+# unfixable from here; each states what removes it. Do NOT add a blanket ignore —
+# add a narrow message match with a reason, or fix the call site.
+filterwarnings = [
+    "error::DeprecationWarning",
+    "error::PendingDeprecationWarning",
+    # starlette's TestClient warns on import; it subclasses UserWarning, not
+    # DeprecationWarning, so it needs its own escalation line.
+    "error::starlette.exceptions.StarletteDeprecationWarning",
+
+    # starlette >=1.6 wants httpx2 for TestClient. Swapping httpx -> httpx2 is a
+    # dependency change and needs an R8 review first. REMOVE WITH: httpx2 review + swap.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+
+    # slowapi 0.1.9 calls asyncio.iscoroutinefunction (removed in Python 3.16).
+    # Upstream fix required. REMOVE WITH: slowapi release that uses inspect.iscoroutinefunction.
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning",
+
+    # fastparquet 2026.5.0 uses the bare-integer numpy timedelta unit at import
+    # (converted_types.py and writer.py). REMOVE WITH: fastparquet release fixing it.
+    "ignore:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning",
 ]

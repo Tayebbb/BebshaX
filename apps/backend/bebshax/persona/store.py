@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.db.models import Businesses, Personas
+from bebshax.db.models import DATA_SOURCE_LIVE
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
 from bebshax.persona.schema import EvidenceItem, PersonaAttribute, PersonaProfile, ProvenanceClass
 
@@ -53,7 +54,14 @@ async def save_persona(
     session: AsyncSession,
     profile: PersonaProfile,
     owner_id: str = "usr_system_holder",
+    data_source: str = DATA_SOURCE_LIVE,
 ) -> None:
+    """Persist a persona.
+
+    ``data_source`` records how the content was produced (H3 piece 2). It
+    defaults to ``"live"`` because every caller except the demo seeder reaches
+    here after a real inference pass; the seeder passes ``"cached"`` explicitly.
+    """
     session.add(
         Personas(
             id=profile.id,
@@ -63,6 +71,7 @@ async def save_persona(
             status=profile.status,
             version=profile.version,
             generation_model=profile.generation_model,
+            data_source=data_source,
         )
     )
 

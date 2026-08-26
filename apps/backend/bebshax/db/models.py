@@ -22,6 +22,13 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+#: Provenance of the content in a response, per docs/DEMO.md §4.
+#: "live" — produced by an inference pass against a routed provider or Ollama.
+#: "cached" — served from pre-seeded demo fixtures or a deterministic mock pool.
+DATA_SOURCE_LIVE = "live"
+DATA_SOURCE_CACHED = "cached"
+
+
 class Base(DeclarativeBase):
     """Declarative base with naming convention (ix/uq/ck/fk/pk).
 
@@ -194,6 +201,13 @@ class Personas(Base):
     )  # ready, needs_review, draft, active, archived
     version: Mapped[int] = mapped_column(default=1)
     generation_model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # H3 piece 2 — demo honesty. "live" = produced by a real inference pass;
+    # "cached" = pre-seeded demo fixture. Persisted at creation so a later read
+    # reports what actually happened instead of inferring it from demo_mode,
+    # which flips independently of the rows already in the table.
+    data_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=DATA_SOURCE_LIVE, server_default=DATA_SOURCE_LIVE
+    )
     archetype: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     tagline: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     country_code: Mapped[Optional[str]] = mapped_column(String(16), default="BD")

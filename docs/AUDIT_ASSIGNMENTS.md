@@ -39,10 +39,10 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | ----------------- | -------: | -----: |
 | Joint (all three) |        5 |      0 |
 | Tayeb             |        8 |      8 |
-| Sazid             |       11 |      6 |
+| Sazid             |       11 |     11 |
 | Shehab            |       16 |     16 |
 | Already closed    |        1 |      1 |
-| **Total**         |   **41** | **31** |
+| **Total**         |   **41** | **36** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -88,7 +88,7 @@ Decide in this order, in one sitting:
 - [x] 🔴 **B6** — `Businesses` and `Personas` have no `owner_id`, so tenancy is impossible even if auth were added. Add the columns + migration; Tayeb wires `Depends(get_current_user)` row scoping in `api/**`. → `db/models.py` + migration — **DONE 2026-08-26** (Stage 1 & Stage 2 complete: tagged system holder account `usr_system_holder` backfilled, `owner_id` enforced `NOT NULL` on `businesses`/`personas` + migration `4e5f6a7b8c9d`, `seed_demo_data` updated, API row-scoping and cross-tenant isolation wired across `api/personas.py` with `Depends(get_optional_current_user)`, 5 tests in `test_owner_id_enforcement.py`, 3 tests in `test_tenancy_row_scoping.py`, 6 tests in `test_owner_id.py`)
 
 
-- [~] 🟠 **H3** — Demo mode is unimplemented but marked ✅. The flag is only echoed by `/api/health`; `seed_demo_data` runs unconditionally regardless of it; nothing is labelled `"cached"`; `docs/DEMO.md` does not exist. → `config.py`, `db/seed.py`, new `docs/DEMO.md` — **Pieces 1 & 3 landed 2026-08-26** (`seed_demo_data` gated behind `demo_mode`, 3 tests in `test_seed_demo_mode.py`; `docs/DEMO.md` created, `PROJECT_CONTEXT.md` corrected; Piece 2 cached labeling pending Shehab UI)
+- [x] 🟠 **H3** — Demo mode is unimplemented but marked ✅. The flag is only echoed by `/api/health`; `seed_demo_data` runs unconditionally regardless of it; nothing is labelled `"cached"`; `docs/DEMO.md` does not exist. → `config.py`, `db/seed.py`, new `docs/DEMO.md` — **DONE 2026-08-27** (piece 1: `seed_demo_data` gated behind `demo_mode`, 3 tests in `test_seed_demo_mode.py`; piece 3: `docs/DEMO.md` created, `PROJECT_CONTEXT.md` corrected; piece 2: `personas.data_source` `"live"|"cached"` persisted at creation via migration `9f0a1b2c3d4e`, written by `save_persona`/`seed_demo_data`, returned by every persona endpoint, frozen in `API_CONTRACT.md`, 4 tests in `test_data_source_labelling.py`). **Handoff — the UI badge is Shehab's:** the label ships in the API but nothing renders it, so a viewer still cannot tell seeded content from model output. Tracked in DEMO.md §4.
 
 - [x] 🟠 **H6** — Migration drift. The local DB was brought to head on 2026-08-24, but **no CI guard exists**, so `/api/auth/*` still 500s on every other machine until each person runs the upgrade manually. Add `alembic current == heads` or fail. → CI + alembic — **DONE 2026-08-26** (CI guard in `ci.yml` + local-dev fail-fast check in `main.py`, 2 tests in `test_migration_drift_guard.py`)
 
@@ -96,8 +96,9 @@ Decide in this order, in one sitting:
 - [x] 🟠 **H9** — The UI promises "We'll send a verification link" and none is ever sent; `is_verified` stays `false` forever and is never checked at signin, while Google users get `is_verified=true` from an endpoint that verifies nothing. Either implement verification or remove the promise — coordinate the copy change with Shehab. → auth backend — **DONE 2026-08-26** (Resend httpx email delivery client in `auth/email.py`, `EmailVerificationToken` model + migration `7a8b9c0d1e2f`, `/verify-email` endpoint + rate-limited `/resend-verification`, 9 tests in `test_email_verification.py` and `test_email_verification_token.py`)
 
 
+- [x] 🟠 **H8** — Password policy is length-only; `"password1"` returns `201`. → `api/auth.py` — **DONE 2026-08-26** (alphanumeric-mix `@field_validator` on `SignUpRequest`, 4 tests in `tests/api/test_password_policy.py`). _Row restored 2026-08-27: the fix landed on 2026-08-26 but an edit dropped this line from the section, leaving 10 items under an "(11)" heading and `L6`'s cross-reference dangling._
 - [x] 🟡 **M8** — Silent `except Exception: pass` around `seed_demo_data`; seeding can fail completely with zero signal. (The matching swallow in `api/personas.py` is Tayeb's.) → `main.py` — **DONE 2026-08-26** (both halves: startup init/seed failures and the persona memory write now log warnings; fixed by Tayeb's agent at owner instruction during the post-audit sweep)
-- [ ] ⚪ **L14** — Suite deprecations: `StarletteDeprecationWarning` (httpx testclient) plus two numpy/fastparquet warnings. Harmless now, breaks on upgrade. → `pyproject.toml`
+- [x] ⚪ **L14** — Suite deprecations: `StarletteDeprecationWarning` (httpx testclient) plus two numpy/fastparquet warnings. Harmless now, breaks on upgrade. → `pyproject.toml` — **DONE 2026-08-27** (deprecations escalated to errors in `[tool.pytest.ini_options]`; 3 narrow third-party exemptions each with a REMOVE-WITH condition; the guard immediately caught a real sqlite3 datetime-adapter deprecation in `test_email_verification.py`, fixed via typed `bindparam`)
 
 ---
 

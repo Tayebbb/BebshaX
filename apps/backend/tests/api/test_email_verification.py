@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import DateTime, bindparam, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from bebshax.db.models import Base
@@ -177,8 +177,14 @@ def test_verify_email_rejects_expired_token(client):
     async def expire():
         async with _engine.begin() as conn:
             from sqlalchemy import text
+            # Bind through SQLAlchemy's DateTime type, exactly as the ORM column
+            # does. Passing a raw datetime into text() instead hands it to the
+            # sqlite3 default adapter, deprecated since Python 3.12 (L14).
+            stmt = text(
+                "UPDATE email_verification_tokens SET expires_at = :exp WHERE token = :t"
+            ).bindparams(bindparam("exp", type_=DateTime(timezone=True)), bindparam("t"))
             await conn.execute(
-                text("UPDATE email_verification_tokens SET expires_at = :exp WHERE token = :t"),
+                stmt,
                 {"exp": datetime.now(timezone.utc) - timedelta(hours=1), "t": token_str},
             )
     asyncio.run(expire())

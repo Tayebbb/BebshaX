@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from bebshax.auth.models import Users
 from bebshax.auth.security import hash_password
-from bebshax.db.models import Businesses, Personas, LLMRequests, Studies
+from bebshax.db.models import DATA_SOURCE_CACHED, Businesses, Personas, LLMRequests, Studies
 from bebshax.persona.schema import (
     EvidenceItem,
     PersonaAttribute,
@@ -237,7 +237,14 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
     )
 
     async with sessionmaker_() as session:
-        await save_persona(session, profile, owner_id="usr_system_holder")
+        await save_persona(
+            session,
+            profile,
+            owner_id="usr_system_holder",
+            # H3 piece 2: seeded demo content must never present as live output.
+            data_source=DATA_SOURCE_CACHED,
+            # H3 piece 2: seeded demo content must never present as live output.
+        )
         logger.info("Demo persona seed complete.")
     return True
 
