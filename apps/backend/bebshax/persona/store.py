@@ -12,8 +12,20 @@ from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEviden
 from bebshax.persona.schema import EvidenceItem, PersonaAttribute, PersonaProfile, ProvenanceClass
 
 
-async def create_business(session: AsyncSession, name: str, description: str | None) -> Businesses:
-    business = Businesses(id=uuid.uuid4().hex, name=name, description=description)
+async def create_business(
+    session: AsyncSession,
+    name: str,
+    description: str | None,
+    industry: str | None = None,
+    target_market: str | None = None,
+) -> Businesses:
+    business = Businesses(
+        id=uuid.uuid4().hex,
+        name=name,
+        description=description,
+        industry=industry,
+        target_market=target_market,
+    )
     session.add(business)
     await session.commit()
     return business

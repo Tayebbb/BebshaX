@@ -149,6 +149,9 @@ class Businesses(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(256), index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # M5: real columns — previously stuffed into description as "Industry: … | Target Market: …"
+    industry: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    target_market: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     # Relationship (lazy-loaded; populated in Phase 8)

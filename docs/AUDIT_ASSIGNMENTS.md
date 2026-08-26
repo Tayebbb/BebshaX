@@ -38,11 +38,11 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | Owner             | Assigned |  Done |
 | ----------------- | -------: | ----: |
 | Joint (all three) |        5 |     0 |
-| Tayeb             |        8 |     6 |
+| Tayeb             |        8 |     7 |
 | Sazid             |       11 |     1 |
 | Shehab            |       16 |     0 |
 | Already closed    |        1 |     1 |
-| **Total**         |   **41** | **8** |
+| **Total**         |   **41** | **9** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -69,7 +69,7 @@ Decide in this order, in one sitting:
 - [x] 🟠 **H2** — Ollama is unreachable, so the local fallback tier and the offline drill are both dead. `EMERGENCY_FALLBACK` currently has no route at all. → `llm/adapters/ollama_adapter.py` + ops — **DONE 2026-08-26** (daemon up + smoke OK + startup warning `warn_if_local_tier_down`; see audit fix log)
 - [x] 🟡 **M2** — `/api/routes/status` fabricates: `active_requests` hardcoded `0`, `max(count, 1)` hides empty pools, provider `type` guessed by substring match, and it reaches into the router's private `_cooling_reason`. → `api/routes.py` — **DONE 2026-08-26** (public `pool_utilization()`/`is_cooling()` on PoolRouter; measured counts; registry-table types; 4 tests)
 - [x] 🟡 **M4** — Interview responses hardcode `latency_ms: 750` and invent `retrieved_memories` placeholder strings instead of the memories actually retrieved. The memory feature's only UI surface is fake. → `api/interviews.py` — **DONE 2026-08-26** (engine returns real values; API fabricated fallbacks removed; e2e asserts real latency/route/memories)
-- [ ] 🟡 **M5** — `industry`/`target_market` stuffed into the description string and re-parsed with `desc.startswith("Industry:")`. Any description starting with "Industry:" corrupts. Needs real columns — coordinate the migration with Sazid. → `api/personas.py`
+- [x] 🟡 **M5** — `industry`/`target_market` stuffed into the description string and re-parsed with `desc.startswith("Industry:")`. Any description starting with "Industry:" corrupts. Needs real columns — coordinate the migration with Sazid. → `api/personas.py` — **DONE 2026-08-26** (columns + migration `c4d5e6f7a8b9` with legacy-data extraction; **Sazid: please review the migration** — it touches your alembic territory, applied at owner instruction)
 - [x] 🟡 **M6** — `CORS allow_origins=["*"]` together with `allow_credentials=True` — invalid per spec and unsafe. → `main.py` — **DONE 2026-08-26** (explicit origins via `BEBSHAX_CORS_ORIGINS`, 3 tests; see audit fix log)
 - [x] 🟡 **M9** — Memories for a non-existent persona return `200 []` instead of `404`; a missing `memory_service` returns the same, so the two are indistinguishable. → `api/personas.py` — **DONE 2026-08-26** (404 for unknown persona, 503 for missing service; 2 tests)
 - [ ] 🟡 **M11** — CI has no lint, no standalone type-check, **no secret scan** (would have caught B4), no migration-drift check (H6), no coverage floor, and `--if-present` silently passes when a script disappears. → `.github/workflows/ci.yml`

@@ -53,6 +53,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — M5: business metadata columns
+
+- `businesses.industry`/`target_market` real columns; migration `c4d5e6f7a8b9` (+legacy header extraction, exact-format-only); endpoints stop stuffing/parsing description; honest nulls. Fixture `api_test_app` moved to shared tests/conftest.py. 4 tests. Applied live. Audit M5 ticked; migration flagged for Sazid's review.
+
 ### Maintenance (2026-08-26) — L12: reply-format normalization
 
 - `interview/normalization.py` + prompt rule 7: think-blocks, whole-reply fences and speaker labels stripped deterministically in `ask()`; content never mutated, empty-out impossible. 11 tests. Audit L12 ticked.

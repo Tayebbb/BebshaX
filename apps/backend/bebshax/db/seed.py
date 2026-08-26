@@ -49,7 +49,9 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession]) -> None:
         business = Businesses(
             id=biz_id,
             name="NovaFlow Financial",
-            description="Industry: Fintech / Personal Finance | Target Market: Independent contractors, rideshare drivers\n\nNext-generation budgeting and micro-investment app for gig workers and freelancers.",
+            description="Next-generation budgeting and micro-investment app for gig workers and freelancers.",
+            industry="Fintech / Personal Finance",
+            target_market="Independent contractors, rideshare drivers",
         )
         session.add(business)
 

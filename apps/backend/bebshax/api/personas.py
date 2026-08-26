@@ -329,24 +329,22 @@ async def delete_study_persona_run_endpoint(
 
 @router.post("/businesses", status_code=201)
 async def create_business_endpoint(body: BusinessCreate, request: Request) -> dict:
+    # M5: industry/target_market are real columns — the description is user
+    # content and is never used as a metadata carrier.
     async with request.app.state.db_sessionmaker() as session:
-        desc = body.description or ""
-        if body.industry or body.target_market:
-            meta_parts = []
-            if body.industry:
-                meta_parts.append(f"Industry: {body.industry}")
-            if body.target_market:
-                meta_parts.append(f"Target Market: {body.target_market}")
-            meta_header = " | ".join(meta_parts)
-            desc = f"{meta_header}\n\n{desc}".strip()
-
-        business = await create_business(session, body.name, desc)
+        business = await create_business(
+            session,
+            body.name,
+            body.description or "",
+            industry=body.industry,
+            target_market=body.target_market,
+        )
     return {
         "id": business.id,
         "name": business.name,
         "description": business.description,
-        "industry": body.industry or "General Enterprise",
-        "target_market": body.target_market or "Global",
+        "industry": business.industry,
+        "target_market": business.target_market,
         "persona_count": 0,
         "created_at": business.created_at.isoformat() if business.created_at else None,
     }
@@ -363,26 +361,14 @@ async def list_businesses_endpoint(request: Request) -> list[dict]:
 
     results = []
     for b in businesses:
-        desc = b.description or ""
-        industry = "General Enterprise"
-        target_market = "Global"
-        if desc.startswith("Industry:"):
-            parts = desc.split("\n\n", 1)
-            for m in parts[0].split(" | "):
-                if m.startswith("Industry:"):
-                    industry = m.replace("Industry:", "").strip()
-                elif m.startswith("Target Market:"):
-                    target_market = m.replace("Target Market:", "").strip()
-            if len(parts) > 1:
-                desc = parts[1]
-
         results.append(
             {
                 "id": b.id,
                 "name": b.name,
-                "description": desc,
-                "industry": industry,
-                "target_market": target_market,
+                "description": b.description or "",
+                # M5: stored values or null — never invented defaults
+                "industry": b.industry,
+                "target_market": b.target_market,
                 "persona_count": counts_map.get(b.id, 0),
                 "created_at": b.created_at.isoformat() if b.created_at else None,
             }
