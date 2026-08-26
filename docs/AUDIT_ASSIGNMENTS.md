@@ -38,11 +38,11 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | Owner             | Assigned |  Done |
 | ----------------- | -------: | ----: |
 | Joint (all three) |        5 |     0 |
-| Tayeb             |        8 |     5 |
+| Tayeb             |        8 |     6 |
 | Sazid             |       11 |     1 |
 | Shehab            |       16 |     0 |
 | Already closed    |        1 |     1 |
-| **Total**         |   **41** | **7** |
+| **Total**         |   **41** | **8** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -73,7 +73,7 @@ Decide in this order, in one sitting:
 - [x] 🟡 **M6** — `CORS allow_origins=["*"]` together with `allow_credentials=True` — invalid per spec and unsafe. → `main.py` — **DONE 2026-08-26** (explicit origins via `BEBSHAX_CORS_ORIGINS`, 3 tests; see audit fix log)
 - [x] 🟡 **M9** — Memories for a non-existent persona return `200 []` instead of `404`; a missing `memory_service` returns the same, so the two are indistinguishable. → `api/personas.py` — **DONE 2026-08-26** (404 for unknown persona, 503 for missing service; 2 tests)
 - [ ] 🟡 **M11** — CI has no lint, no standalone type-check, **no secret scan** (would have caught B4), no migration-drift check (H6), no coverage floor, and `--if-present` silently passes when a script disappears. → `.github/workflows/ci.yml`
-- [ ] ⚪ **L12** — Cross-provider reply-format drift: one free model answered in Markdown persona-script form while others used plain first person. Correctly not an infra failure per R2/D3, but an open Phase-11 normalisation gap. → `interview/` composition
+- [x] ⚪ **L12** — Cross-provider reply-format drift: one free model answered in Markdown persona-script form while others used plain first person. Correctly not an infra failure per R2/D3, but an open Phase-11 normalisation gap. → `interview/` composition — **DONE 2026-08-26** (deterministic `normalize_reply` — think-blocks/fences/speaker labels only, content untouched; 11 tests)
 
 ---
 

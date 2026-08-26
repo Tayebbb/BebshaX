@@ -53,6 +53,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — L12: reply-format normalization
+
+- `interview/normalization.py` + prompt rule 7: think-blocks, whole-reply fences and speaker labels stripped deterministically in `ask()`; content never mutated, empty-out impossible. 11 tests. Audit L12 ticked.
+
 ### Maintenance (2026-08-26) — M2: routes/status de-fabricated
 
 - New public `PoolRouter.pool_utilization()` + `is_cooling()`; endpoint stops reaching into privates, stops inventing `active_requests=0`/`max(count,1)`/substring-guessed types. 4 tests. Audit M2 ticked.

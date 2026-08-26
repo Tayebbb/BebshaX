@@ -178,7 +178,7 @@ Key points:
 
 [apps/backend/bebshax/interview/engine.py](../apps/backend/bebshax/interview/engine.py)
 
-The prompt is assembled from: identity card + business context + objective + **retrieved memories** + evidence themes + **the full prior turn history** (never silently dropped). One `PERSONA_INTERVIEW` call → the persona's reply → both turns persisted.
+The prompt is assembled from: identity card + business context + objective + **retrieved memories** + evidence themes + **the full prior turn history** (never silently dropped). One `PERSONA_INTERVIEW` call → the persona's reply → both turns persisted. Replies pass through deterministic **format** normalization (think-blocks, whole-reply fences, speaker labels — [normalization.py](../apps/backend/bebshax/interview/normalization.py)); answer *content* is never rewritten (R2).
 
 ### Memory — retrieval is math, not an LLM
 
