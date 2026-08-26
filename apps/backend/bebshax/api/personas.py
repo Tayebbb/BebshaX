@@ -480,9 +480,17 @@ async def get_persona_memories_endpoint(
     kind: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[dict]:
+    # M9: a missing service and a missing persona must be distinguishable from
+    # "persona exists and has no memories yet" — never a blanket `200 []`.
     memory_service = getattr(request.app.state, "memory_service", None)
     if not memory_service:
-        return []
+        raise HTTPException(status_code=503, detail="memory service not configured")
+
+    async with request.app.state.db_sessionmaker() as session:
+        # save_persona always writes a Personas row, so one PK lookup covers
+        # both the legacy profile store and study-scoped personas.
+        if await session.get(Personas, persona_id) is None:
+            raise HTTPException(status_code=404, detail="persona not found")
 
     memories = await memory_service.list_for_persona(persona_id, kind=kind, limit=limit)
     return [

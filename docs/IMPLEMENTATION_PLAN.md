@@ -53,6 +53,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — M9: memories endpoint states are honest
+
+- `GET /personas/{id}/memories`: 404 for unknown persona, 503 when the memory service isn't configured, `200 []` only for a real persona with no memories. 2 tests. Audit M9 ticked.
+
 ### Maintenance (2026-08-26) — M6: CORS wildcard+credentials removed
 
 - `create_app` now uses `settings.cors_origins_list` (new `BEBSHAX_CORS_ORIGINS`, comma-separated, Vite dev/preview defaults) with `allow_credentials=True` — spec-valid.

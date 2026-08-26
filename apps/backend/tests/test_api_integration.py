@@ -182,6 +182,24 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
     assert len(turns) == 2
 
 
+async def test_memories_for_unknown_persona_is_404(api_test_app: TestClient):
+    # M9: nonexistent persona must not masquerade as "no memories yet"
+    resp = api_test_app.get("/api/personas/per_does_not_exist/memories")
+    assert resp.status_code == 404
+
+
+async def test_memories_without_service_is_503(api_test_app: TestClient):
+    # M9: a missing memory service is an operational condition, not an empty list
+    app = api_test_app.app
+    saved = app.state.memory_service
+    app.state.memory_service = None
+    try:
+        resp = api_test_app.get("/api/personas/anything/memories")
+        assert resp.status_code == 503
+    finally:
+        app.state.memory_service = saved
+
+
 async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     # 1. Create study for User A (unauthenticated — user_id in body)
     s1_resp = api_test_app.post(
