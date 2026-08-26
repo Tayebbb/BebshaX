@@ -63,3 +63,40 @@ def test_sync_no_longer_accepts_client_supplied_email_field():
     assert "email" not in fields or fields["email"].default is not None, (
         "UserSyncRequest still accepts a trusted client-supplied email field"
     )
+
+
+def test_sync_populates_display_name_and_avatar_from_neon_response():
+    """Regression guard: full_name/avatar_url must come from Neon's real
+    (nested) response shape, not silently end up None forever."""
+    with patch("bebshax.api.auth.verify_neon_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = {
+            "user": {
+                "id": "usr_test",
+                "email": "real-verified@example.com",
+                "name": "Real Person",
+                "emailVerified": True,
+                "image": "https://example.com/avatar.jpg",
+            },
+            "session": {"token": "valid-token"},
+        }
+        response = client.post(
+            "/api/auth/sync", json={"neon_token": "valid-token", "auth_provider": "neon"}
+        )
+        assert response.status_code == 200
+        body = response.json()["user"]
+        assert body["full_name"] == "Real Person"
+        assert body["avatar_url"] == "https://example.com/avatar.jpg"
+
+
+def test_sync_rejects_unverified_email():
+    """Email must be verified upstream by identity provider."""
+    with patch("bebshax.api.auth.verify_neon_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = {
+            "user": {"email": "unverified@example.com", "emailVerified": False},
+            "session": {"token": "valid-token"},
+        }
+        response = client.post(
+            "/api/auth/sync", json={"neon_token": "valid-token", "auth_provider": "neon"}
+        )
+        assert response.status_code == 401
+

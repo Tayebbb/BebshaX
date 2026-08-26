@@ -213,13 +213,13 @@ async def verify_neon_token(token: str) -> dict:
             detail="Invalid or expired Neon session token",
         )
     data = resp.json()
-    user = data.get("user")
+    user = data.get("user") if isinstance(data, dict) else None
     if not user or not user.get("email"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired Neon session token",
         )
-    return user
+    return data
 
 
 @auth_router.post("/sync", response_model=AuthResponse)
@@ -229,10 +229,29 @@ async def sync_user(
 ):
     """Sync a Neon-authenticated user into the local mirror table.
     Identity comes ONLY from Neon's verified response — never from client input."""
-    neon_user = await verify_neon_token(payload.neon_token)
-    email = neon_user["email"].strip().lower()
-    full_name = neon_user.get("full_name") or neon_user.get("name") or email.split("@")[0]
-    avatar_url = neon_user.get("avatar_url") or neon_user.get("image")
+    neon_response = await verify_neon_token(payload.neon_token)
+    neon_user = neon_response.get("user") if isinstance(neon_response, dict) and "user" in neon_response else neon_response
+    if not isinstance(neon_user, dict):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Neon session payload",
+        )
+
+    if not neon_user.get("emailVerified", True):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email not verified with identity provider",
+        )
+
+    email = (neon_user.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Verified Neon session returned no email address",
+        )
+
+    full_name = neon_user.get("name") or neon_user.get("full_name") or email.split("@")[0]
+    avatar_url = neon_user.get("image") or neon_user.get("avatar_url")
 
     user = await get_user_by_email(session, email)
     if not user:
@@ -243,16 +262,25 @@ async def sync_user(
             auth_provider=payload.auth_provider,
             avatar_url=avatar_url,
         )
-    elif avatar_url and not user.avatar_url:
-        user.avatar_url = avatar_url
-        await session.commit()
-        await session.refresh(user)
+    else:
+        updated = False
+        if full_name and user.full_name != full_name:
+            user.full_name = full_name
+            updated = True
+        if avatar_url and user.avatar_url != avatar_url:
+            user.avatar_url = avatar_url
+            updated = True
+        if updated:
+            await session.commit()
+            await session.refresh(user)
 
     token = create_access_token(user_id=user.id)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(user),
     )
+
+
 
 
 
