@@ -1,6 +1,29 @@
-# Custom provider overrides for freellmpool
-# Configures OpenRouter with free and high-throughput models
+# Custom provider overrides for freellmpool (loaded via FREELLMPOOL_CONFIG,
+# set by bebshax.main at startup). Same-id entries REPLACE the packaged ones.
 
+# Kilo override: the packaged catalog routes through "openrouter/free" and
+# "kilo-auto/free" — aggregator-on-aggregator (two queues stacked), and carries
+# nemotron-3-super-120b which measured 185s/turn live (2026-08-26). Keep only
+# direct, fast targets.
+[[provider]]
+id = "kilo"
+label = "Kilo Gateway (keyless)"
+adapter = "openai"
+base_url = "https://api.kilo.ai/api/gateway"
+auth = "none"
+
+[[provider.models]]
+name = "stepfun/step-3.7-flash:free"
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "poolside/laguna-xs.2:free"
+rpd = 0
+enabled = true
+
+# OpenRouter (through freellmpool): measured-fast models only. deepseek-r1 and
+# nemotron burn 100s+ on hidden chain-of-thought for interactive turns.
 [[provider]]
 id = "openrouter"
 label = "OpenRouter"
@@ -10,21 +33,11 @@ key_env = "OPENROUTER_API_KEY"
 auth = "bearer"
 
 [[provider.models]]
-name = "meta-llama/llama-3.3-70b-instruct:free"
-rpd = 1000
-enabled = true
-
-[[provider.models]]
-name = "deepseek/deepseek-r1:free"
-rpd = 1000
-enabled = true
-
-[[provider.models]]
 name = "google/gemini-2.0-flash-exp:free"
 rpd = 1000
 enabled = true
 
 [[provider.models]]
-name = "nvidia/nemotron-3.5-lightning:free"
+name = "meta-llama/llama-3.3-70b-instruct:free"
 rpd = 1000
 enabled = true

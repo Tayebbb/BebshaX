@@ -17,6 +17,13 @@ def test_emergency_pool_is_local_first() -> None:
     assert POOLS["emergency"].adapters[0] == "ollama"
 
 
+def test_interactive_pools_are_local_first() -> None:
+    # Locked by the judged gate (2026-08-26): local 3B scored 9.65/10 ≥ 8/10
+    # bar at ~6s/turn; cloud free tiers measured 50-185s per turn.
+    assert POOLS["conversation"].adapters[0] == "ollama"
+    assert POOLS["fast"].adapters[0] == "ollama"
+
+
 def test_every_pool_reaches_the_local_adapter() -> None:
     # Cross-adapter fallback must terminate on-machine (brief §41/spec).
     for pool in POOLS.values():

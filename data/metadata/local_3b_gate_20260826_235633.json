@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-08-26T17:56:33.275892+00:00",
+  "bar": 8.0,
+  "rubric_weights": {
+    "persona_consistency": 0.25,
+    "naturalness": 0.2,
+    "instruction_following": 0.15,
+    "context_memory": 0.15,
+    "specificity": 0.15,
+    "response_stability": 0.1
+  },
+  "arm_a": {
+    "model": "ollama/llama3.2:3b",
+    "tag": "local/llama3.2:3b",
+    "turns": [
+      {
+        "question": "Walk me through what you ate for lunch yesterday — where did it come from and what did it cost?",
+        "reply": "I had my usual street lunch yesterday. I bought a plate of steamed rice with some vegetables and a piece of fried fish from this small stall near my office in Gulshan. It was a decent meal, nothing too fancy, but filling enough for me to get through the rest of the day.\n\nThe total cost came out to be around 125 BDT, which is pretty standard for street food like that. I paid using my bKash card, just like I usually do when I'm on the go.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 13201
+      },
+      {
+        "question": "What is the most frustrating part of how you handle lunch on workdays?",
+        "reply": "I'd say it's the energy crash I get in the afternoon around 3 pm. It's really tough to focus on work after that. And it's not just the fatigue, but also the mood slump. I find myself feeling a bit irritable and struggling to concentrate.\n\nTo be honest, I've tried different things to combat it - like taking a walk or stretching at my desk - but nothing seems to completely fix it. That's why I'm always on the lookout for something that can help me power through the rest of the day.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 3671
+      },
+      {
+        "question": "Would you pay 3000 BDT per month for healthy delivered lunches? Why or why not?",
+        "reply": "Honestly, I'm not sure if I would pay 3000 BDT per month for healthy delivered lunches. My budget is pretty tight, and 3000 BDT is a significant amount for me.\n\nI mean, don't get me wrong, healthy food is important to me, but I've been managing just fine with my street lunch habit so far. It's not like I'm eating junk food or anything - it's just that the cost of healthy options has always been out of reach for me.\n\nI think I would need some convincing to commit to a service like this every month. Maybe if the prices were more competitive, like in the range of 500-1000 BDT per month? That might be something I could consider. But 3000 BDT is just too steep for me.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 4945
+      },
+      {
+        "question": "Earlier you told me what lunch costs you — how does that compare over a month?",
+        "reply": "I did say earlier that my usual street lunch costs around 125 BDT per day, so for a whole month, it would be something like... *does some quick math* ...around 2,500-3,000 BDT. That's actually pretty close to what the TiffinBox service is charging.\n\nTo be honest, I think my initial hesitation about paying 3000 BDT per month was just because of the price shock. But now that I see it's similar to what I'm already spending on street food, I'm not sure if there's a huge difference between the two.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 4004
+      },
+      {
+        "question": "What would make you cancel such a subscription after the first month?",
+        "reply": "Well, I think I would need to experience some kind of frustration or disappointment with the service in order to cancel it after just one month. Maybe if the food wasn't as healthy as they claimed to be, or if the portions were too small. Or maybe if there were some issues with delivery, like orders getting lost or things not showing up on time.\n\nIf I couldn't get used to the taste and quality of the food, that would definitely be a deal-breaker for me. And if the service failed to meet my expectations in any way, I wouldn't hesitate to cancel it. But if everything went smoothly and I was happy with the food, I think I'd stick with it.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 4515
+      }
+    ],
+    "total_ms": 30336,
+    "avg_ms": 6067,
+    "weighted": 9.65,
+    "dims": {
+      "persona_consistency": 10,
+      "naturalness": 9,
+      "instruction_following": 10,
+      "context_memory": 10,
+      "specificity": 9,
+      "response_stability": 10
+    }
+  },
+  "arm_b": {
+    "model": "freellmpool/fast (see served_by)",
+    "tag": "freellmpool/fast",
+    "turns": [
+      {
+        "question": "Walk me through what you ate for lunch yesterday — where did it come from and what did it cost?",
+        "reply": "Yesterday I grabbed lunch from the street cart right outside my office in Gulshan, like I almost always do on workdays. I had a plate of chicken pulao and some fuchka on the side, that came to 200 taka total, which was a little over my usual daily lunch budget but I was craving it. Most days I stick to the 120-130 taka options there, like khichuri or regular beef tehari, but I always end up feeling super sluggish by 3pm after eating that oily street food, which messes up my work.",
+        "served_by": "kilo/stepfun/step-3.7-flash:free",
+        "latency_ms": 44986
+      },
+      {
+        "question": "What is the most frustrating part of how you handle lunch on workdays?",
+        "reply": "The most frustrating part is hands down that 3pm energy crash I get every single workday after eating the oily street lunch. I can barely focus on reconciling accounts or finishing reports for hours after that, which makes my already long workdays feel even more exhausting. I’ve tried bringing leftover home food a few times, but it gets all soggy and unappetizing by noon, and I barely have the energy to cook extra portions every night after I get home from 10 hour shifts. Also, half the time I end up spending more than my 150 taka daily lunch budget when I get tempted by the pricier street food options when I’m hungry, which throws off my monthly spending plan.",
+        "served_by": "kilo/stepfun/step-3.7-flash:free",
+        "latency_ms": 115839
+      },
+      {
+        "question": "Would you pay 3000 BDT per month for healthy delivered lunches? Why or why not?",
+        "reply": "I don’t think I could afford that. My monthly lunch budget is only around 3,600 BDT, and I already spend most of that on street food. Plus, I’m not sure if the food would actually help with the energy crashes I get after eating. I’ve tried some of those healthy fast food places before, but the food was too bland and didn’t give me the energy I needed to power through my workday. I’d rather stick to what I know and save the money.",
+        "served_by": "llm7/codestral-latest",
+        "latency_ms": 101598
+      },
+      {
+        "question": "Earlier you told me what lunch costs you — how does that compare over a month?",
+        "reply": "I usually spend 120-150 BDT per day on lunch, which comes to about 2,500-3,600 BDT per month. That’s a big chunk of my salary, especially since I’m already paying for everything else like rent, groceries, and subscriptions. So, if I had to pay 3,000 BDT extra for a subscription, I’d have to cut back somewhere else, like maybe skipping a few days of street food or reducing my bKash spending.",
+        "served_by": "llm7/codestral-latest",
+        "latency_ms": 1020
+      },
+      {
+        "question": "What would make you cancel such a subscription after the first month?",
+        "reply": "I’d probably cancel if the food didn’t actually solve my energy crash problem. I’ve tried too many of those \"healthy\" meal services before, and they always end up making me feel worse than the street food. Also, if the delivery was late or the food was cold more than once a week, I’d be done. I’m not the kind of person who tolerates bad service, especially when I’m already stretched thin on money.",
+        "served_by": "llm7/codestral-latest",
+        "latency_ms": 1497
+      }
+    ],
+    "total_ms": 264941,
+    "avg_ms": 52988,
+    "weighted": 8.25,
+    "dims": {
+      "persona_consistency": 8,
+      "naturalness": 8,
+      "instruction_following": 9,
+      "context_memory": 8,
+      "specificity": 8,
+      "response_stability": 9
+    }
+  },
+  "judge": {
+    "route": "llm7/codestral-latest",
+    "notes": "A maintains perfect consistency and stability; B has minor inconsistencies in budget math and slight meta-commenting."
+  }
+}

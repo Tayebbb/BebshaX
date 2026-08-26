@@ -13,13 +13,16 @@ import httpx
 
 from bebshax.llm.adapters.base import AdapterCompletion, ProviderAdapter, RouteCandidate
 from bebshax.llm.failures import AttemptFailed, FailureKind
+from bebshax.llm.latency import attempt_timeout_s
 from bebshax.llm.types import LLMRequest, TokenUsage
 
 PROVIDER = "openrouter"
+# Measured-fast first (session data 2026-08-26). deepseek-r1 (CoT) and other
+# reasoning-heavy free routes are intentionally NOT in the defaults — they
+# burned 100s+ per interactive turn; pin them explicitly when needed.
 DEFAULT_MODELS = [
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "deepseek/deepseek-r1:free",
     "google/gemini-2.0-flash-exp:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
     "mistralai/mistral-small-24b-instruct-2501:free",
     "openrouter/auto",
 ]
@@ -114,12 +117,18 @@ class OpenRouterAdapter(ProviderAdapter):
         }
 
         t0 = time.perf_counter()
+        # Per-attempt budget by task class overrides the client-wide default.
+        req_timeout = httpx.Timeout(attempt_timeout_s(request.task), connect=10.0)
         try:
-            resp = await client.post(OPENROUTER_ENDPOINT, json=payload, headers=headers)
+            resp = await client.post(
+                OPENROUTER_ENDPOINT, json=payload, headers=headers, timeout=req_timeout
+            )
             if resp.status_code == 400 and "response_format" in payload:
                 # Some models reject response_format; retry without it (prompt already demands JSON)
                 retry_payload = {k: v for k, v in payload.items() if k != "response_format"}
-                resp = await client.post(OPENROUTER_ENDPOINT, json=retry_payload, headers=headers)
+                resp = await client.post(
+                    OPENROUTER_ENDPOINT, json=retry_payload, headers=headers, timeout=req_timeout
+                )
         except httpx.TimeoutException as exc:
             raise AttemptFailed(FailureKind.TIMEOUT, PROVIDER, candidate.model, str(exc)) from exc
         except httpx.TransportError as exc:

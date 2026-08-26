@@ -12,8 +12,10 @@ from bebshax.llm.adapters.openrouter_adapter import OpenRouterAdapter
 
 def build_default_adapters() -> dict[str, ProviderAdapter]:
     return {
-        "openrouter": OpenRouterAdapter(),  # Primary: OpenRouter (direct, fastest, most capable)
-        "freellmpool": FreellmpoolAdapter(),  # Secondary: freellmpool aggregator
+        "openrouter": OpenRouterAdapter(),  # Primary: OpenRouter (direct)
+        # "fast" = freellmpool's smoothed-latency-first ranking; the default
+        # "fair" spreads by least-used and keeps picking measured-slow targets.
+        "freellmpool": FreellmpoolAdapter(routing="fast"),
         "ollama": OllamaAdapter(),  # Tertiary: local Ollama fallback
     }
 

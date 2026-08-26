@@ -1,8 +1,10 @@
 """FastAPI application entry point: `uvicorn bebshax.main:app`."""
 
 import logging
+import os
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +12,13 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from bebshax.api.limiter import limiter
+
+# freellmpool reads its user catalog from $FREELLMPOOL_CONFIG; without this the
+# repo's providers.toml (kilo double-proxy removal, model overrides) is silently
+# ignored. setdefault keeps any explicit deployment override authoritative.
+_REPO_PROVIDERS_TOML = Path(__file__).resolve().parents[3] / "providers.toml"
+if _REPO_PROVIDERS_TOML.exists():
+    os.environ.setdefault("FREELLMPOOL_CONFIG", str(_REPO_PROVIDERS_TOML))
 
 
 

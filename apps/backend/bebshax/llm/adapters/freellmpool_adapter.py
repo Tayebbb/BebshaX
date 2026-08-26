@@ -16,6 +16,7 @@ from freellmpool.aio import AsyncPool
 
 from bebshax.llm.adapters.base import AdapterCompletion, ProviderAdapter, RouteCandidate
 from bebshax.llm.failures import AttemptFailed, FailureKind
+from bebshax.llm.latency import attempt_timeout_s
 from bebshax.llm.types import LLMRequest, TokenUsage
 
 PROVIDER = "freellmpool"
@@ -69,7 +70,9 @@ class FreellmpoolAdapter(ProviderAdapter):
     async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
         pool = await self._get_pool()
         messages = [{"role": m.role, "content": m.content} for m in request.messages]
-        kwargs: dict = {}
+        # Per-attempt budget by task class: a queued free endpoint that cannot
+        # answer an interactive request in time yields to the next candidate.
+        kwargs: dict = {"timeout": attempt_timeout_s(request.task)}
         if request.max_output_tokens is not None:
             kwargs["max_tokens"] = request.max_output_tokens
         if request.temperature is not None:

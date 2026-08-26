@@ -80,6 +80,17 @@ async def test_request_parameters_are_passed_through() -> None:
     assert call["messages"][0] == {"role": "system", "content": "be brief"}
 
 
+async def test_per_task_attempt_timeout_is_passed() -> None:
+    from bebshax.llm.latency import attempt_timeout_s
+
+    adapter = FreellmpoolAdapter(pool=StubPool(_reply()))
+    [candidate] = await adapter.candidates()
+    await adapter.complete(candidate, _request())  # PERSONA_RESPONSE = interactive
+    call = adapter._pool.calls[0]
+    assert call["timeout"] == attempt_timeout_s(TaskType.PERSONA_RESPONSE)
+    assert call["timeout"] <= 30
+
+
 async def test_context_window_exceeded_maps_to_our_kind() -> None:
     await _expect_failure(
         fl_errors.ContextWindowExceeded([("groq", "llama")], est_tokens=999_999),
