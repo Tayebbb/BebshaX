@@ -192,23 +192,43 @@ export interface Conversation {
   created_at: string;
 }
 
-export interface RoutingStrategyMetric {
-  strategy: string;
+export interface PoolPerformance {
+  pool: string;
+  requests: number;
   success_rate: number;
-  avg_latency_ms: number;
+  avg_latency_ms: number | null;
   fallback_rate: number;
-  cost_efficiency: number;
+  local_serve_rate: number;
+}
+
+export interface QualityGateArm {
+  tag: string | null;
+  model: string | null;
+  weighted_score: number | null;
+  avg_latency_ms: number | null;
+  dims: Record<string, number> | null;
+}
+
+export interface QualityGate {
+  generated_at: string | null;
+  bar: number | null;
+  rubric_weights: Record<string, number> | null;
+  arms: QualityGateArm[];
+  judge_route: string | null;
+  judge_notes: string | null;
+  source_file: string;
 }
 
 export interface EvaluationMetrics {
   overall_health: {
     total_personas_generated: number;
-    schema_validity_rate: number;
-    consistency_pass_rate: number;
-    avg_grounding_ratio: number;
-    avg_latency_ms: number;
+    schema_validity_rate: number | null;
+    consistency_pass_rate: number | null;
+    avg_grounding_ratio: number | null;
+    avg_latency_ms: number | null;
   };
-  routing_strategies: RoutingStrategyMetric[];
+  pools: PoolPerformance[];
+  quality_gate: QualityGate | null;
 }
 
 export * from './study';
