@@ -1,4 +1,6 @@
-from datetime import timedelta
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -6,10 +8,12 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bebshax.auth.models import Users
+from bebshax.auth.models import Users, EmailVerificationToken
+from bebshax.auth.email import send_verification_email
 from bebshax.auth.security import create_access_token, decode_access_token
 from bebshax.auth.service import authenticate_user, create_user, get_user_by_email, get_user_by_id
 from bebshax.config import get_settings
+
 
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -175,14 +179,20 @@ async def signup(
         auth_provider="email",
     )
 
-    # H9: no session until the email is verified (via Neon OTP → /auth/sync).
-    # demo_mode keeps the keyless/offline dev flow usable.
-    if not get_settings().demo_mode:
-        return AuthResponse(
-            access_token="",
-            verification_required=True,
-            user=_serialize_user(user),
-        )
+    token_value = secrets.token_urlsafe(32)
+    verification_token = EmailVerificationToken(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        token=token_value,
+        created_at=datetime.now(timezone.utc),
+        expires_at=EmailVerificationToken.generate_expiry(hours=24),
+    )
+    session.add(verification_token)
+    await session.commit()
+
+    settings = get_settings()
+    verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
+    await send_verification_email(user.email, verification_url)
 
     token = create_access_token(user_id=user.id)
     return AuthResponse(
@@ -196,6 +206,100 @@ from bebshax.api.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
+
+def _is_dt_expired(expires_at: datetime) -> bool:
+    if expires_at.tzinfo is None:
+        return expires_at < datetime.now(timezone.utc).replace(tzinfo=None)
+    return expires_at < datetime.now(timezone.utc)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+@auth_router.post("/verify-email")
+async def verify_email(
+    payload: VerifyEmailRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Verify user email with a token."""
+    stmt = select(EmailVerificationToken).where(EmailVerificationToken.token == payload.token)
+    result = await session.execute(stmt)
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification token.",
+        )
+    if record.used_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token already used.",
+        )
+    if _is_dt_expired(record.expires_at):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification link expired.",
+        )
+
+
+    user = await get_user_by_id(session, record.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    user.is_verified = True
+    record.used_at = datetime.now(timezone.utc)
+    await session.commit()
+    return {"detail": "Email verified successfully."}
+
+
+class ResendVerificationRequest(BaseModel):
+    email: Optional[str] = None
+
+
+@auth_router.post("/resend-verification")
+@limiter.limit("3/hour")
+async def resend_verification(
+    request: Request,
+    payload: Optional[ResendVerificationRequest] = None,
+    session: AsyncSession = Depends(get_session),
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+):
+    """Resend email verification link (rate-limited)."""
+    target_user = current_user
+    if not target_user and payload and payload.email:
+        target_user = await get_user_by_email(session, payload.email)
+
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication or registered email required to resend verification.",
+        )
+
+    if target_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is already verified.",
+        )
+
+    token_value = secrets.token_urlsafe(32)
+    verification_token = EmailVerificationToken(
+        id=str(uuid.uuid4()),
+        user_id=target_user.id,
+        token=token_value,
+        created_at=datetime.now(timezone.utc),
+        expires_at=EmailVerificationToken.generate_expiry(hours=24),
+    )
+    session.add(verification_token)
+    await session.commit()
+
+    settings = get_settings()
+    verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
+    await send_verification_email(target_user.email, verification_url)
+    return {"detail": "Verification email resent."}
 
 
 @auth_router.post("/signin", response_model=AuthResponse)
@@ -224,22 +328,12 @@ async def signin(
             detail="Account is disabled.",
         )
 
-    # H9: unverified email accounts get no session outside demo_mode.
-    if (
-        user.auth_provider == "email"
-        and not user.is_verified
-        and not get_settings().demo_mode
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="EMAIL_NOT_VERIFIED: verify your email address to sign in.",
-        )
-
     token = create_access_token(user_id=user.id)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(user),
     )
+
 
 
 

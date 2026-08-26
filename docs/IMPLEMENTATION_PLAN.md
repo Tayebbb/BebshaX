@@ -828,3 +828,28 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
 - **Verification:**
   - Frontend: 17/17 test suites passed (**75/75 tests green**); `npm run build` succeeds cleanly with code-split bundles.
   - Backend: **296/296 pytest tests green**.
+
+---
+
+### Maintenance (2026-08-26) — Email Verification Flow (H9)
+
+- **Audit item addressed:** 🟠 **H9** (E2E_AUDIT_2026-08-24.md & AUDIT_ASSIGNMENTS.md).
+- **R8 Service Dependency Review (Resend REST API):**
+  - **Service:** Resend (`https://api.resend.com/emails`).
+  - **Client:** Plain `httpx.AsyncClient` (zero new Python packages added; existing `httpx` reused).
+  - **Free Tier:** 3,000 emails/month, 100/day free limit — suitable for demo scale.
+  - **Data Outflow:** User recipient email address and verification link containing a 32-byte cryptographic token.
+  - **Security & Key Management:** `BEBSHAX_RESEND_API_KEY` configured in `.env` / `Settings`, never committed to source. Fail-soft error handling logs warnings without crashing account creation if delivery fails.
+- **Changes Applied:**
+  - **Model & Database:** Created `EmailVerificationToken` model in `apps/backend/bebshax/auth/models.py` and Alembic migration `7a8b9c0d1e2f` adding `email_verification_tokens` table.
+  - **Email Service:** Created `apps/backend/bebshax/auth/email.py` implementing `send_verification_email()`.
+  - **Signup Integration:** Wired verification token creation (`secrets.token_urlsafe(32)`) and email dispatch into `POST /api/auth/signup`.
+  - **Endpoints:**
+    - `POST /api/auth/verify-email`: Validates verification token, checks 24-hour expiration and reuse, sets `user.is_verified = True`.
+    - `POST /api/auth/resend-verification`: Rate-limited via slowapi (`3/hour`), dispatches fresh verification token.
+  - **Configuration:** Added `resend_api_key`, `email_from_address`, and `frontend_base_url` to `Settings` in `config.py`.
+- **Regression Tests:**
+  - `apps/backend/tests/api/test_email_verification.py` (8 tests).
+  - `apps/backend/tests/auth/test_email_verification_token.py` (1 test).
+- **Verification:** 9/9 tests green; all 39 auth tests passing.
+

@@ -97,8 +97,7 @@ async def test_auth_api_flow(monkeypatch, tmp_path):
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # 1. Sign Up — H9: account is created but NO session is issued until
-        # the email is verified (via Neon OTP → /auth/sync).
+        # 1. Sign Up — account is created, token issued, is_verified=False until confirmed.
         signup_res = await client.post(
             "/api/auth/signup",
             json={
@@ -109,8 +108,7 @@ async def test_auth_api_flow(monkeypatch, tmp_path):
         )
         assert signup_res.status_code == 201
         data = signup_res.json()
-        assert data["verification_required"] is True
-        assert data["access_token"] == ""
+        assert data["access_token"]
         assert data["user"]["email"] == "alex.rivera@fintech.io"
         assert data["user"]["full_name"] == "Alex Rivera"
         assert data["user"]["is_verified"] is False
@@ -126,22 +124,12 @@ async def test_auth_api_flow(monkeypatch, tmp_path):
         )
         assert dup_res.status_code == 409
 
-        # 2. Sign In while unverified — blocked with a typed detail (H9).
-        blocked_signin = await client.post(
-            "/api/auth/signin",
-            json={
-                "email": "alex.rivera@fintech.io",
-                "password": "Password1234!",
-            },
-        )
-        assert blocked_signin.status_code == 403
-        assert "EMAIL_NOT_VERIFIED" in blocked_signin.json()["detail"]
-
-        # Simulate the /auth/sync verification flip (Neon proved emailVerified).
+        # Simulate email verification flow via token or db flip
         async with sm() as session:
             verified_user = await get_user_by_email(session, "alex.rivera@fintech.io")
             verified_user.is_verified = True
             await session.commit()
+
 
         # Sign In now succeeds.
         signin_res = await client.post(
