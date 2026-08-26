@@ -53,6 +53,12 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — Security Fixes B4 + B6 Stage 1, B3 Blocker Documented
+
+- **B4 fixed (audit)** — `config.py` requires `BEBSHAX_JWT_SECRET` (≥32 chars, fail-fast on startup, rejecting burned git default). `security.py` enforces `iss` (`bebshax-api`) and `aud` (`bebshax-client`), and supports zero-downtime key rotation with `BEBSHAX_JWT_SECRET_PREVIOUS`. 8 regression tests added in `tests/test_jwt_secret.py` and updated in `tests/test_auth.py`.
+- **B6 Stage 1 landed (audit)** — Added nullable `owner_id: String(64)` with `ForeignKey("users.id", ondelete="RESTRICT")` and index to `Businesses` and `Personas` in `db/models.py`. Migration `8d648b892fd3_add_owner_id_columns.py` applied. 6 tests added in `tests/db/test_owner_id.py`. Stage 2 (row-scoping enforcement) gated on B4 prod deployment.
+- **B3 blocked (audit)** — Documented handoff in `docs/AUDIT_ASSIGNMENTS.md`. Endpoint `/api/auth/google` retained because `apps/frontend/src/services/api.ts:993` references it; deletion gated on frontend migration to `/api/auth/sync`.
+
 ### Maintenance (2026-08-26) — Conformance sweep: B1 fixed, phantom TaskType, llm_service wiring, R3 re-route, router validation restored
 
 Owner instruction: keep the OpenRouter adapter/pool position **for testing purposes only**; fix everything else flagged by the conformance check.

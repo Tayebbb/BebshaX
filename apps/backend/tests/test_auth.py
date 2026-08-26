@@ -29,16 +29,15 @@ def test_password_hashing_and_verification():
 
 def test_jwt_access_token_creation_and_decoding():
     """Verify JWT creation and claims decoding."""
-    data = {"sub": "usr_test123", "email": "test@bebshax.com", "name": "Test User"}
-    token = create_access_token(data)
+    token = create_access_token("usr_test123")
     assert isinstance(token, str)
     assert len(token.split(".")) == 3
 
     decoded = decode_access_token(token)
     assert decoded is not None
     assert decoded["sub"] == "usr_test123"
-    assert decoded["email"] == "test@bebshax.com"
-    assert decoded["name"] == "Test User"
+    assert decoded["iss"] == "bebshax-api"
+    assert decoded["aud"] == "bebshax-client"
     assert "exp" in decoded
 
     # Invalid token verification

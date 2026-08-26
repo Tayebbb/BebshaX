@@ -1,5 +1,6 @@
 """Integration tests for all REST API endpoints (Phase 13)."""
 
+import uuid
 import pytest
 from starlette.testclient import TestClient
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -244,8 +245,9 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     assert patch_resp.status_code == 403
 
     # 7. Update succeeds when user_id matches via the study auto-create path (new study_id)
+    dynamic_new_id = f"new_study_{uuid.uuid4().hex[:8]}"
     patch2_resp = api_test_app.patch(
-        f"/api/studies/new_study_xyz",
+        f"/api/studies/{dynamic_new_id}",
         json={"status": "in_progress", "step": 2, "user_id": "usr_alice", "title": "New auto-created"},
     )
     assert patch2_resp.status_code == 200

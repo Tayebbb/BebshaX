@@ -165,9 +165,7 @@ async def signup(
         auth_provider="email",
     )
 
-    token = create_access_token(
-        data={"sub": user.id, "email": user.email, "name": user.full_name}
-    )
+    token = create_access_token(user_id=user.id)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(user),
@@ -192,9 +190,7 @@ async def signin(
             detail="Account is disabled.",
         )
 
-    token = create_access_token(
-        data={"sub": user.id, "email": user.email, "name": user.full_name}
-    )
+    token = create_access_token(user_id=user.id)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(user),
@@ -247,9 +243,7 @@ async def google_auth(
         await session.commit()
         await session.refresh(user)
 
-    token = create_access_token(
-        data={"sub": user.id, "email": user.email, "name": user.full_name}
-    )
+    token = create_access_token(user_id=user.id)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(user),
@@ -278,9 +272,7 @@ async def sync_user(
         await session.commit()
         await session.refresh(user)
 
-    token = create_access_token(
-        data={"sub": user.id, "email": user.email, "name": user.full_name}
-    )
+    token = create_access_token(user_id=user.id)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(user),
@@ -296,9 +288,7 @@ async def get_me(current_user: Users = Depends(get_current_user)):
 @auth_router.post("/refresh", response_model=AuthResponse)
 async def refresh_token(current_user: Users = Depends(get_current_user)):
     """Refresh a valid access token and return a new persistent JWT session."""
-    token = create_access_token(
-        data={"sub": current_user.id, "email": current_user.email, "name": current_user.full_name}
-    )
+    token = create_access_token(user_id=current_user.id)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(current_user),

@@ -149,6 +149,9 @@ class Businesses(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(256), index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     # Relationship (lazy-loaded; populated in Phase 8)
@@ -166,6 +169,9 @@ class Personas(Base):
     )
     study_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     segment_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     generation_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(256), index=True)
@@ -723,4 +729,9 @@ class StudyReports(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
+
+
+# Register Users table on Base.metadata for foreign key resolution
+import bebshax.auth.models  # noqa: F401
+
 

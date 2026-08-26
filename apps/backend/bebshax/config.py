@@ -1,23 +1,18 @@
-"""Environment-driven configuration. All BebshaX settings use the BEBSHAX_ prefix.
-
-Provider API keys are intentionally NOT modeled here: freellmpool (Phase 3)
-reads standard provider variables (GROQ_API_KEY, GEMINI_API_KEY, ...) directly,
-so the provider list stays configuration-driven rather than hard-coded.
-"""
-
+"""Environment-driven configuration. BEBSHAX_ prefix for all settings."""
+import sys
 from functools import lru_cache
-
 from dotenv import load_dotenv
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
+BURNED_JWT_SECRET = "bebshax-super-secret-jwt-signing-key-2026-auth-v1"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="BEBSHAX_",
-        env_file=".env",
-        extra="ignore",
+        env_prefix="BEBSHAX_", env_file=".env", extra="ignore"
     )
 
     app_name: str = "BebshaX"
@@ -25,18 +20,40 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     demo_mode: bool = False
-
-    # Consumed from Phase 6 (database); docker-compose pgvector service on 5433.
-    database_url: str = "postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax"
-
-    # Phase 9: memory embedding backend — "local" (deterministic hash, offline)
-    # or "freellmpool" (requires embedding_model pin; see docs/PERSONA_ENGINE.md)
+    database_url: str = (
+        "postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax"
+    )
     embedding_backend: str = "local"
     embedding_model: str | None = None
 
-    # JWT Authentication settings (long-lived persistent login)
-    jwt_secret: str = "bebshax-super-secret-jwt-signing-key-2026-auth-v1"
+    jwt_secret: str  # REQUIRED — no default
+    jwt_secret_previous: str | None = None  # rotation grace window only
+    jwt_issuer: str = "bebshax-api"
+    jwt_audience: str = "bebshax-client"
+    jwt_algorithm: str = "HS256"
     jwt_expire_days: int = 365
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def secret_must_be_real(cls, v: str) -> str:
+        if not v or len(v) < 32:
+            raise ValueError(
+                "BEBSHAX_JWT_SECRET missing or <32 chars. Generate:\n"
+                '  python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        if v == BURNED_JWT_SECRET:
+            raise ValueError(
+                "BEBSHAX_JWT_SECRET is the burned git-history value. "
+                "Generate a new one — the old secret is permanently compromised."
+            )
+        return v
+
+
+try:
+    settings = Settings()
+except Exception as e:
+    print(f"\nFATAL: {e}\n", file=sys.stderr)
+    raise SystemExit(1)
 
 
 @lru_cache
