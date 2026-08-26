@@ -429,6 +429,11 @@ export const InterviewWorkspaceView: React.FC<InterviewWorkspaceViewProps> = ({
             </div>
 
             <div className="bg-[#131A1A] border border-[#202C2C] rounded-xl p-3.5 space-y-2.5 text-xs">
+              {persona?.tagline && (
+                <div className="text-[11px] font-semibold text-teal-400 border-b border-[#202C2C] pb-1.5">
+                  {persona.tagline}
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-[#7D8C8C]">Occupation:</span>
                 <span className="text-white font-medium">
@@ -459,6 +464,35 @@ export const InterviewWorkspaceView: React.FC<InterviewWorkspaceViewProps> = ({
                   {persona?.commercial_profile?.price_sensitivity || 'High'}
                 </span>
               </div>
+
+              {/* Big Five Indicators */}
+              {persona?.personality && (
+                <div className="pt-2 border-t border-[#202C2C] space-y-1.5">
+                  <div className="text-[10px] font-bold text-[#7D8C8C] uppercase tracking-wider">Big Five Personality</div>
+                  <div className="grid grid-cols-5 gap-1 text-center">
+                    {[
+                      { l: 'O', v: persona.personality.openness, c: 'text-sky-400' },
+                      { l: 'C', v: persona.personality.conscientiousness, c: 'text-emerald-400' },
+                      { l: 'E', v: persona.personality.extroversion, c: 'text-amber-400' },
+                      { l: 'A', v: persona.personality.agreeableness, c: 'text-purple-400' },
+                      { l: 'N', v: persona.personality.neuroticism, c: 'text-pink-400' },
+                    ].map((t) => (
+                      <div key={t.l} className="bg-[#0D1212] p-1 rounded border border-[#202C2C]">
+                        <div className={`text-[11px] font-bold ${t.c}`}>{t.v}</div>
+                        <div className="text-[9px] text-[#7D8C8C]">{t.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Communication Style */}
+              {persona?.detailed_attributes?.communication_style && (
+                <div className="pt-1 text-[11px] text-[#A2B3B3] leading-relaxed">
+                  <span className="text-[#7D8C8C]">Style: </span>
+                  {persona.detailed_attributes.communication_style}
+                </div>
+              )}
             </div>
           </div>
 

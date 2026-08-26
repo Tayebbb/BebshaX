@@ -81,25 +81,69 @@ def build_identity_card(profile: Any) -> str:
     demo = profile.demographics or {}
     comm = profile.commercial_profile or {}
     tech = profile.technology_profile or {}
+    personality = getattr(profile, "personality", {}) or {}
+    detailed = getattr(profile, "detailed_attributes", {}) or {}
+    tagline = getattr(profile, "tagline", None)
 
     lines = [
         f"IDENTITY (immutable — never contradict it):",
         f"Name: {profile.name}",
-        f"Age: {demo.get('age', '24')}",
-        f"Occupation: {demo.get('occupation', 'Student')}",
-        f"Location: {demo.get('location', 'Dhaka, Bangladesh')}",
-        f"Education: {demo.get('education', 'Undergraduate')}",
-        f"Income: {demo.get('income_level', demo.get('income', 'Modest'))}",
     ]
+    if tagline:
+        lines.append(f"Tagline Archetype: {tagline}")
+
+    lines.extend([
+        f"Age: {demo.get('age', '24')}",
+        f"Occupation: {demo.get('occupation', profile.archetype or 'Professional')}",
+        f"Location: {demo.get('location', 'Dhaka, Bangladesh')}",
+        f"Education: {demo.get('education', 'Graduate')}",
+        f"Income: {demo.get('income_or_budget', demo.get('income_level', demo.get('income', 'Modest')))}",
+    ])
     if profile.bio:
         lines.append(f"About: {profile.bio}")
     if profile.quote:
         lines.append(f"Representative Quote: \"{profile.quote}\"")
 
+    # Big Five Personality grounding
+    if personality:
+        p_desc = (
+            f"Big Five Traits: Openness={personality.get('openness', 50)}/100, "
+            f"Conscientiousness={personality.get('conscientiousness', 50)}/100, "
+            f"Extroversion={personality.get('extroversion', 50)}/100, "
+            f"Agreeableness={personality.get('agreeableness', 50)}/100, "
+            f"Neuroticism={personality.get('neuroticism', 50)}/100"
+        )
+        lines.append(p_desc)
+
+    # Detailed behavioral context
+    if detailed:
+        key_fields = [
+            ("communication_style", "Communication Style"),
+            ("work_schedule", "Work Schedule"),
+            ("workplace_setting", "Workplace Setting"),
+            ("commute_mode", "Commute Mode"),
+            ("food_source", "Food & Meals"),
+            ("meal_timing", "Meal Timing"),
+            ("coping_strategies", "Coping Strategies"),
+            ("daily_activities", "Daily Activities"),
+            ("life_priorities", "Life Priorities"),
+            ("work_ethic", "Work Ethic"),
+            ("decision_style", "Decision Style"),
+            ("financial_attitude", "Financial Attitude"),
+            ("family_dynamics", "Family Dynamics"),
+            ("hobbies", "Hobbies"),
+        ]
+        det_lines = []
+        for k, label in key_fields:
+            if detailed.get(k):
+                det_lines.append(f"- {label}: {detailed[k]}")
+        if det_lines:
+            lines.append("Daily Routine & Lifestyle Context:\n" + "\n".join(det_lines))
+
     # Commercial constraints
     budget = comm.get("monthly_budget_bdt") or comm.get("budget_bdt") or "300–600"
     sensitivity = comm.get("price_sensitivity", "High")
-    payment = comm.get("payment_preference", "bKash / Mobile Banking")
+    payment = detailed.get("payment_method") or comm.get("payment_preference", "bKash / Mobile Banking")
     lines.append(f"Commercial Reality: Monthly discretionary budget ৳{budget} BDT; Price sensitivity: {sensitivity}; Preferred payment: {payment}")
 
     # Goals, Needs, Pain points

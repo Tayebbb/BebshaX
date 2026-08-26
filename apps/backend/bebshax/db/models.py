@@ -175,6 +175,14 @@ class Personas(Base):
     version: Mapped[int] = mapped_column(default=1)
     generation_model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     archetype: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    tagline: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    country_code: Mapped[Optional[str]] = mapped_column(String(16), default="BD")
+    personality: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    detailed_attributes: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
     demographics: Mapped[dict] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=dict
     )

@@ -1,5 +1,7 @@
 // Core TypeScript types matching docs/API_CONTRACT.md
 
+import type { BigFivePersonality, DetailedAttributes } from './persona';
+
 export type TaskType =
   | "PERSONA_GENERATION"
   | "PERSONA_REFINEMENT"
@@ -130,6 +132,8 @@ export interface PersonaBadge {
   value: string;
 }
 
+export * from './persona';
+
 export interface Persona {
   id: string;
   business_id: string;
@@ -138,6 +142,9 @@ export interface Persona {
   version: number;
   archetype: string;
   tagline: string;
+  quote?: string;
+  personality?: BigFivePersonality;
+  detailed_attributes?: DetailedAttributes;
   demographics: PersonaDemographics;
   attributes: PersonaAttribute[];
   consistency_score: number;
@@ -148,6 +155,7 @@ export interface Persona {
   initials?: string;
   country_code?: string;
   country_name?: string;
+  origin_country?: string;
   role_id?: string;
   role_title?: string;
   description?: string;

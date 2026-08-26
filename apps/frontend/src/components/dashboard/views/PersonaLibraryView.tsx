@@ -19,6 +19,14 @@ import {
   Target,
   AlertCircle,
   Sliders,
+  Brain,
+  Compass,
+  Activity,
+  Briefcase,
+  Clock,
+  Coffee,
+  Globe,
+  DollarSign,
 } from 'lucide-react';
 import { SyntheticPersona, MarketSegment, Study, PersonaGenerationRun } from '../../../types';
 import { api } from '../../../services/api';
@@ -56,7 +64,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
   // Deep Dive Inspector Modal
   const [inspectingPersona, setInspectingPersona] = useState<SyntheticPersona | null>(null);
-  const [inspectorTab, setInspectorTab] = useState<'profile' | 'commercial' | 'technology' | 'grounding' | 'dataset'>('profile');
+  const [inspectorTab, setInspectorTab] = useState<'profile' | 'personality' | 'lifestyle' | 'commercial' | 'technology' | 'grounding' | 'dataset'>('profile');
   const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
 
   // Generation Modal & Stepper States
@@ -661,10 +669,13 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                               v{persona.version}
                             </span>
                           )}
+                          <span style={{ fontSize: '0.68rem', color: '#14B8A6', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                            {persona.country_code || 'BD'}
+                          </span>
                         </div>
                         <div style={{ fontSize: '0.8rem', color: '#8D9999', marginTop: '2px' }}>
                           {persona.demographics?.age ? `${persona.demographics.age} yo • ` : ''}
-                          {persona.demographics?.occupation || 'Consumer'}
+                          {persona.demographics?.occupation || persona.archetype || 'Consumer'}
                         </div>
                       </div>
                     </div>
@@ -686,18 +697,55 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     </span>
                   </div>
 
+                  {/* Tagline / Evocative Archetype */}
+                  {persona.tagline && (
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#22D3EE', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Sparkles size={12} color="#22D3EE" />
+                      <span>{persona.tagline}</span>
+                    </div>
+                  )}
+
                   {/* Segment & Synthetic Tag */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 500, padding: '2px 8px', borderRadius: '6px', background: 'rgba(34, 211, 238, 0.1)', color: '#22D3EE', border: '1px solid rgba(34, 211, 238, 0.2)' }}>
                       {persona.segment_name || 'Target Segment'}
                     </span>
                     <span style={{ fontSize: '0.72rem', color: '#8D9999', background: '#141818', padding: '2px 7px', borderRadius: '5px', border: '1px solid #202727' }}>
                       Synthetic Persona
                     </span>
+                    <span style={{ fontSize: '0.72rem', color: '#8D9999', background: '#141818', padding: '2px 7px', borderRadius: '5px', border: '1px solid #202727' }}>
+                      {persona.origin_country || 'Bangladesh'}
+                    </span>
                   </div>
 
+                  {/* Big Five Personality Micro Bars */}
+                  {persona.personality && (
+                    <div style={{ background: '#141818', border: '1px solid #1E2626', borderRadius: '8px', padding: '8px 10px', marginBottom: '12px' }}>
+                      <div style={{ fontSize: '0.7rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Brain size={11} color="#14B8A6" /> Big Five Traits
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', textAlign: 'center' }}>
+                        {[
+                          { label: 'O', name: 'Openness', val: persona.personality.openness, color: '#38BDF8' },
+                          { label: 'C', name: 'Conscientiousness', val: persona.personality.conscientiousness, color: '#10B981' },
+                          { label: 'E', name: 'Extroversion', val: persona.personality.extroversion, color: '#F59E0B' },
+                          { label: 'A', name: 'Agreeableness', val: persona.personality.agreeableness, color: '#A855F7' },
+                          { label: 'N', name: 'Neuroticism', val: persona.personality.neuroticism, color: '#EC4899' },
+                        ].map((trait) => (
+                          <div key={trait.label} title={`${trait.name}: ${trait.val}/100`}>
+                            <div style={{ fontSize: '0.68rem', fontWeight: 600, color: trait.color }}>{trait.val}</div>
+                            <div style={{ height: '3px', background: '#202727', borderRadius: '2px', overflow: 'hidden', margin: '2px 0' }}>
+                              <div style={{ width: `${trait.val}%`, height: '100%', background: trait.color }} />
+                            </div>
+                            <div style={{ fontSize: '0.62rem', color: '#8D9999' }}>{trait.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Bio or Quote preview */}
-                  <p style={{ fontSize: '0.84rem', color: '#C8D2D2', lineHeight: 1.45, margin: '0 0 14px 0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  <p style={{ fontSize: '0.84rem', color: '#C8D2D2', lineHeight: 1.45, margin: '0 0 12px 0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                     {persona.quote ? `"${persona.quote}"` : persona.bio}
                   </p>
 
@@ -713,6 +761,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       <div style={{ fontSize: '0.78rem', color: '#A0AFAF', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         <AlertCircle size={12} color="#F59E0B" style={{ flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{persona.pain_points[0]}</span>
+                      </div>
+                    )}
+                    {persona.detailed_attributes?.work_schedule && (
+                      <div style={{ fontSize: '0.74rem', color: '#8D9999', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Clock size={11} color="#38BDF8" style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{persona.detailed_attributes.work_schedule}</span>
                       </div>
                     )}
                   </div>
@@ -929,6 +983,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #202727', padding: '0 28px', background: '#090C0C', overflowX: 'auto' }}>
               {[
                 { id: 'profile', label: 'Persona Profile', icon: <User size={14} /> },
+                { id: 'personality', label: 'Personality (Big Five)', icon: <Brain size={14} /> },
+                { id: 'lifestyle', label: 'Lifestyle & Routine', icon: <Activity size={14} /> },
                 { id: 'commercial', label: 'Commercial & WTP', icon: <CreditCard size={14} /> },
                 { id: 'technology', label: 'Technology Profile', icon: <Smartphone size={14} /> },
                 { id: 'grounding', label: `Evidence Citations (${inspectingPersona.evidence_citations?.length || 0})`, icon: <ShieldCheck size={14} /> },
@@ -968,6 +1024,19 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {/* TAB 1: PROFILE */}
               {inspectorTab === 'profile' && (
                 <>
+                  {/* Tagline & Identity overview */}
+                  {inspectingPersona.tagline && (
+                    <div style={{ background: 'rgba(34, 211, 238, 0.08)', border: '1px solid rgba(34, 211, 238, 0.25)', borderRadius: '12px', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#22D3EE', fontWeight: 700, letterSpacing: '0.05em' }}>Archetype Tagline</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 600, color: '#F4F7F7', marginTop: '2px' }}>{inspectingPersona.tagline}</div>
+                      </div>
+                      <span style={{ fontSize: '0.78rem', color: '#14B8A6', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                        {inspectingPersona.country_code || 'BD'} • {inspectingPersona.origin_country || 'Bangladesh'}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Bio & Quote */}
                   <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#14B8A6', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
@@ -1033,6 +1102,238 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     </div>
                   </div>
                 </>
+              )}
+
+              {/* TAB: PERSONALITY (BIG FIVE) */}
+              {inspectorTab === 'personality' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '14px', padding: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      <div>
+                        <h4 style={{ fontSize: '1rem', fontWeight: 600, color: '#F4F7F7', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Brain size={18} color="#14B8A6" /> Big Five Trait Spectrum
+                        </h4>
+                        <p style={{ fontSize: '0.82rem', color: '#8D9999', margin: '4px 0 0 0' }}>
+                          Quantified psychometric scale (0–100) governing simulation conversational tone, risk tolerance, and decision pace.
+                        </p>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', background: 'rgba(20, 184, 166, 0.12)', color: '#14B8A6', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                        OCEAN Psychometrics
+                      </span>
+                    </div>
+
+                    {inspectingPersona.personality ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {[
+                          {
+                            key: 'openness',
+                            name: 'Openness to Experience',
+                            val: inspectingPersona.personality.openness ?? 50,
+                            desc: 'Curiosity, imagination, and receptivity to novel ideas vs preference for routine and convention.',
+                            color: '#38BDF8',
+                          },
+                          {
+                            key: 'conscientiousness',
+                            name: 'Conscientiousness',
+                            val: inspectingPersona.personality.conscientiousness ?? 50,
+                            desc: 'Self-discipline, organization, diligence, and goal-oriented planning.',
+                            color: '#10B981',
+                          },
+                          {
+                            key: 'extroversion',
+                            name: 'Extroversion',
+                            val: inspectingPersona.personality.extroversion ?? 50,
+                            desc: 'Outgoing energy, social engagement, assertiveness, and enthusiasm.',
+                            color: '#F59E0B',
+                          },
+                          {
+                            key: 'agreeableness',
+                            name: 'Agreeableness',
+                            val: inspectingPersona.personality.agreeableness ?? 50,
+                            desc: 'Cooperativeness, empathy, consideration, and trust in social interactions.',
+                            color: '#A855F7',
+                          },
+                          {
+                            key: 'neuroticism',
+                            name: 'Neuroticism (Emotional Sensitivity)',
+                            val: inspectingPersona.personality.neuroticism ?? 50,
+                            desc: 'Sensitivity to stress, vulnerability to anxiety, and reactivity to disruption.',
+                            color: '#EC4899',
+                          },
+                        ].map((trait) => (
+                          <div key={trait.key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '10px', padding: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#F4F7F7' }}>{trait.name}</div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: trait.color }}>{trait.val} / 100</div>
+                            </div>
+                            <div style={{ height: '7px', background: '#1A2222', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+                              <div style={{ width: `${trait.val}%`, height: '100%', background: `linear-gradient(90deg, ${trait.color}99, ${trait.color})`, borderRadius: '4px' }} />
+                            </div>
+                            <p style={{ fontSize: '0.78rem', color: '#8D9999', margin: 0, lineHeight: 1.4 }}>{trait.desc}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', color: '#8D9999', padding: '24px' }}>
+                        No psychometric score data recorded for this persona.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: LIFESTYLE & ROUTINE (45+ DETAILED ATTRIBUTES) */}
+              {inspectorTab === 'lifestyle' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#8D9999' }}>
+                    Granular behavioral context comprising daily habits, coping strategies, cultural affiliations, and operational realities.
+                  </div>
+
+                  {inspectingPersona.detailed_attributes ? (
+                    <>
+                      {/* Section 1: Work & Daily Schedule */}
+                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#38BDF8', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
+                          <Briefcase size={16} /> Work, Commute & Schedule Context
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                          {[
+                            { key: 'work_schedule', label: 'Work Schedule' },
+                            { key: 'workplace_setting', label: 'Workplace Setting' },
+                            { key: 'commute_mode', label: 'Commute Mode' },
+                            { key: 'work_ethic', label: 'Work Ethic' },
+                            { key: 'schedule_flexibility', label: 'Schedule Flexibility' },
+                            { key: 'time_management', label: 'Time Management' },
+                            { key: 'daily_activities', label: 'Daily Activities' },
+                          ].map(({ key, label }) => (
+                            inspectingPersona.detailed_attributes?.[key] ? (
+                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              </div>
+                            ) : null
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Section 2: Living & Sustenance */}
+                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#10B981', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
+                          <Coffee size={16} /> Living, Meals & Household Structure
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                          {[
+                            { key: 'food_source', label: 'Food Source' },
+                            { key: 'meal_timing', label: 'Meal Timing' },
+                            { key: 'sleep_schedule', label: 'Sleep Schedule' },
+                            { key: 'urban_living', label: 'Urban Living Realities' },
+                            { key: 'household_structure', label: 'Household Structure' },
+                            { key: 'family_dynamics', label: 'Family Dynamics' },
+                            { key: 'hobbies', label: 'Hobbies & Interests' },
+                          ].map(({ key, label }) => (
+                            inspectingPersona.detailed_attributes?.[key] ? (
+                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              </div>
+                            ) : null
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Section 3: Mindset, Psychology & Communication */}
+                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#F59E0B', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
+                          <Compass size={16} /> Mindset, Psychology & Communication Style
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                          {[
+                            { key: 'communication_style', label: 'Communication Style' },
+                            { key: 'activity_level', label: 'Activity Level' },
+                            { key: 'adaptability_level', label: 'Adaptability Level' },
+                            { key: 'anxiety_level', label: 'Anxiety & Pressure Response' },
+                            { key: 'attention_focus', label: 'Attention Focus' },
+                            { key: 'coping_strategies', label: 'Coping Strategies' },
+                            { key: 'decision_style', label: 'Decision Style' },
+                            { key: 'introversion_level', label: 'Introversion Level' },
+                            { key: 'growth_mindset', label: 'Growth Mindset' },
+                            { key: 'self_discipline', label: 'Self Discipline' },
+                            { key: 'learning_style', label: 'Learning Style' },
+                          ].map(({ key, label }) => (
+                            inspectingPersona.detailed_attributes?.[key] ? (
+                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              </div>
+                            ) : null
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Section 4: Culture, Beliefs & Social Values */}
+                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#A855F7', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
+                          <Globe size={16} /> Culture, Beliefs & Life Priorities
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                          {[
+                            { key: 'language_preferences', label: 'Language Preferences' },
+                            { key: 'cultural_affiliations', label: 'Cultural Affiliations' },
+                            { key: 'cultural_traditions', label: 'Cultural Traditions' },
+                            { key: 'belief_system', label: 'Belief System' },
+                            { key: 'religious_practices', label: 'Religious Practices' },
+                            { key: 'spiritual_outlook', label: 'Spiritual Outlook' },
+                            { key: 'social_identity', label: 'Social Identity' },
+                            { key: 'social_values', label: 'Social Values' },
+                            { key: 'personal_values', label: 'Personal Values' },
+                            { key: 'life_priorities', label: 'Life Priorities' },
+                            { key: 'core_motivators', label: 'Core Motivators' },
+                            { key: 'motivation_goals', label: 'Motivation Goals' },
+                            { key: 'personal_independence', label: 'Personal Independence' },
+                            { key: 'community_engagement', label: 'Community Engagement' },
+                          ].map(({ key, label }) => (
+                            inspectingPersona.detailed_attributes?.[key] ? (
+                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              </div>
+                            ) : null
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Section 5: Finance & Technology */}
+                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#EC4899', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
+                          <DollarSign size={16} /> Financial Mindset & Technology Adoption
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                          {[
+                            { key: 'payment_method', label: 'Preferred Payment Method' },
+                            { key: 'financial_attitude', label: 'Financial Attitude' },
+                            { key: 'financial_profile', label: 'Financial Profile' },
+                            { key: 'planning_horizon', label: 'Planning Horizon' },
+                            { key: 'general_risk', label: 'General Risk Tolerance' },
+                            { key: 'value_risk', label: 'Value & Experimentation Risk' },
+                            { key: 'tech_interest', label: 'Tech Interest' },
+                            { key: 'technology_usage', label: 'Technology Usage' },
+                          ].map(({ key, label }) => (
+                            inspectingPersona.detailed_attributes?.[key] ? (
+                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              </div>
+                            ) : null
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ textAlign: 'center', color: '#8D9999', padding: '24px' }}>
+                      No detailed lifestyle attributes recorded for this persona.
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* TAB 2: COMMERCIAL & WTP */}

@@ -2,6 +2,66 @@
 
 export type PersonaStatus = 'ready' | 'needs_review' | 'generating' | 'draft' | 'active' | 'archived';
 
+export interface BigFivePersonality {
+  openness: number;
+  conscientiousness: number;
+  extroversion: number;
+  agreeableness: number;
+  neuroticism: number;
+}
+
+export interface DetailedAttributes {
+  hobbies?: string;
+  origin_country?: string;
+  commute_mode?: string;
+  food_source?: string;
+  meal_timing?: string;
+  payment_method?: string;
+  work_schedule?: string;
+  workplace_setting?: string;
+  activity_level?: string;
+  adaptability_level?: string;
+  anxiety_level?: string;
+  attention_focus?: string;
+  belief_system?: string;
+  communication_style?: string;
+  community_engagement?: string;
+  coping_strategies?: string;
+  core_motivators?: string;
+  cultural_affiliations?: string;
+  cultural_traditions?: string;
+  daily_activities?: string;
+  decision_style?: string;
+  family_dynamics?: string;
+  financial_attitude?: string;
+  financial_profile?: string;
+  general_risk?: string;
+  growth_mindset?: string;
+  household_structure?: string;
+  introversion_level?: string;
+  language_preferences?: string;
+  learning_style?: string;
+  life_priorities?: string;
+  motivation_goals?: string;
+  personal_independence?: string;
+  personal_values?: string;
+  planning_horizon?: string;
+  religious_practices?: string;
+  schedule_flexibility?: string;
+  self_discipline?: string;
+  sleep_schedule?: string;
+  social_identity?: string;
+  social_values?: string;
+  spiritual_outlook?: string;
+  tech_interest?: string;
+  technology_usage?: string;
+  time_management?: string;
+  urban_living?: string;
+  value_risk?: string;
+  work_ethic?: string;
+  [key: string]: any;
+}
+
 export interface PersonaDemographicsProfile {
   age?: number;
   gender?: string;
@@ -54,6 +114,11 @@ export interface SyntheticPersona {
   version: number;
   generation_model?: string;
   archetype?: string;
+  tagline?: string;
+  country_code?: string;
+  origin_country?: string;
+  personality?: BigFivePersonality;
+  detailed_attributes?: DetailedAttributes;
   demographics: PersonaDemographicsProfile;
   bio?: string;
   quote?: string;
