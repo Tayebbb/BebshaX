@@ -26,7 +26,7 @@ async def app_client(tmp_path, monkeypatch, llm_factory):
         await conn.run_sync(Base.metadata.create_all)
     maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with maker() as session:
-        business = await create_business(session, "QuickBite", "food delivery")
+        business = await create_business(session, "QuickBite", "food delivery", owner_id="usr_system_holder")
         profile = PersonaProfile(
             business_id=business.id,
             name="Rina Akter",
@@ -38,7 +38,7 @@ async def app_client(tmp_path, monkeypatch, llm_factory):
             description="desc",
             attributes=[PersonaAttribute(key="goal", value="cheap meals")],
         )
-        await save_persona(session, profile)
+        await save_persona(session, profile, owner_id="usr_system_holder")
     await engine.dispose()
 
     from bebshax.main import create_app

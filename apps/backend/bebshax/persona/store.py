@@ -18,10 +18,12 @@ async def create_business(
     session: AsyncSession,
     name: str,
     description: str | None,
+    owner_id: str,
     industry: str | None = None,
     target_market: str | None = None,
-    owner_id: str = "usr_system_holder",
 ) -> Businesses:
+    """``owner_id`` is required and has no default — see ``save_persona`` for why
+    defaulting it to the system holder was a tenancy hazard (B6)."""
     business = Businesses(
         id=uuid.uuid4().hex,
         name=name,
@@ -52,10 +54,16 @@ async def list_businesses(
 async def save_persona(
     session: AsyncSession,
     profile: PersonaProfile,
-    owner_id: str = "usr_system_holder",
+    owner_id: str,
     data_source: str = DATA_SOURCE_LIVE,
 ) -> None:
     """Persist a persona.
+
+    ``owner_id`` is REQUIRED and deliberately has no default. It used to default
+    to ``"usr_system_holder"``, which is in ``PUBLIC_OWNER_IDS`` — so a caller
+    that simply forgot the argument published the persona to the shared pool,
+    readable by every user. That is precisely the tenancy hole B6 exists to
+    close, so forgetting it is now a TypeError instead of a silent disclosure.
 
     ``data_source`` records how the content was produced (H3 piece 2). It
     defaults to ``"live"`` because every caller except the demo seeder reaches

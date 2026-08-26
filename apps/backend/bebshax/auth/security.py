@@ -89,10 +89,11 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
         if not verified:
             return None
         payload = json.loads(_b64_decode(p_b64).decode())
-        if (
-            payload.get("exp")
-            and datetime.now(timezone.utc).timestamp() > payload["exp"]
-        ):
+        # exp is REQUIRED. Treating it as optional meant a token minted without
+        # one never expired; `create_access_token` always sets it, so a token
+        # lacking exp did not come from us and is rejected outright.
+        exp = payload.get("exp")
+        if exp is None or datetime.now(timezone.utc).timestamp() > exp:
             return None
         if payload.get("iss") != s.jwt_issuer:
             return None

@@ -34,15 +34,15 @@ def _profile(business_id: str) -> PersonaProfile:
 
 
 async def test_business_create_and_list(async_session) -> None:
-    business = await create_business(async_session, "QuickBite", "food delivery")
+    business = await create_business(async_session, "QuickBite", "food delivery", owner_id="usr_system_holder")
     assert await get_business(async_session, business.id) is not None
     assert any(b.id == business.id for b in await list_businesses(async_session))
 
 
 async def test_persona_round_trip(async_session) -> None:
-    business = await create_business(async_session, "QuickBite", "food delivery")
+    business = await create_business(async_session, "QuickBite", "food delivery", owner_id="usr_system_holder")
     original = _profile(business.id)
-    await save_persona(async_session, original)
+    await save_persona(async_session, original, owner_id="usr_system_holder")
 
     loaded = await load_persona(async_session, original.id)
     assert loaded is not None
