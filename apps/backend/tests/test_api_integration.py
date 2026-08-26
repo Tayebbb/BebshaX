@@ -60,13 +60,19 @@ async def api_test_app(tmp_path, monkeypatch):
         ],
     )
     adapter = FakeAdapter(routes=[fake_route])
-    adapters = {"freellmpool": adapter, "ollama": adapter, "pollinations": adapter}
+    adapters = {
+        "openrouter": adapter,
+        "freellmpool": adapter,
+        "ollama": adapter,
+        "pollinations": adapter,
+    }
 
     app = create_app()
     with TestClient(app) as client:
         llm_router = PoolRouter(adapters, on_provenance=app.state.provenance_sink)
         app.state.llm_adapters = adapters
         app.state.llm_router = llm_router
+        app.state.llm_service = llm_router
         app.state.persona_engine = PersonaEngine(llm_router, EvidenceStore())
         app.state.interview_engine = InterviewEngine(
             llm_router, app.state.db_sessionmaker, memory=app.state.memory_service

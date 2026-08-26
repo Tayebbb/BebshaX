@@ -474,7 +474,7 @@ async def generate_script_questions(
                 f"Generate exactly {q_count} sequential interview questions in JSON array format."
             )
             req = LLMRequest(
-                task=TaskType.INTERVIEW_PROBING,
+                task=TaskType.STRUCTURED_OUTPUT,
                 messages=[
                     ChatMessage(role="system", content=sys_prompt),
                     ChatMessage(role="user", content=user_msg),

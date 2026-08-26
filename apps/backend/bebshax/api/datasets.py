@@ -26,7 +26,8 @@ def _get_dataset_service(request: Request) -> DatasetService:
         settings = get_settings()
         engine = create_engine(settings)
         sessionmaker_ = create_async_sessionmaker(engine)
-    return DatasetService(sessionmaker_)
+    llm = getattr(request.app.state, "llm_router", None)
+    return DatasetService(sessionmaker_, llm=llm)
 
 
 async def _get_session(request: Request) -> AsyncSession:

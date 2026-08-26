@@ -38,6 +38,8 @@ Two things do the heavy lifting, and they are **different jobs**:
 
 To BebshaX, the entire remote world is a single virtual route called `freellmpool/auto`. The real provider/model that ended up serving (e.g. `llm7/codestral-latest`) is reported back and stored, so provenance never says "auto".
 
+> **Temporary (2026-08-26):** a third adapter, `OpenRouterAdapter`, currently sits as *first preference* in the remote pools — **testing only**, per owner decision. Keyless it contributes no routes and everything behaves as documented here. Its position contradicts §10's capacity math (50 req/day at $0) and must be revisited before production.
+
 ---
 
 ## 3. The single entry point rule
@@ -60,7 +62,7 @@ result.provenance    # the full audit trail
 ```
 
 - No feature file may `import openai` / `import freellmpool` — provider SDKs live **only** in [apps/backend/bebshax/llm/adapters/](../apps/backend/bebshax/llm/adapters/), and a test enforces it (R1/D2).
-- **No LLM is used to classify the task.** The 16 `TaskType` values are declared by the caller in code (D7). Cheap, deterministic, debuggable.
+- **No LLM is used to classify the task.** The 18 `TaskType` values are declared by the caller in code (D7). Cheap, deterministic, debuggable.
 
 ---
 
@@ -90,18 +92,20 @@ Configuration as **data**, so extending it = edit a table + add a test, never ad
 
 | Pool           | Order                    | Max concurrent | Tasks routed here                                                                            |
 | -------------- | ------------------------ | -------------- | -------------------------------------------------------------------------------------------- |
-| `reasoning`    | freellmpool → ollama     | 2              | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC      |
-| `conversation` | freellmpool → ollama     | 5              | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                          |
-| `structured`   | freellmpool → ollama     | 3              | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING |
-| `fast`         | freellmpool → ollama     | 5              | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                       |
-| `long_context` | freellmpool → ollama     | 2              | REPORT_GENERATION                                                                            |
+| `reasoning`    | openrouter† → freellmpool → ollama | 2              | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
+| `conversation` | openrouter† → freellmpool → ollama | 5              | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                          |
+| `structured`   | openrouter† → freellmpool → ollama | 3              | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING |
+| `fast`         | openrouter† → freellmpool → ollama | 5              | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                       |
+| `long_context` | openrouter† → freellmpool → ollama | 2              | REPORT_GENERATION                                                                            |
 | `local`        | ollama only              | 2              | reserved for explicit local-only work                                                        |
 | `emergency`    | **ollama → freellmpool** | 2              | EMERGENCY_FALLBACK (local **first** — when the internet is the problem)                      |
+
+† testing-only first preference — see the note in [§2](#2-the-layer-cake); keyless → contributes no routes.
 
 Two invariants worth memorising:
 
 1. **Every pool ends at the local adapter.** The fallback ladder always terminates on this machine, so "all free providers are down" degrades to _slow_, not _broken_.
-2. **All 16 task types must be mapped.** A unit test fails the build if someone adds a `TaskType` without a pool.
+2. **All 18 task types must be mapped.** A unit test fails the build if someone adds a `TaskType` without a pool — and a second test fails on references to task types that don't exist.
 
 ---
 

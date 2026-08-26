@@ -7,7 +7,7 @@ How an LLM request travels through BebshaX, and why the routing dependencies wer
 ```
 caller (persona engine, API, ...)
   → PoolRouter.complete(LLMRequest{task, ...})                       [bebshax/llm/router.py]
-      task → pool (config map, all 16 task types)                    [bebshax/llm/pools.py]
+      task → pool (config map, all 18 task types)                    [bebshax/llm/pools.py]
       per-pool asyncio.Semaphore (concurrency limits)
       candidates gathered from the pool's adapters in preference order
       pre-flight: cooldown check + capability filter + token estimate [bebshax/llm/estimator.py]
@@ -29,13 +29,15 @@ Wired in `create_app` lifespan: `app.state.llm_router = PoolRouter(build_default
 
 | Pool | Adapter order | Concurrency | Tasks |
 |---|---|---|---|
-| `reasoning` | freellmpool → ollama | 2 | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC |
-| `conversation` | freellmpool → ollama | 5 | PERSONA_INTERVIEW, PERSONA_RESPONSE |
-| `structured` | freellmpool → ollama | 3 | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING |
-| `fast` | freellmpool → ollama | 5 | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION |
-| `long_context` | freellmpool → ollama | 2 | REPORT_GENERATION |
+| `reasoning` | openrouter† → freellmpool → ollama | 2 | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
+| `conversation` | openrouter† → freellmpool → ollama | 5 | PERSONA_INTERVIEW, PERSONA_RESPONSE |
+| `structured` | openrouter† → freellmpool → ollama | 3 | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING |
+| `fast` | openrouter† → freellmpool → ollama | 5 | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION |
+| `long_context` | openrouter† → freellmpool → ollama | 2 | REPORT_GENERATION |
 | `local` | ollama | 2 | (reserved for explicit local-only calls) |
 | `emergency` | **ollama → freellmpool** (local-first) | 2 | EMERGENCY_FALLBACK |
+
+† **OpenRouterAdapter is a TESTING-ONLY first preference** (owner decision 2026-08-26). Keyless → it contributes no routes and the pool behaves as before. Free-tier reality at $0: 20 req/min, 50 req/day (extra accounts do not raise limits); `openrouter/auto` in its default model list is the PAID auto-router — do not fund the key. Its pool position contradicts D1/the capacity plan and must be revisited before production (`docs/AI_IMPLEMENTATION_PLAN.md` §10).
 
 - Every pool terminates at the local adapter (chaos-tested: remote exhausted → Ollama serves).
 - **Ranking:** pool/adapter order today; `PoolRouter(ranker=...)` is the hook where Phase-6 registry scores (quality/latency/health) and Phase-11 strategy experiments plug in.

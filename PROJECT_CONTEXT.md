@@ -82,7 +82,7 @@ Detailed deliverables/exit criteria: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMEN
 | D4  | App DB = pgvector Docker container on port 5433                              | docker-compose.yml                    |
 | D5  | Providers/keys are env-config only — never hard-coded                        | .env.example                          |
 | D6  | Datasets for grounding/eval only; no model training                          | docs/IMPLEMENTATION_PLAN.md non-goals |
-| D7  | 16 fixed task types; callers declare them; no LLM-based classification       | `bebshax/llm/types.py`                |
+| D7  | 18 fixed task types (16 + PERSONA_NARRATIVE/BEHAVIORAL_SIMULATION, 2026-08-26); callers declare them; no LLM-based classification | `bebshax/llm/types.py`                |
 | D8  | Every LLM request records full provenance (§14 fields)                       | `bebshax/llm/provenance.py`           |
 
 ## Document map
