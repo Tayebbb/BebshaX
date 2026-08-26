@@ -55,6 +55,7 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 <<<<<<< HEAD
+<<<<<<< HEAD
 ### Maintenance (2026-08-27) — Deep verification of the 11 Sazid audit items: 5 defects found behind DONE ticks
 
 - **Why:** the track showed 11/11. Verifying each item against the code rather than its completion note found five real defects, two of them serious. Nine items were sound.
@@ -66,6 +67,11 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - **Flagged, not changed:** the H7 limiter is in-memory with `get_remote_address` — buckets reset on restart, are per-worker, and collapse to a single bucket behind a proxy. Fine for local/demo, wrong for a real deployment.
 - **Tests:** `tests/test_auth_hardening_audit.py` (11), covering token lifetime parity, the exp gap, environment-driven verification enforcement, and the owner_id signature. Suite: **369 passed, 1 failed, 3 deselected** — the failure is the known cwd-dependent `test_run_evaluation_cli.py` in Shehab's lane.
 - **Client-visible change:** sessions now last 7 days instead of 365. That is the intended behaviour and matches what the API already claimed, but users will be signed out weekly where they previously were not.
+=======
+### Maintenance (2026-08-27) — M1: /api/evaluation/metrics de-fictionalized (pipeline item 3/5)
+
+- Full rewrite of [api/evaluation.py](../apps/backend/bebshax/api/evaluation.py): the fabricated `routing_strategies` comparison (a "ROUND_ROBIN (Naive)" arm computed as HYBRID×0.85/×1.25/×2+0.1, invented `cost_efficiency`, `schema_validity_rate` asserted 1.0, "LATENCY_FIRST" mapped to a nonexistent `fast_text` pool) is **gone from the contract**. Every value is now measured: `pools[]` aggregates real `llm_requests` per pool (success rate, latency, multi-attempt fallback share, ollama-served share); `schema_validity_rate` derives from the R6 taxonomy (share of PERSONA_GENERATION requests with no MALFORMED_RESPONSE attempt); `consistency_pass_rate` covers only evaluable personas; **no data → `null`, never claimed perfection**. New `quality_gate` section surfaces the newest readable judged A/B gate report (`data/metadata/local_3b_gate_*.json`, dir overridable via `BEBSHAX_METADATA_DIR`; corrupt/mis-shaped files skipped in favor of older valid ones). Frontend types/fixtures updated (`PoolPerformance`, `QualityGate`); no UI view consumed the old shape. API_CONTRACT.md §3.7 rewritten. Critic-verified (8/10 BLOCK on stale contract doc → fixed → PASS): 6 new tests in test_evaluation_metrics.py; 361 backend green, tsc + 76 frontend tests green. Perf follow-up noted: pool aggregates are a full-table scan (move to SQL GROUP BY once llm_requests outgrows dev scale).
+>>>>>>> 0f7db18b1285cc1110f923acd5de6c1d75065df4
 
 ### Maintenance (2026-08-27) — H3 piece 2: personas carry an honest cached/live label
 
@@ -102,11 +108,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - **Suite (from the repo root):** 345 passed, 1 failed, 3 deselected. The failure — `test_study_reports_and_master_workflow.py::test_dynamic_script_and_batch_interviews`, `assert 2 >= 4` — **predates this change and is unrelated to it**; it is in the interview/study area last touched by `e5b4081` (B6 Stage 2 fallout repair). Left for its owner rather than patched from outside the lane.
 - **Doc repairs in the same commit:** restored the **H8** row, which had been deleted from the Sazid section of AUDIT_ASSIGNMENTS.md although the fix landed 2026-08-26 (the section listed 10 items under an "(11)" heading and `L6`'s "pairs with Sazid's H8" pointed at nothing). Progress table corrected 6 → 10 for Sazid and 31 → 35 overall, to match the section's own checkboxes.
 - **Remaining on the Sazid track:** H3 piece 2 (`"cached"` labelling) only. It cannot be closed unilaterally — it needs the response-shape agreement and the UI from Shehab.
-=======
+
 ### Maintenance (2026-08-27) — API row-scoping hardening, B6 stage 3 complete (pipeline item 2/5)
 
 - Closed every gap from the tenancy audit: new `bebshax/tenancy.py` is the single policy table (`PUBLIC_OWNER_IDS`, `STUDY_ANON_OWNER_IDS`, `owner_accessible`, `allowed_owner_ids`) with the two deliberate deltas documented. Weak per-router `_verify_study_access` copies in datasets/segmentation now delegate to the canonical `_user_owns_study`; the `if user_id:` anonymous-collapse pattern is gone from `datasets/service.py` (`_tenant_filter` on list/get/delete/**refresh**) and `persona/store.py` list filters; `DELETE /audiences/{id}` enforces its (previously unused) auth dep; the 4 legacy conversation endpoints, `GET /personas/{id}(/memories)`, copilot `generate-personas` (gate BEFORE LLM spend), and `GET /provenance` (outerjoin to persona owners) are now owner-gated; client-supplied identity is dead — `POST/PATCH /studies` + `/audiences` stamp `user_id` from the token only, `?user_id=` list params are ignored, and PATCH mass-assignment excludes `id`/`user_id`. Anonymous demo mode keeps working via the shared pool (NULL/`usr_default`/`anonymous`/`usr_system_holder` rows). Verified by independent code-reviewer sub-agent over 2 rounds (7/10 → **PASS 9/10**; both round-1 HIGHs — refresh bypass, invisible `usr_default` imports — fixed + regression-pinned). 9-test hardening file added; the old integration test that codified `payload.user_id` spoofing rewritten to the token contract. 350 backend tests green, ruff clean. Merged with Sazid's concurrent B6 correction (`b62cc0f`: write endpoints now require strict auth → 401; my `_owner_accessible` gates retained on top). Follow-up noted: stamp `conv.user_id` at legacy conversation start; persona-delete orphans LLMRequests metadata into the shared pool.
->>>>>>> aff9b67b4d9f132a23b00503e8f3ff21ec4d6b4f
 
 ### Maintenance (2026-08-27) — README refreshed to match shipped state (docs only)
 

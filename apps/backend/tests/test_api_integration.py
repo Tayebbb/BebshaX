@@ -53,8 +53,11 @@ async def test_evaluation_metrics_endpoint(api_test_app: TestClient):
     assert res.status_code == 200
     metrics = res.json()
     assert "overall_health" in metrics
-    assert "routing_strategies" in metrics
-    assert len(metrics["routing_strategies"]) == 4
+    # M1: measured pools only — the fabricated "routing_strategies"
+    # comparison arms are gone from the contract.
+    assert "routing_strategies" not in metrics
+    assert "pools" in metrics and isinstance(metrics["pools"], list)
+    assert "quality_gate" in metrics
 
 
 async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, auth_headers):

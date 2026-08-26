@@ -1,27 +1,108 @@
-"""Evaluation and insights REST API endpoints (Phase 11)."""
+"""Evaluation and insights REST API endpoints (Phase 11, M1 rewrite).
+
+Every number here is measured — aggregated from persisted provenance
+(`llm_requests`), persona validation artifacts, or the judged quality-gate
+reports written by scripts/judge_local_interview.py. Metrics with no
+underlying data are `null`, never an invented 0.0 or 1.0 (M1: the audited
+endpoint fabricated a "ROUND_ROBIN (Naive)" comparison arm with multiplier
+fiction and asserted perfect schema validity).
+"""
 
 from __future__ import annotations
 
-from typing import Any
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Any, Optional
+
 from fastapi import APIRouter, Request
 from sqlalchemy import select, func
 
 from bebshax.db.models import Personas, LLMRequests
+from bebshax.llm.failures import FailureKind
+from bebshax.llm.pools import OLLAMA
+from bebshax.llm.types import TaskType
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["evaluation"])
+
+# Judged A/B gate reports (scripts/judge_local_interview.py). CWD-relative to
+# the repo root like evaluation/report_generator.py; overridable for tests
+# and deployments.
+_GATE_GLOB = "local_3b_gate_*.json"
+
+
+def _metadata_dir() -> Path:
+    return Path(os.environ.get("BEBSHAX_METADATA_DIR", "data/metadata"))
+
+
+def _load_latest_quality_gate() -> Optional[dict[str, Any]]:
+    """Summarize the newest READABLE judged quality-gate report, or None."""
+    try:
+        candidates = sorted(_metadata_dir().glob(_GATE_GLOB))
+    except OSError:
+        return None
+    # Newest first; a corrupt newest file must not hide older valid reports.
+    for latest in reversed(candidates):
+        try:
+            raw = json.loads(latest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            logger.warning("quality gate report unreadable: %s", latest.name, exc_info=True)
+            continue
+        if not isinstance(raw, dict):
+            logger.warning("quality gate report has wrong shape: %s", latest.name)
+            continue
+        arms = []
+        for key in ("arm_a", "arm_b"):
+            arm = raw.get(key)
+            arm = arm if isinstance(arm, dict) else {}
+            arms.append(
+                {
+                    "tag": arm.get("tag"),
+                    "model": arm.get("model"),
+                    "weighted_score": arm.get("weighted"),
+                    "avg_latency_ms": arm.get("avg_ms"),
+                    "dims": arm.get("dims"),
+                }
+            )
+        judge = raw.get("judge")
+        judge = judge if isinstance(judge, dict) else {}
+        return {
+            "generated_at": raw.get("generated_at"),
+            "bar": raw.get("bar"),
+            "rubric_weights": raw.get("rubric_weights"),
+            "arms": arms,
+            "judge_route": judge.get("route"),
+            "judge_notes": judge.get("notes"),
+            "source_file": latest.name,
+        }
+    return None
 
 
 @router.get("/evaluation/metrics")
 async def get_evaluation_metrics(request: Request) -> dict[str, Any]:
-    """Summary of persona synthesis health and routing strategy performance."""
+    """Persona synthesis health + measured per-pool routing performance.
+
+    Contract (all measured, `null` = no data yet):
+    - overall_health: persona counts, provenance-derived schema validity,
+      consistency pass rate over evaluable personas, grounding ratio,
+      average request latency.
+    - pools: one row per pool actually present in llm_requests — success
+      rate, latency, fallback rate (multi-attempt requests), and the share
+      served by the local ollama adapter.
+    - quality_gate: latest judged local-vs-cloud interview gate, if any.
+    """
     sessionmaker_ = getattr(request.app.state, "db_sessionmaker", None)
 
     total_personas = 0
-    avg_latency = 0.0
-    avg_grounding_ratio = 0.0
-    consistency_pass_rate = 0.0
-    schema_validity_rate = 0.0
+    avg_latency: Optional[float] = None
+    avg_grounding_ratio: Optional[float] = None
+    consistency_pass_rate: Optional[float] = None
+    schema_validity_rate: Optional[float] = None
+    pools: list[dict[str, Any]] = []
 
     if sessionmaker_:
         async with sessionmaker_() as session:
@@ -29,19 +110,11 @@ async def get_evaluation_metrics(request: Request) -> dict[str, Any]:
                 await session.execute(select(func.count(Personas.id)))
             ).scalar_one_or_none() or 0
 
-            avg_lat = (
-                await session.execute(select(func.avg(LLMRequests.total_latency_ms)))
-            ).scalar_one_or_none()
-            if avg_lat is not None:
-                avg_latency = round(float(avg_lat), 1)
-
-            if total_personas > 0:
-                schema_validity_rate = 1.0
-
-                # Compute grounding ratio: count(OBSERVED) / count(all attributes)
-                total_attrs = (
-                    await session.execute(select(func.count(PersonaAttributes.id)))
-                ).scalar_one_or_none() or 0
+            # Grounding: OBSERVED attributes / all attributes (provenance classes).
+            total_attrs = (
+                await session.execute(select(func.count(PersonaAttributes.id)))
+            ).scalar_one_or_none() or 0
+            if total_attrs > 0:
                 observed_attrs = (
                     await session.execute(
                         select(func.count(PersonaAttributes.id)).where(
@@ -49,148 +122,95 @@ async def get_evaluation_metrics(request: Request) -> dict[str, Any]:
                         )
                     )
                 ).scalar_one_or_none() or 0
+                avg_grounding_ratio = round(observed_attrs / total_attrs, 3)
 
-                if total_attrs > 0:
-                    avg_grounding_ratio = round(observed_attrs / total_attrs, 3)
-                else:
-                    avg_grounding_ratio = 0.0
+            # Consistency: personas whose stored validation produced 0 warnings,
+            # over the personas that HAVE validation details. No details rows →
+            # nothing evaluable → null (never a claimed-perfect 1.0).
+            details_list = (await session.execute(select(PersonaDetails))).scalars().all()
+            if details_list:
+                passed = sum(1 for d in details_list if not d.warnings)
+                consistency_pass_rate = round(passed / len(details_list), 3)
 
-                # Compute consistency pass rate: personas with 0 warnings
-                details_list = (
-                    await session.execute(select(PersonaDetails))
-                ).scalars().all()
-                if details_list:
-                    passed = sum(1 for d in details_list if not d.warnings or len(d.warnings) == 0)
-                    consistency_pass_rate = round(passed / len(details_list), 3)
-                else:
-                    consistency_pass_rate = 1.0
+            # Request-level aggregates from provenance. Only the columns we
+            # aggregate — attempts JSON is needed for fallback/malformed counts.
+            # TODO(perf): unbounded scan — move counts/latency to SQL GROUP BY
+            # (attempts-JSON inspection keeps this in Python for now) or add a
+            # created_at window once llm_requests grows beyond dev scale.
+            rows = (
+                await session.execute(
+                    select(
+                        LLMRequests.task,
+                        LLMRequests.pool,
+                        LLMRequests.success,
+                        LLMRequests.total_latency_ms,
+                        LLMRequests.attempts,
+                        LLMRequests.served_by_provider,
+                    )
+                )
+            ).all()
 
-    # Query real LLMRequests to compute actual measured routing strategy metrics
-    total_llm_requests = 0
-    measured_success_rate = 0.0
-    measured_avg_latency = 0.0
-    measured_fallback_rate = 0.0
-    cost_efficiency = 0.0
+            latencies = [r.total_latency_ms for r in rows if r.total_latency_ms is not None]
+            if latencies:
+                avg_latency = round(sum(latencies) / len(latencies), 1)
 
-    pool_stats: dict[str, dict[str, Any]] = {}
+            # Schema validity, measured from the failure taxonomy (R6): the
+            # share of persona-generation requests that never emitted a
+            # MALFORMED_RESPONSE attempt (i.e. first-pass schema-valid output).
+            gen_task = TaskType.PERSONA_GENERATION.value
+            gen_rows = [r for r in rows if str(r.task) == gen_task or getattr(r.task, "value", None) == gen_task]
+            if gen_rows:
+                malformed = sum(
+                    1
+                    for r in gen_rows
+                    if any(
+                        (a or {}).get("failure_kind") == FailureKind.MALFORMED_RESPONSE.value
+                        for a in (r.attempts or [])
+                    )
+                )
+                schema_validity_rate = round(1 - malformed / len(gen_rows), 3)
 
-    if sessionmaker_:
-        async with sessionmaker_() as session:
-            req_stmt = select(LLMRequests)
-            req_result = await session.execute(req_stmt)
-            all_requests = req_result.scalars().all()
-            total_llm_requests = len(all_requests)
-
-            if total_llm_requests > 0:
-                success_count = sum(1 for r in all_requests if r.success)
-                measured_success_rate = round(success_count / total_llm_requests, 3)
-
-                latencies = [r.total_latency_ms for r in all_requests if r.total_latency_ms is not None]
-                measured_avg_latency = round(sum(latencies) / len(latencies), 1) if latencies else 0.0
-
-                fallbacks = sum(1 for r in all_requests if r.attempts and len(r.attempts) > 1)
-                measured_fallback_rate = round(fallbacks / total_llm_requests, 3)
-                cost_efficiency = 1.0
-
-                # Group by pool
-                for r in all_requests:
-                    p = r.pool or "default"
-                    if p not in pool_stats:
-                        pool_stats[p] = {"total": 0, "success": 0, "latencies": [], "fallbacks": 0}
-                    pool_stats[p]["total"] += 1
-                    if r.success:
-                        pool_stats[p]["success"] += 1
-                    if r.total_latency_ms is not None:
-                        pool_stats[p]["latencies"].append(r.total_latency_ms)
-                    if r.attempts and len(r.attempts) > 1:
-                        pool_stats[p]["fallbacks"] += 1
-
-    # Calculate overall health
-    overall_health = {
-        "total_personas_generated": total_personas,
-        "schema_validity_rate": schema_validity_rate,
-        "consistency_pass_rate": consistency_pass_rate,
-        "avg_grounding_ratio": avg_grounding_ratio,
-        "avg_latency_ms": avg_latency,
-    }
-
-    def _calc_pool_metric(pool_name: str, fallback_val: float, metric_type: str) -> float:
-        st = pool_stats.get(pool_name)
-        if not st or st["total"] == 0:
-            return fallback_val
-        if metric_type == "success_rate":
-            return round(st["success"] / st["total"], 3)
-        if metric_type == "avg_latency_ms":
-            return round(sum(st["latencies"]) / len(st["latencies"]), 1) if st["latencies"] else 0.0
-        if metric_type == "fallback_rate":
-            return round(st["fallbacks"] / st["total"], 3)
-        return fallback_val
-
-    if total_llm_requests > 0:
-        routing_strategies = [
-            {
-                "strategy": "HYBRID (Default)",
-                "success_rate": measured_success_rate,
-                "avg_latency_ms": measured_avg_latency,
-                "fallback_rate": measured_fallback_rate,
-                "cost_efficiency": cost_efficiency,
-            },
-            {
-                "strategy": "QUALITY_FIRST",
-                "success_rate": _calc_pool_metric("reasoning", measured_success_rate, "success_rate"),
-                "avg_latency_ms": _calc_pool_metric("reasoning", measured_avg_latency, "avg_latency_ms"),
-                "fallback_rate": _calc_pool_metric("reasoning", measured_fallback_rate, "fallback_rate"),
-                "cost_efficiency": cost_efficiency,
-            },
-            {
-                "strategy": "LATENCY_FIRST",
-                "success_rate": _calc_pool_metric("fast_text", measured_success_rate, "success_rate"),
-                "avg_latency_ms": _calc_pool_metric("fast_text", measured_avg_latency, "avg_latency_ms"),
-                "fallback_rate": _calc_pool_metric("fast_text", measured_fallback_rate, "fallback_rate"),
-                "cost_efficiency": cost_efficiency,
-            },
-            {
-                "strategy": "ROUND_ROBIN (Naive)",
-                "success_rate": round(measured_success_rate * 0.85, 3),
-                "avg_latency_ms": round(measured_avg_latency * 1.25, 1) if measured_avg_latency > 0 else 0.0,
-                "fallback_rate": round(min(measured_fallback_rate * 2.0 + 0.1, 1.0), 3) if measured_fallback_rate > 0 else 0.0,
-                "cost_efficiency": round(cost_efficiency * 0.75, 2),
-            },
-        ]
-    else:
-        routing_strategies = [
-            {
-                "strategy": "HYBRID (Default)",
-                "success_rate": 0.0,
-                "avg_latency_ms": 0.0,
-                "fallback_rate": 0.0,
-                "cost_efficiency": 0.0,
-            },
-            {
-                "strategy": "QUALITY_FIRST",
-                "success_rate": 0.0,
-                "avg_latency_ms": 0.0,
-                "fallback_rate": 0.0,
-                "cost_efficiency": 0.0,
-            },
-            {
-                "strategy": "LATENCY_FIRST",
-                "success_rate": 0.0,
-                "avg_latency_ms": 0.0,
-                "fallback_rate": 0.0,
-                "cost_efficiency": 0.0,
-            },
-            {
-                "strategy": "ROUND_ROBIN (Naive)",
-                "success_rate": 0.0,
-                "avg_latency_ms": 0.0,
-                "fallback_rate": 0.0,
-                "cost_efficiency": 0.0,
-            },
-        ]
+            # Per-pool measured performance — only pools that actually served
+            # requests appear; nothing is invented for empty pools.
+            by_pool: dict[str, dict[str, Any]] = {}
+            for r in rows:
+                p = r.pool or "unpooled"
+                st = by_pool.setdefault(
+                    p, {"requests": 0, "success": 0, "latencies": [], "fallbacks": 0, "local": 0}
+                )
+                st["requests"] += 1
+                if r.success:
+                    st["success"] += 1
+                if r.total_latency_ms is not None:
+                    st["latencies"].append(r.total_latency_ms)
+                if r.attempts and len(r.attempts) > 1:
+                    st["fallbacks"] += 1
+                if r.served_by_provider == OLLAMA:
+                    st["local"] += 1
+            pools = [
+                {
+                    "pool": name,
+                    "requests": st["requests"],
+                    "success_rate": round(st["success"] / st["requests"], 3),
+                    "avg_latency_ms": (
+                        round(sum(st["latencies"]) / len(st["latencies"]), 1)
+                        if st["latencies"]
+                        else None
+                    ),
+                    "fallback_rate": round(st["fallbacks"] / st["requests"], 3),
+                    "local_serve_rate": round(st["local"] / st["requests"], 3),
+                }
+                for name, st in sorted(by_pool.items(), key=lambda kv: -kv[1]["requests"])
+            ]
 
     return {
-        "overall_health": overall_health,
-        "routing_strategies": routing_strategies,
+        "overall_health": {
+            "total_personas_generated": total_personas,
+            "schema_validity_rate": schema_validity_rate,
+            "consistency_pass_rate": consistency_pass_rate,
+            "avg_grounding_ratio": avg_grounding_ratio,
+            "avg_latency_ms": avg_latency,
+        },
+        "pools": pools,
+        "quality_gate": _load_latest_quality_gate(),
     }
-

@@ -372,24 +372,34 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
 
 ---
 
-### 3.7 Evaluation & Insights (Phase 11)
+### 3.7 Evaluation & Insights (Phase 11; M1 rewrite 2026-08-27)
 
 #### `GET /api/evaluation/metrics`
+- Every value is **measured** (provenance aggregates from `llm_requests`, persona validation artifacts, judged gate reports). Metrics with no underlying data are `null` — never an invented `0.0`/`1.0`. The former `routing_strategies` array (which included a fabricated "ROUND_ROBIN (Naive)" arm) is **removed**.
 - **Response `200 OK`:**
   ```json
   {
     "overall_health": {
       "total_personas_generated": 24,
-      "schema_validity_rate": 1.0,
-      "consistency_pass_rate": 0.958,
+      "schema_validity_rate": 0.958,
+      "consistency_pass_rate": 0.929,
       "avg_grounding_ratio": 0.742,
-      "avg_latency_ms": 940.5
+      "avg_latency_ms": 5240.5
     },
-    "routing_strategies": [
-      { "strategy": "HYBRID (Default)", "success_rate": 0.985, "avg_latency_ms": 820, "fallback_rate": 0.08, "cost_efficiency": 1.0 },
-      { "strategy": "QUALITY_FIRST", "success_rate": 0.990, "avg_latency_ms": 1420, "fallback_rate": 0.12, "cost_efficiency": 0.85 },
-      { "strategy": "LATENCY_FIRST", "success_rate": 0.940, "avg_latency_ms": 310, "fallback_rate": 0.04, "cost_efficiency": 0.92 },
-      { "strategy": "ROUND_ROBIN (Naive)", "success_rate": 0.810, "avg_latency_ms": 1650, "fallback_rate": 0.38, "cost_efficiency": 0.62 }
-    ]
+    "pools": [
+      { "pool": "conversation", "requests": 412, "success_rate": 0.99, "avg_latency_ms": 6100.0, "fallback_rate": 0.05, "local_serve_rate": 0.93 }
+    ],
+    "quality_gate": {
+      "generated_at": "2026-08-26T17:56:33+00:00",
+      "bar": 8.0,
+      "rubric_weights": { "persona_consistency": 0.25 },
+      "arms": [
+        { "tag": "local/llama3.2:3b", "model": "ollama/llama3.2:3b", "weighted_score": 9.65, "avg_latency_ms": 6067, "dims": { "naturalness": 9 } }
+      ],
+      "judge_route": "llm7/codestral-latest",
+      "judge_notes": "…",
+      "source_file": "local_3b_gate_20260826_235633.json"
+    }
   }
   ```
+- Field semantics: `schema_validity_rate` = share of `PERSONA_GENERATION` requests with no `MALFORMED_RESPONSE` attempt (R6 taxonomy), `null` when no generation requests exist. `consistency_pass_rate` = personas whose stored validation has zero warnings, over personas that have validation details; `null` when none are evaluable. `pools` lists only pools that actually served traffic; `fallback_rate` = share of multi-attempt requests; `local_serve_rate` = share served by the local `ollama` adapter. `quality_gate` = newest readable `data/metadata/local_3b_gate_*.json` (judge harness), else `null`.

@@ -415,19 +415,36 @@ export const mockConversations: Record<string, Conversation> = {
 export const mockEvaluationMetrics: EvaluationMetrics = {
   overall_health: {
     total_personas_generated: 28,
-    schema_validity_rate: 1.0,
-    consistency_pass_rate: 0.964,
+    schema_validity_rate: 0.964,
+    consistency_pass_rate: 0.929,
     avg_grounding_ratio: 0.785,
     avg_latency_ms: 885.2,
   },
-  routing_strategies: [
-    { strategy: 'HYBRID (Default)', success_rate: 0.988, avg_latency_ms: 780, fallback_rate: 0.07, cost_efficiency: 1.0 },
-    { strategy: 'QUALITY_FIRST', success_rate: 0.992, avg_latency_ms: 1350, fallback_rate: 0.11, cost_efficiency: 0.86 },
-    { strategy: 'LATENCY_FIRST', success_rate: 0.942, avg_latency_ms: 295, fallback_rate: 0.04, cost_efficiency: 0.94 },
-    { strategy: 'CAPABILITY_FIRST', success_rate: 0.975, avg_latency_ms: 950, fallback_rate: 0.09, cost_efficiency: 0.91 },
-    { strategy: 'QUOTA_AWARE', success_rate: 0.981, avg_latency_ms: 640, fallback_rate: 0.05, cost_efficiency: 0.98 },
-    { strategy: 'ROUND_ROBIN (Naive)', success_rate: 0.795, avg_latency_ms: 1580, fallback_rate: 0.42, cost_efficiency: 0.58 },
+  pools: [
+    { pool: 'conversation', requests: 412, success_rate: 0.99, avg_latency_ms: 6100, fallback_rate: 0.05, local_serve_rate: 0.93 },
+    { pool: 'fast', requests: 168, success_rate: 0.982, avg_latency_ms: 2300, fallback_rate: 0.06, local_serve_rate: 0.88 },
+    { pool: 'structured', requests: 74, success_rate: 0.96, avg_latency_ms: 8900, fallback_rate: 0.11, local_serve_rate: 0.0 },
+    { pool: 'reasoning', requests: 31, success_rate: 0.935, avg_latency_ms: 14200, fallback_rate: 0.13, local_serve_rate: 0.0 },
   ],
+  quality_gate: {
+    generated_at: '2026-08-26T17:56:33Z',
+    bar: 8.0,
+    rubric_weights: {
+      persona_consistency: 0.25,
+      naturalness: 0.2,
+      instruction_following: 0.15,
+      context_memory: 0.15,
+      specificity: 0.15,
+      response_stability: 0.1,
+    },
+    arms: [
+      { tag: 'local/llama3.2:3b', model: 'ollama/llama3.2:3b', weighted_score: 9.65, avg_latency_ms: 6067, dims: null },
+      { tag: 'freellmpool/fast', model: 'freellmpool', weighted_score: 8.25, avg_latency_ms: 52988, dims: null },
+    ],
+    judge_route: 'llm7/codestral-latest',
+    judge_notes: 'A maintains perfect consistency and stability.',
+    source_file: 'local_3b_gate_20260826_235633.json',
+  },
 };
 
 export const mockStudies: Study[] = [
