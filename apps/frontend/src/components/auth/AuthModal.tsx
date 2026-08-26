@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { OtpInput } from './OtpInput';
 import { BebshaXLogo } from '../common/BebshaXLogo';
+import { LegalModal } from './LegalModal';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -46,6 +47,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [otp, setOtp] = useState('');
+  const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
 
   // Resend countdown
   const [countdown, setCountdown] = useState(0);
@@ -118,6 +120,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
     if (password.length < 8) {
       setErrorMessage('Password must be at least 8 characters.');
+      return;
+    }
+    const hasLetter = /[a-zA-Z]/.test(password);
+    const hasDigit = /[0-9]/.test(password);
+    if (!hasLetter || !hasDigit) {
+      setErrorMessage('Password must contain at least one letter and one number.');
       return;
     }
 
@@ -211,6 +219,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setErrorMessage('New password must be at least 8 characters.');
       return;
     }
+    const hasLetter = /[a-zA-Z]/.test(password);
+    const hasDigit = /[0-9]/.test(password);
+    if (!hasLetter || !hasDigit) {
+      setErrorMessage('Password must contain at least one letter and one number.');
+      return;
+    }
     if (password !== confirmPassword) {
       setErrorMessage('Passwords do not match.');
       return;
@@ -235,7 +249,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       await googleAuth({
         email: email || 'saidul.founder@bebshax.io',
         name: fullName || 'Saidul Islam',
-        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&h=120&fit=crop&crop=faces',
+        avatar_url: undefined,
       });
       onSuccess?.();
       onClose();
@@ -459,6 +473,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </label>
                   <input
                     type="email"
+                    name="email"
+                    autoComplete="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -508,6 +524,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div style={{ position: 'relative' }}>
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      autoComplete="current-password"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -713,7 +731,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <ChevronRight size={18} color="#9CA3AF" />
               </button>
 
-              <div style={{ textAlign: 'center', marginTop: '26px' }}>
+              <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                <p style={{ fontSize: '0.74rem', color: '#9CA3AF', lineHeight: 1.4, margin: '0 0 10px 0' }}>
+                  By continuing, you agree to our{' '}
+                  <button
+                    type="button"
+                    onClick={() => setLegalModal('terms')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#6B7280',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      padding: 0,
+                      fontSize: 'inherit',
+                    }}
+                  >
+                    Terms of Service
+                  </button>{' '}
+                  and{' '}
+                  <button
+                    type="button"
+                    onClick={() => setLegalModal('privacy')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#6B7280',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      padding: 0,
+                      fontSize: 'inherit',
+                    }}
+                  >
+                    Privacy Policy
+                  </button>
+                </p>
                 <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
                   Already have an account?{' '}
                   <button
@@ -791,6 +843,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </label>
                   <input
                     type="text"
+                    name="fullName"
+                    autoComplete="name"
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
@@ -823,6 +877,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </label>
                   <input
                     type="email"
+                    name="email"
+                    autoComplete="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -856,6 +912,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div style={{ position: 'relative' }}>
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      autoComplete="new-password"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -911,6 +969,43 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 >
                   {isLoading ? 'Creating account...' : 'Create account'}
                 </button>
+
+                <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                  <p style={{ fontSize: '0.74rem', color: '#9CA3AF', lineHeight: 1.4, margin: 0 }}>
+                    By creating an account, you agree to our{' '}
+                    <button
+                      type="button"
+                      onClick={() => setLegalModal('terms')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#6B7280',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontSize: 'inherit',
+                      }}
+                    >
+                      Terms of Service
+                    </button>{' '}
+                    and{' '}
+                    <button
+                      type="button"
+                      onClick={() => setLegalModal('privacy')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#6B7280',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontSize: 'inherit',
+                      }}
+                    >
+                      Privacy Policy
+                    </button>
+                  </p>
+                </div>
               </form>
             </div>
           )}
@@ -1080,6 +1175,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </label>
                   <input
                     type="email"
+                    name="email"
+                    autoComplete="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -1207,6 +1304,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div style={{ position: 'relative' }}>
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      autoComplete="new-password"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -1258,6 +1357,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div style={{ position: 'relative' }}>
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      autoComplete="new-password"
                       required
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
@@ -1317,6 +1418,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
         </div>
       </div>
+
+      <LegalModal
+        isOpen={Boolean(legalModal)}
+        onClose={() => setLegalModal(null)}
+        type={legalModal || 'terms'}
+      />
     </div>
   );
 };

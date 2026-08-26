@@ -12,9 +12,22 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-icons': ['lucide-react'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            return 'vendor-react';
+          }
+          if (id.includes('node_modules/lucide-react')) {
+            return 'vendor-icons';
+          }
+          if (id.includes('src/components/landing')) {
+            return 'landing';
+          }
+          if (id.includes('src/components/dashboard')) {
+            return 'dashboard';
+          }
+          if (id.includes('src/components/auth')) {
+            return 'auth';
+          }
         },
       },
     },

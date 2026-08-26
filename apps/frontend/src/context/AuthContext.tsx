@@ -25,12 +25,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(() => {
     const stored = api.getStoredUser();
     if (stored) return stored;
-    const storedToken = api.getAuthToken();
-    if (storedToken) {
+    if (api.isMockMode() && api.getAuthToken()) {
       return {
-        id: 'usr_stored',
+        id: 'usr_test',
         email: 'user@example.com',
-        full_name: 'Authenticated User',
+        full_name: 'Test User',
         avatar_url: null,
         is_active: true,
         is_verified: true,
@@ -69,16 +68,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const activeToken = api.getAuthToken();
             if (activeToken) setToken(activeToken);
           } else if (!profile && isMounted) {
-            const storedToken = api.getAuthToken();
-            if (!storedToken) {
-              setUser(null);
-              setToken(null);
-              api.setStoredUser(null);
-            }
+            setUser(null);
+            setToken(null);
+            api.setStoredUser(null);
+            api.setAuthToken(null);
           }
         }
       } catch (err) {
         console.error('Session initialization error:', err);
+        if (isMounted) {
+          setUser(null);
+          setToken(null);
+          api.setStoredUser(null);
+          api.setAuthToken(null);
+        }
       } finally {
         if (isMounted) {
           setIsLoading(false);

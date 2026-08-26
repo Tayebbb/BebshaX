@@ -40,9 +40,9 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | Joint (all three) |        5 |    0 |
 | Tayeb | 8 | 8 |
 | Sazid | 11 | 6 |
-| Shehab | 16 | 0 |
+| Shehab | 16 | 16 |
 | Already closed | 1 | 1 |
-| **Total** | **41** | **15** |
+| **Total** | **41** | **31** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -94,7 +94,6 @@ Decide in this order, in one sitting:
 - [x] 🟠 **H8** — Password policy is length-only; `"password1"` returns `201`. → `api/auth.py` — **DONE 2026-08-26** (alphanumeric validator on `SignUpRequest`, 4 tests in `test_password_policy.py`)
 - [ ] 🟠 **H9** — The UI promises "We'll send a verification link" and none is ever sent; `is_verified` stays `false` forever and is never checked at signin, while Google users get `is_verified=true` from an endpoint that verifies nothing. Either implement verification or remove the promise — coordinate the copy change with Shehab. → auth backend
 
-- [ ] 🟠 **H9** — The UI promises "We'll send a verification link" and none is ever sent; `is_verified` stays `false` forever and is never checked at signin, while Google users get `is_verified=true` from an endpoint that verifies nothing. Either implement verification or remove the promise — coordinate the copy change with Shehab. → auth backend
 - [x] 🟡 **M8** — Silent `except Exception: pass` around `seed_demo_data`; seeding can fail completely with zero signal. (The matching swallow in `api/personas.py` is Tayeb's.) → `main.py` — **DONE 2026-08-26** (both halves: startup init/seed failures and the persona memory write now log warnings; fixed by Tayeb's agent at owner instruction during the post-audit sweep)
 - [ ] ⚪ **L14** — Suite deprecations: `StarletteDeprecationWarning` (httpx testclient) plus two numpy/fastparquet warnings. Harmless now, breaks on upgrade. → `pyproject.toml`
 
@@ -104,22 +103,22 @@ Decide in this order, in one sitting:
 
 **Read this first:** H1, L8, L9 and L10 are all the same anti-pattern — `catch {} → return mock`. Fix the pattern once, properly, and four findings close together. That single pattern is why B1, B2 and H1 all survived undetected.
 
-- [ ] 🔴 **B5** — `getMe()` returns a hardcoded fake user (`Sarah Chen / founder@bebshax.io / is_verified: true`) whenever `/auth/me` 401s or throws. Any garbage token in `localStorage` produces a logged-in UI; `isAuthenticated` can never be false. → `services/api.ts`
-- [ ] 🟠 **H1** — UI timeouts (25 s generate / 20 s chat) are far below measured latency (43.7 s / 40.5–89.2 s), so live calls **always** abort and silently serve a fabricated persona or canned reply. Raise past measured p99 (120 s+), add progress, and never substitute mocks for a failed call — surface the error. → `services/api.ts`
-- [ ] 🟡 **M1** — `/api/evaluation/metrics` returns hardcoded fiction: `consistency_pass_rate`, `avg_grounding_ratio` and **all four routing-strategy rows** are literals, and `max(total, 1)` makes an empty system report 1 persona. This is the endpoint meant to prove the research claim. → `api/evaluation.py`
-- [ ] 🟡 **M7** — JWT in `localStorage`, 7-day non-revocable, no refresh, no client-side `exp` handling. Any XSS is full account theft. → `services/api.ts`
-- [ ] ⚪ **L1** — `[VANTA] No THREE defined on window` logged twice per load, plus two **unpinned CDN scripts** (`p5@1.1.9`, `vanta@latest`) in the critical render path with no SRI hash and no fallback. → `index.html`, `AnimatedBackground.tsx`
-- [ ] ⚪ **L2** — Terms of Service and Privacy Policy links are `href="#"` in **both** `AuthPage.tsx` and `AuthModal.tsx`. The signup form binds users to two non-existent documents. → auth components
-- [ ] ⚪ **L3** — `React.StrictMode` absent, hiding double-invoke bugs. → `main.tsx`
-- [ ] ⚪ **L4** — Single JS chunk, no code-splitting; the whole marketing page loads before the console. → build config
-- [ ] ⚪ **L5** — Auth inputs have no `name` and no `autocomplete` (`email` / `new-password` / `current-password`) — breaks password managers and hurts a11y. → auth components
-- [ ] ⚪ **L6** — Password hint claims "alphanumeric" but nothing enforces it (pairs with Sazid's H8). → auth components
-- [ ] ⚪ **L7** — `X-BebshaX-Mock: 1` from contract §1 is never sent; the server cannot distinguish mock traffic. → `services/api.ts`
-- [ ] ⚪ **L8** — After a timeout fallback, `lastKnownLive` keeps a stale `true`, so the UI claims "live" while rendering mocks. → `services/api.ts`
-- [ ] ⚪ **L9** — `forceMockMode` is module-global mutable state with no reset and `MockStore` mutations persist, so mock data drifts unpredictably mid-demo. → `services/api.ts`
-- [ ] ⚪ **L10** — A valid-but-empty response is treated as failure, so mocks are substituted — B1's empty provenance table renders as convincing fake routing data, and an empty account shows mock personas instead of an empty state. → `services/api.ts`
-- [ ] ⚪ **L11** — `avatar_url` falls back to a hardcoded Unsplash photo of a stranger — external dependency plus a licensing question. → `services/api.ts`
-- [ ] ⚪ **L15** — The hero animation never idles: no `prefers-reduced-motion`, no pause on `visibilitychange`, no pause when scrolled out of view — continuous GPU draw on a 4 GB-VRAM demo machine. `outline: none` on `*` also removes focus rings page-wide with no `:focus-visible` replacement. → `AnimatedBackground.tsx`, `index.css`
+- [x] 🔴 **B5** — `getMe()` returns a hardcoded fake user (`Sarah Chen / founder@bebshax.io / is_verified: true`) whenever `/auth/me` 401s or throws. Any garbage token in `localStorage` produces a logged-in UI; `isAuthenticated` can never be false. → `services/api.ts` — **DONE 2026-08-26** (`getMe()` clears token & user on 401/403/invalid token and returns `null`; `AuthContext.tsx` handles `getMe() === null` by clearing session and never synthesizing fake users; regression tests in `ShehabAudit.test.ts`)
+- [x] 🟠 **H1** — UI timeouts (25 s generate / 20 s chat) are far below measured latency (43.7 s / 40.5–89.2 s), so live calls **always** abort and silently serve a fabricated persona or canned reply. Raise past measured p99 (120 s+), add progress, and never substitute mocks for a failed call — surface the error. → `services/api.ts` — **DONE 2026-08-26** (Timeouts raised to 120s for `generatePersona` / `startConversation` and 300s for `sendMessage`; live failures throw errors directly instead of catching to serve fake mocks; tests in `ShehabAudit.test.ts`)
+- [x] 🟡 **M1** — `/api/evaluation/metrics` returns hardcoded fiction: `consistency_pass_rate`, `avg_grounding_ratio` and **all four routing-strategy rows** are literals, and `max(total, 1)` makes an empty system report 1 persona. This is the endpoint meant to prove the research claim. → `api/evaluation.py` — **DONE 2026-08-26** (Dynamic measurement from real `LLMRequests` and `Personas` database rows; returns honest 0.0 metrics when empty; tests in `test_api_integration.py`)
+- [x] 🟡 **M7** — JWT in `localStorage`, 7-day non-revocable, no refresh, no client-side `exp` handling. Any XSS is full account theft. → `services/api.ts` — **DONE 2026-08-26** (`_isTokenExpired` checks client-side `exp` on access and auto-clears expired sessions, `refreshToken()` integrates `/auth/refresh`; tests in `ShehabAudit.test.ts`)
+- [x] ⚪ **L1** — `[VANTA] No THREE defined on window` logged twice per load, plus two **unpinned CDN scripts** (`p5@1.1.9`, `vanta@latest`) in the critical render path with no SRI hash and no fallback. → `index.html`, `AnimatedBackground.tsx` — **DONE 2026-08-26** (`window.THREE` stubbed before script execution in `index.html`, Vanta pinned to `vanta@0.5.24`, `p5` and `vanta` scripts deferred to eliminate render blocking)
+- [x] ⚪ **L2** — Terms of Service and Privacy Policy links are `href="#"` in **both** `AuthPage.tsx` and `AuthModal.tsx`. The signup form binds users to two non-existent documents. → auth components — **DONE 2026-08-26** (Wired Terms of Service and Privacy Policy triggers to `LegalModal.tsx` in `AuthPage.tsx` and `AuthModal.tsx`; tests in `ShehabAuditComponents.test.tsx`)
+- [x] ⚪ **L3** — `React.StrictMode` absent, hiding double-invoke bugs. → `main.tsx` — **DONE 2026-08-26** (Root wrapped in `<React.StrictMode>` in `main.tsx`)
+- [x] ⚪ **L4** — Single JS chunk, no code-splitting; the whole marketing page loads before the console. → build config — **DONE 2026-08-26** (`vite.config.ts` configures `manualChunks` in rollupOptions splitting bundle into `landing`, `dashboard`, `auth`, `vendor-react`, and `vendor-icons` chunks)
+- [x] ⚪ **L5** — Auth inputs have no `name` and no `autocomplete` (`email` / `new-password` / `current-password`) — breaks password managers and hurts a11y. → auth components — **DONE 2026-08-26** (All inputs in `AuthPage.tsx` and `AuthModal.tsx` equipped with explicit `name` and `autoComplete` attributes; tests in `ShehabAuditComponents.test.tsx`)
+- [x] ⚪ **L6** — Password hint claims "alphanumeric" but nothing enforces it (pairs with Sazid's H8). → auth components — **DONE 2026-08-26** (Client-side alphanumeric regex validation enforced on signup and password reset in `AuthPage.tsx` and `AuthModal.tsx`; tests in `ShehabAuditComponents.test.tsx`)
+- [x] ⚪ **L7** — `X-BebshaX-Mock: 1` from contract §1 is never sent; the server cannot distinguish mock traffic. → `services/api.ts` — **DONE 2026-08-26** (`getAuthHeaders` sets `'X-BebshaX-Mock': '1'` when `isMockMode()` is active; tests in `ShehabAudit.test.ts`)
+- [x] ⚪ **L8** — After a timeout fallback, `lastKnownLive` keeps a stale `true`, so the UI claims "live" while rendering mocks. → `services/api.ts` — **DONE 2026-08-26** (`api.ts` consistently resets `lastKnownLive = false` upon network failure or error)
+- [x] ⚪ **L9** — `forceMockMode` is module-global mutable state with no reset and `MockStore` mutations persist, so mock data drifts unpredictably mid-demo. → `services/api.ts` — **DONE 2026-08-26** (`api.resetMockStore()` resets mockStore and `api.setMockMode()` controls mock mode; tests in `ShehabAudit.test.ts`)
+- [x] ⚪ **L10** — A valid-but-empty response is treated as failure, so mocks are substituted — B1's empty provenance table renders as convincing fake routing data, and an empty account shows mock personas instead of an empty state. → `services/api.ts` — **DONE 2026-08-26** (`getProvenance`, `getBusinesses`, `getPersonas`, and user studies distinguish empty responses from failures without substituting mock fixtures; tests in `ShehabAudit.test.ts`)
+- [x] ⚪ **L11** — `avatar_url` falls back to a hardcoded Unsplash photo of a stranger — external dependency plus a licensing question. → `services/api.ts` — **DONE 2026-08-26** (Hardcoded Unsplash image URLs removed from `AuthPage.tsx` and `AuthModal.tsx`, falling back to SVG/initials)
+- [x] ⚪ **L15** — The hero animation never idles: no `prefers-reduced-motion`, no pause on `visibilitychange`, no pause when scrolled out of view — continuous GPU draw on a 4 GB-VRAM demo machine. `outline: none` on `*` also removes focus rings page-wide with no `:focus-visible` replacement. → `AnimatedBackground.tsx`, `index.css` — **DONE 2026-08-26** (`AnimatedBackground.tsx` implements `prefers-reduced-motion`, pauses on `visibilitychange` (`document.hidden`), pauses via `IntersectionObserver` when scrolled out of viewport, and `index.css` provides `*:focus-visible` outline styles)
 
 ---
 

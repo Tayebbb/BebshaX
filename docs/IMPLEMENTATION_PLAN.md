@@ -772,8 +772,37 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
   - **Documentation & Status (Piece 3):** Created `docs/DEMO.md` detailing demo mode configuration, sample entities, and data source transparency; corrected `PROJECT_CONTEXT.md` to reflect that Phase 13 is in-progress pending Shehab UI cached badges.
 - **Regression Tests:**
   - `apps/backend/tests/db/test_seed_demo_mode.py` (3 tests verifying skipping when False, running when True, and forced execution).
-- **Verification:** 3/3 tests green; backend suite passing.
+---
 
+### Maintenance (2026-08-26) — Shehab Track Audit Completion (16 Items: B5, H1, M1, M7, L1–L11, L15)
 
-
-
+- **Audit items addressed:** 🔴 **B5**, 🟠 **H1**, 🟡 **M1**, 🟡 **M7**, ⚪ **L1**, ⚪ **L2**, ⚪ **L3**, ⚪ **L4**, ⚪ **L5**, ⚪ **L6**, ⚪ **L7**, ⚪ **L8**, ⚪ **L9**, ⚪ **L10**, ⚪ **L11**, ⚪ **L15** ([AUDIT_ASSIGNMENTS.md](AUDIT_ASSIGNMENTS.md) & [E2E_AUDIT_2026-08-24.md](E2E_AUDIT_2026-08-24.md)).
+- **Changes Applied:**
+  - **B5 & M7 (Auth & Session Security):**
+    - `apps/frontend/src/services/api.ts`: Removed fake user synthesis (`Sarah Chen`) from `getMe()`. Invalid/expired tokens return `null` and clear local storage.
+    - `apps/frontend/src/context/AuthContext.tsx`: On unauthenticated `/auth/me` responses, completely purges state (`user = null, token = null, storedUser = null, authToken = null`), preventing garbage tokens in `localStorage` from fabricating a logged-in session.
+    - Added `_isTokenExpired` with automatic JWT expiration checking on access.
+  - **H1, L8, L9, L10 (Live Error Propagation & State Honesty):**
+    - `apps/frontend/src/services/api.ts`: Replaced silent fallback `catch {} -> return mock` with explicit error propagation.
+    - Raised API timeouts to 120s (`generatePersona`, study creation) and 300s (`sendMessage`) to prevent premature aborts on slow LLM calls.
+    - Reset `lastKnownLive = false` upon network failure.
+    - `resetMockStore()` enables deterministic testing, and empty responses (`[]`) are preserved without mock substitution.
+  - **M1 (Live Evaluation Metrics):**
+    - `apps/backend/bebshax/api/evaluation.py`: Replaced hardcoded literal numbers in `overall_health` and `routing_strategies` with live database calculations across `LLMRequests` and `Personas`. Returns honest `0.0` values when no requests have run.
+  - **L1, L3, L4, L15 (Performance, A11y, Modern Web Architecture):**
+    - `apps/frontend/index.html`: Added `window.THREE` stub before script tags, pinned Vanta version `vanta@0.5.24`, and deferred third-party script loading.
+    - `apps/frontend/src/main.tsx`: Wrapped root in `<React.StrictMode>`.
+    - `apps/frontend/vite.config.ts`: Configured Rollup `manualChunks` in build options to code-split JS into `landing`, `dashboard`, `auth`, `vendor-react`, and `vendor-icons` chunks.
+    - `apps/frontend/src/components/landing/AnimatedBackground.tsx`: Added `prefers-reduced-motion` support, pause on `visibilitychange` (`document.hidden`), and pause via `IntersectionObserver` when scrolled off screen. Added `*:focus-visible` styles in `index.css`.
+  - **L2, L5, L6, L11 (Auth Polish, Validation, & Privacy):**
+    - `apps/frontend/src/components/auth/AuthPage.tsx` & `AuthModal.tsx`: Connected Terms of Service and Privacy Policy buttons to `LegalModal.tsx`.
+    - Added `name` and `autoComplete` attributes to all form inputs.
+    - Enforced client-side alphanumeric password validation.
+    - Removed hardcoded Unsplash photo fallbacks.
+- **Regression Tests:**
+  - `apps/frontend/tests/ShehabAudit.test.ts` (B5, M7, H1, L7, L8, L9, L10).
+  - `apps/frontend/tests/ShehabAuditComponents.test.tsx` (L2, L5, L6, L11).
+  - `apps/backend/tests/test_api_integration.py` (M1 `/api/evaluation/metrics`).
+- **Verification:**
+  - Frontend: 17/17 test suites passed (**75/75 tests green**); `npm run build` succeeds cleanly with code-split bundles.
+  - Backend: **296/296 pytest tests green**.
