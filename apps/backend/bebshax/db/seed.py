@@ -24,12 +24,19 @@ from bebshax.persona.store import save_persona
 logger = logging.getLogger(__name__)
 
 
-async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession]) -> None:
-    """Seed initial known-good user, business, persona, studies, and provenance if database is empty."""
+async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool = False) -> bool:
+    """Seed initial known-good user, business, persona, studies, and provenance if database is empty and demo_mode is enabled (or force=True)."""
+    from bebshax.config import get_settings
+    settings = get_settings()
+    if not settings.demo_mode and not force:
+        logger.info("Demo data seeding skipped (demo_mode is disabled).")
+        return False
+
     async with sessionmaker_() as session:
         count = (await session.execute(select(func.count(Businesses.id)))).scalar_one_or_none() or 0
         if count > 0:
-            return  # Already seeded or has data
+            return False  # Already seeded or has data
+
 
         logger.info("Seeding demo user, business, personas, studies, and initial records...")
 
@@ -217,3 +224,5 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession]) -> None:
     async with sessionmaker_() as session:
         await save_persona(session, profile)
         logger.info("Demo persona seed complete.")
+    return True
+

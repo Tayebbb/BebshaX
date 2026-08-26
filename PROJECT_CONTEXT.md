@@ -66,9 +66,10 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | 10 | Interview engine | ✅ 2026-08-23 |
 | 11 | Quality/evaluation (+ routing strategy experiments) | ✅ 2026-08-22 |
 | 12 | Frontend (Foundation & Views on mocks) | ✅ 2026-08-22 |
-| 13 | Integration + demo mode | ✅ 2026-08-23 |
+| 13 | Integration + demo mode | 🟡 In progress (seeding flag-gated, DEMO.md added; cached labeling pending Shehab UI) |
 | 14 | Testing (full matrix + acceptance tests) | ⬜ |
 | 15 | Documentation | ⬜ |
+
 
 Detailed deliverables/exit criteria: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md). Environment/ecosystem audit: [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md).
 
