@@ -62,29 +62,50 @@ async def warn_if_local_tier_down(adapters: Mapping[str, ProviderAdapter]) -> bo
     return True
 
 
+
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
+
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine as create_sync_engine
+from sqlalchemy.ext.asyncio import create_async_engine
+from bebshax.db.engine import normalize_async_database_url
 
 
-def check_migrations_current(sync_database_url: str, alembic_ini_path: str = "alembic.ini") -> None:
+async def check_migrations_current_async(database_url: str, alembic_ini_path: str = "alembic.ini") -> None:
     """
     Fail-fast guard: refuse to serve requests against a database that isn't
     at the current migration head. Mirrors the CI check (H6) but runs locally
     so a stale dev DB produces one clear message instead of a cryptic 500 on
     the first request that touches a missing column/table.
     """
+    import os
     import sys
+
+    if not os.path.exists(alembic_ini_path):
+        candidates = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "alembic.ini"),
+            os.path.join(os.getcwd(), "apps", "backend", "alembic.ini"),
+            os.path.join(os.getcwd(), "alembic.ini"),
+        ]
+        for cand in candidates:
+            if os.path.exists(cand):
+                alembic_ini_path = cand
+                break
 
     alembic_cfg = Config(alembic_ini_path)
     script = ScriptDirectory.from_config(alembic_cfg)
     head_revisions = set(script.get_heads())
 
-    engine = create_sync_engine(sync_database_url)
-    with engine.connect() as conn:
-        context = MigrationContext.configure(conn)
-        current_revisions = set(context.get_current_heads())
+    async_url = normalize_async_database_url(database_url)
+    engine = create_async_engine(async_url)
+
+    def _get_current(sync_conn):
+        ctx = MigrationContext.configure(sync_conn)
+        return set(ctx.get_current_heads())
+
+    async with engine.connect() as conn:
+        current_revisions = await conn.run_sync(_get_current)
+    await engine.dispose()
 
     if current_revisions != head_revisions:
         print(
@@ -97,6 +118,23 @@ def check_migrations_current(sync_database_url: str, alembic_ini_path: str = "al
         raise SystemExit(1)
 
 
+def check_migrations_current(sync_database_url: str, alembic_ini_path: str = "alembic.ini") -> None:
+    """Sync wrapper for tests and external scripts."""
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # Fallback if called inside an event loop
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.submit(asyncio.run, check_migrations_current_async(sync_database_url, alembic_ini_path)).result()
+    else:
+        asyncio.run(check_migrations_current_async(sync_database_url, alembic_ini_path))
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     settings = get_settings()
@@ -104,7 +142,7 @@ async def _lifespan(app: FastAPI):
     # Local development migration drift check (H6)
     if settings.environment in ("development", "local") and not settings.demo_mode and "localhost" in settings.database_url:
         try:
-            check_migrations_current(settings.sync_database_url)
+            await check_migrations_current_async(settings.database_url)
         except SystemExit:
             raise
         except Exception:
@@ -115,6 +153,7 @@ async def _lifespan(app: FastAPI):
     sessionmaker_ = create_async_sessionmaker(db_engine)
     sink = ProvenanceSink(sessionmaker_)  # fail-soft: DB issues never fail LLM calls
     await sink.start()
+
 
 
     # AI plan §10: quota ledger (seeded from today's rows) + quota-aware ranking

@@ -1,19 +1,25 @@
-"""Environment-driven configuration. BEBSHAX_ prefix for all settings."""
+import os
 import sys
+from pathlib import Path
 from functools import lru_cache
 from dotenv import load_dotenv
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
+
+for p in (".env", "../.env", "../../.env"):
+    if os.path.exists(p):
+        load_dotenv(p)
+        break
 
 BURNED_JWT_SECRET = "bebshax-super-secret-jwt-signing-key-2026-auth-v1"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="BEBSHAX_", env_file=".env", extra="ignore"
+        env_prefix="BEBSHAX_", env_file=(".env", "../.env", "../../.env"), extra="ignore"
     )
+
 
     app_name: str = "BebshaX"
     environment: str = "development"
