@@ -38,11 +38,11 @@ A finding is **not done** until a test fails without your fix. B1 exists precise
 | Owner             | Assigned |  Done |
 | ----------------- | -------: | ----: |
 | Joint (all three) |        5 |     0 |
-| Tayeb             |        8 |     1 |
+| Tayeb             |        8 |     2 |
 | Sazid             |       11 |     1 |
 | Shehab            |       16 |     0 |
 | Already closed    |        1 |     1 |
-| **Total**         |   **41** | **3** |
+| **Total**         |   **41** | **4** |
 
 🔴 = blocker · 🟠 = high · 🟡 = medium · ⚪ = low
 
@@ -70,7 +70,7 @@ Decide in this order, in one sitting:
 - [ ] 🟡 **M2** — `/api/routes/status` fabricates: `active_requests` hardcoded `0`, `max(count, 1)` hides empty pools, provider `type` guessed by substring match, and it reaches into the router's private `_cooling_reason`. → `api/routes.py`
 - [ ] 🟡 **M4** — Interview responses hardcode `latency_ms: 750` and invent `retrieved_memories` placeholder strings instead of the memories actually retrieved. The memory feature's only UI surface is fake. → `api/interviews.py`
 - [ ] 🟡 **M5** — `industry`/`target_market` stuffed into the description string and re-parsed with `desc.startswith("Industry:")`. Any description starting with "Industry:" corrupts. Needs real columns — coordinate the migration with Sazid. → `api/personas.py`
-- [ ] 🟡 **M6** — `CORS allow_origins=["*"]` together with `allow_credentials=True` — invalid per spec and unsafe. → `main.py`
+- [x] 🟡 **M6** — `CORS allow_origins=["*"]` together with `allow_credentials=True` — invalid per spec and unsafe. → `main.py` — **DONE 2026-08-26** (explicit origins via `BEBSHAX_CORS_ORIGINS`, 3 tests; see audit fix log)
 - [ ] 🟡 **M9** — Memories for a non-existent persona return `200 []` instead of `404`; a missing `memory_service` returns the same, so the two are indistinguishable. → `api/personas.py`
 - [ ] 🟡 **M11** — CI has no lint, no standalone type-check, **no secret scan** (would have caught B4), no migration-drift check (H6), no coverage floor, and `--if-present` silently passes when a script disappears. → `.github/workflows/ci.yml`
 - [ ] ⚪ **L12** — Cross-provider reply-format drift: one free model answered in Markdown persona-script form while others used plain first person. Correctly not an infra failure per R2/D3, but an open Phase-11 normalisation gap. → `interview/` composition

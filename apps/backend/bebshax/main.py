@@ -109,10 +109,11 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=_lifespan)
 
-    # CORS configuration allowing local frontend development and web requests
+    # M6: explicit origins only — "*" with allow_credentials=True is spec-invalid
+    # and would let any site ride a user's credentials. Origins come from settings.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_origins_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

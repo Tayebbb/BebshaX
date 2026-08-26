@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     api_port: int = 8000
     demo_mode: bool = False
 
+    # M6: explicit origins — wildcard + allow_credentials is invalid per the
+    # Fetch spec and unsafe. Comma-separated; override via BEBSHAX_CORS_ORIGINS.
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     # Consumed from Phase 6 (database); docker-compose pgvector service on 5433.
     database_url: str = "postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax"
 

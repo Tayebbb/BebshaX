@@ -53,6 +53,11 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — M6: CORS wildcard+credentials removed
+
+- `create_app` now uses `settings.cors_origins_list` (new `BEBSHAX_CORS_ORIGINS`, comma-separated, Vite dev/preview defaults) with `allow_credentials=True` — spec-valid.
+- Tests: `tests/test_cors.py` (echoed origin, rejected unknown origin, parsing). `.env.example` updated. Audit M6 ticked.
+
 ### Maintenance (2026-08-26) — H2: local Ollama tier restored + loud startup probe
 
 - Ops: daemon started and verified live (`smoke_ollama.py` → SMOKE OK via `ollama/llama3.2:3b`); **no autostart exists** — ops note added to docs/ROUTING.md.
