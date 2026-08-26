@@ -45,9 +45,19 @@ class SignInRequest(BaseModel):
     password: str
 
 
+from enum import Enum
+
+
+class AuthProvider(str, Enum):
+    EMAIL = "email"
+    NEON = "neon"
+    GOOGLE = "google"
+
+
 class UserSyncRequest(BaseModel):
     neon_token: str = Field(..., min_length=1)
-    auth_provider: str = "neon"
+    auth_provider: AuthProvider = AuthProvider.NEON
+
 
 
 class UserProfileResponse(BaseModel):
