@@ -161,15 +161,3 @@ async def test_auth_api_flow(monkeypatch, tmp_path):
         no_auth = await client.get("/api/auth/me")
         assert no_auth.status_code == 401
 
-        # 4. Google Auth
-        google_res = await client.post(
-            "/api/auth/google",
-            json={
-                "email": "taylor.google@example.com",
-                "name": "Taylor Google",
-            },
-        )
-        assert google_res.status_code == 200
-        g_data = google_res.json()
-        assert "access_token" in g_data
-        assert g_data["user"]["auth_provider"] == "google"

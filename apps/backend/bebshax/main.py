@@ -62,14 +62,60 @@ async def warn_if_local_tier_down(adapters: Mapping[str, ProviderAdapter]) -> bo
     return True
 
 
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import create_engine as create_sync_engine
+
+
+def check_migrations_current(sync_database_url: str, alembic_ini_path: str = "alembic.ini") -> None:
+    """
+    Fail-fast guard: refuse to serve requests against a database that isn't
+    at the current migration head. Mirrors the CI check (H6) but runs locally
+    so a stale dev DB produces one clear message instead of a cryptic 500 on
+    the first request that touches a missing column/table.
+    """
+    import sys
+
+    alembic_cfg = Config(alembic_ini_path)
+    script = ScriptDirectory.from_config(alembic_cfg)
+    head_revisions = set(script.get_heads())
+
+    engine = create_sync_engine(sync_database_url)
+    with engine.connect() as conn:
+        context = MigrationContext.configure(conn)
+        current_revisions = set(context.get_current_heads())
+
+    if current_revisions != head_revisions:
+        print(
+            "FATAL: local database is not at the current migration head.\n"
+            f"  Database is at:  {current_revisions or '(no migrations applied)'}\n"
+            f"  Code expects:    {head_revisions}\n"
+            "  Run: alembic upgrade head\n",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     settings = get_settings()
+
+    # Local development migration drift check (H6)
+    if settings.environment in ("development", "local") and not settings.demo_mode and "localhost" in settings.database_url:
+        try:
+            check_migrations_current(settings.sync_database_url)
+        except SystemExit:
+            raise
+        except Exception:
+            logger.warning("Local migration check failed or skipped", exc_info=True)
+
     adapters = build_default_adapters()  # lazy clients — no network at startup
     db_engine = create_engine(settings)  # lazy — connects on first use
     sessionmaker_ = create_async_sessionmaker(db_engine)
     sink = ProvenanceSink(sessionmaker_)  # fail-soft: DB issues never fail LLM calls
     await sink.start()
+
 
     # AI plan §10: quota ledger (seeded from today's rows) + quota-aware ranking
     # + cooldowns that survive restarts. All fail-soft — capacity features must

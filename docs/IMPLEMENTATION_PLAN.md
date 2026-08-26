@@ -718,3 +718,45 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
   - Adapter boundary test `apps/backend/tests/llm/test_boundary.py` verified (**R1 compliance preserved**).
   - Frontend: All 16 vitest test suites passed (**71/71 tests green**).
   - Frontend production bundle build verified (`npm run build` green).
+
+---
+
+### Maintenance (2026-08-26) — Security Fix B3 (Unverified Identity & Token Bypass)
+
+- **Audit item addressed:** 🔴 **B3** (E2E_AUDIT_2026-08-24.md & AUDIT_ASSIGNMENTS.md).
+- **Changes Applied:**
+  - **Part 1 (/google endpoint deletion):** Completely removed `class GoogleAuthRequest` and `@auth_router.post("/google")` in `apps/backend/bebshax/api/auth.py`. No signature verification or GIS integration existed.
+  - **Part 2 (/sync token verification):** Added `neon_auth_url` configuration in `apps/backend/bebshax/config.py`. Implemented `verify_neon_token(token: str)` in `apps/backend/bebshax/api/auth.py` to verify Neon session tokens server-side via `GET /get-session` with `Authorization: Bearer <neon_token>`. Updated `UserSyncRequest` to require `neon_token: str` and removed client-supplied `email` from user lookup and creation.
+  - **Frontend handoff:** Prepared exact diffs for Shehab to remove obsolete Google sign-in buttons in `AuthPage.tsx` and `AuthModal.tsx`, remove `googleAuth()` in `services/api.ts`, and forward `neon_token` in `syncUser({ neon_token })`.
+- **Regression Tests:**
+  - `apps/backend/tests/test_auth_google_removed.py` (2 tests, verifying 404/405 and absence from OpenAPI schema).
+  - `apps/backend/tests/test_auth_sync_verification.py` (4 tests, verifying rejection of missing token, rejection of invalid token, authoritative identity from verified Neon user, and exclusion of client-claimed email field).
+- **Verification:** All 18 auth tests in backend suite passed cleanly.
+
+---
+
+### Maintenance (2026-08-26) — Migration Drift Guard (H6)
+
+- **Audit item addressed:** 🟠 **H6** (E2E_AUDIT_2026-08-24.md & AUDIT_ASSIGNMENTS.md).
+- **Changes Applied:**
+  - **Local Dev Guard:** Added `check_migrations_current()` in `apps/backend/bebshax/main.py` using Alembic's Python API (`Config`, `ScriptDirectory`, `MigrationContext`).
+  - **Lifespan Integration:** Hooked `check_migrations_current(settings.sync_database_url)` into `_lifespan` in `apps/backend/bebshax/main.py` for local dev environments (`localhost` / `development`), producing a loud fatal message and exiting immediately with `SystemExit(1)` and instructions to run `alembic upgrade head` instead of mysterious 500 runtime errors.
+  - **Config Helper:** Added `sync_database_url` property in `apps/backend/bebshax/config.py`.
+- **Regression Tests:**
+  - `apps/backend/tests/db/test_migration_drift_guard.py` (2 tests asserting `SystemExit` when behind head and clean startup when at head).
+- **Verification:** 2/2 tests green.
+
+---
+
+### Maintenance (2026-08-26) — Password Policy Beyond Length (H8)
+
+- **Audit item addressed:** 🟠 **H8** (E2E_AUDIT_2026-08-24.md & AUDIT_ASSIGNMENTS.md).
+- **Changes Applied:**
+  - **Alphanumeric Password Validator:** Added `password_must_be_alphanumeric_mix` validator to `SignUpRequest` in `apps/backend/bebshax/api/auth.py` requiring at least one letter and at least one digit (`has_letter and has_digit`).
+  - **Copy Consistency:** Matched the exact frontend UI promise displayed to users ("At least 8 characters, alphanumeric") without introducing unadvertised symbol/blocklist scope changes.
+- **Regression Tests:**
+  - `apps/backend/tests/api/test_password_policy.py` (4 tests verifying numeric-only rejection, alpha-only rejection, alphanumeric acceptance, and length limit preservation).
+- **Verification:** 4/4 tests green.
+
+
+

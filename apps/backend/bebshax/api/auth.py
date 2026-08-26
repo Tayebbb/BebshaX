@@ -1,5 +1,6 @@
 from datetime import timedelta
 from typing import Optional
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
@@ -8,8 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bebshax.auth.models import Users
 from bebshax.auth.security import create_access_token, decode_access_token
 from bebshax.auth.service import authenticate_user, create_user, get_user_by_email, get_user_by_id
+from bebshax.config import get_settings
 
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class SignUpRequest(BaseModel):
@@ -17,23 +22,27 @@ class SignUpRequest(BaseModel):
     email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     password: str = Field(..., min_length=8, max_length=128)
 
+    @field_validator("password")
+    @classmethod
+    def password_must_be_alphanumeric_mix(cls, v: str) -> str:
+        has_letter = any(c.isalpha() for c in v)
+        has_digit = any(c.isdigit() for c in v)
+        if not (has_letter and has_digit):
+            raise ValueError(
+                "Password must contain at least one letter and one number "
+                "(matches the requirement shown at signup)."
+            )
+        return v
+
+
 
 class SignInRequest(BaseModel):
     email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     password: str
 
 
-class GoogleAuthRequest(BaseModel):
-    credential: Optional[str] = None
-    email: Optional[str] = None
-    name: Optional[str] = None
-    avatar_url: Optional[str] = None
-
-
 class UserSyncRequest(BaseModel):
-    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-    full_name: Optional[str] = None
-    avatar_url: Optional[str] = None
+    neon_token: str = Field(..., min_length=1)
     auth_provider: str = "neon"
 
 
@@ -197,57 +206,36 @@ async def signin(
     )
 
 
-@auth_router.post("/google", response_model=AuthResponse)
-async def google_auth(
-    payload: GoogleAuthRequest,
-    session: AsyncSession = Depends(get_session),
-):
-    """Authenticate or register seamlessly with Google, extracting profile photo and name."""
-    email = payload.email
-    full_name = payload.name
-    avatar_url = payload.avatar_url
 
-    if payload.credential and (not email or not avatar_url):
+async def verify_neon_token(token: str) -> dict:
+    """Calls Neon's session-verification endpoint server-side.
+    Identity comes only from Neon's verified response — never from client claims."""
+    settings = get_settings()
+    base_url = settings.neon_auth_url.rstrip("/")
+    async with httpx.AsyncClient(timeout=5.0) as client:
         try:
-            import base64
-            import json
-
-            parts = payload.credential.split(".")
-            if len(parts) >= 2:
-                padded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
-                jwt_payload = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
-                if not email and "email" in jwt_payload:
-                    email = jwt_payload["email"]
-                if not full_name and "name" in jwt_payload:
-                    full_name = jwt_payload["name"]
-                if not avatar_url and "picture" in jwt_payload:
-                    avatar_url = jwt_payload["picture"]
-        except Exception:
-            pass
-
-    email = email or "google.user@example.com"
-    full_name = full_name or "Google User"
-    avatar_url = avatar_url or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop"
-
-    user = await get_user_by_email(session, email)
-    if not user:
-        user = await create_user(
-            session=session,
-            email=email,
-            full_name=full_name,
-            auth_provider="google",
-            avatar_url=avatar_url,
+            resp = await client.get(
+                f"{base_url}/get-session",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Unable to reach Neon authentication service: {exc}",
+            )
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired Neon session token",
         )
-    elif avatar_url and (not user.avatar_url or user.auth_provider == "google"):
-        user.avatar_url = avatar_url
-        await session.commit()
-        await session.refresh(user)
-
-    token = create_access_token(user_id=user.id)
-    return AuthResponse(
-        access_token=token,
-        user=_serialize_user(user),
-    )
+    data = resp.json()
+    user = data.get("user") if isinstance(data, dict) else None
+    if not user or not user.get("email"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired Neon session token",
+        )
+    return data
 
 
 @auth_router.post("/sync", response_model=AuthResponse)
@@ -255,9 +243,33 @@ async def sync_user(
     payload: UserSyncRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    """Sync, register, or upsert an account authenticated via Neon Auth or external providers."""
-    email = payload.email.strip().lower()
-    full_name = payload.full_name or email.split("@")[0]
+    """Sync a Neon-authenticated user into the local mirror table.
+    Identity comes ONLY from Neon's verified response — never from client input."""
+    neon_response = await verify_neon_token(payload.neon_token)
+    neon_user = neon_response.get("user") if isinstance(neon_response, dict) and "user" in neon_response else neon_response
+    if not isinstance(neon_user, dict):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Neon session payload",
+        )
+
+    if not neon_user.get("emailVerified", False):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email not verified with identity provider",
+        )
+
+
+    email = (neon_user.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Verified Neon session returned no email address",
+        )
+
+    full_name = neon_user.get("name") or neon_user.get("full_name") or email.split("@")[0]
+    avatar_url = neon_user.get("image") or neon_user.get("avatar_url")
+
     user = await get_user_by_email(session, email)
     if not user:
         user = await create_user(
@@ -265,18 +277,28 @@ async def sync_user(
             email=email,
             full_name=full_name,
             auth_provider=payload.auth_provider,
-            avatar_url=payload.avatar_url,
+            avatar_url=avatar_url,
         )
-    elif payload.avatar_url and not user.avatar_url:
-        user.avatar_url = payload.avatar_url
-        await session.commit()
-        await session.refresh(user)
+    else:
+        updated = False
+        if full_name and user.full_name != full_name:
+            user.full_name = full_name
+            updated = True
+        if avatar_url and user.avatar_url != avatar_url:
+            user.avatar_url = avatar_url
+            updated = True
+        if updated:
+            await session.commit()
+            await session.refresh(user)
 
     token = create_access_token(user_id=user.id)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(user),
     )
+
+
+
 
 
 @auth_router.get("/me", response_model=UserProfileResponse)
