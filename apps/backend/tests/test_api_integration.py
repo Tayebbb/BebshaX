@@ -57,7 +57,7 @@ async def test_evaluation_metrics_endpoint(api_test_app: TestClient):
     assert len(metrics["routing_strategies"]) == 4
 
 
-async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
+async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, auth_headers):
     # 1. Create Business
     b_res = api_test_app.post(
         "/api/businesses",
@@ -67,13 +67,14 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
             "industry": "Gig Economy",
             "target_market": "Couriers",
         },
+        headers=auth_headers,
     )
     assert b_res.status_code == 201
     biz = b_res.json()
     biz_id = biz["id"]
 
     # 2. List Businesses
-    blist_res = api_test_app.get("/api/businesses")
+    blist_res = api_test_app.get("/api/businesses", headers=auth_headers)
     assert blist_res.status_code == 200
     assert any(b["id"] == biz_id for b in blist_res.json())
 
@@ -84,6 +85,7 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
             "audience_segment": "High-mileage courier",
             "generation_hints": ["Prioritize vehicle maintenance costs"],
         },
+        headers=auth_headers,
     )
     assert p_gen.status_code == 201
     persona = p_gen.json()

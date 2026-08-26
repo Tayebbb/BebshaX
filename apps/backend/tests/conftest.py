@@ -94,3 +94,33 @@ async def api_test_app(tmp_path, monkeypatch):
         )
         yield client
     get_settings.cache_clear()
+
+
+async def seed_test_user(db_sessionmaker) -> str:
+    """Insert a test user into the DB and return auth headers dict."""
+    from bebshax.auth.models import Users
+    from bebshax.auth.security import create_access_token
+
+    user_id = "usr_test_fixture"
+    async with db_sessionmaker() as session:
+        existing = await session.get(Users, user_id)
+        if not existing:
+            session.add(Users(
+                id=user_id,
+                email="fixture@test.local",
+                full_name="Test Fixture User",
+                auth_provider="email",
+                is_active=True,
+                is_verified=True,
+            ))
+            await session.commit()
+    token = create_access_token(user_id)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+async def auth_headers(api_test_app):
+    """Return auth headers for a seeded test user — use on write endpoints."""
+    headers = await seed_test_user(api_test_app.app.state.db_sessionmaker)
+    return headers
+
