@@ -772,7 +772,29 @@ Owner instruction: keep the OpenRouter adapter/pool position **for testing purpo
   - **Documentation & Status (Piece 3):** Created `docs/DEMO.md` detailing demo mode configuration, sample entities, and data source transparency; corrected `PROJECT_CONTEXT.md` to reflect that Phase 13 is in-progress pending Shehab UI cached badges.
 - **Regression Tests:**
   - `apps/backend/tests/db/test_seed_demo_mode.py` (3 tests verifying skipping when False, running when True, and forced execution).
+- **Verification:** 3/3 tests green; backend suite passing.
+
 ---
+
+### Maintenance (2026-08-26) — Auth Rate Limiting & Failed Attempt Logging (H7)
+
+- **Audit item addressed:** 🟠 **H7** (E2E_AUDIT_2026-08-24.md & AUDIT_ASSIGNMENTS.md).
+- **R8 Dependency Review:**
+  - **Package:** `slowapi` (v0.1.10) / `limits` (v5.8.0), `wrapt` (v2.3.0), `deprecated` (v1.3.1).
+  - **Purpose:** FastAPI/Starlette-native IP-based in-memory rate limiting.
+  - **License:** MIT (compatible).
+  - **Security:** 0 known CVEs; in-memory storage (zero extra infrastructure overhead, fits single-worker topology).
+- **Changes Applied:**
+  - **Shared Limiter:** Created `apps/backend/bebshax/api/limiter.py` initializing `Limiter(key_func=get_remote_address)`.
+  - **App Wiring:** Integrated `SlowAPIMiddleware` and `RateLimitExceeded` handler in `apps/backend/bebshax/main.py`.
+  - **Endpoint Gating:** Added `@limiter.limit("5/minute")` to `/api/auth/signin` in `apps/backend/bebshax/api/auth.py`.
+  - **Audit Logging:** Added `logger.warning("Failed signin attempt for %s from %s", payload.email, client_ip)` on invalid authentication (explicitly omitting passwords).
+- **Regression Tests:**
+  - `apps/backend/tests/api/test_signin_rate_limit.py` (4 tests verifying 429 threshold enforcement, initial attempt allowance, multi-email IP sharing, and password-free audit logging).
+- **Verification:** 4/4 tests green; full backend suite passing.
+
+---
+
 
 ### Maintenance (2026-08-26) — Shehab Track Audit Completion (16 Items: B5, H1, M1, M7, L1–L11, L15)
 

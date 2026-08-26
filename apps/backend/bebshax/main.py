@@ -6,6 +6,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from bebshax.api.limiter import limiter
+
+
 
 from bebshax import __version__
 from bebshax.api.auth import auth_router
@@ -222,8 +228,10 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=_lifespan)
 
-    # M6: explicit origins only — "*" with allow_credentials=True is spec-invalid
-    # and would let any site ride a user's credentials. Origins come from settings.
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list,
@@ -231,6 +239,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
 
     app.include_router(health_router, prefix="/api")
     app.include_router(auth_router)

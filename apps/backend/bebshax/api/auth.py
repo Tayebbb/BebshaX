@@ -191,14 +191,29 @@ async def signup(
     )
 
 
+import logging
+from bebshax.api.limiter import limiter
+
+logger = logging.getLogger(__name__)
+
+
+
 @auth_router.post("/signin", response_model=AuthResponse)
+@limiter.limit("5/minute")
 async def signin(
+    request: Request,
     payload: SignInRequest,
     session: AsyncSession = Depends(get_session),
 ):
     """Authenticate with email and password."""
     user = await authenticate_user(session, payload.email, payload.password)
     if not user:
+        client_ip = request.client.host if request.client else "unknown"
+        logger.warning(
+            "Failed signin attempt for %s from %s",
+            payload.email,
+            client_ip,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -225,6 +240,7 @@ async def signin(
         access_token=token,
         user=_serialize_user(user),
     )
+
 
 
 

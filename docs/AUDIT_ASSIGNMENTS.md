@@ -90,7 +90,7 @@ Decide in this order, in one sitting:
 
 - [x] 🟠 **H6** — Migration drift. The local DB was brought to head on 2026-08-24, but **no CI guard exists**, so `/api/auth/*` still 500s on every other machine until each person runs the upgrade manually. Add `alembic current == heads` or fail. → CI + alembic — **DONE 2026-08-26** (CI guard in `ci.yml` + local-dev fail-fast check in `main.py`, 2 tests in `test_migration_drift_guard.py`)
 
-- [ ] 🟠 **H7** — No rate limiting, throttling or lockout on `/auth/signin`. PBKDF2 at 100 k rounds is also a DoS amplifier without it. → `api/auth.py`
+- [x] 🟠 **H7** — No rate limiting, throttling or lockout on `/auth/signin`. PBKDF2 at 100 k rounds is also a DoS amplifier without it. → `api/auth.py` — **DONE 2026-08-26** (slowapi IP rate limiter 5/min on `/signin` + failed attempt audit logging, 4 regression tests in `test_signin_rate_limit.py`)
 - [x] 🟠 **H8** — Password policy is length-only; `"password1"` returns `201`. → `api/auth.py` — **DONE 2026-08-26** (alphanumeric validator on `SignUpRequest`, 4 tests in `test_password_policy.py`)
 - [ ] 🟠 **H9** — The UI promises "We'll send a verification link" and none is ever sent; `is_verified` stays `false` forever and is never checked at signin, while Google users get `is_verified=true` from an endpoint that verifies nothing. Either implement verification or remove the promise — coordinate the copy change with Shehab. → auth backend
 
