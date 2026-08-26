@@ -26,6 +26,18 @@ data/uploads/*
 !data/processed/.gitkeep
 !data/uploads/.gitkeep
 
+# The rules above are root-anchored, but UPLOAD_DIR is Path("data/uploads") —
+# relative to the process working directory. Running the server or the suite
+# from apps/backend therefore writes apps/backend/data/uploads/, which the
+# root-anchored rules do not match: 13 test artifacts reached git this way in
+# e8873d4. These patterns catch the directory at any depth.
+**/data/raw/*
+**/data/processed/*
+**/data/uploads/*
+!**/data/raw/.gitkeep
+!**/data/processed/.gitkeep
+!**/data/uploads/.gitkeep
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -257,12 +257,26 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
     "grounding_ratio": 0.78,
     "critic_notes": "Passed consistency rules: Income bracket matches multi-app delivery occupation. Tax reserve goal matches gig profile.",
     "generation_model": "pollinations/deepseek-r1",
+    "data_source": "live",
     "created_at": "2026-08-22T08:15:00.000Z"
   }
   ```
 
 #### `GET /api/personas/{id}`
 - **Response `200 OK`:** Full `Persona` profile.
+
+#### `data_source` — demo honesty label (audit H3 piece 2)
+
+Every serialized `Persona` carries `data_source`, one of:
+
+| Value | Meaning |
+|---|---|
+| `"live"` | The content was produced by an inference pass against a routed provider or Ollama. |
+| `"cached"` | The content came from the demo seeder — pre-seeded fixtures, not model output. |
+
+The value is **persisted on the row at creation time**, not derived from `demo_mode` at read time: the flag flips independently of the rows already in the table, so deriving it would mislabel every persona created before the last flip. Existing rows were backfilled to `"live"` by migration `9f0a1b2c3d4e`, which is correct — the demo seeder is the only cached producer and it did not previously exist as a distinct category.
+
+Clients MUST NOT present `"cached"` content as system output. **Frontend obligation (Shehab):** surface a visible badge wherever a persona is rendered; absent the badge the label is invisible to the user and H3's honesty requirement is only half met. Semantics are defined in [DEMO.md](DEMO.md) §4.
 
 ---
 

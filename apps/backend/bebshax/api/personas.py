@@ -13,6 +13,7 @@ from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.studies import _owner_accessible, _user_owns_study, get_session
 from bebshax.auth.models import Users
 from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
+from bebshax.db.models import DATA_SOURCE_LIVE
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.persona.generation import PersonaGenerationFailed
 from bebshax.persona.store import (
@@ -76,6 +77,8 @@ def _serialize_persona(p: Personas, segment_name: Optional[str] = None) -> dict[
         "status": p.status,
         "version": p.version,
         "generation_model": p.generation_model,
+        # H3 piece 2 — "live" | "cached", see docs/DEMO.md §4.
+        "data_source": getattr(p, "data_source", DATA_SOURCE_LIVE) or DATA_SOURCE_LIVE,
         "archetype": p.archetype,
         "tagline": getattr(p, "tagline", None),
         "country_code": getattr(p, "country_code", "BD") or "BD",

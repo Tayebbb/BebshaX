@@ -51,10 +51,14 @@ When `BEBSHAX_DEMO_MODE=true` and the database is unpopulated (or when `seed_dem
 
 ---
 
-## 4. "Cached" vs. "Live" Data Transparency (Piece 2 Roadmap)
+## 4. "Cached" vs. "Live" Data Transparency
 
 To maintain strict evaluation integrity and honesty:
 - **`data_source: "cached"`**: Represents responses served directly from pre-seeded baseline fixtures or deterministic local mock pools.
 - **`data_source: "live"`**: Represents live inference passes executed against routed LLM providers or local Ollama engines.
 
-*(Note: Piece 2 UI badge integration is coordinated with Shehab).*
+**Backend: implemented 2026-08-27.** `personas.data_source` (migration `9f0a1b2c3d4e`) is written at creation time and returned by every persona endpoint. `save_persona()` defaults to `"live"` — every caller but the seeder arrives after real inference — and `seed_demo_data()` passes `"cached"` explicitly.
+
+The label is **stored, not derived**. Computing it from `demo_mode` at read time would be wrong: the flag flips independently of the rows already in the table, so a demo-mode toggle would silently relabel personas that a real model produced. Guarded by `tests/db/test_data_source_labelling.py` (4 tests), including one that fails if the seeder stops labelling.
+
+**Frontend: outstanding, owned by Shehab.** The label reaches the API but nothing renders it yet, so a viewer still cannot tell seeded content from model output. H3's honesty requirement is met end to end only once a badge appears wherever personas are shown. Field semantics are frozen in [API_CONTRACT.md](API_CONTRACT.md).
