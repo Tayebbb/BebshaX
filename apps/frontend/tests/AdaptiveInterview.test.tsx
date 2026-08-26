@@ -17,6 +17,7 @@ vi.mock('../src/services/api', () => ({
     getStudyPersonaDetail: vi.fn(),
     startPersonaInterview: vi.fn(),
     sendInterviewMessage: vi.fn(),
+    sendInterviewMessageStream: vi.fn(),
     completeStudyInterview: vi.fn(),
   },
 }));
@@ -198,7 +199,7 @@ describe('Adaptive Persona Interviews (Part 6)', () => {
   it('renders InterviewWorkspace with transcript, suggestions, provenance and insights', async () => {
     vi.mocked(api.getStudyInterviewDetail).mockResolvedValue(mockDetail);
     vi.mocked(api.getStudyPersonaDetail).mockResolvedValue(mockPersona);
-    vi.mocked(api.sendInterviewMessage).mockResolvedValue({
+    const donePayload = {
       reply: '৳2,000 is way above my ৳400 monthly allowance.',
       turn_number: 4,
       turn_count: 4,
@@ -209,7 +210,15 @@ describe('Adaptive Persona Interviews (Part 6)', () => {
       suggested_questions: ['What if it were ৳250/mo?'],
       latency_ms: 250,
       served_by: 'openrouter/qwen3.5',
-    });
+    };
+    // Streaming path: two deltas, then the canonical done payload.
+    vi.mocked(api.sendInterviewMessageStream).mockImplementation(
+      async (_s: string, _i: string, _c: string, onDelta: (t: string) => void) => {
+        onDelta('৳2,000 is way above ');
+        onDelta('my ৳400 monthly allowance.');
+        return donePayload;
+      }
+    );
 
     render(
       <InterviewWorkspace
@@ -232,17 +241,18 @@ describe('Adaptive Persona Interviews (Part 6)', () => {
     expect(screen.getByText('Hostel Dining Monotony')).toBeDefined();
     expect(screen.getByText('T2')).toBeDefined();
 
-    // Suggested question chip sends the real message.
+    // Suggested question chip sends the real message through the STREAM path.
     const suggestionPill = screen.getByText(
       'How much would you pay per month for an alternative meal service?'
     );
     fireEvent.click(suggestionPill);
 
     await waitFor(() => {
-      expect(api.sendInterviewMessage).toHaveBeenCalledWith(
+      expect(api.sendInterviewMessageStream).toHaveBeenCalledWith(
         'study_123',
         'int_001',
-        { content: 'How much would you pay per month for an alternative meal service?' }
+        'How much would you pay per month for an alternative meal service?',
+        expect.any(Function)
       );
     });
 
@@ -255,9 +265,9 @@ describe('Adaptive Persona Interviews (Part 6)', () => {
   it('returns the question to the composer and shows an honest error when a turn fails', async () => {
     vi.mocked(api.getStudyInterviewDetail).mockResolvedValue(mockDetail);
     vi.mocked(api.getStudyPersonaDetail).mockResolvedValue(mockPersona);
-    vi.mocked(api.sendInterviewMessage).mockRejectedValue(
-      new Error('No LLM route could serve this request')
-    );
+    const typedErr = new Error('No LLM route could serve this request') as Error & { kind?: string };
+    typedErr.kind = 'no_route';
+    vi.mocked(api.sendInterviewMessageStream).mockRejectedValue(typedErr);
 
     render(
       <InterviewWorkspace

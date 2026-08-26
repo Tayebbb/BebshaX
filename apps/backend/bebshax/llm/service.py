@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
-from bebshax.llm.adapters.base import ProviderAdapter, RouteCandidate
+from bebshax.llm.adapters.base import ProviderAdapter, RouteCandidate, StreamDelta
 from bebshax.llm.estimator import estimate_request_tokens
 from bebshax.llm.failures import (
     FAILURE_POLICIES,
@@ -33,6 +33,16 @@ Entry = tuple[ProviderAdapter, RouteCandidate]
 class LLMService(ABC):
     @abstractmethod
     async def complete(self, request: LLMRequest) -> LLMResult: ...
+
+    async def stream(self, request: LLMRequest) -> AsyncIterator["StreamDelta | LLMResult"]:
+        """Yield StreamDelta chunks then the final LLMResult.
+
+        Default for non-streaming implementations: resolve complete() and emit
+        the whole text as one delta — identical result, no incremental render.
+        """
+        result = await self.complete(request)
+        yield StreamDelta(text=result.text)
+        yield result
 
 
 def capability_skip_reason(cand: RouteCandidate, request: LLMRequest) -> str | None:

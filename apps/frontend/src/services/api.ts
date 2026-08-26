@@ -4240,6 +4240,81 @@ export const api = {
     throw new Error('Backend required for live persona interview');
   },
 
+  /** SSE variant: onDelta fires per text chunk; resolves with the canonical
+   * done payload (same shape as sendInterviewMessage). Throws a typed error
+   * (err.kind from the backend taxonomy) on failure. */
+  async sendInterviewMessageStream(
+    studyId: string,
+    interviewId: string,
+    content: string,
+    onDelta: (text: string) => void
+  ): Promise<any> {
+    if (this.isMockMode()) throw new Error('Backend required for live persona interview');
+
+    const res = await fetch(
+      `${API_BASE}/studies/${studyId}/interviews/${interviewId}/messages/stream`,
+      {
+        method: 'POST',
+        headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ content }),
+      }
+    );
+    if (!res.ok || !res.body) {
+      const err = await res.json().catch(() => ({ detail: `Stream failed (${res.status})` }));
+      const e = new Error(err.detail || 'Stream failed') as Error & { status?: number };
+      e.status = res.status;
+      lastKnownLive = false;
+      throw e;
+    }
+    lastKnownLive = true;
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let done: any = null;
+
+    const handleFrame = (frame: string) => {
+      const lines = frame.split(/\r?\n/);
+      const eventLine = lines.find((l) => l.startsWith('event:'));
+      // Per the SSE spec, multiple data: lines concatenate with newlines.
+      const dataPayload = lines
+        .filter((l) => l.startsWith('data:'))
+        .map((l) => l.slice(5).replace(/^ /, ''))
+        .join('\n');
+      if (!eventLine || !dataPayload) return;
+      const event = eventLine.slice(6).trim();
+      const data = JSON.parse(dataPayload);
+      if (event === 'delta') onDelta(data.text || '');
+      else if (event === 'done') done = data;
+      else if (event === 'error') {
+        const e = new Error(data.detail || 'interview turn failed') as Error & { kind?: string };
+        e.kind = data.kind;
+        throw e;
+      }
+    };
+
+    try {
+      for (;;) {
+        const { value, done: eof } = await reader.read();
+        if (eof) break;
+        buffer += decoder.decode(value, { stream: true });
+        let match: RegExpExecArray | null;
+        const boundary = /\r?\n\r?\n/;
+        while ((match = boundary.exec(buffer)) !== null) {
+          const frame = buffer.slice(0, match.index);
+          buffer = buffer.slice(match.index + match[0].length);
+          handleFrame(frame);
+        }
+      }
+      if (buffer.trim()) handleFrame(buffer);
+    } finally {
+      reader.cancel().catch(() => {});
+    }
+
+    if (!done) throw new Error('Stream ended without a final reply');
+    return done;
+  },
+
   async completeStudyInterview(studyId: string, interviewId: string): Promise<any> {
     if (!this.isMockMode()) {
       try {

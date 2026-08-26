@@ -320,6 +320,12 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
   }
   ```
 
+#### `POST /api/studies/{study_id}/interviews/{interview_id}/messages/stream`
+- **SSE variant** of the study-scoped message endpoint (same auth/ownership checks). `Content-Type: text/event-stream`. Events, in order:
+  - `event: delta` · `data: {"text": "<raw chunk>"}` — repeated as the persona speaks (raw model output).
+  - `event: done` · `data: {…}` — the canonical payload (same fields as the non-stream endpoint incl. `reply` [normalized, this is what was persisted], `turn_number`, `served_by`, `latency_ms`, `suggested_questions`, `topics_explored`, `is_finished`, plus `user_message`/`persona_reply` parity objects). Clients MUST replace their streamed buffer with `reply`.
+  - `event: error` · `data: {"kind": "finished|not_found|context_window|no_route|generic", "detail": "…"}` — failures after headers are sent; nothing was persisted for this turn unless `done` arrived.
+
 #### `POST /api/conversations/{id}/messages`
 - **Request Body:**
   ```json

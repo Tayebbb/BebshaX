@@ -15,12 +15,24 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import aclosing
 
-from bebshax.llm.adapters.base import ProviderAdapter, RouteCandidate
-from bebshax.llm.failures import FailureKind, LLMError
+from bebshax.llm.adapters.base import (
+    ProviderAdapter,
+    RouteCandidate,
+    StreamDelta,
+    StreamDone,
+)
+from bebshax.llm.failures import (
+    FAILURE_POLICIES,
+    AllCandidatesFailed,
+    AttemptFailed,
+    FailureKind,
+    LLMError,
+)
 from bebshax.llm.pools import POOLS, TASK_POOL_MAP, PoolConfig
-from bebshax.llm.provenance import ProvenanceRecord
+from bebshax.llm.provenance import AttemptRecord, ProvenanceRecord
 from bebshax.llm.service import Entry, LLMService, attempt_candidates, filter_eligible
 from bebshax.llm.types import LLMRequest, LLMResult, TaskType
 
@@ -112,6 +124,23 @@ class PoolRouter(LLMService):
             # fire-and-forget persistence — cooldown state must survive restarts
             self._on_cooldown_change(cand.provider, cand.model, self._cooldown_seconds)
 
+    async def _eligible_entries(
+        self, pool: PoolConfig, request: LLMRequest, provenance: ProvenanceRecord
+    ) -> list[Entry]:
+        entries: list[Entry] = []
+        for adapter_name in pool.adapters:
+            adapter = self._adapters.get(adapter_name)
+            if adapter is None:
+                continue
+            for cand in await adapter.candidates():
+                entries.append((adapter, cand))
+        if self._ranker is not None:
+            entries = self._ranker(entries)
+        entries = _apply_preference(entries, request, provenance)
+        return filter_eligible(
+            entries, request, provenance, extra_skip_reason=self._cooling_reason
+        )
+
     async def complete(self, request: LLMRequest) -> LLMResult:
         pool_name = self._task_pool_map.get(request.task)
         if pool_name is None or pool_name not in self._pools:
@@ -130,22 +159,116 @@ class PoolRouter(LLMService):
             async with self._semaphores[pool_name]:
                 self._active_requests[pool_name] += 1
                 try:
-                    entries: list[Entry] = []
-                    for adapter_name in pool.adapters:
-                        adapter = self._adapters.get(adapter_name)
-                        if adapter is None:
-                            continue
-                        for cand in await adapter.candidates():
-                            entries.append((adapter, cand))
-                    if self._ranker is not None:
-                        entries = self._ranker(entries)
-                    entries = _apply_preference(entries, request, provenance)
-                    eligible = filter_eligible(
-                        entries, request, provenance, extra_skip_reason=self._cooling_reason
-                    )
+                    eligible = await self._eligible_entries(pool, request, provenance)
                     return await attempt_candidates(
                         eligible, request, provenance, on_cooldown=self._start_cooldown
                     )
+                finally:
+                    self._active_requests[pool_name] -= 1
+        finally:
+            provenance.total_latency_ms = (time.perf_counter() - started) * 1000
+            if self._on_provenance is not None:
+                self._on_provenance(provenance)
+
+    async def stream(self, request: LLMRequest) -> AsyncIterator[StreamDelta | LLMResult]:
+        """Streaming complete(): yields StreamDelta chunks, then the final
+        LLMResult (canonical text + full provenance).
+
+        Fallback semantics: candidates that fail BEFORE their first delta are
+        skipped per the same failure policies; once a route has produced text
+        the stream is committed to it — a mid-answer swap would splice two
+        different personas' voices (R2), so the failure surfaces instead.
+        """
+        pool_name = self._task_pool_map.get(request.task)
+        if pool_name is None or pool_name not in self._pools:
+            raise LLMError(f"no pool mapped for task {request.task}")
+        pool = self._pools[pool_name]
+
+        provenance = ProvenanceRecord(
+            request_id=request.request_id,
+            task=request.task.value,
+            pool=pool_name,
+            persona_id=request.persona_id,
+            conversation_id=request.conversation_id,
+        )
+        started = time.perf_counter()
+        try:
+            async with self._semaphores[pool_name]:
+                self._active_requests[pool_name] += 1
+                try:
+                    eligible = await self._eligible_entries(pool, request, provenance)
+
+                    attempt_no = 0
+                    for adapter, cand in eligible:
+                        same_route_retries = 0
+                        while True:
+                            attempt_no += 1
+                            record = AttemptRecord(
+                                attempt_number=attempt_no, provider=cand.provider, model=cand.model
+                            )
+                            provenance.attempts.append(record)
+                            t0 = time.perf_counter()
+                            committed = False
+                            try:
+                                async with aclosing(adapter.stream(cand, request)) as adapter_stream:
+                                    async for event in adapter_stream:
+                                        if isinstance(event, StreamDelta):
+                                            committed = True
+                                            yield event
+                                        elif isinstance(event, StreamDone):
+                                            completion = event.completion
+                                            record.latency_ms = (time.perf_counter() - t0) * 1000
+                                            record.success = True
+                                            record.provider = completion.provider
+                                            record.model = completion.model
+                                            record.notes = list(completion.notes)
+                                            provenance.success = True
+                                            provenance.served_by_provider = completion.provider
+                                            provenance.served_by_model = completion.model
+                                            provenance.input_tokens = completion.usage.input_tokens
+                                            provenance.output_tokens = completion.usage.output_tokens
+                                            yield LLMResult(
+                                                text=completion.text,
+                                                provider=completion.provider,
+                                                model=completion.model,
+                                                usage=completion.usage,
+                                                provenance=provenance,
+                                            )
+                                            return
+                                # Stream ended without StreamDone: treat as malformed.
+                                raise AttemptFailed(
+                                    FailureKind.MALFORMED_RESPONSE,
+                                    cand.provider,
+                                    cand.model,
+                                    "stream ended without a terminal completion",
+                                )
+                            except (GeneratorExit, asyncio.CancelledError):
+                                # Consumer abort — but closing AFTER StreamDone was
+                                # consumed lands here too (GeneratorExit at the final
+                                # yield), so never overwrite a successful record.
+                                if not record.success:
+                                    record.latency_ms = (time.perf_counter() - t0) * 1000
+                                    record.failure_detail = "aborted by consumer"
+                                raise
+                            except AttemptFailed as failure:
+                                record.latency_ms = (time.perf_counter() - t0) * 1000
+                                record.failure_kind = failure.kind
+                                record.failure_detail = failure.detail
+                                policy = FAILURE_POLICIES[failure.kind]
+                                if policy.cooldown_route:
+                                    self._start_cooldown(cand, failure.kind)
+                                # Deliberate order difference from attempt_candidates:
+                                # a committed route must never retry or advance — the
+                                # user already saw its words (R2).
+                                if committed or not policy.try_next_candidate:
+                                    raise
+                                if policy.retry_same_once and same_route_retries == 0:
+                                    same_route_retries += 1
+                                    record.fallback_reason = "retrying same route once"
+                                    continue
+                                record.fallback_reason = f"advancing after {failure.kind}"
+                                break
+                    raise AllCandidatesFailed(provenance)
                 finally:
                     self._active_requests[pool_name] -= 1
         finally:

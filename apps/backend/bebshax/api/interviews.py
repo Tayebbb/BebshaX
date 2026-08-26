@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
+from contextlib import aclosing
 from datetime import datetime, timezone
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -401,6 +404,84 @@ async def post_study_interview_message(
             "retrieved_memories": result.get("retrieved_memories", []),
         },
     }
+
+
+@router.post("/studies/{study_id}/interviews/{interview_id}/messages/stream")
+async def post_study_interview_message_stream(
+    study_id: str,
+    interview_id: str,
+    body: InterviewMessageRequest,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
+    """SSE variant of the message endpoint: `delta` events as the persona
+    speaks, then one `done` event with the canonical ask() payload (normalized
+    reply + provenance). Errors after headers are sent arrive as `error` events."""
+    await _get_study_and_verify_access(session, study_id, current_user)
+
+    conversation = await session.get(Conversations, interview_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    if conversation.study_id and conversation.study_id != study_id:
+        raise HTTPException(status_code=403, detail="Interview does not belong to this study")
+
+    text = body.content or body.message
+    if not text or not text.strip():
+        raise HTTPException(status_code=422, detail="Message content cannot be empty")
+
+    engine = request.app.state.interview_engine
+
+    def _sse(event: str, data: dict[str, Any]) -> str:
+        return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    async def event_source():
+        try:
+            # aclosing: deterministic cleanup of the whole generator chain on
+            # client disconnect, not GC-scheduled finalization.
+            async with aclosing(engine.ask_stream(interview_id, text.strip())) as agen:
+                async for item in agen:
+                    if item.get("type") == "delta":
+                        yield _sse("delta", {"text": item["text"]})
+                    elif item.get("type") == "done":
+                        payload = {k: v for k, v in item.items() if k != "type"}
+                        now_iso = datetime.now(timezone.utc).isoformat()
+                        # Contract parity with the non-stream endpoint (M4 fields).
+                        payload["user_message"] = {
+                            "role": "researcher",
+                            "content": text.strip(),
+                            "timestamp": now_iso,
+                            "turn_number": (payload.get("turn_number") or 1) - 1,
+                            "topic": payload.get("topic"),
+                        }
+                        payload["persona_reply"] = {
+                            "role": "persona",
+                            "content": payload.get("reply"),
+                            "timestamp": now_iso,
+                            "turn_number": payload.get("turn_number"),
+                            "topic": payload.get("topic"),
+                            "latency_ms": payload.get("latency_ms"),
+                            "served_by": payload.get("served_by"),
+                            "retrieved_memories": payload.get("retrieved_memories", []),
+                        }
+                        yield _sse("done", payload)
+        except InterviewFinished as exc:
+            yield _sse("error", {"kind": "finished", "detail": str(exc)})
+        except (ConversationNotFound, PersonaNotFound) as exc:
+            yield _sse("error", {"kind": "not_found", "detail": str(exc)})
+        except ContextWindowExceeded as exc:
+            yield _sse("error", {"kind": "context_window", "detail": str(exc)})
+        except AllCandidatesFailed:
+            yield _sse("error", {"kind": "no_route", "detail": "No LLM route could serve this request"})
+        except Exception:
+            logger.warning("interview stream failed for %s", interview_id, exc_info=True)
+            yield _sse("error", {"kind": "generic", "detail": "interview turn failed"})
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/studies/{study_id}/interviews/{interview_id}/complete")

@@ -25,12 +25,13 @@ interface InterviewWorkspaceProps {
 }
 
 /** Failure classes surfaced by the backend (RULES R2/R6: never blur them). */
-type FailureKindUI = 'context_window' | 'no_route' | 'finished' | 'generic';
+type FailureKindUI = 'context_window' | 'no_route' | 'finished' | 'not_found' | 'generic';
 
 function classifyFailure(message: string, status?: number): FailureKindUI {
   if (status === 413 || /context/i.test(message)) return 'context_window';
   if (status === 503 || /no llm route/i.test(message)) return 'no_route';
   if (status === 400 && /finish/i.test(message)) return 'finished';
+  if (status === 404) return 'not_found';
   return 'generic';
 }
 
@@ -50,6 +51,10 @@ const FAILURE_COPY: Record<FailureKindUI, { title: string; body: string }> = {
   finished: {
     title: 'Interview complete',
     body: 'This interview has reached its final turn. Generate the synthesis to extract insights.',
+  },
+  not_found: {
+    title: 'Interview unavailable',
+    body: 'This interview or its persona could not be found — it may have been removed. Nothing was answered.',
   },
   generic: {
     title: 'Turn failed',
@@ -118,6 +123,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   const [railOpen, setRailOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [lastRevealId, setLastRevealId] = useState<string | null>(null);
+  const [streamText, setStreamText] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -171,7 +177,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-  }, [turns.length, isSending]);
+  }, [turns.length, isSending, streamText]);
 
   const personaName = interview?.persona_name || persona?.name || 'Synthetic Persona';
   const personaRole =
@@ -188,6 +194,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     setInput('');
     pendingQuestionRef.current = text;
     setIsSending(true);
+    setStreamText(null);
 
     const optimistic: InterviewTurn = {
       id: `pending_${Date.now()}`,
@@ -198,8 +205,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     };
     setTurns((prev) => [...prev, optimistic]);
 
-    try {
-      const res = await api.sendInterviewMessage(studyId, interviewId, { content: text });
+    const applyDone = (res: any, streamed: boolean) => {
       const personaTurn: InterviewTurn = {
         id: `turn_${res.turn_number}_${Date.now()}`,
         turn_number: res.turn_number,
@@ -208,10 +214,11 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
         topic: res.topic,
         latency_ms: res.latency_ms,
         served_by: res.served_by,
-        retrieved_memories: res.persona_reply?.retrieved_memories || [],
+        retrieved_memories: res.retrieved_memories || res.persona_reply?.retrieved_memories || [],
         created_at: new Date().toISOString(),
       };
-      setLastRevealId(personaTurn.id);
+      // Streamed text was already read live — don't re-animate the canonical swap.
+      setLastRevealId(streamed ? null : personaTurn.id);
       setTurns((prev) => [...prev, personaTurn]);
       setSuggested(res.suggested_questions || []);
       setInterview((prev) =>
@@ -226,16 +233,39 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
           : prev
       );
       pendingQuestionRef.current = '';
+    };
+
+    try {
+      let streamedAny = false;
+      try {
+        const res = await api.sendInterviewMessageStream(studyId, interviewId, text, (chunk) => {
+          streamedAny = true;
+          setStreamText((prev) => (prev ?? '') + chunk);
+        });
+        applyDone(res, streamedAny);
+      } catch (streamErr: any) {
+        // Older backend without the stream route — or transport-level failure
+        // before anything streamed — falls back to the blocking endpoint.
+        if (!streamedAny && (streamErr?.status === 404 || streamErr?.status === 405)) {
+          const res = await api.sendInterviewMessage(studyId, interviewId, { content: text });
+          applyDone(res, false);
+        } else {
+          throw streamErr;
+        }
+      }
     } catch (err: any) {
       // Honest failure: remove the unanswered question from the transcript,
       // return it to the composer, and classify the failure.
       setTurns((prev) => prev.filter((t) => t.id !== optimistic.id));
       setInput(text);
-      setSendError({
-        kind: classifyFailure(err?.message || '', err?.status),
-        detail: err?.message || 'Unknown failure',
-      });
+      // Backend-emitted kinds are only trusted when we have copy for them.
+      const kind: FailureKindUI =
+        err?.kind && err.kind in FAILURE_COPY
+          ? (err.kind as FailureKindUI)
+          : classifyFailure(err?.message || '', err?.status);
+      setSendError({ kind, detail: err?.message || 'Unknown failure' });
     } finally {
+      setStreamText(null);
       setIsSending(false);
     }
   };
@@ -500,7 +530,22 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                   );
                 })}
 
-                {isSending && (
+                {isSending && streamText !== null && (
+                  <div className="iv-turn iv-persona" aria-live="polite">
+                    <div className="iv-turn-head">
+                      <span className="iv-speaker">{personaName}</span>
+                      <span className="iv-turn-meta" style={{ opacity: 1 }}>
+                        speaking…
+                      </span>
+                    </div>
+                    <div className="iv-turn-body">
+                      {streamText}
+                      <span className="iv-cursor" aria-hidden="true" style={{ marginLeft: 4 }} />
+                    </div>
+                  </div>
+                )}
+
+                {isSending && streamText === null && (
                   <div className="iv-thinking" role="status" aria-live="polite">
                     <div className="iv-thinking-line">
                       <span className="iv-cursor" aria-hidden="true" />

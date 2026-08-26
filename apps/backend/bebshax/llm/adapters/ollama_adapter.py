@@ -10,12 +10,21 @@ counts. Talks plain httpx — no SDK dependency (R8).
 
 from __future__ import annotations
 
+import json
 import os
 import time
+from collections.abc import AsyncIterator
 
 import httpx
 
-from bebshax.llm.adapters.base import AdapterCompletion, ProviderAdapter, RouteCandidate
+from bebshax.llm.adapters.base import (
+    AdapterCompletion,
+    ProviderAdapter,
+    RouteCandidate,
+    StreamDelta,
+    StreamDone,
+    StreamEvent,
+)
 from bebshax.llm.failures import AttemptFailed, FailureKind
 from bebshax.llm.types import LLMRequest, TokenUsage
 
@@ -178,4 +187,107 @@ class OllamaAdapter(ProviderAdapter):
             provider=PROVIDER,
             model=data.get("model", candidate.model),
             notes=notes,
+        )
+
+    async def stream(
+        self, candidate: RouteCandidate, request: LLMRequest
+    ) -> AsyncIterator[StreamEvent]:
+        """Native NDJSON streaming from /api/chat (stream=true)."""
+        num_ctx = _required_ctx(request)
+        if num_ctx > candidate.context_window:
+            raise AttemptFailed(
+                FailureKind.CONTEXT_WINDOW_EXCEEDED,
+                PROVIDER,
+                candidate.model,
+                f"needs num_ctx≈{num_ctx} > window {candidate.context_window}",
+            )
+
+        options: dict = {"num_ctx": num_ctx}
+        if request.max_output_tokens is not None:
+            options["num_predict"] = request.max_output_tokens
+        if request.temperature is not None:
+            options["temperature"] = request.temperature
+
+        parts: list[str] = []
+        final: dict | None = None
+        try:
+            async with self._client.stream(
+                "POST",
+                "/api/chat",
+                json={
+                    "model": candidate.model,
+                    "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+                    "stream": True,
+                    "options": options,
+                },
+                timeout=self._request_timeout,
+            ) as resp:
+                if resp.status_code == 404:
+                    raise AttemptFailed(
+                        FailureKind.MODEL_UNAVAILABLE, PROVIDER, candidate.model, "model not found"
+                    )
+                if resp.status_code != 200:
+                    raise AttemptFailed(
+                        FailureKind.SERVER_ERROR if resp.status_code >= 500 else FailureKind.PROVIDER_UNAVAILABLE,
+                        PROVIDER,
+                        candidate.model,
+                        f"HTTP {resp.status_code}",
+                    )
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except ValueError as exc:
+                        raise AttemptFailed(
+                            FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model,
+                            "invalid NDJSON stream line",
+                        ) from exc
+                    # Ollama can emit {"error": ...} mid-stream AFTER HTTP 200
+                    # (e.g. runner OOM) — a partial answer must never pass as
+                    # a completed reply (R2).
+                    if chunk.get("error"):
+                        raise AttemptFailed(
+                            FailureKind.SERVER_ERROR, PROVIDER, candidate.model,
+                            f"mid-stream error: {str(chunk['error'])[:200]}",
+                        )
+                    piece = (chunk.get("message") or {}).get("content", "")
+                    if piece:
+                        parts.append(piece)
+                        yield StreamDelta(text=piece)
+                    if chunk.get("done"):
+                        final = chunk
+                        break
+        except httpx.TimeoutException as exc:
+            raise AttemptFailed(FailureKind.TIMEOUT, PROVIDER, candidate.model, str(exc)) from exc
+        except httpx.TransportError as exc:
+            raise AttemptFailed(FailureKind.CONNECTION, PROVIDER, candidate.model, str(exc)) from exc
+
+        if final is None:
+            # Connection closed without done:true — whatever we streamed is a
+            # truncated fragment, not the persona's answer.
+            raise AttemptFailed(
+                FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model,
+                "stream ended without done marker",
+            )
+        text = "".join(parts)
+        if not text.strip():
+            raise AttemptFailed(
+                FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "empty stream"
+            )
+        notes = [f"num_ctx={num_ctx}", "streamed"]
+        done_reason = final.get("done_reason")
+        if done_reason and done_reason != "stop":
+            notes.append(f"done_reason={done_reason}")
+        yield StreamDone(
+            completion=AdapterCompletion(
+                text=text,
+                usage=TokenUsage(
+                    input_tokens=final.get("prompt_eval_count"),
+                    output_tokens=final.get("eval_count"),
+                ),
+                provider=PROVIDER,
+                model=final.get("model", candidate.model),
+                notes=notes,
+            )
         )

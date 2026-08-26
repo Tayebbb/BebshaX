@@ -16,6 +16,8 @@ import json
 import re
 import uuid
 from collections import defaultdict
+from collections.abc import AsyncIterator
+from contextlib import aclosing
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -26,7 +28,7 @@ from sqlalchemy.orm import sessionmaker
 from bebshax.db.models import Businesses, MarketSegments, Personas, Studies
 from bebshax.interview.normalization import normalize_reply
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
-from bebshax.llm import ChatMessage, LLMRequest, LLMService, TaskType
+from bebshax.llm import ChatMessage, LLMError, LLMRequest, LLMResult, LLMService, TaskType
 from bebshax.memory.service import MemoryService
 from bebshax.persona.schema import PersonaProfile
 from bebshax.persona.store import load_persona
@@ -576,10 +578,10 @@ class InterviewEngine:
             ])
         return suggestions[:4]
 
-    async def ask(self, conversation_id: str, interviewer_message: str) -> dict[str, Any]:
-        """Process a researcher question and return the persona response with updated state."""
-        start_time = datetime.now(timezone.utc)
-
+    async def _prepare_turn(
+        self, conversation_id: str, interviewer_message: str
+    ) -> tuple[Any, Any, list[ConversationTurns], list[ChatMessage], list[str]]:
+        """Load conversation/persona/turns and compose the LLM context."""
         async with self._sessionmaker() as session:
             conversation = await session.get(Conversations, conversation_id)
             if conversation is None:
@@ -614,23 +616,35 @@ class InterviewEngine:
             messages, retrieved_memories = await self._compose(
                 session, conversation, persona, prior_turns, interviewer_message
             )
+        return conversation, persona, prior_turns, messages, retrieved_memories
 
-        # Call LLM Service
-        result = await self._llm.complete(
-            LLMRequest(
-                task=TaskType.PERSONA_INTERVIEW,
-                messages=messages,
-                # 900, not 450: reasoning models spend budget on hidden
-                # chain-of-thought before the visible reply; 450 caused live
-                # truncation (adapters now classify that as MALFORMED_RESPONSE).
-                max_output_tokens=900,
-                temperature=0.7,
-                persona_id=conversation.persona_id,
-                conversation_id=conversation_id,
-            )
+    def _turn_request(self, conversation: Any, messages: list[ChatMessage]) -> LLMRequest:
+        return LLMRequest(
+            task=TaskType.PERSONA_INTERVIEW,
+            messages=messages,
+            # 900, not 450: reasoning models spend budget on hidden
+            # chain-of-thought before the visible reply; 450 caused live
+            # truncation (adapters now classify that as MALFORMED_RESPONSE).
+            max_output_tokens=900,
+            temperature=0.7,
+            persona_id=conversation.persona_id,
+            conversation_id=conversation.id,
         )
-        reply = normalize_reply(result.text, persona_name=getattr(persona, "name", None))
-        latency_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+
+    async def _finalize_turn(
+        self,
+        conversation: Any,
+        persona: Any,
+        prior_turns: list[ConversationTurns],
+        retrieved_memories: list[str],
+        interviewer_message: str,
+        raw_text: str,
+        served_by: str,
+        latency_ms: float,
+    ) -> dict[str, Any]:
+        """Normalize, classify, persist, and shape the ask() result payload."""
+        conversation_id = conversation.id
+        reply = normalize_reply(raw_text, persona_name=getattr(persona, "name", None))
 
         # Classify topic & memory category
         topic, updated_topics = self._classify_topic(
@@ -690,7 +704,7 @@ class InterviewEngine:
                     content=reply,
                     topic=topic,
                     latency_ms=round(latency_ms, 2),
-                    served_by=f"{result.provider}/{result.model}",
+                    served_by=served_by,
                     retrieved_memories=retrieved_memories,
                     metadata_json={
                         "contradiction_detected": has_contradiction,
@@ -724,7 +738,7 @@ class InterviewEngine:
         return {
             "reply": reply,
             "turn_number": persona_turn_num,
-            "served_by": f"{result.provider}/{result.model}",
+            "served_by": served_by,
             "latency_ms": round(latency_ms, 2),
             "topic": topic,
             "topics_explored": updated_topics,
@@ -739,6 +753,66 @@ class InterviewEngine:
             "memory_kind": memory_kind,
             "decision_state": decision_state,
         }
+
+    async def ask(self, conversation_id: str, interviewer_message: str) -> dict[str, Any]:
+        """Process a researcher question and return the persona response with updated state."""
+        start_time = datetime.now(timezone.utc)
+        conversation, persona, prior_turns, messages, retrieved_memories = await self._prepare_turn(
+            conversation_id, interviewer_message
+        )
+
+        result = await self._llm.complete(self._turn_request(conversation, messages))
+        latency_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        return await self._finalize_turn(
+            conversation,
+            persona,
+            prior_turns,
+            retrieved_memories,
+            interviewer_message,
+            result.text,
+            f"{result.provider}/{result.model}",
+            latency_ms,
+        )
+
+    async def ask_stream(
+        self, conversation_id: str, interviewer_message: str
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Streaming ask(): yields {"type": "delta", "text"} chunks as the
+        persona speaks, then {"type": "done", ...ask()-shaped payload...}.
+
+        The streamed deltas are RAW model output; the terminal payload carries
+        the canonical normalized reply (format normalization, audit L12) which
+        is also what gets persisted — clients must swap the buffer for it.
+        """
+        start_time = datetime.now(timezone.utc)
+        conversation, persona, prior_turns, messages, retrieved_memories = await self._prepare_turn(
+            conversation_id, interviewer_message
+        )
+
+        final: LLMResult | None = None
+        # aclosing: breaking out of the router stream must release the pool
+        # semaphore and fire provenance NOW, not at GC (critic finding #1).
+        async with aclosing(self._llm.stream(self._turn_request(conversation, messages))) as stream:
+            async for event in stream:
+                if isinstance(event, LLMResult):
+                    final = event
+                    break
+                yield {"type": "delta", "text": event.text}
+        if final is None:
+            raise LLMError("stream ended without a final result")
+
+        latency_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        payload = await self._finalize_turn(
+            conversation,
+            persona,
+            prior_turns,
+            retrieved_memories,
+            interviewer_message,
+            final.text,
+            f"{final.provider}/{final.model}",
+            latency_ms,
+        )
+        yield {"type": "done", **payload}
 
 
     async def complete(self, conversation_id: str) -> dict[str, Any]:
