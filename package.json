@@ -1,12 +1,13 @@
 {
   "name": "bebshax",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.js",
     "start": "node scripts/dev.js",
-    "backend": ".venv\\Scripts\\python -m uvicorn bebshax.main:app --port 8000 --reload",
+    "backend": "node scripts/run_backend.js",
     "frontend": "node scripts/dev.js",
     "dev:frontend": "npm --prefix apps/frontend run dev",
-    "dev:backend": ".venv\\Scripts\\python -m uvicorn bebshax.main:app --port 8000 --reload"
+    "dev:backend": "node scripts/run_backend.js"
   }
 }

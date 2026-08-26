@@ -8,6 +8,9 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      # B4 fail-fast requires a secret at import; CI-only value, ≥32 chars.
+      BEBSHAX_JWT_SECRET: ci-only-jwt-secret-never-production-0123456789
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -65,6 +68,7 @@ jobs:
           --health-timeout 5s --health-retries 10
     env:
       BEBSHAX_DATABASE_URL: postgresql+asyncpg://bebshax:bebshax@localhost:5432/bebshax
+      BEBSHAX_JWT_SECRET: ci-only-jwt-secret-never-production-0123456789
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -1,131 +1,107 @@
-"""Security utilities: password hashing (PBKDF2-HMAC-SHA256) and JWT tokens."""
-
+"""Security: password hashing (PBKDF2) and JWT tokens. B4-hardened."""
 import base64
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import json
 import secrets
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from bebshax.config import get_settings
 
-# Secret key used for signing JWTs (loaded from settings / environment)
-def _get_jwt_secret() -> str:
-    try:
-        return get_settings().jwt_secret
-    except Exception:
-        return "bebshax-super-secret-jwt-signing-key-2026-auth-v1"
-
-JWT_SECRET = _get_jwt_secret()
-JWT_ALGORITHM = "HS256"
-DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 365  # 365 days (stay logged in until logout)
+ALGORITHM = "HS256"
 
 
 def _b64_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
-def _b64_decode(data_str: str) -> bytes:
-    padding = 4 - (len(data_str) % 4)
-    if padding != 4:
-        data_str += "=" * padding
-    return base64.urlsafe_b64decode(data_str.encode("ascii"))
+def _b64_decode(s: str) -> bytes:
+    s += "=" * ((4 - len(s) % 4) % 4)
+    return base64.urlsafe_b64decode(s.encode("ascii"))
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using salted PBKDF2-HMAC-SHA256 (100,000 rounds)."""
     salt = secrets.token_bytes(16)
-    dk = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt,
-        100_000,
-        dklen=32,
-    )
-    salt_b64 = _b64_encode(salt)
-    dk_b64 = _b64_encode(dk)
-    return f"pbkdf2_sha256$100000${salt_b64}${dk_b64}"
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000, dklen=32)
+    return f"pbkdf2_sha256$100000${_b64_encode(salt)}${_b64_encode(dk)}"
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against a stored hashed password."""
+def verify_password(plain: str, hashed: str) -> bool:
     try:
-        parts = hashed_password.split("$")
+        parts = hashed.split("$")
         if len(parts) != 4 or parts[0] != "pbkdf2_sha256":
             return False
-        iterations = int(parts[1])
-        salt = _b64_decode(parts[2])
-        expected_dk = _b64_decode(parts[3])
-        actual_dk = hashlib.pbkdf2_hmac(
-            "sha256",
-            plain_password.encode("utf-8"),
-            salt,
-            iterations,
-            dklen=len(expected_dk),
+        salt, expected = _b64_decode(parts[2]), _b64_decode(parts[3])
+        actual = hashlib.pbkdf2_hmac(
+            "sha256", plain.encode(), salt, int(parts[1]), dklen=len(expected)
         )
-        return hmac.compare_digest(actual_dk, expected_dk)
+        return hmac.compare_digest(actual, expected)
     except Exception:
         return False
 
 
 def create_access_token(
-    data: Dict[str, Any],
-    expires_delta: Optional[timedelta] = None,
-    secret_key: str = JWT_SECRET,
+    user_id: Union[str, Dict[str, Any]], expires_delta: Optional[timedelta] = None
 ) -> str:
-    """Create an HMAC-SHA256 signed JWT access token."""
-    to_encode = data.copy()
+    """Sign path — ALWAYS current secret, never previous."""
+    if isinstance(user_id, dict):
+        user_id = str(user_id.get("sub", ""))
+    s = get_settings()
     now = datetime.now(timezone.utc)
-    if expires_delta:
-        expire = now + expires_delta
-    else:
-        expire = now + timedelta(minutes=DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": int(expire.timestamp()), "iat": int(now.timestamp())})
-
-    header = {"alg": "HS256", "typ": "JWT"}
-    header_json = json.dumps(header, separators=(",", ":")).encode("utf-8")
-    payload_json = json.dumps(to_encode, separators=(",", ":")).encode("utf-8")
-
-    header_b64 = _b64_encode(header_json)
-    payload_b64 = _b64_encode(payload_json)
-
-    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
-    signature = hmac.new(
-        secret_key.encode("utf-8"), signing_input, hashlib.sha256
+    exp = now + (expires_delta or timedelta(days=s.jwt_expire_days))
+    payload = {
+        "sub": user_id,
+        "iat": int(now.timestamp()),
+        "exp": int(exp.timestamp()),
+        "iss": s.jwt_issuer,
+        "aud": s.jwt_audience,
+    }
+    h_b64 = _b64_encode(
+        json.dumps({"alg": ALGORITHM, "typ": "JWT"}, separators=(",", ":")).encode()
+    )
+    p_b64 = _b64_encode(json.dumps(payload, separators=(",", ":")).encode())
+    sig = hmac.new(
+        s.jwt_secret.encode(), f"{h_b64}.{p_b64}".encode(), hashlib.sha256
     ).digest()
-    sig_b64 = _b64_encode(signature)
-
-    return f"{header_b64}.{payload_b64}.{sig_b64}"
+    return f"{h_b64}.{p_b64}.{_b64_encode(sig)}"
 
 
-def decode_access_token(
-    token: str,
-    secret_key: str = JWT_SECRET,
-) -> Optional[Dict[str, Any]]:
-    """Decode and verify an HMAC-SHA256 JWT access token."""
+def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verify path — tries current, then previous (grace window). Validates iss+aud."""
+    s = get_settings()
     try:
         parts = token.split(".")
         if len(parts) != 3:
             return None
-        header_b64, payload_b64, sig_b64 = parts
-
-        signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
-        expected_sig = hmac.new(
-            secret_key.encode("utf-8"), signing_input, hashlib.sha256
-        ).digest()
-        actual_sig = _b64_decode(sig_b64)
-
-        if not hmac.compare_digest(expected_sig, actual_sig):
+        h_b64, p_b64, s_b64 = parts
+        keys = [s.jwt_secret] + (
+            [s.jwt_secret_previous] if s.jwt_secret_previous else []
+        )
+        verified = False
+        for key in keys:
+            expected = hmac.new(
+                key.encode(), f"{h_b64}.{p_b64}".encode(), hashlib.sha256
+            ).digest()
+            if hmac.compare_digest(expected, _b64_decode(s_b64)):
+                verified = True
+                break
+        if not verified:
             return None
-
-        payload_json = _b64_decode(payload_b64).decode("utf-8")
-        payload = json.loads(payload_json)
-
-        exp = payload.get("exp")
-        if exp and datetime.now(timezone.utc).timestamp() > exp:
+        payload = json.loads(_b64_decode(p_b64).decode())
+        if (
+            payload.get("exp")
+            and datetime.now(timezone.utc).timestamp() > payload["exp"]
+        ):
             return None
-
+        if payload.get("iss") != s.jwt_issuer:
+            return None
+        aud = payload.get("aud")
+        if isinstance(aud, list):
+            if s.jwt_audience not in aud:
+                return None
+        elif aud != s.jwt_audience:
+            return None
         return payload
     except Exception:
         return None

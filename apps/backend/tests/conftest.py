@@ -1,5 +1,11 @@
 """Suite-wide fixtures. tests/ is not a package — helpers are shared from here."""
 
+import os
+
+# B4 fail-fast: bebshax.config instantiates Settings at import time and exits
+# without a JWT secret. Set a test-only value BEFORE any bebshax import below.
+os.environ.setdefault("BEBSHAX_JWT_SECRET", "test-only-jwt-secret-not-for-production-0123456789")
+
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.testclient import TestClient

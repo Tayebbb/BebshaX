@@ -3,8 +3,9 @@
 useDefault = true
 
 [allowlist]
-description = """B4: this JWT literal is already public in git history and is
-permanently burned (tracked as audit finding B4, owner Sazid). Allowlisting it
-keeps the scan green for every NEW secret while B4 is being fixed.
-REMOVE THIS ALLOWLIST IN THE SAME COMMIT AS THE B4 FIX."""
+description = """B4 is FIXED (fail-fast config, 2026-08-26) — but this literal
+remains in git history permanently and intentionally in source as the
+BURNED_JWT_SECRET deny-constant in config.py (startup rejects it). The
+allowlist therefore stays; it suppresses exactly this one burned value and
+nothing else. Every NEW secret still fails the scan."""
 regexes = ['''bebshax-super-secret-jwt-signing-key-2026-auth-v1''']

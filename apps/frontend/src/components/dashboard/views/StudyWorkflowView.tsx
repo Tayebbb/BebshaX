@@ -1056,7 +1056,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                         {p.initials || p.name.slice(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <div style={{ fontSize: '1rem', fontWeight: 600, color: '#FFFFFF' }}>{p.name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#FFFFFF' }}>{p.name}</div>
+                          <span style={{ fontSize: '0.65rem', color: '#14B8A6', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                            {p.country_code || 'BD'}
+                          </span>
+                        </div>
                         <div style={{ fontSize: '0.78rem', color: '#22D3EE' }}>{p.archetype || p.role_title}</div>
                         {p.tagline && <div style={{ fontSize: '0.74rem', color: '#8D9999' }}>{p.tagline}</div>}
                       </div>
@@ -1070,8 +1075,25 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     </button>
                   </div>
 
+                  {p.personality && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', background: '#0D1111', padding: '6px 8px', borderRadius: '6px', border: '1px solid #1E2626', textAlign: 'center' }}>
+                      {[
+                        { l: 'O', v: p.personality.openness, c: '#38BDF8' },
+                        { l: 'C', v: p.personality.conscientiousness, c: '#10B981' },
+                        { l: 'E', v: p.personality.extroversion, c: '#F59E0B' },
+                        { l: 'A', v: p.personality.agreeableness, c: '#A855F7' },
+                        { l: 'N', v: p.personality.neuroticism, c: '#EC4899' },
+                      ].map((t) => (
+                        <div key={t.l} style={{ fontSize: '0.65rem' }}>
+                          <span style={{ color: t.c, fontWeight: 700 }}>{t.v}</span>
+                          <span style={{ color: '#8D9999', marginLeft: '2px' }}>{t.l}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <p style={{ fontSize: '0.84rem', color: '#D1D5DB', lineHeight: 1.45, margin: 0 }}>
-                    {p.description || p.tagline}
+                    {p.description || p.tagline || (p.quote ? `"${p.quote}"` : '')}
                   </p>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px' }}>
@@ -1697,19 +1719,72 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               </div>
               <div>
                 <span style={{ fontSize: '0.72rem', color: '#8D9999' }}>Occupation: </span>
-                <span style={{ fontSize: '0.82rem', color: '#FFF' }}>{viewingPersona.demographics?.occupation || 'Professional'}</span>
+                <span style={{ fontSize: '0.82rem', color: '#FFF' }}>{viewingPersona.demographics?.occupation || viewingPersona.archetype || 'Professional'}</span>
               </div>
               <div>
                 <span style={{ fontSize: '0.72rem', color: '#8D9999' }}>Location: </span>
-                <span style={{ fontSize: '0.82rem', color: '#FFF' }}>{viewingPersona.demographics?.location || 'Urban'}</span>
+                <span style={{ fontSize: '0.82rem', color: '#FFF' }}>{viewingPersona.demographics?.location || 'Dhaka, Bangladesh'}</span>
               </div>
               <div>
-                <span style={{ fontSize: '0.72rem', color: '#8D9999' }}>Grounding: </span>
-                <span style={{ fontSize: '0.82rem', color: '#10B981', fontWeight: 700 }}>
-                  {Math.round((viewingPersona.grounding_ratio || 0.95) * 100)}%
-                </span>
+                <span style={{ fontSize: '0.72rem', color: '#8D9999' }}>Country: </span>
+                <span style={{ fontSize: '0.82rem', color: '#14B8A6', fontWeight: 600 }}>{viewingPersona.origin_country || viewingPersona.country_code || 'BD'}</span>
               </div>
             </div>
+
+            {/* Big Five Personality */}
+            {viewingPersona.personality && (
+              <div style={{ background: '#0D1111', padding: '14px', borderRadius: '10px', border: '1px solid #202727' }}>
+                <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#14B8A6', letterSpacing: '0.06em', marginBottom: '8px' }}>
+                  BIG FIVE PERSONALITY PROFILE
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', textAlign: 'center' }}>
+                  {[
+                    { label: 'Openness', val: viewingPersona.personality.openness, color: '#38BDF8' },
+                    { label: 'Conscientious', val: viewingPersona.personality.conscientiousness, color: '#10B981' },
+                    { label: 'Extroversion', val: viewingPersona.personality.extroversion, color: '#F59E0B' },
+                    { label: 'Agreeable', val: viewingPersona.personality.agreeableness, color: '#A855F7' },
+                    { label: 'Neuroticism', val: viewingPersona.personality.neuroticism, color: '#EC4899' },
+                  ].map((t) => (
+                    <div key={t.label}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: t.color }}>{t.val}</div>
+                      <div style={{ height: '3px', background: '#202727', borderRadius: '2px', overflow: 'hidden', margin: '3px 0' }}>
+                        <div style={{ width: `${t.val}%`, height: '100%', background: t.color }} />
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: '#8D9999' }}>{t.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Key Lifestyle Attributes */}
+            {viewingPersona.detailed_attributes && Object.keys(viewingPersona.detailed_attributes).length > 0 && (
+              <div style={{ background: '#0D1111', padding: '14px', borderRadius: '10px', border: '1px solid #202727' }}>
+                <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#22D3EE', letterSpacing: '0.06em', marginBottom: '8px' }}>
+                  LIFESTYLE & ROUTINE SNAPSHOT
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
+                  {viewingPersona.detailed_attributes.commute_mode && (
+                    <div><span style={{ color: '#8D9999' }}>Commute: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.commute_mode}</span></div>
+                  )}
+                  {viewingPersona.detailed_attributes.work_schedule && (
+                    <div><span style={{ color: '#8D9999' }}>Schedule: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.work_schedule}</span></div>
+                  )}
+                  {viewingPersona.detailed_attributes.food_source && (
+                    <div><span style={{ color: '#8D9999' }}>Food: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.food_source}</span></div>
+                  )}
+                  {viewingPersona.detailed_attributes.payment_method && (
+                    <div><span style={{ color: '#8D9999' }}>Payment: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.payment_method}</span></div>
+                  )}
+                  {viewingPersona.detailed_attributes.communication_style && (
+                    <div><span style={{ color: '#8D9999' }}>Communication: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.communication_style}</span></div>
+                  )}
+                  {viewingPersona.detailed_attributes.hobbies && (
+                    <div style={{ gridColumn: '1 / -1' }}><span style={{ color: '#8D9999' }}>Hobbies: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.hobbies}</span></div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Grounded Claims & Provenance */}
             <div>

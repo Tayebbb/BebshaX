@@ -53,6 +53,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — Merge: audit sweep (Tayeb, 8 items) × security fixes (Sazid, B4+B6)
+
+- Conflicts resolved as the union of both sides: `config.py` keeps the M6 CORS block AND the fail-fast JWT settings; `Businesses` carries `industry`/`target_market` (M5) AND `owner_id` (B6); progress table recomputed (11/41).
+
 ### Maintenance (2026-08-26) — M11: CI gates (lint, coverage floor, secret scan, migration drift)
 
 - ci.yml → 5 jobs: ruff bug-tier lint + 68% coverage floor (at 70.6%), advisory pyright, gitleaks full-history scan (`.gitleaks.toml` allowlists only the burned B4 literal, removal tracked), pgvector migration-drift job (H6's CI half), frontend without `--if-present`.
@@ -90,6 +94,12 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 - `main.py` lifespan now runs `warn_if_local_tier_down()`: WARNING + `app.state.local_tier_up=False` when the local tier has zero routes (emergency pool is local-first, so silence was the H2 failure mode).
 - Tests: `test_local_tier_warning.py` (4 cases incl. discovery-exception path), wiring assertion in `test_app_wiring.py`, and a new suite-wide `tests/conftest.py` autouse fixture pinning `OLLAMA_API_BASE` to an unroutable port — the unit suite is now hermetic w.r.t. a locally running daemon.
 - Audit H2 ticked (assignments + fix log). Suite: 204 passed.
+
+### Maintenance (2026-08-26) — Security Fixes B4 + B6 Stage 1, B3 Blocker Documented
+
+- **B4 fixed (audit)** — `config.py` requires `BEBSHAX_JWT_SECRET` (≥32 chars, fail-fast on startup, rejecting burned git default). `security.py` enforces `iss` (`bebshax-api`) and `aud` (`bebshax-client`), and supports zero-downtime key rotation with `BEBSHAX_JWT_SECRET_PREVIOUS`. 8 regression tests added in `tests/test_jwt_secret.py` and updated in `tests/test_auth.py`.
+- **B6 Stage 1 landed (audit)** — Added nullable `owner_id: String(64)` with `ForeignKey("users.id", ondelete="RESTRICT")` and index to `Businesses` and `Personas` in `db/models.py`. Migration `8d648b892fd3_add_owner_id_columns.py` applied. 6 tests added in `tests/db/test_owner_id.py`. Stage 2 (row-scoping enforcement) gated on B4 prod deployment.
+- **B3 blocked (audit)** — Documented handoff in `docs/AUDIT_ASSIGNMENTS.md`. Endpoint `/api/auth/google` retained because `apps/frontend/src/services/api.ts:993` references it; deletion gated on frontend migration to `/api/auth/sync`.
 
 ### Maintenance (2026-08-26) — Conformance sweep: B1 fixed, phantom TaskType, llm_service wiring, R3 re-route, router validation restored
 

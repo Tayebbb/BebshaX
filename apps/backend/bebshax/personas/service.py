@@ -207,6 +207,10 @@ class PersonaGenerationService:
                     version=1,
                     generation_model="qwen3.5-grounded" if self.llm_service else "deterministic-empirical-generator",
                     archetype=draft.archetype,
+                    tagline=draft.tagline,
+                    country_code=draft.country_code,
+                    personality=draft.personality,
+                    detailed_attributes=draft.detailed_attributes,
                     demographics=draft.demographics,
                     bio=draft.bio,
                     quote=draft.quote,
@@ -341,6 +345,10 @@ class PersonaGenerationService:
                 persona.version += 1
                 persona.name = draft.name
                 persona.archetype = draft.archetype
+                persona.tagline = draft.tagline
+                persona.country_code = draft.country_code
+                persona.personality = draft.personality
+                persona.detailed_attributes = draft.detailed_attributes
                 persona.demographics = draft.demographics
                 persona.bio = draft.bio
                 persona.quote = draft.quote

@@ -152,6 +152,10 @@ class Businesses(Base):
     # M5: real columns — previously stuffed into description as "Industry: … | Target Market: …"
     industry: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     target_market: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # B6 stage 1: tenancy column (row-scoping enforcement arrives with stage 2)
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     # Relationship (lazy-loaded; populated in Phase 8)
@@ -169,6 +173,9 @@ class Personas(Base):
     )
     study_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     segment_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     generation_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(256), index=True)
@@ -178,6 +185,14 @@ class Personas(Base):
     version: Mapped[int] = mapped_column(default=1)
     generation_model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     archetype: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    tagline: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    country_code: Mapped[Optional[str]] = mapped_column(String(16), default="BD")
+    personality: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    detailed_attributes: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
     demographics: Mapped[dict] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=dict
     )
@@ -719,3 +734,6 @@ class StudyReports(Base):
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
 
+
+# Register Users table on Base.metadata for foreign key resolution
+import bebshax.auth.models  # noqa: F401
