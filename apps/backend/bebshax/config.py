@@ -79,6 +79,18 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("resend_api_key")
+    @classmethod
+    def validate_resend_api_key(cls, v: str | None, info) -> str | None:
+        env = info.data.get("environment", "development")
+        if env in ("production", "staging") and not v:
+            raise ValueError(
+                "BEBSHAX_RESEND_API_KEY is required in production/staging environments. "
+                "Register at resend.com and configure BEBSHAX_RESEND_API_KEY."
+            )
+        return v
+
+
 
 try:
     settings = Settings()
