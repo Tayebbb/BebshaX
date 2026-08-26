@@ -53,6 +53,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-08-26) — M4: no fabricated interview metadata
+
+- Both interview message endpoints stop inventing `latency_ms=750` / `served_by="ollama/fallback"` defaults; engine's real measured values pass through (`None` = honest absence). E2E now pins real latency/route/memories. Audit M4 ticked.
+
 ### Maintenance (2026-08-26) — M9: memories endpoint states are honest
 
 - `GET /personas/{id}/memories`: 404 for unknown persona, 503 when the memory service isn't configured, `200 []` only for a real persona with no memories. 2 tests. Audit M9 ticked.

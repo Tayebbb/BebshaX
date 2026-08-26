@@ -173,6 +173,15 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient):
     msg_data = msg_res.json()
     assert "Alex" in msg_data["reply"]
     assert msg_data["user_message"]["content"] == "Would you use an automated 5% buffer deduction?"
+    # M4: latency/route/memories must be REAL values from the engine — the
+    # audited code hardcoded latency_ms=750 and invented placeholder memories.
+    reply_meta = msg_data["persona_reply"]
+    assert isinstance(reply_meta["latency_ms"], (int, float)) and reply_meta["latency_ms"] > 0
+    assert reply_meta["latency_ms"] != 750  # the audit's fabricated constant
+    assert reply_meta["served_by"] == "pollinations/deepseek-r1"  # the FakeRoute actually serving
+    assert any("Alex Mercer" in m for m in reply_meta["retrieved_memories"]), (
+        "retrieved_memories must be the actual memory texts used in composition"
+    )
     assert "Alex" in msg_data["persona_reply"]["content"]
 
     # 9. Get transcript

@@ -354,9 +354,10 @@ async def post_study_interview_message(
         raise HTTPException(status_code=503, detail="No LLM route could serve this request") from exc
 
     reply_text = result.get("reply", "")
-    served_by = result.get("served_by", "ollama/fallback")
-    turn_num = result.get("turn_number", 2)
-    latency_ms = result.get("latency_ms", 750)
+    # M4: engine values pass through untouched — never fabricate latency/route.
+    served_by = result.get("served_by")
+    turn_num = result.get("turn_number")
+    latency_ms = result.get("latency_ms")
     topic = result.get("topic", "general")
     topics_explored = result.get("topics_explored", {})
     suggested_questions = result.get("suggested_questions", [])
@@ -370,7 +371,7 @@ async def post_study_interview_message(
         "topic": topic,
         "topics_explored": topics_explored,
         "turn_count": result.get("turn_count", turn_num),
-        "max_turns": result.get("max_turns", 14),
+        "max_turns": result.get("max_turns"),
         "is_finished": is_finished,
         "suggested_questions": suggested_questions,
         "user_message": {
@@ -502,8 +503,9 @@ async def post_message(conversation_id: str, body: MessageIn, request: Request) 
         ) from exc
 
     reply_text = result.get("reply", "")
-    served_by = result.get("served_by", "ollama/fallback")
-    turn_num = result.get("turn_number", 2)
+    # M4: engine values pass through untouched — never fabricate latency/route.
+    served_by = result.get("served_by")
+    turn_num = result.get("turn_number")
 
     return {
         "reply": reply_text,
@@ -519,7 +521,7 @@ async def post_message(conversation_id: str, body: MessageIn, request: Request) 
             "role": "assistant",
             "content": reply_text,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "latency_ms": result.get("latency_ms", 750),
+            "latency_ms": result.get("latency_ms"),
             "served_by": served_by,
             "retrieved_memories": result.get("retrieved_memories", []),
         },
