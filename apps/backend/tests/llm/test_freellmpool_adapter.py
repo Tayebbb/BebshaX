@@ -133,6 +133,12 @@ async def test_empty_reply_is_malformed_response() -> None:
     await _expect_failure(_reply(text="   "), FailureKind.MALFORMED_RESPONSE)
 
 
+async def test_cached_reply_is_noted_in_completion() -> None:
+    """Brief acceptance: cache hits are visible in provenance, never silent."""
+    _, completion = await _complete(_reply(cached=True))
+    assert any("served from freellmpool response cache" in n for n in completion.notes)
+
+
 async def test_truncated_reply_is_malformed_response() -> None:
     """completion_tokens >= max_output_tokens ⇒ output was cut mid-thought."""
     adapter = FreellmpoolAdapter(pool=StubPool(_reply(completion_tokens=64)))

@@ -78,6 +78,19 @@ async def test_warnings_are_recorded_not_fatal(evidence_store, persona_json) -> 
     assert any("timezone" in w for w in profile.warnings)
 
 
+async def test_twenty_concurrent_generations_all_succeed(evidence_store, persona_json) -> None:
+    """Brief acceptance: 20 parallel persona generations, end to end."""
+    import asyncio
+
+    engine, adapter = _engine([persona_json()] * 20, evidence_store)
+    profiles = await asyncio.gather(
+        *(engine.generate("b1", "QuickBite", "Online food delivery") for _ in range(20))
+    )
+    assert len(profiles) == 20
+    assert all(p.name == "Rina Akter" for p in profiles)
+    assert _tasks(adapter) == [TaskType.PERSONA_GENERATION] * 20
+
+
 async def test_critic_issues_become_warnings(evidence_store, persona_json) -> None:
     engine, adapter = _engine(
         [persona_json(), '{"issues": ["stated savings goal conflicts with spending"]}'],

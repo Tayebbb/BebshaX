@@ -97,6 +97,25 @@ async def test_whole_pool_failing_raises_with_pool_in_provenance() -> None:
     assert len(exc.value.provenance.attempts) == 2
 
 
+async def test_model_unavailable_route_cools_down() -> None:
+    """Brief acceptance: a 404'd model is cooled down, not hammered."""
+    now = {"t": 0.0}
+    router, adapters = _router(
+        [_route("freellmpool", "gone", [FailureKind.MODEL_UNAVAILABLE])],
+        [_route("ollama", "m")],
+        cooldown_seconds=60.0,
+        clock=lambda: now["t"],
+    )
+    first = await router.complete(_request())
+    assert first.provider == "ollama"
+    assert first.provenance.attempts[0].failure_kind == FailureKind.MODEL_UNAVAILABLE
+
+    second = await router.complete(_request())  # inside cooldown window
+    assert second.provider == "ollama"
+    assert len(adapters["freellmpool"].calls) == 1  # dead model never re-attempted
+    assert any("cooling down" in step for step in second.provenance.routing_path)
+
+
 async def test_provenance_hook_receives_pool_on_failure_too() -> None:
     captured: list = []
     router, _ = _router(

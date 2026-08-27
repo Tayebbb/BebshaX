@@ -197,7 +197,7 @@ Steps: wire frontend to real endpoints (mock mode stays); `BEBSHAX_DEMO_MODE=tru
 **Exit criteria:** demo walkthrough script (`docs/DEMO.md`) executes with network unplugged; TESTS green; frontend build green.
 **Docs to update:** docs/DEMO.md (new), implementation log, status flips.
 
-## Phase 14 — Testing hardening ⬜ (all)
+## Phase 14 — Testing hardening ✅ (2026-08-28)
 
 Full matrix from the brief §37/§44: provider down / 429 / timeout / context overflow / model gone / whole chain / all-fail→Ollama / structured-output failure / persona consistency / dataset loading / provenance / caching / 20-concurrent generation. Map each of the 10 acceptance tests to a named test; add missing ones; fix what they expose. **Exit:** every §44 test passes or has a documented, owner-approved deviation.
 **Docs to update:** implementation log (acceptance-test table), status flips.

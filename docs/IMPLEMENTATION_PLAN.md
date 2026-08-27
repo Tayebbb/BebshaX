@@ -55,6 +55,28 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Phase 14 — Testing hardening, completed (2026-08-28)
+
+The brief-§44 acceptance matrix was mapped scenario-by-scenario onto the existing suite by an independent research pass, gaps were closed with 4 new tests, and the suite stands at **422 passed** (+3 DB-integration deselected by default). Chaos paths use `FakeAdapter` exclusively (R7).
+
+| # | Scenario | Named test(s) | Status |
+|---|----------|---------------|--------|
+| 1 | Provider down → fallback succeeds | `tests/llm/test_fallback.py::test_connection_failure_retries_same_route_once`, `tests/llm/test_pool_router.py::test_remote_pool_exhausted_falls_back_to_local` | ✅ existing |
+| 2 | 429 → cooldown + fallback | `test_pool_router.py::test_rate_limited_route_cools_down_then_recovers`, `test_fallback.py::test_falls_through_429_and_timeout_to_success` | ✅ existing |
+| 3 | Timeout → chain advances | `test_fallback.py::test_falls_through_429_and_timeout_to_success`, `test_freellmpool_adapter.py::test_timeout_and_connection_errors_map` | ✅ existing |
+| 4 | Context overflow → explicit, never truncate | `tests/llm/test_context.py::test_no_model_fits_raises_explicitly_and_never_truncates`, `::test_small_context_models_are_skipped_not_called` | ✅ existing |
+| 5 | Model gone (404) → fallback + cooldown | **NEW** `test_fallback.py::test_model_unavailable_advances_to_next_candidate`, **NEW** `test_pool_router.py::test_model_unavailable_route_cools_down` (adapter mapping already existed) | ✅ added |
+| 6 | Whole chain fails → explicit exhaustion w/ provenance | `test_pool_router.py::test_whole_pool_failing_raises_with_pool_in_provenance`, `test_fallback.py::test_all_candidates_failing_raises_with_full_provenance` | ✅ existing |
+| 7 | All remote fail → Ollama serves | `test_pool_router.py::test_remote_pool_exhausted_falls_back_to_local`, `::test_emergency_pool_prefers_local_and_skips_remote` | ✅ existing |
+| 8 | Structured-output failure → retry-once then explicit; schema-invalid → one refinement | `test_freellmpool_adapter.py::test_empty_reply_is_malformed_response`, `tests/persona/test_generation.py::test_schema_invalid_output_gets_one_refinement`, `::test_schema_invalid_twice_fails_explicitly` | ✅ existing |
+| 9 | Persona consistency rules | `tests/persona/test_consistency.py` (age/occupation error, income/luxury error, location/timezone warning) + engine integration in `test_generation.py` | ✅ existing |
+| 10 | Dataset loading | `tests/datasets/test_manifest.py` (schema, profile subsets, pinned revisions), `test_idempotence.py`, `test_preprocessing.py` | ✅ existing |
+| 11 | Provenance completeness + persistence | `tests/llm/test_capabilities_and_provenance.py::test_provenance_is_complete_and_delivered_to_hook` (+failure variant), `tests/db/test_sink.py::test_insert_batch_writes_row_round_trip` | ✅ existing |
+| 12 | Caching visible in provenance | **NEW** `test_freellmpool_adapter.py::test_cached_reply_is_noted_in_completion`; persona layer `tests/db/test_data_source_labelling.py` | ✅ added |
+| 13 | 20-concurrent generation | `tests/llm/test_concurrency.py::test_pool_concurrency_limit_respected_under_20_parallel_requests` + **NEW** end-to-end `tests/persona/test_generation.py::test_twenty_concurrent_generations_all_succeed` | ✅ added |
+
+Documented deviation (owner-visible): there is no first-party response-cache layer — caching lives inside freellmpool and is surfaced honestly through provenance notes; scenario 12 is interpreted as "cache hits must be visible, never silent", which the new test pins down.
+
 ### Phase 13 — Integration + demo mode, completed (2026-08-28)
 
 The two remaining H3 pieces closed and the exit criteria are now met end to end:

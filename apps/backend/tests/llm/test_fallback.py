@@ -56,6 +56,22 @@ async def test_connection_failure_retries_same_route_once() -> None:
     assert len(result.provenance.attempts) == 2
 
 
+async def test_model_unavailable_advances_to_next_candidate() -> None:
+    """Brief acceptance: model removed from provider (404) — chain continues."""
+    adapter = FakeAdapter(
+        [
+            _route("prov_a", "model_gone", [FailureKind.MODEL_UNAVAILABLE]),
+            _route("prov_b", "model_b"),
+        ]
+    )
+    result = await SingleAdapterLLMService(adapter).complete(_request())
+    assert result.model == "model_b"
+    p = result.provenance
+    assert [a.failure_kind for a in p.attempts] == [FailureKind.MODEL_UNAVAILABLE, None]
+    # dead model was not retried on the same route — policy advances immediately
+    assert adapter.calls == ["prov_a/model_gone", "prov_b/model_b"]
+
+
 async def test_all_candidates_failing_raises_with_full_provenance() -> None:
     adapter = FakeAdapter(
         [
