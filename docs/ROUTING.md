@@ -30,9 +30,9 @@ Wired in `create_app` lifespan: `app.state.llm_router = PoolRouter(build_default
 | Pool           | Adapter order                          | Concurrency | Tasks                                                                                                                             |
 | -------------- | -------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `reasoning`    | openrouter† → freellmpool → ollama     | 2           | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
-| `conversation` | **ollama → freellmpool → openrouter** | 5           | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                                                               |
+| `conversation` | **ollama → freellmpool → openrouter**  | 5           | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                                                               |
 | `structured`   | openrouter† → freellmpool → ollama     | 3           | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING                                      |
-| `fast`         | **ollama → freellmpool → openrouter** | 5           | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                                                            |
+| `fast`         | **ollama → freellmpool → openrouter**  | 5           | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                                                            |
 | `long_context` | openrouter† → freellmpool → ollama     | 2           | REPORT_GENERATION                                                                                                                 |
 | `local`        | ollama                                 | 2           | (reserved for explicit local-only calls)                                                                                          |
 | `emergency`    | **ollama → freellmpool** (local-first) | 2           | EMERGENCY_FALLBACK                                                                                                                |

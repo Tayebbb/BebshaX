@@ -1,185 +1,220 @@
 import React, { useEffect, useRef } from 'react';
 
-declare global {
-  interface Window {
-    VANTA?: {
-      TOPOLOGY: (options: Record<string, unknown>) => {
-        destroy: () => void;
-        onMouseMove?: (e: { clientX: number; clientY: number }) => void;
-        p5?: { loop?: () => void; redraw?: () => void };
-      };
-      WAVES?: (options: Record<string, unknown>) => { destroy: () => void };
-    };
-    p5?: unknown;
-  }
+/**
+ * Evidence Constellation — the living environment of the hero fold.
+ *
+ * Concept: BebshaX turns scattered evidence into grounded synthetic minds.
+ * The background is a drifting field of evidence nodes; nearby nodes link
+ * into constellations, and a handful of "grounded" nodes pulse gold — the
+ * moments evidence becomes a persona. The cursor is gravity: the field
+ * leans gently toward presence without ever chasing it.
+ *
+ * Engineering: in-house canvas (replaces the p5/VANTA CDN payload).
+ * ~70 nodes, O(n²) link pass (trivial at this count), 30 fps frame gate,
+ * devicePixelRatio clamped, paused when offscreen or the tab hides,
+ * reduced-motion renders one static frame. Zero dependencies.
+ */
+
+const GOLD = '246, 200, 120';
+const LINK_DIST = 150;
+const FPS_INTERVAL = 1000 / 30;
+
+interface Node {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  grounded: boolean; // pulses gold
+  phase: number;
 }
 
 export const AnimatedBackground: React.FC = () => {
-  const vantaRef = useRef<HTMLDivElement | null>(null);
-  const vantaEffectRef = useRef<{
-    destroy: () => void;
-    onMouseMove?: (e: { clientX: number; clientY: number }) => void;
-    p5?: { loop?: () => void; redraw?: () => void };
-  } | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    let checkCount = 0;
-    const maxChecks = 30;
-    let animFrameId: number | null = null;
-    let time = 0;
-    let userMouseX = typeof window !== 'undefined' ? window.innerWidth / 2 : 500;
-    let userMouseY = typeof window !== 'undefined' ? window.innerHeight / 2 : 400;
-    let hasUserMoved = false;
-    let isVisible = true;
-    let isIntersecting = true;
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    if (typeof ResizeObserver === 'undefined' || typeof IntersectionObserver === 'undefined') {
+      return; // jsdom / ancient browsers: static gradient background only
+    }
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (!ctx) return;
 
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      userMouseX = e.clientX;
-      userMouseY = e.clientY;
-      hasUserMoved = true;
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
+    let nodes: Node[] = [];
+    let raf: number | null = null;
+    let last = 0;
+    let visible = !document.hidden;
+    let intersecting = true;
+    // cursor gravity, lerped so the field settles with inertia
+    let mx = -9999;
+    let my = -9999;
+    let smx = -9999;
+    let smy = -9999;
+
+    const seed = () => {
+      const count = Math.min(80, Math.max(40, Math.round((width * height) / 26000)));
+      nodes = Array.from({ length: count }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.22,
+        vy: (Math.random() - 0.5) * 0.22,
+        r: 1 + Math.random() * 1.6,
+        grounded: Math.random() < 0.12,
+        phase: Math.random() * Math.PI * 2,
+      }));
     };
 
-    window.addEventListener('mousemove', handleWindowMouseMove, { passive: true });
-
-    const stopMotionLoop = () => {
-      if (animFrameId !== null) {
-        cancelAnimationFrame(animFrameId);
-        animFrameId = null;
-      }
+    const resize = () => {
+      const rect = wrap.getBoundingClientRect();
+      width = rect.width;
+      height = rect.height;
+      dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (nodes.length === 0) seed();
     };
 
-    const startMotionLoop = () => {
-      if (prefersReducedMotion || !isVisible || !isIntersecting || animFrameId !== null) {
-        return;
-      }
+    const draw = (t: number) => {
+      ctx.clearRect(0, 0, width, height);
 
-      const step = () => {
-        time += 0.02;
+      // cursor inertia
+      smx += (mx - smx) * 0.06;
+      smy += (my - smy) * 0.06;
 
-        if (vantaEffectRef.current) {
-          const effect = vantaEffectRef.current;
-
-          // Compute smooth organic Lissajous curves so the mesh never stops evolving
-          const winW = window.innerWidth || 1200;
-          const winH = window.innerHeight || 800;
-
-          const waveX = (Math.sin(time * 0.75) * 0.45 + 0.5) * winW;
-          const waveY = (Math.cos(time * 0.55) * 0.45 + 0.5) * winH;
-
-          // Harmoniously blend ambient organic drift with user mouse position
-          const targetX = hasUserMoved ? userMouseX * 0.65 + waveX * 0.35 : waveX;
-          const targetY = hasUserMoved ? userMouseY * 0.65 + waveY * 0.35 : waveY;
-
-          if (typeof effect.onMouseMove === 'function') {
-            try {
-              effect.onMouseMove({ clientX: targetX, clientY: targetY });
-            } catch {
-              // Ignore if internal canvas is busy
-            }
+      // links first (under the nodes)
+      ctx.lineWidth = 1;
+      for (let i = 0; i < nodes.length; i++) {
+        const a = nodes[i];
+        for (let j = i + 1; j < nodes.length; j++) {
+          const b = nodes[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < LINK_DIST * LINK_DIST) {
+            const alpha = (1 - Math.sqrt(d2) / LINK_DIST) * 0.14;
+            ctx.strokeStyle = `rgba(${GOLD}, ${alpha})`;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
           }
         }
+      }
 
-        animFrameId = requestAnimationFrame(step);
-      };
-
-      animFrameId = requestAnimationFrame(step);
-    };
-
-    // Pause animation when tab is inactive or hidden
-    const handleVisibilityChange = () => {
-      isVisible = !document.hidden;
-      if (isVisible && isIntersecting) {
-        if (vantaEffectRef.current?.p5?.loop) {
-          try { vantaEffectRef.current.p5.loop(); } catch {}
+      for (const n of nodes) {
+        // gentle drift + soft cursor gravity
+        const dx = smx - n.x;
+        const dy = smy - n.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > 1 && d2 < 240 * 240) {
+          const f = 0.012 / Math.sqrt(d2);
+          n.vx += dx * f;
+          n.vy += dy * f;
         }
-        startMotionLoop();
-      } else {
-        stopMotionLoop();
-        if (vantaEffectRef.current?.p5?.redraw) {
-          // keep static frame
+        // friction keeps velocities physical
+        n.vx *= 0.985;
+        n.vy *= 0.985;
+        n.x += n.vx;
+        n.y += n.vy;
+        // wrap around edges
+        if (n.x < -20) n.x = width + 20;
+        if (n.x > width + 20) n.x = -20;
+        if (n.y < -20) n.y = height + 20;
+        if (n.y > height + 20) n.y = -20;
+
+        const pulse = n.grounded ? 0.5 + 0.5 * Math.sin(t / 900 + n.phase) : 0;
+        const alpha = n.grounded ? 0.35 + pulse * 0.45 : 0.3;
+        const radius = n.grounded ? n.r + pulse * 1.4 : n.r;
+        ctx.fillStyle = `rgba(${GOLD}, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        if (n.grounded && pulse > 0.15) {
+          ctx.fillStyle = `rgba(${GOLD}, ${pulse * 0.08})`;
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, radius * 4, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const loop = (t: number) => {
+      raf = requestAnimationFrame(loop);
+      if (t - last < FPS_INTERVAL) return; // 30fps gate
+      last = t;
+      draw(t);
+    };
 
-    // Pause animation when hero background is scrolled out of viewport
-    let observer: IntersectionObserver | null = null;
-    if (typeof IntersectionObserver !== 'undefined' && vantaRef.current) {
-      observer = new IntersectionObserver(
-        ([entry]) => {
-          isIntersecting = entry.isIntersecting;
-          if (isIntersecting && isVisible) {
-            startMotionLoop();
-          } else {
-            stopMotionLoop();
-          }
-        },
-        { threshold: 0.05 }
-      );
-      observer.observe(vantaRef.current);
+    const start = () => {
+      if (reduced || raf !== null || !visible || !intersecting) return;
+      raf = requestAnimationFrame(loop);
+    };
+    const stop = () => {
+      if (raf !== null) {
+        cancelAnimationFrame(raf);
+        raf = null;
+      }
+    };
+
+    const onMouse = (e: MouseEvent) => {
+      mx = e.clientX;
+      const rect = wrap.getBoundingClientRect();
+      my = e.clientY - rect.top;
+    };
+    const onVisibility = () => {
+      visible = !document.hidden;
+      visible && intersecting ? start() : stop();
+    };
+
+    const ro = new ResizeObserver(() => {
+      resize();
+      if (reduced) draw(0);
+    });
+    ro.observe(wrap);
+    resize();
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        intersecting = entry.isIntersecting;
+        intersecting && visible ? start() : stop();
+      },
+      { threshold: 0.02 }
+    );
+    io.observe(wrap);
+
+    window.addEventListener('mousemove', onMouse, { passive: true });
+    document.addEventListener('visibilitychange', onVisibility);
+
+    if (reduced) {
+      draw(0); // one static constellation, no loop
+    } else {
+      start();
     }
 
-    const initVanta = () => {
-      if (!vantaRef.current) return;
-
-      if (window.VANTA && typeof window.VANTA.TOPOLOGY === 'function') {
-        try {
-          if (vantaEffectRef.current) {
-            vantaEffectRef.current.destroy();
-          }
-
-          vantaEffectRef.current = window.VANTA.TOPOLOGY({
-            el: vantaRef.current,
-            mouseControls: !prefersReducedMotion,
-            touchControls: !prefersReducedMotion,
-            gyroControls: false,
-            minHeight: 200.0,
-            minWidth: 200.0,
-            scale: 1.0,
-            scaleMobile: 1.0,
-            color: 0xf6c878,
-            backgroundColor: 0x080909,
-          });
-
-          // Ensure p5 rendering loop stays unpaused
-          if (!prefersReducedMotion && vantaEffectRef.current?.p5?.loop) {
-            vantaEffectRef.current.p5.loop();
-          }
-
-          startMotionLoop();
-        } catch (e) {
-          console.warn('Vanta Topology initialization deferred:', e);
-        }
-      } else if (checkCount < maxChecks) {
-        checkCount++;
-        setTimeout(initVanta, 150);
-      }
-    };
-
-    initVanta();
-
     return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (observer) {
-        observer.disconnect();
-      }
-      stopMotionLoop();
-      if (vantaEffectRef.current && typeof vantaEffectRef.current.destroy === 'function') {
-        vantaEffectRef.current.destroy();
-        vantaEffectRef.current = null;
-      }
+      stop();
+      ro.disconnect();
+      io.disconnect();
+      window.removeEventListener('mousemove', onMouse);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
   return (
     <div
+      ref={wrapRef}
+      aria-hidden="true"
       style={{
         position: 'absolute',
         top: 0,
@@ -191,21 +226,13 @@ export const AnimatedBackground: React.FC = () => {
         zIndex: 0,
         pointerEvents: 'none',
         overflow: 'hidden',
-        background: '#080909',
+        background:
+          'radial-gradient(1100px 600px at 50% -10%, rgba(246, 200, 120, 0.06), transparent 60%), #080909',
       }}
     >
-      {/* Vanta Topology Canvas */}
-      <div
-        ref={vantaRef}
-        id="vanta-topology-bg"
-        style={{
-          width: '100%',
-          height: '100%',
-          opacity: 0.92,
-        }}
-      />
+      <canvas ref={canvasRef} style={{ display: 'block' }} />
 
-      {/* Smooth bottom transition fade to solid #080909 */}
+      {/* bottom transition into the solid page surface */}
       <div
         style={{
           position: 'absolute',
@@ -213,7 +240,8 @@ export const AnimatedBackground: React.FC = () => {
           left: 0,
           right: 0,
           height: '240px',
-          background: 'linear-gradient(to bottom, rgba(8, 9, 9, 0) 0%, rgba(8, 9, 9, 0.7) 60%, #080909 100%)',
+          background:
+            'linear-gradient(to bottom, rgba(8, 9, 9, 0) 0%, rgba(8, 9, 9, 0.7) 60%, #080909 100%)',
           pointerEvents: 'none',
         }}
       />

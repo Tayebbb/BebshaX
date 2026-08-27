@@ -15,6 +15,8 @@ import { UseCases } from './UseCases';
 import { FAQ } from './FAQ';
 import { FinalCTA } from './FinalCTA';
 import { Footer } from './Footer';
+import { Reveal } from './Reveal';
+import './landing.css';
 
 interface LandingPageProps {
   onOpenApp: () => void;
@@ -32,31 +34,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenApp, onOpenAuth 
         overflowX: 'hidden',
       }}
     >
-      {/* Background Interactive Data Grid Canvas - Confined to Hero 100vh Fold */}
+      {/* Evidence Constellation — living environment of the hero fold */}
       <AnimatedBackground />
 
       {/* Navigation */}
       <Navbar onOpenApp={onOpenApp} onOpenAuth={onOpenAuth} />
 
-      {/* Main Content Sections */}
+      {/* Scenes. The dashboard preview rises masked out of the hero's exit;
+          everything below the second fold defers rendering until approached. */}
       <main style={{ position: 'relative', zIndex: 1 }}>
-        {/* 1st Screen Hero Fold Matching Image 1 */}
         <Hero onOpenApp={onOpenApp} />
 
-        {/* Dashboard Preview Section (Image 2) Visible When Scrolling Down */}
-        <HeroDashboardSection />
+        <Reveal variant="mask">
+          <HeroDashboardSection />
+        </Reveal>
 
-        <TrustMetrics />
-        <ProblemSection />
-        <HowItWorks />
-        <ProductShowcase />
-        <IntelligenceSection />
-        <FeatureGrid />
-        <Comparison />
-        <InteractiveDemo onOpenApp={onOpenApp} />
-        <UseCases />
-        <FAQ />
-        <FinalCTA onOpenApp={onOpenApp} />
+        <div className="lp-defer">
+          <Reveal variant="rise"><TrustMetrics /></Reveal>
+          <Reveal variant="rise"><ProblemSection /></Reveal>
+          <Reveal variant="rise"><HowItWorks /></Reveal>
+          <Reveal variant="rise"><ProductShowcase /></Reveal>
+          <Reveal variant="rise"><IntelligenceSection /></Reveal>
+          <Reveal variant="rise"><FeatureGrid /></Reveal>
+          <Reveal variant="rise"><Comparison /></Reveal>
+          <Reveal variant="rise"><InteractiveDemo onOpenApp={onOpenApp} /></Reveal>
+          <Reveal variant="rise"><UseCases /></Reveal>
+          <Reveal variant="rise"><FAQ /></Reveal>
+          <Reveal variant="mask"><FinalCTA onOpenApp={onOpenApp} /></Reveal>
+        </div>
       </main>
 
       {/* Footer */}

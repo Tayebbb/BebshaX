@@ -25,6 +25,7 @@
 ## 2. Enumerations
 
 ### 2.1 TaskType (16 Fixed Tasks)
+
 ```typescript
 export type TaskType =
   | "PERSONA_GENERATION"
@@ -46,6 +47,7 @@ export type TaskType =
 ```
 
 ### 2.2 FailureKind
+
 ```typescript
 export type FailureKind =
   | "RATE_LIMIT"
@@ -61,11 +63,13 @@ export type FailureKind =
 ```
 
 ### 2.3 ProvenanceClass
+
 ```typescript
 export type ProvenanceClass = "OBSERVED" | "INFERRED" | "SYNTHETIC";
 ```
 
 ### 2.4 MemoryKind
+
 ```typescript
 export type MemoryKind = "semantic" | "episodic" | "reflection";
 ```
@@ -75,6 +79,7 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
 ## 3. Endpoints
 
 ### 3.1 Health Check (Implemented in Phase 1)
+
 - **`GET /api/health`**
 - **Response `200 OK`:**
   ```json
@@ -92,6 +97,7 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
 ### 3.2 LLM Provenance & Routing (Phase 2, 5, 6)
 
 #### `GET /api/provenance`
+
 - **Query params:** `limit` (default 50), `task`, `pool`, `success` (boolean), `persona_id`
 - **Response `200 OK`:**
   ```json
@@ -104,7 +110,11 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
         "persona_id": "per_101",
         "conversation_id": null,
         "created_at": "2026-08-22T08:00:00.000Z",
-        "routing_path": ["groq/llama-3.3-70b-versatile", "pollinations/deepseek-r1", "ollama/llama3.2:3b"],
+        "routing_path": [
+          "groq/llama-3.3-70b-versatile",
+          "pollinations/deepseek-r1",
+          "ollama/llama3.2:3b"
+        ],
         "attempts": [
           {
             "attempt_number": 1,
@@ -144,18 +154,52 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
   ```
 
 #### `GET /api/routes/status`
+
 - **Response `200 OK`:** Model registry and provider health snapshot:
   ```json
   {
     "providers": [
-      { "name": "pollinations", "type": "keyless", "status": "healthy", "available_models": 12, "active_cooldowns": 0 },
-      { "name": "groq", "type": "free_tier_key", "status": "degraded", "available_models": 4, "active_cooldowns": 1 },
-      { "name": "ollama", "type": "local_fallback", "status": "healthy", "available_models": 2, "active_cooldowns": 0 }
+      {
+        "name": "pollinations",
+        "type": "keyless",
+        "status": "healthy",
+        "available_models": 12,
+        "active_cooldowns": 0
+      },
+      {
+        "name": "groq",
+        "type": "free_tier_key",
+        "status": "degraded",
+        "available_models": 4,
+        "active_cooldowns": 1
+      },
+      {
+        "name": "ollama",
+        "type": "local_fallback",
+        "status": "healthy",
+        "available_models": 2,
+        "active_cooldowns": 0
+      }
     ],
     "pools": [
-      { "name": "reasoning", "max_concurrency": 4, "active_requests": 1, "candidates_count": 5 },
-      { "name": "conversation", "max_concurrency": 8, "active_requests": 0, "candidates_count": 8 },
-      { "name": "fallback", "max_concurrency": 2, "active_requests": 0, "candidates_count": 2 }
+      {
+        "name": "reasoning",
+        "max_concurrency": 4,
+        "active_requests": 1,
+        "candidates_count": 5
+      },
+      {
+        "name": "conversation",
+        "max_concurrency": 8,
+        "active_requests": 0,
+        "candidates_count": 8
+      },
+      {
+        "name": "fallback",
+        "max_concurrency": 2,
+        "active_requests": 0,
+        "candidates_count": 2
+      }
     ]
   }
   ```
@@ -165,6 +209,7 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
 ### 3.3 Business Setup (Phase 6, 8)
 
 #### `GET /api/businesses`
+
 - **Response `200 OK`:** List of businesses.
   ```json
   [
@@ -181,6 +226,7 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
   ```
 
 #### `POST /api/businesses`
+
 - **Request Body:**
   ```json
   {
@@ -197,11 +243,15 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
 ### 3.4 Persona Engine (Phase 8)
 
 #### `POST /api/businesses/{business_id}/personas`
+
 - **Request Body:**
   ```json
   {
     "audience_segment": "Variable income delivery driver striving for financial cushion",
-    "generation_hints": ["Prioritize irregular cashflow challenges", "Mobile-first technology user"]
+    "generation_hints": [
+      "Prioritize irregular cashflow challenges",
+      "Mobile-first technology user"
+    ]
   }
   ```
 - **Response `201 Created`:**
@@ -263,16 +313,17 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
   ```
 
 #### `GET /api/personas/{id}`
+
 - **Response `200 OK`:** Full `Persona` profile.
 
 #### `data_source` — demo honesty label (audit H3 piece 2)
 
 Every serialized `Persona` carries `data_source`, one of:
 
-| Value | Meaning |
-|---|---|
-| `"live"` | The content was produced by an inference pass against a routed provider or Ollama. |
-| `"cached"` | The content came from the demo seeder — pre-seeded fixtures, not model output. |
+| Value      | Meaning                                                                            |
+| ---------- | ---------------------------------------------------------------------------------- |
+| `"live"`   | The content was produced by an inference pass against a routed provider or Ollama. |
+| `"cached"` | The content came from the demo seeder — pre-seeded fixtures, not model output.     |
 
 The value is **persisted on the row at creation time**, not derived from `demo_mode` at read time: the flag flips independently of the rows already in the table, so deriving it would mislabel every persona created before the last flip. Existing rows were backfilled to `"live"` by migration `9f0a1b2c3d4e`, which is correct — the demo seeder is the only cached producer and it did not previously exist as a distinct category.
 
@@ -283,6 +334,7 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
 ### 3.5 Persona Memory Stream (Phase 9)
 
 #### `GET /api/personas/{id}/memories`
+
 - **Query params:** `kind` (`semantic` | `episodic` | `reflection`), `limit`
 - **Response `200 OK`:**
   ```json
@@ -315,6 +367,7 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
 ### 3.6 Interview Simulation (Phase 10)
 
 #### `POST /api/conversations`
+
 - **Request Body:**
   ```json
   {
@@ -335,12 +388,14 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
   ```
 
 #### `POST /api/studies/{study_id}/interviews/{interview_id}/messages/stream`
+
 - **SSE variant** of the study-scoped message endpoint (same auth/ownership checks). `Content-Type: text/event-stream`. Events, in order:
   - `event: delta` · `data: {"text": "<raw chunk>"}` — repeated as the persona speaks (raw model output).
   - `event: done` · `data: {…}` — the canonical payload (same fields as the non-stream endpoint incl. `reply` [normalized, this is what was persisted], `turn_number`, `served_by`, `latency_ms`, `suggested_questions`, `topics_explored`, `is_finished`, plus `user_message`/`persona_reply` parity objects). Clients MUST replace their streamed buffer with `reply`.
   - `event: error` · `data: {"kind": "finished|not_found|context_window|no_route|generic", "detail": "…"}` — failures after headers are sent; nothing was persisted for this turn unless `done` arrived.
 
 #### `POST /api/conversations/{id}/messages`
+
 - **Request Body:**
   ```json
   {
@@ -375,6 +430,7 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
 ### 3.7 Evaluation & Insights (Phase 11; M1 rewrite 2026-08-27)
 
 #### `GET /api/evaluation/metrics`
+
 - Every value is **measured** (provenance aggregates from `llm_requests`, persona validation artifacts, judged gate reports). Metrics with no underlying data are `null` — never an invented `0.0`/`1.0`. The former `routing_strategies` array (which included a fabricated "ROUND_ROBIN (Naive)" arm) is **removed**.
 - **Response `200 OK`:**
   ```json
@@ -387,14 +443,27 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
       "avg_latency_ms": 5240.5
     },
     "pools": [
-      { "pool": "conversation", "requests": 412, "success_rate": 0.99, "avg_latency_ms": 6100.0, "fallback_rate": 0.05, "local_serve_rate": 0.93 }
+      {
+        "pool": "conversation",
+        "requests": 412,
+        "success_rate": 0.99,
+        "avg_latency_ms": 6100.0,
+        "fallback_rate": 0.05,
+        "local_serve_rate": 0.93
+      }
     ],
     "quality_gate": {
       "generated_at": "2026-08-26T17:56:33+00:00",
       "bar": 8.0,
       "rubric_weights": { "persona_consistency": 0.25 },
       "arms": [
-        { "tag": "local/llama3.2:3b", "model": "ollama/llama3.2:3b", "weighted_score": 9.65, "avg_latency_ms": 6067, "dims": { "naturalness": 9 } }
+        {
+          "tag": "local/llama3.2:3b",
+          "model": "ollama/llama3.2:3b",
+          "weighted_score": 9.65,
+          "avg_latency_ms": 6067,
+          "dims": { "naturalness": 9 }
+        }
       ],
       "judge_route": "llm7/codestral-latest",
       "judge_notes": "…",

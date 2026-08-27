@@ -15,7 +15,7 @@ const signIn = (): void => {
 
 const heroSection = (): HTMLElement =>
   screen
-    .getByText(/Generate evidence-grounded personas\./i)
+    .getByText(/Evidence in\./i)
     .closest('section') as HTMLElement;
 
 const finalCtaSection = (): HTMLElement =>
@@ -31,7 +31,11 @@ describe('BebshaX Premium Landing Page', () => {
     render(<App />);
 
     expect(
-      screen.getByText(/Generate evidence-grounded personas\./i)
+      screen.getByText(/Evidence in\./i)
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText(/Personas out\./i)
     ).toBeInTheDocument();
 
     expect(

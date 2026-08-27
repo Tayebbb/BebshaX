@@ -1,0 +1,210 @@
+/* ==========================================================================
+   Landing motion language (lp-*)
+   Gold-on-black marketing DNA. One ease. Transform/opacity only — nothing
+   here can trigger layout or paint storms. Parallax reads the CSS vars set
+   by scrollEngine.ts (--lp-scroll px, --lp-hero-p 0..1).
+   ========================================================================== */
+
+:root {
+  --lp-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --lp-gold: #f6c878;
+  --lp-scroll: 0;
+  --lp-hero-p: 0;
+}
+
+/* ------------------------------------------------------------------ hero */
+
+.lp-hero-layer {
+  will-change: transform, opacity;
+}
+
+/* three depth planes — farther layers move less, the fold dims as it exits */
+.lp-hero-layer--badges {
+  transform: translate3d(0, calc(var(--lp-scroll) * -0.22px), 0);
+  opacity: calc(1 - var(--lp-hero-p) * 1.6);
+}
+.lp-hero-layer--title {
+  transform: translate3d(0, calc(var(--lp-scroll) * -0.12px), 0);
+  opacity: calc(1 - var(--lp-hero-p) * 1.25);
+}
+.lp-hero-layer--stats {
+  transform: translate3d(0, calc(var(--lp-scroll) * -0.05px), 0);
+  opacity: calc(1 - var(--lp-hero-p) * 1.8);
+}
+
+/* oversized display headline */
+.lp-hero-title {
+  font-size: clamp(3rem, 7.2vw, 6.4rem);
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+  color: #ffffff;
+  margin: 0 0 26px 0;
+}
+
+/* masked line reveal — each line rises out of its own clip box */
+.lp-line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.08em; /* keep descenders inside the mask */
+  margin-bottom: -0.08em;
+}
+.lp-line > span {
+  display: block;
+  transform: translateY(112%);
+  animation: lp-line-up 0.9s var(--lp-ease) forwards;
+  animation-delay: calc(0.12s + var(--lp-i, 0) * 0.11s);
+}
+@keyframes lp-line-up {
+  to { transform: translateY(0); }
+}
+
+/* soft rise for hero accessories (badges, subtitle, cta, stats) */
+.lp-soft {
+  opacity: 0;
+  transform: translateY(14px);
+  animation: lp-soft-in 0.8s var(--lp-ease) forwards;
+  animation-delay: calc(0.2s + var(--lp-i, 0) * 0.1s);
+}
+@keyframes lp-soft-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ------------------------------------------------------------------- cta */
+
+.lp-cta {
+  position: relative;
+  padding: 15px 36px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 9999px;
+  background: var(--lp-gold);
+  color: #1a1305;
+  border: none;
+  outline: none;
+  box-shadow: 0 0 35px rgba(246, 200, 120, 0.4);
+  transition: transform 0.3s var(--lp-ease), box-shadow 0.3s var(--lp-ease),
+    background 0.3s var(--lp-ease);
+  /* magnetic offset set from JS, decays via the transition above */
+  transform: translate3d(var(--lp-mx, 0px), var(--lp-my, 0px), 0);
+}
+.lp-cta:hover {
+  background: #ffd88f;
+  box-shadow: 0 0 60px rgba(246, 200, 120, 0.55), 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.lp-cta:active {
+  transform: translate3d(var(--lp-mx, 0px), calc(var(--lp-my, 0px) + 1px), 0) scale(0.97);
+  box-shadow: 0 0 24px rgba(246, 200, 120, 0.35);
+  transition-duration: 0.08s;
+}
+.lp-cta:focus-visible {
+  outline: 2px solid var(--lp-gold);
+  outline-offset: 3px;
+}
+
+/* ------------------------------------------------------------ scroll cue */
+
+.lp-scroll-cue {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 34px;
+  border: 1.5px solid rgba(246, 200, 120, 0.35);
+  border-radius: 12px;
+  opacity: calc(0.9 - var(--lp-hero-p) * 4);
+  pointer-events: none;
+}
+.lp-scroll-cue::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 3px;
+  height: 7px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--lp-gold);
+  animation: lp-cue 2s var(--lp-ease) infinite;
+}
+@keyframes lp-cue {
+  0% { transform: translateY(0); opacity: 1; }
+  70% { transform: translateY(12px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 0; }
+}
+
+/* -------------------------------------------------------- scene reveals */
+
+.lp-reveal {
+  --lp-d: calc(var(--lp-i, 0) * 70ms);
+}
+.lp-reveal--mask {
+  clip-path: inset(0 0 100% 0);
+  transform: translateY(26px);
+  transition: clip-path 0.9s var(--lp-ease) var(--lp-d),
+    transform 0.9s var(--lp-ease) var(--lp-d);
+}
+.lp-reveal--mask.is-in {
+  clip-path: inset(0 0 -8% 0);
+  transform: translateY(0);
+}
+.lp-reveal--rise {
+  opacity: 0;
+  transform: translateY(30px) scale(0.992);
+  transition: opacity 0.85s var(--lp-ease) var(--lp-d),
+    transform 0.85s var(--lp-ease) var(--lp-d);
+}
+.lp-reveal--rise.is-in {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ------------------------------------------------- render-cost deferral */
+
+/* below-fold sections don't exist for layout/paint until approached */
+.lp-defer {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 720px;
+}
+
+/* --------------------------------------------------------------- mobile */
+
+@media (max-width: 640px) {
+  .lp-hero-title {
+    font-size: clamp(2.4rem, 11vw, 3.2rem);
+  }
+  /* inline grid style needs the override */
+  .lp-hero-layer--stats {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+    text-align: left;
+  }
+}
+
+/* --------------------------------------------------------------- motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-line > span,
+  .lp-soft {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+  .lp-hero-layer--badges,
+  .lp-hero-layer--title,
+  .lp-hero-layer--stats {
+    transform: none;
+    opacity: 1;
+  }
+  .lp-reveal--mask,
+  .lp-reveal--rise {
+    clip-path: none;
+    transition: none;
+    transform: none;
+    opacity: 1;
+  }
+  .lp-scroll-cue { display: none; }
+  .lp-cta { transition: none; transform: none; }
+}
