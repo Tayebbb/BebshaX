@@ -4,9 +4,9 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 
 > Renamed from *SignalLens* on 2026-08-22. No other historical relationship — the project is greenfield.
 
-**Team members start here:** [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) (single source of truth) → [RULES.md](RULES.md) (binding engineering rules) → [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md) (machine setup) → [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md) (your track).
+**Team members start here:** [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) (single source of truth) → [RULES.md](RULES.md) (binding engineering rules) → [docs/SETUP.md](docs/SETUP.md) (fresh-machine setup, or one-shot `python scripts/setup.py`) → [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md) (your track).
 
-**Current workstream is audit remediation, not new phases:** [docs/E2E_AUDIT_2026-08-24.md](docs/E2E_AUDIT_2026-08-24.md) holds the evidence for all 41 findings; [docs/AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md) says who fixes what. Find your name there before starting anything.
+**All 15 phases are complete** — the summary of what was built, on what, and with which limitations is [FINAL_IMPLEMENTATION_REPORT.md](FINAL_IMPLEMENTATION_REPORT.md). System internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/FAILOVER.md](docs/FAILOVER.md) · [docs/MODEL_REGISTRY.md](docs/MODEL_REGISTRY.md) · [docs/DEMO.md](docs/DEMO.md) (demo walkthrough + offline drill).
 
 **Working with an AI agent?** It auto-loads [AGENTS.md](AGENTS.md). To build the next milestone, just tell it: **“Implement phase N”** — specs live in [docs/PHASES.md](docs/PHASES.md).
 
@@ -19,9 +19,11 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 | `services` (inside backend) | `bebshax.llm` policy layer → adapters → freellmpool / Ollama |
 | `data/raw` · `data/processed` · `data/metadata` | Datasets (reproducible via `scripts/`, not committed) |
 | `scripts/` | Setup, dataset, and evaluation tooling |
-| `docs/` | [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) · [E2E_AUDIT_2026-08-24.md](docs/E2E_AUDIT_2026-08-24.md) · [AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md) · [DEMO.md](docs/DEMO.md) |
+| `docs/` | [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [FAILOVER.md](docs/FAILOVER.md) · [SETUP.md](docs/SETUP.md) · [DEMO.md](docs/DEMO.md) · [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) |
 
-## Quickstart (state: Phases 1–12 ✅ · 13 integration/demo 🟡 in progress — remaining: 14 testing, 15 docs)
+## Quickstart (state: Phases 1–15 ✅ complete)
+
+One-shot: `python scripts/setup.py` (creates venv, installs, bootstraps .env + JWT secret, starts db, migrates, fetches datasets, runs tests). Manual:
 
 ```powershell
 # Backend

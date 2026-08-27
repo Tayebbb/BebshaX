@@ -68,7 +68,7 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | 12 | Frontend (Foundation & Views on mocks) | ✅ 2026-08-22 |
 | 13 | Integration + demo mode | ✅ 2026-08-28 (flag-gated seeding, cached labeling end-to-end, DEMO.md walkthrough + offline drill) |
 | 14 | Testing (full matrix + acceptance tests) | ✅ 2026-08-28 |
-| 15 | Documentation | ⬜ |
+| 15 | Documentation | ✅ 2026-08-28 |
 
 
 Detailed deliverables/exit criteria: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md). Environment/ecosystem audit: [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md).

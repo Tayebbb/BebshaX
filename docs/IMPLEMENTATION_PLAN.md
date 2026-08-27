@@ -55,6 +55,20 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Phase 15 — Documentation, completed (2026-08-28)
+
+All deliverables authored from a verified factsheet (independent research pass over pyproject/package.json, `llm/pools.py`, `failures.py`, `router.py`, `main.py` lifespan, `capacity_state.py`, eval reports, DATASETS.md) rather than from memory:
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — system shape (mermaid), package-by-package map with key classes, lifespan wiring incl. drift guard and cooldown restoration, API surface, data stores.
+- **[FAILOVER.md](FAILOVER.md)** — the 7 pools with concurrency + adapter order, full 18-task pool map, the 13-kind failure taxonomy with the exact retry/advance/cooldown policy table, the routing walk, persistent cooldowns, context budgeting (chars/3.5+4, over-estimates by design), latency budgets, offline behavior.
+- **[MODEL_REGISTRY.md](MODEL_REGISTRY.md)** — honest status: `cooldown_until` is the one live column (CooldownStore persistence across restarts); capability/score columns are schema-only; live discovery (freellmpool inventory, Ollama /api/tags + /api/show with the 16k VRAM cap) documented as the real capability source.
+- **[SETUP.md](SETUP.md)** — fresh-machine guide: prerequisites, venv, secrets (JWT generation), Docker db on 5433 vs cloud URL, migrations, dataset profiles, verification, run commands, full env-var name list, troubleshooting (drift guard, pgvector, dev.js reloader, local tier warning).
+- **[../FINAL_IMPLEMENTATION_REPORT.md](../FINAL_IMPLEMENTATION_REPORT.md)** — what was built, OSS + versions + licenses (all R8-reviewed), datasets + licenses, routing/fallback architecture, performance & eval results (strategy table, live-path latencies, local gate 9.65/10 @ ~6s/turn), security posture, honest limitations (registry skeleton, free-tier latency, demo Google auth, xRouteBench capability-metadata gap, freellmpool-internal caching, single-worker rate limiting), future work, final phase table.
+- **[../scripts/setup.py](../scripts/setup.py)** — one-shot idempotent setup (venv → editable install → .env bootstrap incl. generated `BEBSHAX_JWT_SECRET` → `docker compose up -d db` with graceful cloud-URL fallback → alembic → datasets profile → npm install → pytest gate). No secrets ever printed or committed.
+- **README** — status line now "Phases 1–15 ✅", quickstart points at the one-shot script, doc table links the new pages, stale audit-remediation framing removed.
+
+Exit criterion “fresh-machine setup succeeds following SETUP.md alone”: every command in SETUP.md is the verified working form from this machine (same commands CI runs on Ubuntu, path separators aside); `scripts/setup.py` encodes the identical sequence and ends by running the suite. **422 backend + 79 frontend tests green.**
+
 ### Phase 14 — Testing hardening, completed (2026-08-28)
 
 The brief-§44 acceptance matrix was mapped scenario-by-scenario onto the existing suite by an independent research pass, gaps were closed with 4 new tests, and the suite stands at **422 passed** (+3 DB-integration deselected by default). Chaos paths use `FakeAdapter` exclusively (R7).
