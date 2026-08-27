@@ -16,7 +16,6 @@ import secrets
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -70,8 +69,9 @@ def ensure_env_file() -> None:
     for line in text.splitlines():
         if line.startswith("BEBSHAX_JWT_SECRET="):
             value = line.split("=", 1)[1].strip()
-            # the example ships a burned placeholder the app rejects
-            needs_secret = len(value) < 32 or "change" in value.lower() or "example" in value.lower()
+            # only replace the shipped placeholder or a too-short value —
+            # never silently rotate a legitimate secret
+            needs_secret = len(value) < 32 or value.startswith("<")
             break
     if needs_secret:
         token = secrets.token_urlsafe(48)
@@ -99,11 +99,11 @@ def start_database(skip_docker: bool) -> None:
     if shutil.which("docker") is None:
         print("Docker not found - skipping. Point BEBSHAX_DATABASE_URL at a pgvector Postgres instead.")
         return
-    rc = run(["docker", "compose", "up", "-d", "db"], check=False)
+    # --wait blocks on the compose healthcheck (pg_isready) — no sleep guessing
+    rc = run(["docker", "compose", "up", "-d", "--wait", "db"], check=False)
     if rc != 0:
         print("docker compose failed (daemon down?) - configure BEBSHAX_DATABASE_URL manually.")
         return
-    time.sleep(3)  # give postgres a moment before migrations
 
 
 def run_migrations() -> None:
@@ -139,7 +139,7 @@ def install_frontend(skip: bool) -> None:
     if npm is None:
         print("npm not found - install Node.js 20+ to run the frontend")
         return
-    run([npm, "install"], cwd=ROOT / "apps" / "frontend")
+    run([npm, "ci"], cwd=ROOT / "apps" / "frontend")
 
 
 def main() -> None:

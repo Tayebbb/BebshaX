@@ -67,11 +67,11 @@ All deliverables authored from a verified factsheet (independent research pass o
 - **[../scripts/setup.py](../scripts/setup.py)** — one-shot idempotent setup (venv → editable install → .env bootstrap incl. generated `BEBSHAX_JWT_SECRET` → `docker compose up -d db` with graceful cloud-URL fallback → alembic → datasets profile → npm install → pytest gate). No secrets ever printed or committed.
 - **README** — status line now "Phases 1–15 ✅", quickstart points at the one-shot script, doc table links the new pages, stale audit-remediation framing removed.
 
-Exit criterion “fresh-machine setup succeeds following SETUP.md alone”: every command in SETUP.md is the verified working form from this machine (same commands CI runs on Ubuntu, path separators aside); `scripts/setup.py` encodes the identical sequence and ends by running the suite. **422 backend + 79 frontend tests green.**
+Exit criterion “fresh-machine setup succeeds following SETUP.md alone”: every command in SETUP.md is the verified working form from this machine (same commands CI runs on Ubuntu, path separators aside); `scripts/setup.py` encodes the identical sequence and ends by running the suite. **423 backend + 79 frontend tests green.**
 
 ### Phase 14 — Testing hardening, completed (2026-08-28)
 
-The brief-§44 acceptance matrix was mapped scenario-by-scenario onto the existing suite by an independent research pass, gaps were closed with 4 new tests, and the suite stands at **422 passed** (+3 DB-integration deselected by default). Chaos paths use `FakeAdapter` exclusively (R7).
+The brief-§44 acceptance matrix was mapped scenario-by-scenario onto the existing suite by an independent research pass, gaps were closed with 5 new tests, and the suite stands at **423 passed** (+3 DB-integration deselected by default). Chaos paths use `FakeAdapter` exclusively (R7).
 
 | # | Scenario | Named test(s) | Status |
 |---|----------|---------------|--------|
@@ -86,7 +86,7 @@ The brief-§44 acceptance matrix was mapped scenario-by-scenario onto the existi
 | 9 | Persona consistency rules | `tests/persona/test_consistency.py` (age/occupation error, income/luxury error, location/timezone warning) + engine integration in `test_generation.py` | ✅ existing |
 | 10 | Dataset loading | `tests/datasets/test_manifest.py` (schema, profile subsets, pinned revisions), `test_idempotence.py`, `test_preprocessing.py` | ✅ existing |
 | 11 | Provenance completeness + persistence | `tests/llm/test_capabilities_and_provenance.py::test_provenance_is_complete_and_delivered_to_hook` (+failure variant), `tests/db/test_sink.py::test_insert_batch_writes_row_round_trip` | ✅ existing |
-| 12 | Caching visible in provenance | **NEW** `test_freellmpool_adapter.py::test_cached_reply_is_noted_in_completion`; persona layer `tests/db/test_data_source_labelling.py` | ✅ added |
+| 12 | Caching visible in provenance | **NEW** `test_freellmpool_adapter.py::test_cached_reply_is_noted_in_completion` + `::test_cached_note_reaches_provenance` (note pinned end-to-end into `ProvenanceRecord.attempts[].notes`); persona layer `tests/db/test_data_source_labelling.py` | ✅ added |
 | 13 | 20-concurrent generation | `tests/llm/test_concurrency.py::test_pool_concurrency_limit_respected_under_20_parallel_requests` + **NEW** end-to-end `tests/persona/test_generation.py::test_twenty_concurrent_generations_all_succeed` | ✅ added |
 
 Documented deviation (owner-visible): there is no first-party response-cache layer — caching lives inside freellmpool and is surfaced honestly through provenance notes; scenario 12 is interpreted as "cache hits must be visible, never silent", which the new test pins down.
@@ -97,8 +97,8 @@ The two remaining H3 pieces closed and the exit criteria are now met end to end:
 
 - **Stale status corrected**: the "cached labeling pending Shehab UI" note was outdated — the `CACHED` badge shipped 2026-08-27 (Persona Library cards, Deep-Dive inspector, workflow persona modal; guarded by `tests/PersonaLibraryView.test.tsx`). [DEMO.md](DEMO.md) §4 updated to reflect frontend completion.
 - **Demo walkthrough script** added to [DEMO.md](DEMO.md) §5: 9 ordered steps from `docker compose up -d db` through live generation with provenance inspection, using the flag-gated seed (`BEBSHAX_DEMO_MODE=true`, `tests/db/test_seed_demo_mode.py`).
-- **Offline drill** documented in [DEMO.md](DEMO.md) §6 and backed by implementation: cached content renders from Postgres with `CACHED` labels regardless of network; live generation falls through remote pools to the local Ollama tier (`llama3.2:3b`/`qwen3:4b`); without the daemon it fails **explicitly** (`AllProvidersExhausted` → error turn in the chat UI), never silently (R2). Startup logs a loud "local tier DOWN" warning when Ollama is unreachable so the drill can't be attempted blind.
-- Statuses flipped in PROJECT_CONTEXT.md and PHASES.md. **422 backend + 79 frontend tests green; frontend build green.**
+- **Offline drill** documented in [DEMO.md](DEMO.md) §6 and backed by implementation: cached content renders from Postgres with `CACHED` labels regardless of network; live generation falls through remote pools to the local Ollama tier (`llama3.2:3b`/`qwen3:4b`); without the daemon it fails **explicitly** (`AllCandidatesFailed` → error turn in the chat UI), never silently (R2). Startup logs a loud "local tier DOWN" warning when Ollama is unreachable so the drill can't be attempted blind.
+- Statuses flipped in PROJECT_CONTEXT.md and PHASES.md. **423 backend + 79 frontend tests green; frontend build green.**
 
 ### Maintenance (2026-08-28) — Fully responsive layout for all device sizes
 

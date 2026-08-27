@@ -35,7 +35,7 @@ Request → task-typed `LLMRequest` → pool (data-driven map) → ranked candid
 - **Routing strategies** (eval_report_20260822): all 7 strategies 100 % success under chaos simulation (35 requests, scripted failures); offline replay — HYBRID/LEAST_USED/QUALITY_FIRST/LATENCY_FIRST 100 % alignment on both RouterArena and xRouteBench slices; ROUND_ROBIN 34–50 %; CAPABILITY_FIRST/QUOTA_AWARE 0 % on xRouteBench (capability metadata absent from that replay set — a data limitation, not a router defect). HYBRID is the shipped default.
 - **Live path** (2026-08-24/27 E2E audits): persona generation ~44 s on free cloud tiers; identity held across ovh→kilo→llm7 provider failover mid-interview; 2-turn interview coherent and grounded across kilo/stepfun→llm7/codestral failover at 51–73 s/turn. Local gate: llama3.2:3b interview quality 9.65/10 at ~6 s/turn (adopted local-first for conversation).
 - **Capacity**: target ~100 personas/day on $0 validated as feasible via quota ledger + measured free-tier limits (OpenRouter free = 20 RPM/50 RPD; extra accounts do not raise limits and are prohibited anyway, R5).
-- **Tests**: 422 backend (unit, offline, chaos via `FakeAdapter`) + 3 DB-integration deselected by default; 79 frontend (vitest); acceptance matrix fully mapped (implementation log, Phase 14 entry).
+- **Tests**: 423 backend (unit, offline, chaos via `FakeAdapter`) + 3 DB-integration deselected by default; 79 frontend (vitest); acceptance matrix fully mapped (implementation log, Phase 14 entry).
 
 ## 6. Security posture
 
@@ -62,5 +62,5 @@ Registry sync jobs feeding the ranker; real Google OAuth verification; shared ra
 | 8–10 | Persona engine, memory, interviews | ✅ 2026-08-23 |
 | 11–12 | Evaluation, frontend | ✅ 2026-08-22 |
 | 13 | Integration + demo mode (flag-gated seed, cached labeling, offline drill) | ✅ 2026-08-28 |
-| 14 | Testing hardening (acceptance matrix mapped, 422 tests) | ✅ 2026-08-28 |
+| 14 | Testing hardening (acceptance matrix mapped, 423 tests) | ✅ 2026-08-28 |
 | 15 | Documentation (this report + ARCHITECTURE/FAILOVER/MODEL_REGISTRY/SETUP, `scripts/setup.py`) | ✅ 2026-08-28 |

@@ -10,7 +10,7 @@ flowchart LR
     API --> ENG[Engines on app.state<br/>persona · interview · behavioral · memory · segmentation]
     ENG --> SVC[LLMService = PoolRouter]
     SVC --> AD[adapters/ — the ONLY provider boundary R1]
-    AD --> FLP[freellmpool → 24 free providers]
+    AD --> FLP[freellmpool → ~18 free providers<br/>catalog is data, varies by version]
     AD --> OR[OpenRouter direct]
     AD --> OL[Ollama local]
     SVC -->|ProvenanceRecord per call| SINK[ProvenanceSink → llm_requests]

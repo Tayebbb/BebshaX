@@ -70,14 +70,14 @@ The label is **stored, not derived**. Computing it from `demo_mode` at read time
 Run each step in order from the repo root on the demo machine. Steps 1–4 are one-time setup; the tour itself is 5–9.
 
 1. **Database up + migrated**
-   ```bash
+   ```powershell
    docker compose up -d db
-   cd apps/backend && ..\..\.venv\Scripts\python -m alembic upgrade head && cd ..\..
+   cd apps/backend; ..\..\.venv\Scripts\python -m alembic upgrade head; cd ..\..
    ```
 2. **Enable demo mode** — in `.env` (repo root): `BEBSHAX_DEMO_MODE=true`. No API keys are required (keyless providers are a supported configuration).
 3. **Start both servers**: `node scripts/dev.js` → backend on `:8000`, frontend on `:5173`.
 4. **Confirm seeding**: `GET http://localhost:8000/api/health` reports `"demo_mode": true`; startup logs show the demo seed ran (skipped when the tables already hold data).
-5. **Sign in** at `http://localhost:5173` (Continue with Google or the seeded `founder@bebshax.ai` account).
+5. **Sign in** at `http://localhost:5173` (Continue with Google, or the seeded demo fixture `founder@bebshax.ai` / `Password123!` — a flag-gated demo credential defined in `db/seed.py`, not a secret).
 6. **Persona Library** — the seeded grounded persona renders with the `CACHED` badge; open the Deep-Dive inspector: profile, Big-Five, evidence citations, provenance classes (OBSERVED / INFERRED / SYNTHETIC) all populate from the seed.
 7. **Studies / workflow** — open the seeded study: copilot transcript, roles, and script restore from the database; stepper navigates all 5 steps.
 8. **Live generation (network available)** — create a new study and generate personas: routed through the free-tier pools, results labeled `data_source: "live"`, provenance visible under Model Router.
@@ -89,6 +89,6 @@ What keeps working with **no internet**:
 
 - **Everything seeded** — cached personas, studies, transcripts, and evidence render from Postgres; the UI labels them `CACHED`. Steps 5–7 and 9 of the walkthrough run unchanged.
 - **Live generation** falls back through the routing ladder: remote pools fail fast (connection errors → cooldowns) and the `local` / `emergency` pools serve via **Ollama** (`llama3.2:3b` primary, `qwen3:4b` secondary — both fit the 4 GB dev GPU). Requires the Ollama daemon: `ollama serve`, verify with `ollama list`.
-- **Without Ollama**, live generation fails **explicitly** (`AllProvidersExhausted` surfaced as an error turn in the chat UI) — never silently, and cached content is unaffected. Low quality or unavailability is reported, not masked (R2).
+- **Without Ollama**, live generation fails **explicitly** (`AllCandidatesFailed` surfaced as an error turn in the chat UI) — never silently, and cached content is unaffected. Low quality or unavailability is reported, not masked (R2).
 
 Drill checklist: disable networking → restart `node scripts/dev.js` → walk steps 5–7 → attempt one live generation and confirm either an Ollama-served reply (daemon up) or an explicit, labeled failure (daemon down).

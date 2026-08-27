@@ -88,6 +88,8 @@ async def test_twenty_concurrent_generations_all_succeed(evidence_store, persona
     )
     assert len(profiles) == 20
     assert all(p.name == "Rina Akter" for p in profiles)
+    # distinct profiles — no cross-contamination between the gathered runs
+    assert len({p.id for p in profiles}) == 20
     assert _tasks(adapter) == [TaskType.PERSONA_GENERATION] * 20
 
 

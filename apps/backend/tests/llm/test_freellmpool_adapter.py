@@ -139,6 +139,16 @@ async def test_cached_reply_is_noted_in_completion() -> None:
     assert any("served from freellmpool response cache" in n for n in completion.notes)
 
 
+async def test_cached_note_reaches_provenance() -> None:
+    """The note must survive into the ProvenanceRecord attempt trail."""
+    from bebshax.llm import SingleAdapterLLMService
+
+    adapter = FreellmpoolAdapter(pool=StubPool(_reply(cached=True)))
+    result = await SingleAdapterLLMService(adapter).complete(_request())
+    last = result.provenance.attempts[-1]
+    assert any("served from freellmpool response cache" in n for n in last.notes)
+
+
 async def test_truncated_reply_is_malformed_response() -> None:
     """completion_tokens >= max_output_tokens ⇒ output was cut mid-thought."""
     adapter = FreellmpoolAdapter(pool=StubPool(_reply(completion_tokens=64)))

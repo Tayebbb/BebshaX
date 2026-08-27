@@ -22,14 +22,14 @@ cd BebshaX
 
 ## 2. Python environment
 
-```bash
+```powershell
 python -m venv .venv
 .venv\Scripts\pip install -e "apps/backend[dev]"
 ```
 
 ## 3. Secrets
 
-```bash
+```powershell
 copy .env.example .env
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
@@ -40,7 +40,7 @@ Paste the generated value as `BEBSHAX_JWT_SECRET` in `.env` (mandatory, ≥32 ch
 
 Local (Docker, pgvector on port **5433** — native PG16 installs usually own 5432 and lack pgvector):
 
-```bash
+```powershell
 docker compose up -d db
 cd apps/backend
 ..\..\.venv\Scripts\python -m alembic upgrade head
@@ -51,7 +51,7 @@ Cloud alternative: set `BEBSHAX_DATABASE_URL` in `.env` to a pgvector-enabled Po
 
 ## 5. Datasets (grounding evidence)
 
-```bash
+```powershell
 .venv\Scripts\python scripts/setup_datasets.py --profile minimal
 ```
 
@@ -59,7 +59,7 @@ Profiles nest: `minimal ⊂ development ⊂ evaluation ⊂ full`. Idempotent —
 
 ## 6. Verify
 
-```bash
+```powershell
 .venv\Scripts\python -m pytest apps/backend/tests -q
 ```
 
@@ -69,15 +69,15 @@ Expect all green (integration tests needing a live DB run with `-m integration`)
 
 Both servers at once (recommended):
 
-```bash
+```powershell
 node scripts/dev.js
 ```
 
 Or individually:
 
-```bash
+```powershell
 .venv\Scripts\python -m uvicorn bebshax.main:app --port 8000   # API → http://localhost:8000/api/health
-cd apps/frontend && npm install && npm run dev                  # UI  → http://localhost:5173
+cd apps/frontend; npm install; npm run dev                      # UI  → http://localhost:5173
 ```
 
 Frontend checks: `npm run build` (type-checks via tsc), `npm test -- --run`, `npm run theme:check` (theme-token drift gate).
@@ -88,7 +88,7 @@ Set `BEBSHAX_DEMO_MODE=true` in `.env` to seed cached, clearly-labeled demo enti
 
 ## Environment variables
 
-Names only — values live in `.env` (gitignored). Core: `BEBSHAX_ENVIRONMENT`, `BEBSHAX_API_HOST`, `BEBSHAX_API_PORT`, `BEBSHAX_DEMO_MODE`, `BEBSHAX_CORS_ORIGINS`, `BEBSHAX_DATABASE_URL`, `BEBSHAX_JWT_SECRET` (+`_PREVIOUS`, `_EXPIRE_DAYS`), `BEBSHAX_REQUIRE_EMAIL_VERIFICATION`, `BEBSHAX_EMBEDDING_BACKEND` / `_MODEL`, `BEBSHAX_RESEND_API_KEY`, `BEBSHAX_EMAIL_FROM_ADDRESS`, `BEBSHAX_FRONTEND_BASE_URL`, `OLLAMA_API_BASE`. Optional provider keys (each unlocks routes): `GROQ_API_KEY`, `GEMINI_API_KEY`, `NVIDIA_API_KEY`, `OPENROUTER_API_KEY`, `MISTRAL_API_KEY`, `CEREBRAS_API_KEY`, `COHERE_API_KEY`, `GITHUB_TOKEN`, `HF_TOKEN`, `CLOUDFLARE_API_TOKEN` + `_ACCOUNT_ID`. `FREELLMPOOL_CONFIG` is set automatically to the repo's `providers.toml`.
+Names only — values live in `.env` (gitignored). Core: `BEBSHAX_ENVIRONMENT`, `BEBSHAX_API_HOST`, `BEBSHAX_API_PORT`, `BEBSHAX_DEMO_MODE`, `BEBSHAX_CORS_ORIGINS`, `BEBSHAX_DATABASE_URL`, `BEBSHAX_JWT_SECRET`, `BEBSHAX_JWT_SECRET_PREVIOUS`, `BEBSHAX_JWT_EXPIRE_DAYS`, `BEBSHAX_REQUIRE_EMAIL_VERIFICATION`, `BEBSHAX_EMBEDDING_BACKEND` / `_MODEL`, `BEBSHAX_RESEND_API_KEY`, `BEBSHAX_EMAIL_FROM_ADDRESS`, `BEBSHAX_FRONTEND_BASE_URL`, `OLLAMA_API_BASE`. Optional provider keys (each unlocks routes): `GROQ_API_KEY`, `GEMINI_API_KEY`, `NVIDIA_API_KEY`, `OPENROUTER_API_KEY`, `MISTRAL_API_KEY`, `CEREBRAS_API_KEY`, `COHERE_API_KEY`, `GITHUB_TOKEN`, `HF_TOKEN`, `CLOUDFLARE_API_TOKEN` + `_ACCOUNT_ID`. `FREELLMPOOL_CONFIG` is set automatically to the repo's `providers.toml`.
 
 ## Troubleshooting
 
