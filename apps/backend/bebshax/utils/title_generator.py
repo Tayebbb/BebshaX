@@ -78,6 +78,10 @@ def generate_deterministic_study_title(prompt: Optional[str], study_type: str = 
             processed = cut[:last_space]
         else:
             processed = cut
+        # Truncation can leave a dangling connective ("… Decants to Students at")
+        dangling = r"\s+(?:a|an|the|and|or|but|for|nor|on|at|to|from|by|with|in|of)$"
+        while re.search(dangling, processed, flags=re.IGNORECASE):
+            processed = re.sub(dangling, "", processed, flags=re.IGNORECASE)
 
     # Clean punctuation
     processed = processed.rstrip(" ,;:-.")

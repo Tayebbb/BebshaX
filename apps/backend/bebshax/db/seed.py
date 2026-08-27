@@ -20,8 +20,34 @@ from bebshax.persona.schema import (
     ProvenanceClass,
 )
 from bebshax.persona.store import save_persona
+from bebshax.tenancy import PUBLIC_OWNER_IDS
 
 logger = logging.getLogger(__name__)
+
+
+async def ensure_shared_tenant_users(sessionmaker_: sessionmaker[AsyncSession]) -> None:
+    """Guarantee a users row for every shared owner id in PUBLIC_OWNER_IDS.
+
+    Rows like personas stamp ``owner_id`` with these ids (FK → users.id); when
+    the rows are missing the insert fails and — observed live — generated
+    personas silently never reach the personas table, making interviews 404.
+    Runs at every startup, independent of demo seeding.
+    """
+    async with sessionmaker_() as session:
+        for owner_id in PUBLIC_OWNER_IDS:
+            if await session.get(Users, owner_id) is None:
+                session.add(
+                    Users(
+                        id=owner_id,
+                        email=f"{owner_id}@bebshax.internal",
+                        full_name=f"BebshaX shared tenant ({owner_id})",
+                        auth_provider="system",
+                        is_active=True,
+                        is_verified=True,
+                    )
+                )
+                logger.info("created shared-tenant users row %s", owner_id)
+        await session.commit()
 
 
 async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool = False) -> bool:

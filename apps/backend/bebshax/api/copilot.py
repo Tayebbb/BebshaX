@@ -683,7 +683,13 @@ async def generate_study_personas(
                     study.step = max(study.step or 1, 2)
                 await db_session.commit()
         except Exception:
-            pass
+            # Personas the UI shows but the DB doesn't have make every later
+            # interview 404 — this must never fail silently.
+            logger.error(
+                "persona persistence failed for study %s — generated personas will 404 in interviews",
+                body.study_id,
+                exc_info=True,
+            )
 
     return all_personas
 

@@ -80,6 +80,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [step1Prompt, setStep1Prompt] = useState<string>('');
   const [showRoleSelection, setShowRoleSelection] = useState<boolean>(false);
   const [suggestedRoles, setSuggestedRoles] = useState<PersonaRoleSuggestion[]>([]);
+  const [isLoadingRoles, setIsLoadingRoles] = useState<boolean>(false);
 
   // Live Interview Simulation States (Step 4)
   const [activeInterviewPersonaId, setActiveInterviewPersonaId] = useState<string>('');
@@ -99,6 +100,19 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const copilotMessagesRef = useRef<CopilotMessage[]>([]);
   const isFetchingCopilotRef = useRef<boolean>(false);
   const initialPromptHandledRef = useRef<string | null>(null);
+  const roleSelectionRef = useRef<HTMLDivElement | null>(null);
+  const copilotChatRef = useRef<HTMLDivElement | null>(null);
+  const interviewChatRef = useRef<HTMLDivElement | null>(null);
+
+  // Chats must stay pinned to the newest message — both containers scroll internally.
+  useEffect(() => {
+    const el = copilotChatRef.current;
+    if (el) el.scrollTo?.({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [copilotMessages, isCopilotTyping]);
+  useEffect(() => {
+    const el = interviewChatRef.current;
+    if (el) el.scrollTo?.({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [chatMessages, isSimulating]);
 
   useEffect(() => {
     copilotMessagesRef.current = copilotMessages;
@@ -166,8 +180,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         if (!s) return;
         setStudy(s);
         if (s.prompt && !promptInput) setPromptInput(s.prompt);
-        if (!initialPrompt && s.copilot_messages && s.copilot_messages.length > 0 && copilotMessages.length === 0) {
-          const restored = s.copilot_messages.map((m: any, i: number) => ({
+        // Saved history wins whenever it is longer than what's in memory
+        // (e.g. a stale initialPrompt seeded a single-message chat).
+        const saved = (s.copilot_messages || []) as any[];
+        if (saved.length > copilotMessagesRef.current.length) {
+          const restored = saved.map((m: any, i: number) => ({
             ...m,
             id: m.id || `msg_restored_${i}_${Date.now()}`,
           }));
@@ -176,6 +193,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         }
         if (s.suggested_roles && s.suggested_roles.length > 0) {
           setSuggestedRoles(s.suggested_roles);
+          // Reopen the role drawer when the goal was already approved pre-refresh.
+          if ((s.copilot_messages || []).some((m: any) => m.isGoalCard)) {
+            setShowRoleSelection(true);
+          }
         }
         if (s.script_questions && s.script_questions.length > 0) {
           setQuestions(s.script_questions);
@@ -217,15 +238,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         goalCardData: res.research_goal_card || undefined,
       };
 
-      setCopilotMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last && last.role === 'assistant' && last.content.trim() === assistantMsg.content.trim()) {
-          return prev;
-        }
-        const updated = [...prev, assistantMsg];
+      const last = copilotMessagesRef.current[copilotMessagesRef.current.length - 1];
+      const isDuplicate = last && last.role === 'assistant' && last.content.trim() === assistantMsg.content.trim();
+      if (!isDuplicate) {
+        const updated = [...copilotMessagesRef.current, assistantMsg];
         copilotMessagesRef.current = updated;
-        return updated;
-      });
+        setCopilotMessages(updated);
+        if (studyId) {
+          api.updateStudy(studyId, { copilot_messages: updated as any }).catch(() => {});
+        }
+      }
 
       if (res.suggested_roles && res.suggested_roles.length > 0) {
         setSuggestedRoles(res.suggested_roles);
@@ -246,11 +268,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           core_hypothesis: 'Strong product-market fit and willingness to pay',
         },
       };
-      setCopilotMessages((prev) => {
-        const updated = [...prev, fallbackMsg];
-        copilotMessagesRef.current = updated;
-        return updated;
-      });
+      const updated = [...copilotMessagesRef.current, fallbackMsg];
+      copilotMessagesRef.current = updated;
+      setCopilotMessages(updated);
+      if (studyId) {
+        api.updateStudy(studyId, { copilot_messages: updated as any }).catch(() => {});
+      }
     } finally {
       setIsCopilotTyping(false);
       isFetchingCopilotRef.current = false;
@@ -268,10 +291,6 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     setPromptInput('');
     if (inputEl) inputEl.value = '';
 
-    if (studyId) {
-      api.updateStudy(studyId, { prompt: messageToSend }).catch(() => {});
-    }
-
     const userMsg: CopilotMessage = {
       id: `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       role: 'user',
@@ -283,11 +302,19 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     copilotMessagesRef.current = updated;
     setCopilotMessages(updated);
 
+    if (studyId) {
+      api.updateStudy(studyId, { prompt: messageToSend, copilot_messages: updated as any }).catch(() => {});
+    }
+
     fetchCopilotTurn(updated.map((m) => ({ role: m.role, content: m.content })));
   };
 
   const handleApproveGoal = async (summary?: string) => {
     setShowRoleSelection(true);
+    // The drawer mounts below the fold — scroll to it so the click has visible feedback.
+    setTimeout(() => {
+      roleSelectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }, 80);
     const activePrompt =
       summary ||
       [...copilotMessages].reverse().find((m) => m.role === 'user')?.content ||
@@ -300,20 +327,27 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       api.triggerStudyResearch(studyId).catch(() => {});
     }
 
-    // 2. Fetch dynamically suggested persona roles tailored to this business idea
-    try {
-      const roles = await api.getSuggestedPersonaRoles(activePrompt);
-      if (roles && roles.length > 0) {
-        setSuggestedRoles(roles);
+    // 2. Fetch suggested roles only when the copilot didn't already supply them,
+    //    so re-approving never clobbers the user's count/selection tweaks.
+    if (suggestedRoles.length === 0) {
+      setIsLoadingRoles(true);
+      try {
+        const roles = await api.getSuggestedPersonaRoles(activePrompt);
+        if (roles && roles.length > 0) {
+          setSuggestedRoles(roles);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setIsLoadingRoles(false);
       }
-    } catch {
-      // ignore
     }
 
     if (studyId) {
       api.updateStudy(studyId, {
         prompt: activePrompt,
         step: 2,
+        copilot_messages: copilotMessagesRef.current as any,
       }).catch(() => {});
     }
   };
@@ -368,7 +402,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       .join(' ');
 
     const userPrompt = allUserTexts || promptInput || study?.prompt || 'Product Research Study';
-    const studyTitle = study?.title && study.title !== 'Untitled Study' ? study.title : userPrompt.slice(0, 50);
+    // Word-boundary cut — slice(0, 50) mid-word produced titles like "…Students at".
+    const derivedTitle = (() => {
+      if (userPrompt.length <= 50) return userPrompt;
+      const cut = userPrompt.slice(0, 50);
+      const atWord = cut.lastIndexOf(' ') > 25 ? cut.slice(0, cut.lastIndexOf(' ')) : cut;
+      return atWord.replace(/\s+(?:a|an|the|and|or|but|for|nor|on|at|to|from|by|with|in|of)$/i, '');
+    })();
+    const studyTitle = study?.title && study.title !== 'Untitled Study' ? study.title : derivedTitle;
 
     try {
       const generated = await api.generateStudyPersonas(
@@ -585,6 +626,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim() && initialPromptHandledRef.current !== initialPrompt.trim()) {
+      // Never clobber an existing conversation (restored or in progress).
+      if (copilotMessagesRef.current.length > 0) return;
       initialPromptHandledRef.current = initialPrompt.trim();
       const userMsg: CopilotMessage = {
         id: `msg_u_${Date.now()}`,
@@ -592,9 +635,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         content: initialPrompt.trim(),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
       };
+      copilotMessagesRef.current = [userMsg];
       setCopilotMessages([userMsg]);
+      if (studyId) {
+        api.updateStudy(studyId, { copilot_messages: [userMsg] as any }).catch(() => {});
+      }
       fetchCopilotTurn([{ role: 'user', content: initialPrompt.trim() }]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPrompt]);
 
   const stepLabels = [
@@ -639,7 +687,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           >
             ← Exit Study
           </button>
-          <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#FFFFFF' }}>
+          <div
+            title={study?.title || 'Research Workflow'}
+            style={{
+              fontSize: '0.95rem',
+              fontWeight: 600,
+              color: '#FFFFFF',
+              maxWidth: '360px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {study?.title || 'Research Workflow'}
           </div>
         </div>
@@ -711,6 +770,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
             {/* Chat Transcript Area */}
             <div
+              ref={copilotChatRef}
               style={{
                 background: '#111616',
                 border: '1px solid #202727',
@@ -784,11 +844,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                         style={{
                           marginTop: '14px',
                           width: '100%',
-                          background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-                          border: 'none',
+                          background: showRoleSelection
+                            ? 'rgba(20, 184, 166, 0.16)'
+                            : 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                          border: showRoleSelection ? '1px solid #14B8A6' : 'none',
                           borderRadius: '8px',
                           padding: '10px 16px',
-                          color: '#080909',
+                          color: showRoleSelection ? '#2DD4BF' : '#080909',
                           fontWeight: 700,
                           fontSize: '0.85rem',
                           cursor: 'pointer',
@@ -799,7 +861,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                         }}
                       >
                         <CheckCircle2 size={16} />
-                        Approve Goal & Discover Personas
+                        {showRoleSelection ? 'Goal Approved — View Suggested Roles ↓' : 'Approve Goal & Discover Personas'}
                       </button>
                     </div>
                   )}
@@ -859,7 +921,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
             {/* Role Selection Drawer when ready */}
             {showRoleSelection && (
-              <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '16px', padding: '24px' }}>
+              <div ref={roleSelectionRef} style={{ background: '#111616', border: '1px solid #202727', borderRadius: '16px', padding: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
@@ -896,6 +958,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
                 {/* Stacked Roles List */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {isLoadingRoles && suggestedRoles.length === 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8D9999', fontSize: '0.85rem', padding: '14px 4px' }}>
+                      <Sparkles size={14} className="text-teal-400 animate-spin" />
+                      Discovering suggested roles for your study...
+                    </div>
+                  )}
                   {suggestedRoles.map((role) => {
                     const isSelected = !!role.selected && role.count > 0;
                     return (
@@ -1098,7 +1166,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     padding: '8px 16px',
                     fontSize: '0.84rem',
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: isGeneratingPersonas ? 'not-allowed' : 'pointer',
+                    opacity: isGeneratingPersonas ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
@@ -1130,8 +1199,69 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               </div>
             </div>
 
+            {/* Generation progress banner */}
+            {isGeneratingPersonas && (
+              <div
+                role="status"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  background: 'rgba(20, 184, 166, 0.06)',
+                  border: '1px solid rgba(20, 184, 166, 0.25)',
+                  borderRadius: '12px',
+                  padding: '14px 18px',
+                  color: '#2DD4BF',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                }}
+              >
+                <Sparkles size={16} className="animate-spin" />
+                Generating grounded personas from evidence datasets — this can take a minute on free-tier routes...
+              </div>
+            )}
+
             {/* Persona Cards Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+              {isGeneratingPersonas &&
+                personas.length === 0 &&
+                Array.from({
+                  length:
+                    suggestedRoles.filter((r) => r.selected && r.count > 0).reduce((sum, r) => sum + r.count, 0) || 6,
+                }).map((_, i) => (
+                  <div
+                    key={`persona_skeleton_${i}`}
+                    className="bx-stagger"
+                    style={{
+                      ['--bx-i' as string]: Math.min(i, 12),
+                      background: '#111616',
+                      border: '1px solid #202727',
+                      borderRadius: '16px',
+                      padding: '20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '14px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div className="bx-skeleton" style={{ width: '42px', height: '42px', borderRadius: '10px', flexShrink: 0 }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                        <div className="bx-skeleton" style={{ height: '14px', width: '55%' }} />
+                        <div className="bx-skeleton" style={{ height: '11px', width: '40%' }} />
+                      </div>
+                    </div>
+                    <div className="bx-skeleton" style={{ height: '30px', borderRadius: '6px' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div className="bx-skeleton" style={{ height: '11px', width: '100%' }} />
+                      <div className="bx-skeleton" style={{ height: '11px', width: '90%' }} />
+                      <div className="bx-skeleton" style={{ height: '11px', width: '70%' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '8px' }}>
+                      <div className="bx-skeleton" style={{ height: '13px', width: '38%' }} />
+                      <div className="bx-skeleton" style={{ height: '18px', width: '25%', borderRadius: '6px' }} />
+                    </div>
+                  </div>
+                ))}
               {personas.map((p, cardIdx) => (
                 <div
                   key={p.id}
@@ -1232,6 +1362,50 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 </div>
               ))}
             </div>
+
+            {/* Empty state: nothing generated yet and not currently generating */}
+            {!isGeneratingPersonas && personas.length === 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '12px',
+                  textAlign: 'center',
+                  padding: '64px 24px',
+                  border: '1px dashed #202727',
+                  borderRadius: '16px',
+                  color: '#8D9999',
+                }}
+              >
+                <Sparkles size={28} className="text-teal-400" />
+                <div style={{ fontSize: '1rem', fontWeight: 600, color: '#FFFFFF' }}>No personas yet</div>
+                <div style={{ fontSize: '0.85rem', maxWidth: '420px' }}>
+                  Generate grounded personas from your approved research goal and selected roles.
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGeneratePersonas}
+                  style={{
+                    marginTop: '6px',
+                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    color: '#080909',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <Sparkles size={15} />
+                  Generate Personas
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1415,12 +1589,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     fontWeight: 700,
                     fontSize: '0.88rem',
                     cursor: isBatchRunning ? 'not-allowed' : 'pointer',
+                    opacity: isBatchRunning ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
                   }}
                 >
-                  <Sparkles size={16} />
+                  <Sparkles size={16} className={isBatchRunning ? 'animate-spin' : ''} />
                   {isBatchRunning ? 'Running Interviews...' : 'Run All Synthetic Interviews'}
                 </button>
                 <button
@@ -1436,6 +1611,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     fontSize: '0.88rem',
                     fontWeight: 700,
                     cursor: isGeneratingReport ? 'not-allowed' : 'pointer',
+                    opacity: isGeneratingReport ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
@@ -1448,6 +1624,44 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             </div>
 
             {/* Persona Selector Tabs */}
+            {personas.length === 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '12px',
+                  textAlign: 'center',
+                  padding: '48px 24px',
+                  border: '1px dashed #202727',
+                  borderRadius: '16px',
+                  color: '#8D9999',
+                }}
+              >
+                <MessageSquare size={26} className="text-teal-400" />
+                <div style={{ fontSize: '1rem', fontWeight: 600, color: '#FFFFFF' }}>No personas to interview yet</div>
+                <div style={{ fontSize: '0.85rem', maxWidth: '420px' }}>
+                  Generate grounded personas in the Personas step first — then run interviews here.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleStepChange(2)}
+                  style={{
+                    marginTop: '6px',
+                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    color: '#080909',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Go to Personas
+                </button>
+              </div>
+            ) : (
             <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
               {personas.map((p) => {
                 const status = interviewStatusMap[p.id] || 'pending';
@@ -1502,9 +1716,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 );
               })}
             </div>
+            )}
 
             {/* Chat Transcript Area */}
             <div
+              ref={interviewChatRef}
               style={{
                 background: '#111616',
                 border: '1px solid #202727',
@@ -1530,17 +1746,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 </div>
               )}
 
-              {chatMessages.map((msg, idx) => (
+              {chatMessages.map((msg, idx) => {
+                const isErrorTurn = typeof msg.id === 'string' && msg.id.startsWith('turn_err_');
+                return (
                 <div
                   key={msg.id || idx}
+                  role={isErrorTurn ? 'alert' : undefined}
                   style={{
                     alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
                     maxWidth: '82%',
-                    background: msg.role === 'user' ? 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)' : '#161C1C',
-                    color: '#FFFFFF',
+                    background: isErrorTurn
+                      ? 'rgba(239, 68, 68, 0.08)'
+                      : msg.role === 'user'
+                      ? 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)'
+                      : '#161C1C',
+                    color: isErrorTurn ? '#FCA5A5' : '#FFFFFF',
                     padding: '14px 18px',
                     borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                    border: msg.role === 'user' ? 'none' : '1px solid #202727',
+                    border: isErrorTurn
+                      ? '1px solid rgba(239, 68, 68, 0.4)'
+                      : msg.role === 'user'
+                      ? 'none'
+                      : '1px solid #202727',
                   }}
                 >
                   <div style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.content}</div>
@@ -1552,7 +1779,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
 
               {isSimulating && (
                 <div style={{ alignSelf: 'flex-start', color: '#8D9999', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '8px' }}>

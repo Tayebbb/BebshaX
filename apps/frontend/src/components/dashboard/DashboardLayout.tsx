@@ -229,7 +229,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     else if (tab === 'interviews') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`);
     else if (tab === 'behavioral-tests') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests`);
     else if (tab === 'router') navigate('/router');
-    else if (tab === 'study-workflow') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
+    else if (tab === 'study-workflow') {
+      setInitialWorkflowPrompt(undefined);
+      navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
+    }
   };
 
   const handleStartStudy = async (type: StudyType, prompt?: string) => {
@@ -257,6 +260,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   };
 
   const handleOpenStudy = (studyId: string, step: number = 1) => {
+    // Reopening an existing study: never re-seed the copilot chat with the
+    // stale creation prompt — saved messages are restored from the study.
+    setInitialWorkflowPrompt(undefined);
     setActiveStudyId(studyId);
     setActiveStep(step);
     navigate(`/research/${studyId}/step${step}`);
@@ -303,7 +309,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         background: '#080909',
         color: '#FFFFFF',
         position: 'relative',
-        overflowX: 'hidden',
+        // 'hidden' would make this a scroll container and break the sidebar's
+        // position:sticky; 'clip' clips overflow without doing that.
+        overflowX: 'clip',
       }}
     >
       {/* ============================================================

@@ -82,7 +82,47 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
+  /* clip, not hidden: hidden creates a scroll container and can disable
+     position:sticky descendants (dashboard sidebar). */
+  overflow-x: clip;
+}
+
+/* ==========================================================================
+   Platform chrome — scrollbars, selection, keyboard focus.
+   Default OS scrollbars break the dark theme; keyboard users need a ring
+   because most controls set outline:none inline.
+   ========================================================================== */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3434 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #232d2d;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #31403f;
+  background-clip: content-box;
+}
+
+::selection {
+  background: rgba(20, 184, 166, 0.35);
+  color: #ffffff;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(45, 212, 191, 0.75) !important;
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 /* Typography Utility Classes */
@@ -175,6 +215,18 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(20, 184, 166, 0.12);
 }
 
+/* Skeleton shimmer for loading placeholders */
+.bx-skeleton {
+  background: linear-gradient(90deg, #161c1c 25%, #202a2a 50%, #161c1c 75%);
+  background-size: 200% 100%;
+  animation: bx-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+@keyframes bx-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
 /* Modal choreography: backdrop fades, dialog settles */
 .bx-backdrop {
   animation: bx-fade 0.25s ease-out both;
@@ -195,7 +247,8 @@ h1, h2, h3, h4, h5, h6 {
   .bx-view,
   .bx-stagger,
   .bx-backdrop,
-  .bx-modal {
+  .bx-modal,
+  .bx-skeleton {
     animation: none;
   }
   .bx-lift,

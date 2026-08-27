@@ -475,7 +475,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/conversations/${id}`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(30000),
         });
         if (res.ok) {
           const data = await res.json();
@@ -1167,7 +1167,9 @@ export const api = {
         const url = user?.id ? `${API_BASE}/studies?user_id=${encodeURIComponent(user.id)}` : `${API_BASE}/studies`;
         const res = await fetch(url, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          // DB read, but a busy backend (LLM calls in flight) can exceed 5s —
+          // aborting here silently empties the dashboard.
+          signal: AbortSignal.timeout(30000),
         });
         if (res.ok) {
           const data = await res.json();
@@ -1192,7 +1194,8 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/studies/${id}`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          // Restores the whole workflow state — aborting early loses chat/personas in the UI.
+          signal: AbortSignal.timeout(30000),
         });
         if (res.ok) {
           lastKnownLive = true;

@@ -196,7 +196,16 @@ async def init_database(
                     "reconcile manually with `alembic stamp <revision>`"
                 )
 
-    # 3. Seed demo data if requested and sessionmaker is provided
+    # 3. Shared-tenant users rows (usr_default & co.) must exist before any
+    #    owner_id-stamped insert — independent of demo seeding.
+    if sessionmaker_:
+        try:
+            from bebshax.db.seed import ensure_shared_tenant_users
+            await ensure_shared_tenant_users(sessionmaker_)
+        except Exception:
+            logger.warning("shared-tenant user bootstrap failed", exc_info=True)
+
+    # 4. Seed demo data if requested and sessionmaker is provided
     if seed and sessionmaker_:
         try:
             from bebshax.db.seed import seed_demo_data

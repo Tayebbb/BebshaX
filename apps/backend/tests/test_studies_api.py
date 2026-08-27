@@ -30,6 +30,12 @@ def test_deterministic_title_generator():
     t4 = generate_deterministic_study_title("   ", study_type="pricing")
     assert t4 == "Pricing Elasticity & WTP Analysis"
 
+    # Truncation never leaves a dangling connective ("... Decants to Students at")
+    t5 = generate_deterministic_study_title(
+        "Selling authentic perfume decants to students at affordable prices with fast delivery"
+    )
+    assert not t5.split()[-1].lower() in {"at", "to", "for", "with", "the", "a", "an", "of", "in", "on", "by"}
+
 
 @pytest.mark.asyncio
 async def test_create_study_and_title_generation():

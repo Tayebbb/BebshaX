@@ -197,4 +197,64 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       { timeout: 4000 }
     );
   });
+
+  it('shows empty state on step 2 when no personas exist and not generating', () => {
+    render(
+      <StudyWorkflowView
+        studyId="study_empty_state"
+        initialStep={2}
+        initialType="interviews"
+        initialPrompt=""
+        onExit={vi.fn()}
+        onStepChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('No personas yet')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Generate Personas$/i })).toBeInTheDocument();
+  });
+
+  it('shows loading banner and skeleton cards while persona generation is in flight, then clears them', async () => {
+    let resolveGeneration!: (personas: unknown[]) => void;
+    vi.spyOn(api, 'generateStudyPersonas').mockReturnValue(
+      new Promise((resolve) => {
+        resolveGeneration = resolve;
+      }) as ReturnType<typeof api.generateStudyPersonas>
+    );
+
+    const { container } = render(
+      <StudyWorkflowView
+        studyId="study_loading_state"
+        initialStep={2}
+        initialType="interviews"
+        initialPrompt=""
+        onExit={vi.fn()}
+        onStepChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Generate Personas$/i }));
+
+    // In-flight: status banner + shimmering skeleton cards, no empty state
+    expect(screen.getByText(/Generating grounded personas/i)).toBeInTheDocument();
+    expect(container.querySelectorAll('.bx-skeleton').length).toBeGreaterThan(0);
+    expect(screen.queryByText('No personas yet')).not.toBeInTheDocument();
+
+    resolveGeneration([
+      {
+        id: 'per_test_1',
+        name: 'Test Persona',
+        initials: 'TP',
+        role_title: 'Primary User',
+        description: 'A generated persona.',
+      },
+    ]);
+
+    // Resolved: skeletons and banner replaced by the persona card
+    await waitFor(() => {
+      expect(screen.getByText('Test Persona')).toBeInTheDocument();
+      expect(screen.queryByText(/Generating grounded personas/i)).not.toBeInTheDocument();
+      expect(container.querySelectorAll('.bx-skeleton').length).toBe(0);
+    });
+  });
 });

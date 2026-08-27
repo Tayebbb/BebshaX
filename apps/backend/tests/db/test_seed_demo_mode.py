@@ -2,8 +2,10 @@ import pytest
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from bebshax.auth.models import Users
 from bebshax.db.models import Base, Businesses
-from bebshax.db.seed import seed_demo_data
+from bebshax.db.seed import ensure_shared_tenant_users, seed_demo_data
+from bebshax.tenancy import PUBLIC_OWNER_IDS
 
 
 @pytest.fixture
@@ -56,3 +58,30 @@ async def test_seed_demo_data_runs_when_forced(monkeypatch, memory_sessionmaker)
     async with memory_sessionmaker() as session:
         count = (await session.execute(select(func.count(Businesses.id)))).scalar_one_or_none() or 0
         assert count > 0
+
+
+@pytest.mark.asyncio
+async def test_ensure_shared_tenant_users_creates_all_public_owner_rows(memory_sessionmaker):
+    """Every PUBLIC_OWNER_IDS id must get a users row so owner_id FKs (personas etc.) can insert."""
+    await ensure_shared_tenant_users(memory_sessionmaker)
+
+    async with memory_sessionmaker() as session:
+        for owner_id in PUBLIC_OWNER_IDS:
+            row = await session.get(Users, owner_id)
+            assert row is not None, f"missing shared-tenant users row for {owner_id}"
+            assert row.auth_provider == "system"
+
+
+@pytest.mark.asyncio
+async def test_ensure_shared_tenant_users_is_idempotent(memory_sessionmaker):
+    """Running the bootstrap twice must not fail or duplicate rows."""
+    await ensure_shared_tenant_users(memory_sessionmaker)
+    await ensure_shared_tenant_users(memory_sessionmaker)
+
+    async with memory_sessionmaker() as session:
+        count = (
+            await session.execute(
+                select(func.count(Users.id)).where(Users.id.in_(PUBLIC_OWNER_IDS))
+            )
+        ).scalar_one()
+        assert count == len(PUBLIC_OWNER_IDS)
