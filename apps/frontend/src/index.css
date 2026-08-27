@@ -2,6 +2,13 @@
    BebshaX Teal / Cyan Research Theme Design System
    ========================================================================== */
 
+/* Tailwind utilities for the utility-classed console components.
+   Preflight is disabled in tailwind.config.js — base only emits the --tw-*
+   custom-property defaults that utilities like shadow/ring depend on. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   /* Core Color Palette: High-Craft Dark with #080A0A Base */
   --bg-pure: #080a0a;
