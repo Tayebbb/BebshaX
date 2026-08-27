@@ -37,6 +37,7 @@ from bebshax.llm.adapters.base import AdapterCompletion, ProviderAdapter, RouteC
 from bebshax.llm.adapters.embeddings import HashEmbedding  # noqa: E402
 from bebshax.llm.adapters.freellmpool_adapter import FreellmpoolAdapter  # noqa: E402
 from bebshax.llm.adapters.ollama_adapter import OllamaAdapter  # noqa: E402
+from bebshax.llm.adapters.openrouter_adapter import OpenRouterAdapter  # noqa: E402
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType  # noqa: E402
 from bebshax.interview.engine import InterviewEngine  # noqa: E402
 from bebshax.memory.service import MemoryService  # noqa: E402
@@ -188,22 +189,42 @@ async def main() -> None:
     run_b = await run_interview(cloud, "freellmpool/fast")
 
     print("== Judging (blind labels A/B)")
-    verdict = await judge(cloud, run_a, run_b)
+    # Prefer a judge on a DIFFERENT provider than either arm (self-preference
+    # bias); fall back to the cloud service when OpenRouter has no route.
+    try:
+        judge_llm = SingleAdapterLLMService(OpenRouterAdapter())
+        verdict = await judge(judge_llm, run_a, run_b)
+    except Exception as exc:
+        print(f"   (openrouter judge unavailable: {exc!r} — falling back to the arm-B service)")
+        verdict = await judge(cloud, run_a, run_b)
     a, b = verdict["scores"]["A"], verdict["scores"]["B"]
+    # Self-preference detection: a judge scoring transcripts produced by its
+    # own serving model is a known LLM-as-judge bias — flag it honestly.
+    # Limitation: exact route match — the same model reached via a different
+    # gateway (ovh/X vs openrouter/X) is not detected.
+    arm_routes = {
+        *(t["served_by"] for t in run_a["turns"]),
+        *(t["served_by"] for t in run_b["turns"]),
+    }
+    self_pref = verdict["judge_route"] in arm_routes
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "bar": 8.0,
         "rubric_weights": RUBRIC,
         "arm_a": {"model": f"ollama/{LOCAL_MODEL}", **run_a, "weighted": weighted(a), "dims": a},
         "arm_b": {"model": "freellmpool/fast (see served_by)", **run_b, "weighted": weighted(b), "dims": b},
-        "judge": {"route": verdict["judge_route"], "notes": verdict["scores"].get("notes")},
+        "judge": {
+            "route": verdict["judge_route"],
+            "notes": verdict["scores"].get("notes"),
+            "self_preference_risk": self_pref,
+        },
     }
     out = REPO / "data" / "metadata" / f"local_3b_gate_{datetime.now():%Y%m%d_%H%M%S}.json"
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print(f"\nA local/{LOCAL_MODEL}:  weighted {report['arm_a']['weighted']}/10  avg {run_a['avg_ms']}ms")
     print(f"B freellmpool/fast:     weighted {report['arm_b']['weighted']}/10  avg {run_b['avg_ms']}ms")
-    print(f"judge: {verdict['judge_route']}")
+    print(f"judge: {verdict['judge_route']}" + ("  [SELF-PREFERENCE RISK: judge == an arm's serving model]" if self_pref else ""))
     print(f"report: {out}")
     verdict_line = (
         f"GATE {'PASS' if report['arm_a']['weighted'] >= 8.0 else 'FAIL'}: "

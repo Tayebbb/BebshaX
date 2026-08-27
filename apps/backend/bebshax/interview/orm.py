@@ -102,6 +102,6 @@ class InterviewInsights(Base):
     supporting_turn_numbers: Mapped[list] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=list
     )
-    confidence: Mapped[float] = mapped_column(Float, default=0.85)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0 = unmeasured, never an invented default
     is_synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

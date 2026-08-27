@@ -51,8 +51,11 @@ class ReportGenerator:
                 "",
             ])
             for om in result.offline_metrics:
+                heading = f"### Dataset: `{om.dataset_name}` ({om.total_samples} samples)"
+                if om.synthetic_fallback:
+                    heading += " — ⚠ SYNTHETIC FALLBACK (dataset absent; NOT a benchmark result)"
                 lines.extend([
-                    f"### Dataset: `{om.dataset_name}` ({om.total_samples} samples)",
+                    heading,
                     "",
                     "| Strategy | Alignment Score / Top-Match Rate |",
                     "|---|---|",

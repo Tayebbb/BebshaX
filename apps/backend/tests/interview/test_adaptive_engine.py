@@ -186,3 +186,40 @@ async def test_interview_length_limit_and_completion_synthesis(
     # Attempting to ask in a completed interview raises InterviewFinished
     with pytest.raises(InterviewFinished):
         await engine.ask(interview.id, "One more question!")
+
+
+async def test_failed_synthesis_falls_back_honestly(
+    session_maker, memory_service, llm_factory, full_study_context
+):
+    """When insight synthesis returns unparseable output, the fallback must be
+    labeled mechanical with confidence 0.0 — never dressed up as analysis
+    with an invented confidence (M-series honesty)."""
+    study_id, persona_id = full_study_context
+    llm, adapter = llm_factory([
+        "The mess food is quite repetitive honestly.",
+        "THIS IS NOT JSON AT ALL — synthesis reply that cannot parse",
+    ])
+    engine = InterviewEngine(llm, session_maker, memory=memory_service)
+    interview = await engine.start(
+        persona_id=persona_id,
+        objective="Pain Point Discovery",
+        study_id=study_id,
+        length_tier="short",
+    )
+    await engine.ask(interview.id, "What's the hardest part about hostel dining?")
+
+    synthesis = await engine.complete(interview.id)
+    assert synthesis["status"] == "completed"
+    assert synthesis["summary"].startswith("Automated synthesis unavailable")
+    [insight] = synthesis["structured_insights"]
+    assert insight["title"] == "Unanalyzed excerpt (synthesis unavailable)"
+    assert insight["confidence"] == 0.0
+
+    async with session_maker() as session:
+        rows = list(
+            (await session.execute(
+                select(InterviewInsights).where(InterviewInsights.interview_id == interview.id)
+            )).scalars()
+        )
+        assert len(rows) == 1
+        assert rows[0].confidence == 0.0  # persisted, not the ORM default

@@ -39,6 +39,10 @@ class OfflineEvalResult(BaseModel):
     total_samples: int = 0
     strategy_scores: dict[str, float] = Field(default_factory=dict)
     details: list[dict[str, Any]] = Field(default_factory=list)
+    # True when the benchmark dataset was absent and hardcoded synthetic
+    # records were replayed instead — scores then measure nothing real and
+    # must never be presented as benchmark results.
+    synthetic_fallback: bool = False
 
 
 class EvaluationSuiteResult(BaseModel):

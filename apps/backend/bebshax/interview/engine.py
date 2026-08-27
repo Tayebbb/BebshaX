@@ -13,6 +13,7 @@ Principles (R2, R3, R6, Part 6):
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from collections import defaultdict
@@ -32,6 +33,8 @@ from bebshax.llm import ChatMessage, LLMError, LLMRequest, LLMResult, LLMService
 from bebshax.memory.service import MemoryService
 from bebshax.persona.schema import PersonaProfile
 from bebshax.persona.store import load_persona
+
+logger = logging.getLogger(__name__)
 
 
 class PersonaNotFound(Exception):
@@ -921,8 +924,17 @@ Output valid JSON adhering strictly to this schema:
             key_findings = parsed.get("key_findings", [])
             insights_raw = parsed.get("insights", [])
         except Exception:
-            # Fallback deterministic extraction
-            summary = f"Interview with {persona_name} focused on {conversation.objective} over {len(turns)} turns."
+            # Mechanical fallback — marked as such, never dressed up as
+            # analysis (M-series honesty: no fabricated confidence).
+            logger.warning(
+                "insight synthesis failed for %s — emitting mechanical fallback",
+                conversation_id,
+                exc_info=True,
+            )
+            summary = (
+                f"Automated synthesis unavailable — mechanical summary: interview with "
+                f"{persona_name} covered {conversation.objective} over {len(turns)} turns."
+            )
             key_findings = [
                 f"Completed {len(turns)} dialogue turns investigating {conversation.objective}.",
                 f"Addressed key topics: {', '.join([k for k, v in (conversation.topics_explored or {}).items() if v == 'explored'])}.",
@@ -930,10 +942,10 @@ Output valid JSON adhering strictly to this schema:
             insights_raw = [
                 {
                     "type": "pain_point",
-                    "title": f"Key feedback on {conversation.objective}",
+                    "title": "Unanalyzed excerpt (synthesis unavailable)",
                     "description": turns[-1].content[:200] if turns else "Persona participated in interview session.",
                     "supporting_turn_numbers": [turns[-1].turn_number] if turns else [1],
-                    "confidence": 0.85,
+                    "confidence": 0.0,
                 }
             ]
 
@@ -961,7 +973,8 @@ Output valid JSON adhering strictly to this schema:
                     title=ins.get("title", "Interview Insight"),
                     description=ins.get("description", ""),
                     supporting_turn_numbers=ins.get("supporting_turn_numbers", []),
-                    confidence=float(ins.get("confidence", 0.85)),
+                    # unmeasured → 0.0, never an invented default
+                    confidence=float(ins.get("confidence") or 0.0),
                     is_synthetic=True,
                     created_at=datetime.now(timezone.utc),
                 )

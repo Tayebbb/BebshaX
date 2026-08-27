@@ -1,0 +1,111 @@
+{
+  "generated_at": "2026-08-27T05:45:07.411297+00:00",
+  "bar": 8.0,
+  "rubric_weights": {
+    "persona_consistency": 0.25,
+    "naturalness": 0.2,
+    "instruction_following": 0.15,
+    "context_memory": 0.15,
+    "specificity": 0.15,
+    "response_stability": 0.1
+  },
+  "arm_a": {
+    "model": "ollama/llama3.2:3b",
+    "tag": "local/llama3.2:3b",
+    "turns": [
+      {
+        "question": "Walk me through what you ate for lunch yesterday — where did it come from and what did it cost?",
+        "reply": "Yesterday was a pretty normal day for me. I usually grab a quick bite at the street stalls near my office in Gulshan. There's this one particular stall that serves really good Bengali home-style food - their dal, bhat, and fish curry is just so comforting. It costs me around 120 BDT for a plate, which isn't too bad considering the quantity they serve. I'd say it's a good deal, especially since I usually eat alone at this stall.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 8541
+      },
+      {
+        "question": "What is the most frustrating part of how you handle lunch on workdays?",
+        "reply": "You know, it's just that I get really tired of eating oily food every day. The street stalls near my office can be really tempting, but all those fried snacks and curries just feel like a lot of calories at the end of the day. And then I have this afternoon energy crash - it's like my body is saying \"no more caffeine or sugar, please!\" So, if there was something that could help me avoid getting stuck in that cycle, that'd be great. Maybe something healthier?",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 2911
+      },
+      {
+        "question": "Would you pay 3000 BDT per month for healthy delivered lunches? Why or why not?",
+        "reply": "Honestly, I'm not sure... That's a pretty steep price for me. To be honest, I've been skeptical about subscriptions and how they add up over time. With my budget, I'm already stretching to make ends meet. 3000 BDT is almost half of what I spend on lunch every month just right now, and that's not even considering the convenience factor - I like being able to grab something quickly when I need it.\n\nI do want healthy food, but if it's really going to be a game-changer for my energy levels or overall health, I'd want to see some tangible benefits that would justify the cost. Could you tell me more about what kind of healthy lunches this service offers and how they're prepared?",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 4140
+      },
+      {
+        "question": "Earlier you told me what lunch costs you — how does that compare over a month?",
+        "reply": "I mentioned earlier that my usual street food meal costs around 120 BDT per plate, which works out to be about 100-150 BDT per day. Since I usually eat alone, that's the amount I spend on lunch every workday.\n\nOver a month, it would be around 2,500-3,600 BDT. So, when you compare that to the 3000 BDT your service charges per month, it feels like a pretty significant jump in price for me. I'm not sure if I'd be willing to pay that much just yet, at least without some more convincing evidence of how this healthier option will make a difference in my life.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 4134
+      },
+      {
+        "question": "What would make you cancel such a subscription after the first month?",
+        "reply": "If the service didn't meet my expectations or failed to deliver on its promises, I'd probably be willing to cancel it. You know, like if the food wasn't as healthy as they claimed or if the portion sizes were too small. If that happened, I'd expect a decent level of customer support and compensation for any inconvenience.\n\nI've had experiences in the past where I've signed up for services and they just didn't work out... twice is my limit before I lose patience. So, if there was anything that would make me feel like I'm not getting value for money or that the service isn't reliable, I'd definitely be looking to cancel it after the first month.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 4322
+      }
+    ],
+    "total_ms": 24048,
+    "avg_ms": 4810,
+    "weighted": 9.2,
+    "dims": {
+      "persona_consistency": 9,
+      "naturalness": 8,
+      "instruction_following": 10,
+      "context_memory": 10,
+      "specificity": 9,
+      "response_stability": 10
+    }
+  },
+  "arm_b": {
+    "model": "freellmpool/fast (see served_by)",
+    "tag": "freellmpool/fast",
+    "turns": [
+      {
+        "question": "Walk me through what you ate for lunch yesterday — where did it come from and what did it cost?",
+        "reply": "Yesterday I grabbed lunch from the street food stall right outside my office in Gulshan, the one I usually go to on workdays. I had a plate of rice with aloo bhorta, a small serving of cheap chicken curry, and a side of cucumber salad, and it cost me 130 BDT. By 3 in the afternoon I was completely drained, had to drink two extra cups of strong milk tea just to stay awake for my remaining meetings, which is a pretty regular thing for me after these oily street meals.",
+        "served_by": "kilo/stepfun/step-3.7-flash:free",
+        "latency_ms": 44830
+      },
+      {
+        "question": "What is the most frustrating part of how you handle lunch on workdays?",
+        "reply": "The most frustrating part is definitely that brutal 3pm energy crash that hits me hard after every oily street lunch. I can barely focus on my remaining work, so I end up spending extra on sweet milk tea just to stay awake, which adds up and isn't great for my health either. Some days the stalls even run out of the simpler, less greasy options I prefer, so I'm stuck eating something that leaves me feeling bloated and sluggish for hours.",
+        "served_by": "kilo/stepfun/step-3.7-flash:free",
+        "latency_ms": 55394
+      },
+      {
+        "question": "Would you pay 3000 BDT per month for healthy delivered lunches? Why or why not?",
+        "reply": "That's a bit steep for me, to be honest. I spend around 2,500 to 3,600 BDT on lunch every month, and I'm already looking for ways to cut down on the oily street food. While the idea of healthy Bengali lunches sounds appealing, I'm not sure I can afford to double or even triple my lunch budget.",
+        "served_by": "ovh/Mistral-Nemo-Instruct-2407",
+        "latency_ms": 125988
+      },
+      {
+        "question": "Earlier you told me what lunch costs you — how does that compare over a month?",
+        "reply": "Well, I spend around 100 to 150 BDT on lunch every day, so over a month that adds up to about 2,500 to 3,600 BDT. It's not too bad, but I do try to keep track of my spending.",
+        "served_by": "ovh/Mistral-Nemo-Instruct-2407",
+        "latency_ms": 1470
+      },
+      {
+        "question": "What would make you cancel such a subscription after the first month?",
+        "reply": "First off, if the lunches still leave me with that brutal 3pm energy crash like the oily street food does, there's literally no point in paying for it, so I'd cancel right after the first month. I also won't stick around if the food isn't proper, less oily Bengali home-style cooking that I'm used to, or if deliveries are late more than twice a week. And if there are any hidden extra fees on top of the 3000 BDT subscription cost that weren't mentioned upfront, I'd drop it immediately without a second thought.",
+        "served_by": "kilo/stepfun/step-3.7-flash:free",
+        "latency_ms": 54015
+      }
+    ],
+    "total_ms": 281698,
+    "avg_ms": 56340,
+    "weighted": 8.2,
+    "dims": {
+      "persona_consistency": 8,
+      "naturalness": 7,
+      "instruction_following": 9,
+      "context_memory": 9,
+      "specificity": 8,
+      "response_stability": 9
+    }
+  },
+  "judge": {
+    "route": "llm7/codestral-latest",
+    "notes": "A maintains consistency and specificity better, while B is slightly more natural and concise.",
+    "self_preference_risk": false
+  }
+}

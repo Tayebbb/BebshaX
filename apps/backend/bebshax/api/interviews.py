@@ -572,7 +572,10 @@ async def start_conversation_under_persona(
 ) -> dict:
     await _guard_legacy_persona(request, persona_id, current_user)
     try:
-        conversation = await request.app.state.interview_engine.start(persona_id, body.objective)
+        conversation = await request.app.state.interview_engine.start(
+            persona_id, body.objective,
+            user_id=current_user.id if current_user else None,
+        )
     except PersonaNotFound as exc:
         raise HTTPException(status_code=404, detail="persona not found") from exc
     return {
@@ -595,7 +598,10 @@ async def start_conversation(
         raise HTTPException(status_code=422, detail="persona_id is required")
     await _guard_legacy_persona(request, body.persona_id, current_user)
     try:
-        conversation = await request.app.state.interview_engine.start(body.persona_id, body.objective)
+        conversation = await request.app.state.interview_engine.start(
+            body.persona_id, body.objective,
+            user_id=current_user.id if current_user else None,
+        )
     except PersonaNotFound as exc:
         raise HTTPException(status_code=404, detail="persona not found") from exc
     return {

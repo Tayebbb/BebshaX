@@ -29,8 +29,10 @@ class OfflineEvaluator:
                     if line.strip():
                         records.append(json.loads(line))
 
-        if not records:
-            # Fallback synthetic records for evaluation offline suite
+        synthetic_fallback = not records
+        if synthetic_fallback:
+            # Fallback synthetic records — flagged in the result so reports
+            # never present them as real benchmark measurements.
             records = [
                 {
                     "id": f"ra-{i}",
@@ -72,6 +74,7 @@ class OfflineEvaluator:
             dataset_name="router_arena",
             total_samples=len(records),
             strategy_scores=scores,
+            synthetic_fallback=synthetic_fallback,
         )
 
     def evaluate_xroute_bench(self) -> OfflineEvalResult:
@@ -84,7 +87,8 @@ class OfflineEvaluator:
                     if line.strip():
                         records.append(json.loads(line))
 
-        if not records:
+        synthetic_fallback = not records
+        if synthetic_fallback:
             records = [
                 {
                     "id": f"xb-{i}",
@@ -128,4 +132,5 @@ class OfflineEvaluator:
             dataset_name="xroute_bench",
             total_samples=len(records),
             strategy_scores=scores,
+            synthetic_fallback=synthetic_fallback,
         )
