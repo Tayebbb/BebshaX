@@ -189,7 +189,7 @@ Steps:
 
 ---
 
-## Phase 13 — Integration + demo mode ✅ (2026-08-23, all tracks converge)
+## Phase 13 — Integration + demo mode ✅ (completed 2026-08-28; started 2026-08-23, all tracks converge)
 
 **Goal:** end-to-end flows wired; exhibition-safe demo mode.
 **Allowed paths:** whole repo (coordinated).

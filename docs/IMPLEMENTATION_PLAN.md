@@ -55,6 +55,15 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Phase 13 — Integration + demo mode, completed (2026-08-28)
+
+The two remaining H3 pieces closed and the exit criteria are now met end to end:
+
+- **Stale status corrected**: the "cached labeling pending Shehab UI" note was outdated — the `CACHED` badge shipped 2026-08-27 (Persona Library cards, Deep-Dive inspector, workflow persona modal; guarded by `tests/PersonaLibraryView.test.tsx`). [DEMO.md](DEMO.md) §4 updated to reflect frontend completion.
+- **Demo walkthrough script** added to [DEMO.md](DEMO.md) §5: 9 ordered steps from `docker compose up -d db` through live generation with provenance inspection, using the flag-gated seed (`BEBSHAX_DEMO_MODE=true`, `tests/db/test_seed_demo_mode.py`).
+- **Offline drill** documented in [DEMO.md](DEMO.md) §6 and backed by implementation: cached content renders from Postgres with `CACHED` labels regardless of network; live generation falls through remote pools to the local Ollama tier (`llama3.2:3b`/`qwen3:4b`); without the daemon it fails **explicitly** (`AllProvidersExhausted` → error turn in the chat UI), never silently (R2). Startup logs a loud "local tier DOWN" warning when Ollama is unreachable so the drill can't be attempted blind.
+- Statuses flipped in PROJECT_CONTEXT.md and PHASES.md. **422 backend + 79 frontend tests green; frontend build green.**
+
 ### Maintenance (2026-08-28) — Fully responsive layout for all device sizes
 
 Owner brief: "make the website fully responsive for all device sizes." The landing page, auth page, and the scoped-CSS views (`ns-`/`sd-`/`iv-`) already had breakpoints; this pass closed the gaps in the inline-styled dashboard shell and views.
