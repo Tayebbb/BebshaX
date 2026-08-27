@@ -34,10 +34,12 @@ from bebshax.api.studies import router as studies_router
 from bebshax.auth.models import Users
 from bebshax.config import get_settings
 from bebshax.db.engine import create_async_sessionmaker, create_engine, init_database
-from bebshax.db.models import Base, Businesses, LLMRequests, ModelRegistry, Personas, SavedAudiences, Studies
+# Side-effect imports: registering every table on Base.metadata is what makes
+# empty-DB bootstrap (init_database) create the full schema.
+from bebshax.db.models import Base, Businesses, LLMRequests, ModelRegistry, Personas, SavedAudiences, Studies  # noqa: F401
 from bebshax.db.sink import ProvenanceSink
 from bebshax.interview.engine import InterviewEngine
-from bebshax.interview.orm import Conversations, ConversationTurns
+from bebshax.interview.orm import Conversations, ConversationTurns  # noqa: F401
 from bebshax.llm.adapters.base import ProviderAdapter
 from bebshax.llm.adapters.factory import (
     build_default_adapters,
@@ -47,7 +49,7 @@ from bebshax.llm.router import PoolRouter
 from bebshax.memory.service import MemoryService
 from bebshax.persona.evidence import EvidenceStore
 from bebshax.persona.generation import PersonaEngine
-from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
+from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

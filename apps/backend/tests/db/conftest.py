@@ -4,7 +4,6 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from bebshax.config import Settings
 from bebshax.db.models import Base
 
 
@@ -33,11 +32,3 @@ async def async_session(async_engine):
 
     async with async_sessionmaker() as session:
         yield session
-
-
-def settings():
-    """Return test settings."""
-    return Settings(
-        environment="test",
-        database_url="sqlite+aiosqlite:///:memory:",
-    )

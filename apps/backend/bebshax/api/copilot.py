@@ -522,11 +522,6 @@ async def suggest_persona_roles(body: SuggestRolesRequest, request: Request) -> 
     ])
 
 
-class PersonaBadgePayload(BaseModel):
-    label: str
-    value: str
-
-
 class GeneratePersonasRequest(BaseModel):
     study_id: Optional[str] = None
     study_prompt: Optional[str] = None
