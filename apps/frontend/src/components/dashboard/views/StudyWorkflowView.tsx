@@ -1132,10 +1132,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
             {/* Persona Cards Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
-              {personas.map((p) => (
+              {personas.map((p, cardIdx) => (
                 <div
                   key={p.id}
+                  className="bx-stagger bx-lift"
                   style={{
+                    ['--bx-i' as string]: Math.min(cardIdx, 12),
                     background: '#111616',
                     border: '1px solid #202727',
                     borderRadius: '16px',
@@ -1772,6 +1774,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       {/* Viewing Full Persona Modal */}
       {viewingPersona && (
         <div
+          className="bx-backdrop"
           style={{
             position: 'fixed',
             inset: 0,
@@ -1786,6 +1789,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           onClick={() => setViewingPersona(null)}
         >
           <div
+            className="bx-modal"
             style={{
               background: '#111616',
               border: '1px solid #202727',

@@ -128,6 +128,76 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--border-hover);
 }
 
+/* ==========================================================================
+   Console Motion Layer (bx-*)
+   Shared entrance/switch/modal choreography for the inline-styled console
+   views. One ease everywhere: cubic-bezier(0.16, 1, 0.3, 1).
+   ========================================================================== */
+
+:root {
+  --bx-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* View switch: every dashboard tab rises in when it mounts */
+.bx-view {
+  animation: bx-view-in 0.5s var(--bx-ease) both;
+}
+@keyframes bx-view-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Staggered card entrance — set `--bx-i` inline (cap the index in JS) */
+.bx-stagger {
+  animation: bx-rise 0.5s var(--bx-ease) both;
+  animation-delay: calc(var(--bx-i, 0) * 45ms);
+}
+@keyframes bx-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Hover lift for interactive cards (inline styles can't express :hover) */
+.bx-lift {
+  transition: transform 0.25s var(--bx-ease), border-color 0.25s var(--bx-ease),
+    box-shadow 0.25s var(--bx-ease), background 0.25s var(--bx-ease);
+}
+.bx-lift:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-hover) !important;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(20, 184, 166, 0.12);
+}
+
+/* Modal choreography: backdrop fades, dialog settles */
+.bx-backdrop {
+  animation: bx-fade 0.25s ease-out both;
+}
+.bx-modal {
+  animation: bx-modal-in 0.35s var(--bx-ease) both;
+}
+@keyframes bx-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes bx-modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bx-view,
+  .bx-stagger,
+  .bx-backdrop,
+  .bx-modal {
+    animation: none;
+  }
+  .bx-lift,
+  .bx-lift:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
 /* Legacy aliases */
 .glass-panel {
   background: var(--bg-card);

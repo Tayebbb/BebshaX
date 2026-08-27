@@ -370,6 +370,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
       {/* Centered Floating White Card */}
       <div
+        className="bx-modal"
         style={{
           width: '100%',
           maxWidth: '440px',

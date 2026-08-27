@@ -269,6 +269,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
 
   return (
     <div
+      className="bx-backdrop"
       style={{
         position: 'fixed',
         inset: 0,
@@ -283,6 +284,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
       onClick={onClose}
     >
       <div
+        className="bx-modal"
         style={{
           width: '100%',
           maxWidth: '780px',

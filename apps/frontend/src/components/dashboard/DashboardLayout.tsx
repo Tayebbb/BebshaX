@@ -817,7 +817,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           </header>
         )}
 
-        {/* Tab View Switcher */}
+        {/* Tab View Switcher — keyed so each view replays its entrance */}
+        <div
+          key={activeTab}
+          className="bx-view"
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}
+        >
         {activeTab === 'new-study' && (
           <NewStudyView onStartStudy={handleStartStudy} />
         )}
@@ -943,6 +948,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             />
           </div>
         )}
+        </div>
       </main>
 
       {/* Start Adaptive Interview Modal */}

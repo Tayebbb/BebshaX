@@ -601,7 +601,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
-          {filteredPersonas.map((persona) => {
+          {filteredPersonas.map((persona, cardIdx) => {
             const initials = persona.name
               .split(' ')
               .map((n) => n[0])
@@ -614,7 +614,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             return (
               <div
                 key={persona.id}
+                className="bx-stagger"
                 style={{
+                  ['--bx-i' as string]: Math.min(cardIdx, 12),
                   background: '#0D1111',
                   border: '1px solid #202727',
                   borderRadius: '16px',
@@ -890,6 +892,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
          ========================================================================= */}
       {inspectingPersona && (
         <div
+          className="bx-backdrop"
           style={{
             position: 'fixed',
             inset: 0,
@@ -904,6 +907,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           onClick={() => setInspectingPersona(null)}
         >
           <div
+            className="bx-modal"
             style={{
               background: '#0D1111',
               border: '1px solid #202727',
@@ -1548,6 +1552,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
          ========================================================================= */}
       {showGenerateModal && (
         <div
+          className="bx-backdrop"
           style={{
             position: 'fixed',
             inset: 0,
@@ -1562,6 +1567,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           onClick={() => !isGenerating && setShowGenerateModal(false)}
         >
           <div
+            className="bx-modal"
             style={{
               background: '#0D1111',
               border: '1px solid #202727',
