@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Plus,
@@ -9,11 +9,19 @@ import {
 } from 'lucide-react';
 import { Study } from '../../../types';
 import { api } from '../../../services/api';
+import './studies.css';
 
 interface StudiesDashboardViewProps {
   onCreateStudy: () => void;
   onOpenStudy: (studyId: string) => void;
 }
+
+const TYPE_LABELS: Record<string, string> = {
+  landing_page_test: 'Landing Page Test',
+  message_testing: 'Message Testing',
+  ab_test: 'A/B Test',
+  interviews: 'Interviews',
+};
 
 export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   onCreateStudy,
@@ -23,6 +31,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'completed' | 'in_progress'>('all');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadStudies = async () => {
@@ -36,12 +45,29 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
     loadStudies();
   }, []);
 
+  // An open kebab menu closes on Escape or any outside pointer press.
+  useEffect(() => {
+    if (!activeMenuId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActiveMenuId(null);
+    };
+    const onPress = () => setActiveMenuId(null);
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPress);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPress);
+    };
+  }, [activeMenuId]);
+
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
       await api.deleteStudy(id);
       setStudies((prev) => prev.filter((s) => s.id !== id));
       setActiveMenuId(null);
+      // the focused row unmounts — keep keyboard users anchored in the list
+      listRef.current?.focus();
     } catch {
       // ignore
     }
@@ -61,487 +87,222 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   const demoStudy = studies.find((s) => s.is_demo);
   const regularStudies = filteredStudies.filter((s) => !s.is_demo);
 
-  const formatTypeLabel = (type: string) => {
-    switch (type) {
-      case 'landing_page_test':
-        return 'Landing Page Test';
-      case 'message_testing':
-        return 'Message Testing';
-      case 'ab_test':
-        return 'A/B Test';
-      case 'interviews':
-      default:
-        return 'Interviews';
+  // Honest totals derived from the loaded list only. "In flight" matches the
+  // In Progress tab bucket (drafts included) so the two never disagree.
+  const own = studies.filter((s) => !s.is_demo);
+  const completedCount = own.filter((s) => s.status === 'completed').length;
+  const inFlightCount = own.filter((s) => s.status === 'in_progress' || s.status === 'draft').length;
+  const personaCount = own.reduce((sum, s) => sum + (s.persona_count || 0), 0);
+
+  const rowStatus = (study: Study) => {
+    if (study.status === 'completed') {
+      return <span className="sd-status sd-status--completed"><span className="sd-status-dot" />COMPLETED</span>;
     }
+    if (study.status === 'in_progress') {
+      return <span className="sd-status sd-status--live"><span className="sd-status-dot" />IN FLIGHT</span>;
+    }
+    return <span className="sd-status sd-status--draft"><span className="sd-status-dot" />DRAFT</span>;
   };
 
+  const openRow = (id: string) => onOpenStudy(id);
+
   return (
-    <div
-      style={{
-        padding: '32px 40px',
-        maxWidth: '1200px',
-        margin: '0 auto',
-        width: '100%',
-      }}
-    >
-      {/* Main Studies Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '24px',
-        }}
-      >
-        <h1
-          style={{
-            fontSize: '1.75rem',
-            fontWeight: 600,
-            color: '#FFFFFF',
-            letterSpacing: '-0.02em',
-            margin: 0,
-          }}
-        >
-          Studies
-        </h1>
+    <div className="sd-root">
+      <div className="sd-ambient" aria-hidden="true" />
+      <div className="sd-content">
+        <header>
+          <div className="sd-kicker">Research Console</div>
+          <div className="sd-hero-row">
+            <h1 className="sd-display">
+              Studies<span className="sd-dot" aria-hidden="true">.</span>
+            </h1>
+            <button type="button" className="sd-cta" onClick={onCreateStudy}>
+              <Plus size={16} strokeWidth={2.5} />
+              Create Study
+            </button>
+          </div>
 
-        <button
-          type="button"
-          onClick={onCreateStudy}
-          style={{
-            background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-            color: '#080A0A',
-            border: 'none',
-            borderRadius: '10px',
-            padding: '9px 18px',
-            fontSize: '0.86rem',
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(20, 184, 166, 0.35)',
-            transition: 'transform 0.18s ease, box-shadow 0.18s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(20, 184, 166, 0.5)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 14px rgba(20, 184, 166, 0.35)';
-          }}
-        >
-          <Plus size={16} strokeWidth={2.5} />
-          Create Study
-        </button>
-      </div>
-
-      {/* Search & Filter Tabs */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '24px',
-        }}
-      >
-        {/* Search Bar */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            background: '#0D1111',
-            border: '1px solid #202727',
-            borderRadius: '12px',
-            padding: '8px 14px',
-            width: '320px',
-          }}
-        >
-          <Search size={16} color="#8D9999" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search your studies..."
-            style={{
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: '#FFFFFF',
-              fontSize: '0.86rem',
-              width: '100%',
-            }}
-          />
-        </div>
-
-        {/* Tabs Filter */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: '#0D1111',
-            border: '1px solid #202727',
-            borderRadius: '10px',
-            padding: '4px',
-          }}
-        >
-          {(['all', 'completed', 'in_progress'] as const).map((tab) => {
-            const isTabActive = selectedFilter === tab;
-            const label =
-              tab === 'all' ? 'All' : tab === 'completed' ? 'Completed' : 'In Progress';
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setSelectedFilter(tab)}
-                style={{
-                  background: isTabActive ? 'rgba(20, 184, 166, 0.15)' : 'transparent',
-                  color: isTabActive ? '#22D3EE' : '#8D9999',
-                  border: isTabActive ? '1px solid rgba(20, 184, 166, 0.3)' : '1px solid transparent',
-                  borderRadius: '7px',
-                  padding: '6px 14px',
-                  fontSize: '0.8rem',
-                  fontWeight: isTabActive ? 600 : 400,
-                  cursor: 'pointer',
-                  transition: 'all 0.18s ease',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Featured Demo Study Card */}
-      {demoStudy && (
-        <div
-          onClick={() => onOpenStudy(demoStudy.id)}
-          style={{
-            background:
-              'linear-gradient(135deg, rgba(20, 184, 166, 0.08) 0%, rgba(13, 17, 17, 0.85) 100%)',
-            border: '1px solid rgba(20, 184, 166, 0.35)',
-            borderRadius: '16px',
-            padding: '20px 24px',
-            marginBottom: '28px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            transition: 'all 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(20, 184, 166, 0.6)';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(20, 184, 166, 0.35)';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '10px',
-                background: 'rgba(20, 184, 166, 0.15)',
-                color: '#22D3EE',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Plus size={18} strokeWidth={2.5} />
+          <div className="sd-metrics" role="group" aria-label="Research totals">
+            <div>
+              <div className="sd-metric-num">{own.length}</div>
+              <div className="sd-metric-label">Studies</div>
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span
-                  style={{
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    color: '#22D3EE',
-                    letterSpacing: '-0.01em',
-                  }}
+              <div className="sd-metric-num"><em>{inFlightCount}</em></div>
+              <div className="sd-metric-label">In Flight</div>
+            </div>
+            <div>
+              <div className="sd-metric-num">{completedCount}</div>
+              <div className="sd-metric-label">Completed</div>
+            </div>
+            <div>
+              <div className="sd-metric-num">{personaCount}</div>
+              <div className="sd-metric-label">Personas</div>
+            </div>
+          </div>
+        </header>
+
+        <div className="sd-toolbar">
+          <div className="sd-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search your studies..."
+              aria-label="Search your studies"
+            />
+          </div>
+
+          <div className="sd-tabs" role="group" aria-label="Filter studies">
+            {(['all', 'completed', 'in_progress'] as const).map((tab) => {
+              const label = tab === 'all' ? 'All' : tab === 'completed' ? 'Completed' : 'In Progress';
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  className="sd-tab"
+                  aria-pressed={selectedFilter === tab}
+                  onClick={() => setSelectedFilter(tab)}
                 >
-                  {demoStudy.title}
-                </span>
-                <span
-                  style={{
-                    fontSize: '0.68rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    background: 'rgba(20, 184, 166, 0.15)',
-                    color: '#22D3EE',
-                    border: '1px solid rgba(20, 184, 166, 0.3)',
-                  }}
-                >
-                  DEMO STUDY
-                </span>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {demoStudy && (
+          <div
+            className="sd-demo"
+            role="button"
+            tabIndex={0}
+            onClick={() => openRow(demoStudy.id)}
+            onKeyDown={(e) => {
+              if (e.target !== e.currentTarget) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openRow(demoStudy.id);
+              }
+            }}
+          >
+            <div>
+              <div className="sd-demo-title">
+                {demoStudy.title}
+                <span className="sd-demo-badge">DEMO STUDY</span>
               </div>
-              <div style={{ fontSize: '0.82rem', color: '#8D9999', marginTop: '2px' }}>
+              <div className="sd-demo-sub">
                 Sample study — explore a finished report and pre-generated interviews
               </div>
             </div>
+            <div className="sd-demo-open">
+              Explore Report
+              <ArrowUpRight size={16} />
+            </div>
           </div>
+        )}
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              color: '#22D3EE',
-              fontSize: '0.84rem',
-              fontWeight: 600,
-            }}
-          >
-            <span>Explore Report</span>
-            <ArrowUpRight size={16} />
-          </div>
-        </div>
-      )}
+        <div className="sd-label">Your Studies</div>
 
-      {/* YOUR STUDIES Subtitle */}
-      <div
-        style={{
-          fontSize: '0.74rem',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: '#8D9999',
-          marginBottom: '14px',
-        }}
-      >
-        Your Studies
-      </div>
-
-      {/* Studies List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {regularStudies.length === 0 ? (
-          <div
-            style={{
-              padding: '48px',
-              textAlign: 'center',
-              background: 'rgba(255, 255, 255, 0.015)',
-              border: '1px dashed rgba(255, 255, 255, 0.1)',
-              borderRadius: '16px',
-              color: '#8A909A',
-            }}
-          >
-            No studies matching your search. Click "+ Create Study" to start your first research study.
-          </div>
-        ) : (
-          regularStudies.map((study) => {
-            const isCompleted = study.status === 'completed';
-            const isMenuOpen = activeMenuId === study.id;
-
-            return (
-              <div
-                key={study.id}
-                onClick={() => onOpenStudy(study.id)}
-                style={{
-                  background: '#0D1111',
-                  border: '1px solid #202727',
-                  borderRadius: '14px',
-                  padding: '18px 22px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '16px',
-                  transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
-                  position: 'relative',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(20, 184, 166, 0.35)';
-                  e.currentTarget.style.background = '#111616';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#202727';
-                  e.currentTarget.style.background = '#0D1111';
-                }}
-              >
-                {/* Left info */}
-                <div>
-                  <div
-                    style={{
-                      fontSize: '0.98rem',
-                      fontWeight: 600,
-                      color: '#FFFFFF',
-                      letterSpacing: '-0.01em',
-                      marginBottom: '4px',
-                    }}
-                  >
-                    {study.title}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#8A909A' }}>
-                    {study.duration_text ||
-                      (study.persona_count > 0
-                        ? `${study.persona_count} personas`
-                        : 'Just created • No personas yet')}
-                  </div>
-                </div>
-
-                {/* Right badges & Actions */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                  {/* Status Badge */}
-                  {isCompleted ? (
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        color: '#10B981',
-                        fontSize: '0.76rem',
-                        fontWeight: 700,
-                        letterSpacing: '0.04em',
-                      }}
-                    >
-                      <span>COMPLETED</span>
-                      <div style={{ display: 'flex', gap: '3px' }}>
-                        <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#10B981' }} />
-                        <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#10B981' }} />
-                        <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#10B981' }} />
-                        <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#10B981' }} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        fontSize: '0.74rem',
-                        fontWeight: 600,
-                        letterSpacing: '0.04em',
-                        color: '#9CA3AF',
-                      }}
-                    >
-                      DRAFT
-                    </div>
-                  )}
-
-                  {/* Study Type */}
-                  <div
-                    style={{
-                      fontSize: '0.82rem',
-                      color: '#D1D5DB',
-                      minWidth: '110px',
-                      textAlign: 'right',
-                    }}
-                  >
-                    {formatTypeLabel(study.type)}
-                  </div>
-
-                  {/* Options Menu Button */}
-                  <div style={{ position: 'relative' }}>
+        <div className="sd-list" role="list" ref={listRef} tabIndex={-1}>
+          {regularStudies.length === 0 ? (
+            <div className="sd-empty">
+              <div className="sd-empty-kicker">Nothing In Flight</div>
+              <div className="sd-empty-line">
+                {searchQuery ? 'No studies match your search.' : 'Your first study starts with a question.'}
+              </div>
+              <div className="sd-empty-sub">
+                {searchQuery
+                  ? 'Try a different name, or clear the filters.'
+                  : 'Describe a business idea and interview grounded synthetic personas about it.'}
+              </div>
+              <button type="button" className="sd-empty-cta" onClick={onCreateStudy}>
+                <Plus size={15} strokeWidth={2.5} />
+                Start your first study
+              </button>
+            </div>
+          ) : (
+            regularStudies.map((study, index) => {
+              const isMenuOpen = activeMenuId === study.id;
+              return (
+                <div
+                  key={study.id}
+                  className="sd-row"
+                  style={{ '--sd-i': Math.min(index, 12) } as React.CSSProperties}
+                  role="listitem"
+                  onClick={() => openRow(study.id)}
+                >
+                  <div>
+                    {/* The title is the row's real keyboard control — the row
+                        click is a pointer-only enhancement. */}
                     <button
                       type="button"
-                      aria-label="Study options"
+                      className="sd-row-titlebtn"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setActiveMenuId(isMenuOpen ? null : study.id);
-                      }}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#6B7280',
-                        cursor: 'pointer',
-                        padding: '4px',
-                        borderRadius: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        openRow(study.id);
                       }}
                     >
-                      <MoreVertical size={16} />
+                      {study.title}
                     </button>
+                    <div className="sd-row-meta">
+                      {study.duration_text ||
+                        (study.persona_count > 0
+                          ? `${study.persona_count} personas`
+                          : 'Just created • No personas yet')}
+                    </div>
+                  </div>
 
-                    {isMenuOpen && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          right: 0,
-                          top: '100%',
-                          marginTop: '6px',
-                          background: '#131415',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '10px',
-                          padding: '6px',
-                          minWidth: '140px',
-                          zIndex: 20,
-                          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.5)',
+                  <div className="sd-row-right">
+                    {rowStatus(study)}
+                    <div className="sd-row-type">{TYPE_LABELS[study.type] ?? 'Interviews'}</div>
+                    <span className="sd-row-open" aria-hidden="true">
+                      Open
+                      <ArrowUpRight size={14} />
+                    </span>
+
+                    <div className="sd-menu-wrap" onPointerDown={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="sd-menu-btn"
+                        aria-label="Study options"
+                        aria-expanded={isMenuOpen}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuId(isMenuOpen ? null : study.id);
                         }}
                       >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenStudy(study.id);
-                          }}
-                          style={{
-                            width: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            padding: '8px 10px',
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#FFFFFF',
-                            fontSize: '0.8rem',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            borderRadius: '6px',
-                          }}
-                        >
-                          <FileText size={14} /> View Study
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => handleDelete(e, study.id)}
-                          style={{
-                            width: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            padding: '8px 10px',
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#EF4444',
-                            fontSize: '0.8rem',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            borderRadius: '6px',
-                          }}
-                        >
-                          <Trash2 size={14} /> Delete
-                        </button>
-                      </div>
-                    )}
+                        <MoreVertical size={16} />
+                      </button>
+
+                      {isMenuOpen && (
+                        <div className="sd-menu" aria-label="Study options">
+                          <button
+                            type="button"
+                            className="sd-menu-item"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openRow(study.id);
+                            }}
+                          >
+                            <FileText size={14} /> View Study
+                          </button>
+                          <button
+                            type="button"
+                            className="sd-menu-item sd-menu-item--danger"
+                            onClick={(e) => handleDelete(e, study.id)}
+                          >
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Footer subtle text */}
-      <div
-        style={{
-          textAlign: 'center',
-          marginTop: '36px',
-          fontSize: '0.78rem',
-          color: '#4B5563',
-        }}
-      >
-        No more studies
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
