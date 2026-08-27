@@ -53,10 +53,14 @@ class PersonaEvaluator:
             if isinstance(attr, dict):
                 prov = attr.get("provenance_class", "").upper()
                 has_evidence = bool(attr.get("evidence_ids") or attr.get("evidence"))
-                if prov == "OBSERVED" or has_evidence:
+                # Only evidence-cited OBSERVED claims count as grounded —
+                # INFERRED text with a decorative evidence string does not.
+                if prov == "OBSERVED" and has_evidence:
                     grounded_count += 1
 
-        grounding_ratio = grounded_count / total_attrs if total_attrs > 0 else (1.0 if is_valid else 0.0)
+        # Schema validity is not grounding: a persona with no attributes has
+        # zero grounding, never a free 1.0.
+        grounding_ratio = grounded_count / total_attrs if total_attrs > 0 else 0.0
 
         # Rule consistency & contradiction checks
         violations: list[str] = []

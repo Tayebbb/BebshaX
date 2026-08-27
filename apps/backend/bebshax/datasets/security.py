@@ -102,12 +102,19 @@ async def safe_fetch_dataset_bytes(url: str, max_bytes: int = MAX_DATASET_FILE_S
     async with httpx.AsyncClient(
         transport=transport,
         timeout=httpx.Timeout(REQUEST_TIMEOUT_SECONDS, connect=10.0),
-        follow_redirects=True,
-        max_redirects=3,
+        # Redirects are NOT followed automatically: each hop is re-validated so
+        # a public URL cannot 302 into private/metadata address space (SSRF).
+        follow_redirects=False,
     ) as client:
         # Pre-flight or GET with stream to prevent memory exhaustion
         try:
             async with client.stream("GET", url, headers={"User-Agent": "BebshaX-Dataset-Fetcher/1.0"}) as resp:
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("location", "")
+                    raise DatasetSecurityError(
+                        f"Redirects are not followed for dataset URLs (got {resp.status_code} → {location[:120]}). "
+                        "Provide the final direct URL."
+                    )
                 if resp.status_code != 200:
                     raise DatasetSecurityError(f"HTTP request returned status {resp.status_code}: {resp.reason_phrase}")
 

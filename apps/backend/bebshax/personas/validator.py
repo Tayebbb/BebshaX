@@ -1,4 +1,11 @@
-"""Deterministic validation and grounding score computation for synthetic personas."""
+"""Deterministic validation and grounding score computation for synthetic personas.
+
+Grounding is measured, never decorated: ``grounding_score`` is the share of the
+persona's claims (goals/needs/pain points) whose provenance is OBSERVED —
+actually cited to verified evidence — and ``confidence`` is the share that is
+at least evidence-adjacent (OBSERVED or INFERRED). Both are 0.0 when no claim
+provenance exists. Validity checks report warnings; they never inflate scores.
+"""
 
 from __future__ import annotations
 
@@ -14,14 +21,32 @@ class ValidationOutcome(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+def _provenance_ratios(claim_provenance: dict[str, Any] | None) -> tuple[float, float]:
+    """(observed/total, (observed+inferred)/total) over all claim groups; (0, 0) if empty."""
+    if not claim_provenance:
+        return 0.0, 0.0
+    entries = [
+        e
+        for group in claim_provenance.values()
+        if isinstance(group, list)
+        for e in group
+        if isinstance(e, dict)
+    ]
+    total = len(entries)
+    if total == 0:
+        return 0.0, 0.0
+    observed = sum(1 for e in entries if e.get("provenance") == "OBSERVED")
+    non_synthetic = sum(1 for e in entries if e.get("provenance") in ("OBSERVED", "INFERRED"))
+    return round(observed / total, 2), round(non_synthetic / total, 2)
+
+
 def validate_synthetic_persona(
     persona_dict: dict[str, Any],
     segment_characteristics: dict[str, Any],
     evidence_claims: list[Any] | None = None,
 ) -> ValidationOutcome:
-    """Validate persona attributes against segment bounds and compute grounding score."""
+    """Validate persona attributes against segment bounds and compute honest grounding."""
     warnings: list[str] = []
-    base_score = 0.85
 
     # 1. Demographics & Age Range Validation
     demo = persona_dict.get("demographics", {}) or {}
@@ -37,8 +62,6 @@ def validate_synthetic_persona(
                     warnings.append(
                         f"Age ({age_int}) falls outside segment expected range ({seg_age_range[0]}–{seg_age_range[1]})."
                     )
-            else:
-                base_score += 0.03
         except (ValueError, TypeError):
             warnings.append("Age is not a valid integer.")
 
@@ -56,8 +79,6 @@ def validate_synthetic_persona(
                     warnings.append(
                         f"Monthly budget (৳{budget_num:.0f}) deviates significantly from segment bounds (৳{seg_econ.get('min', 200)}–৳{seg_econ.get('max', 1000)})."
                     )
-                else:
-                    base_score += 0.04
         except (ValueError, TypeError):
             pass
 
@@ -76,25 +97,20 @@ def validate_synthetic_persona(
 
     needs = persona_dict.get("needs", []) or []
     if len(needs) < 1:
-        warnings.append("Persona is missing structured observed needs.")
+        warnings.append("Persona is missing structured needs.")
 
-    # 4. Evidence Citations Bonus
-    citations = persona_dict.get("evidence_citations", []) or []
-    if len(citations) >= 1:
-        base_score += 0.05
+    # 4. Grounding: measured from claim provenance, never from bonuses.
+    grounding, confidence = _provenance_ratios(persona_dict.get("claim_provenance"))
 
-    # 5. Calculate Final Grounding Score and Status
-    penalty = len(warnings) * 0.10
-    final_grounding_score = max(0.50, min(0.98, round(base_score - penalty, 2)))
-    confidence = max(0.70, min(0.95, round(final_grounding_score - (0.05 if warnings else 0.0), 2)))
-
-    status = "ready" if final_grounding_score >= 0.80 and len(warnings) == 0 else "needs_review"
+    # "ready" means the persona passed deterministic checks — it does not
+    # assert evidence support; grounding_score carries that separately.
+    status = "ready" if len(warnings) == 0 else "needs_review"
     is_valid = len(warnings) == 0
 
     return ValidationOutcome(
         is_valid=is_valid,
         status=status,
-        grounding_score=final_grounding_score,
+        grounding_score=grounding,
         confidence=confidence,
         warnings=warnings,
     )

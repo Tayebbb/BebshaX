@@ -65,8 +65,33 @@ def test_validate_synthetic_persona_valid():
     outcome = validate_synthetic_persona(persona, seg_char)
     assert outcome.is_valid is True
     assert outcome.status == "ready"
-    assert outcome.grounding_score >= 0.85
+    # No claim provenance supplied → grounding is honestly zero, never a bonus.
+    assert outcome.grounding_score == 0.0
+    assert outcome.confidence == 0.0
     assert len(outcome.warnings) == 0
+
+
+def test_grounding_score_is_measured_from_claim_provenance():
+    """grounding = OBSERVED/total; confidence = (OBSERVED+INFERRED)/total."""
+    persona = {
+        "name": "Nadia Rahman",
+        "demographics": {"age": 21},
+        "goals": ["g1", "g2"],
+        "needs": ["n1"],
+        "pain_points": ["p1"],
+        "commercial_profile": {},
+        "claim_provenance": {
+            "goals": [
+                {"value": "g1", "provenance": "OBSERVED", "evidence_ids": ["clm_1"]},
+                {"value": "g2", "provenance": "OBSERVED", "evidence_ids": ["clm_2"]},
+            ],
+            "needs": [{"value": "n1", "provenance": "INFERRED", "evidence_ids": []}],
+            "pain_points": [{"value": "p1", "provenance": "SYNTHETIC", "evidence_ids": []}],
+        },
+    }
+    outcome = validate_synthetic_persona(persona, {})
+    assert outcome.grounding_score == 0.5  # 2 OBSERVED of 4 claims
+    assert outcome.confidence == 0.75  # 3 non-synthetic of 4 claims
 
 
 def test_validate_synthetic_persona_out_of_bounds_warnings():
@@ -86,7 +111,7 @@ def test_validate_synthetic_persona_out_of_bounds_warnings():
     assert outcome.is_valid is False
     assert outcome.status == "needs_review"
     assert len(outcome.warnings) >= 3
-    assert outcome.grounding_score < 0.80
+    assert outcome.grounding_score == 0.0
 
 
 @pytest.mark.asyncio
@@ -114,7 +139,10 @@ async def test_generate_personas_for_study_fallback():
     for d in drafts:
         assert len(d.name) > 2
         assert d.status in ("ready", "needs_review")
-        assert d.grounding_score >= 0.80
+        # Template drafts invent every claim (all SYNTHETIC) — grounding must
+        # be honestly zero and citations honestly empty, never decorated.
+        assert d.grounding_score == 0.0
+        assert d.evidence_citations == []
         assert len(d.goals) >= 1
         assert len(d.pain_points) >= 1
         assert "monthly_budget_bdt" in d.commercial_profile

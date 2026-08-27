@@ -1365,7 +1365,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       View full profile <ArrowRight size={13} />
                     </button>
                     <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-emerald)', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '6px' }}>
-                      {Math.round((p.grounding_ratio || 0.95) * 100)}% Grounded
+                      {Math.round((p.grounding_ratio ?? 0) * 100)}% Grounded
                     </span>
                   </div>
                 </div>
@@ -2005,7 +2005,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
             {/* Methodology & Limitations Disclaimer */}
             <div style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', borderRadius: '12px', padding: '16px 20px', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              <strong style={{ color: 'var(--accent-cyan)' }}>Research Methodology Note:</strong> This report synthesizes real empirical research evidence and public dataset parameters with exploratory synthetic persona simulations. Simulations model expected behavioral dynamics based on grounded empirical distributions.
+              <strong style={{ color: 'var(--accent-cyan)' }}>Research Methodology Note:</strong> This report combines collected research material (clearly labeled by source, including curated samples) with exploratory synthetic persona simulations. Synthetic findings are research signals and hypotheses — validate consequential decisions with real users.
             </div>
           </div>
         )}

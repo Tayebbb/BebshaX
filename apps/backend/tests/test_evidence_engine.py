@@ -109,15 +109,16 @@ async def test_evidence_api_lifecycle_and_user_isolation():
         assert run_data["source_count"] >= 3
         assert run_data["claim_count"] >= 3
 
-        # 3. Get evidence summary
+        # 3. Get evidence summary — with no LLM the deterministic extractor
+        # cannot verify anything, so "supported" coverage is honestly zero.
         res_summary = await client.get(
             f"/api/studies/{study_id}/evidence/summary",
             headers={"Authorization": f"Bearer {token_alice}"},
         )
         assert res_summary.status_code == 200
         summary = res_summary.json()
-        assert summary["evidence_coverage"] > 0
-        assert summary["supported_count"] >= 1
+        assert summary["evidence_coverage"] == 0
+        assert summary["supported_count"] == 0
         assert summary["total_sources"] >= 3
 
         # 4. Get claims list
@@ -130,9 +131,10 @@ async def test_evidence_api_lifecycle_and_user_isolation():
         assert len(claims) >= 3
         first_claim_id = claims[0]["id"]
 
-        # Verify claim statuses are properly separated (GREEN/AMBER/RED)
+        # Deterministic fallback claims never self-declare verification —
+        # only hypothesis (inference) and unsupported classes appear.
         statuses = {c["status"] for c in claims}
-        assert "supported" in statuses
+        assert statuses <= {"inference", "unsupported"}
         assert any(c["status"] in ("inference", "unsupported") for c in claims)
 
         # 5. Get claim detail with provenance

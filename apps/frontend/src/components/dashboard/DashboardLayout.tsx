@@ -175,6 +175,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [isRecentStudiesOpen, setIsRecentStudiesOpen] = useState(true);
   const [recentStudies, setRecentStudies] = useState<Study[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
+  const [backendDown, setBackendDown] = useState(false);
   const [initialWorkflowType, setInitialWorkflowType] = useState<StudyType>('interviews');
   const [initialWorkflowPrompt, setInitialWorkflowPrompt] = useState<string | undefined>(undefined);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -218,6 +219,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         // fallback
       } finally {
         setLoadingRecent(false);
+        // Mock fixtures must never masquerade as live research data.
+        setBackendDown(!api.isMockMode() && !api.isLive());
       }
     };
     loadRecent();
@@ -1079,6 +1082,33 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         )}
         </div>
       </main>
+
+      {/* Honest-state banner: fixtures must never pass as live research data */}
+      {backendDown && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            bottom: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 90,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '8px 16px',
+            borderRadius: '999px',
+            background: 'rgba(245, 158, 11, 0.12)',
+            border: '1px solid rgba(245, 158, 11, 0.4)',
+            color: '#F59E0B',
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          Showing sample data — backend unreachable. Data shown here is not live research output.
+        </div>
+      )}
 
       {/* Start Adaptive Interview Modal */}
       {showStartInterviewModal && modalPersona && (

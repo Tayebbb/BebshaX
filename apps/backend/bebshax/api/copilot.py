@@ -173,14 +173,14 @@ Return ONLY a valid JSON array (no markdown, no code blocks):
         "category": "Goals",
         "title": "Specific Goal Related to Product",
         "description": "What they want to achieve with this product",
-        "provenance_class": "OBSERVED",
+        "provenance_class": "INFERRED",
         "evidence": null
       },
       {
         "category": "Pain Points",
         "title": "Current Frustration",
         "description": "What problem they currently face that this product solves",
-        "provenance_class": "OBSERVED",
+        "provenance_class": "INFERRED",
         "evidence": null
       },
       {
@@ -191,8 +191,6 @@ Return ONLY a valid JSON array (no markdown, no code blocks):
         "evidence": null
       }
     ],
-    "consistency_score": 0.96,
-    "grounding_ratio": 0.94,
     "critic_notes": "Brief note about realism",
     "generation_model": "openrouter/llm",
     "created_at": "2026-08-24T22:00:00Z",
@@ -645,6 +643,14 @@ async def generate_study_personas(
                     p_id = f"per_{uuid.uuid4().hex[:12]}"
                     p["id"] = p_id
                     p["study_id"] = body.study_id
+                    # No evidence is retrieved on the copilot path, so the
+                    # model may not self-declare grounding: every attribute is
+                    # at most INFERRED and scores are honestly zero.
+                    p["grounding_ratio"] = 0.0
+                    p["consistency_score"] = 0.0
+                    for attr in p.get("attributes", []) or []:
+                        if isinstance(attr, dict) and not attr.get("evidence"):
+                            attr["provenance_class"] = "INFERRED"
                     existing = await db_session.get(Personas, p_id)
                     if not existing:
                         db_p = Personas(
@@ -673,7 +679,7 @@ async def generate_study_personas(
                             goals=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Goals"] or ["Efficiency", "Convenience"],
                             needs=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Needs"] or ["Frictionless onboarding"],
                             pain_points=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Pain Points"] or ["Manual workarounds", "High cost"],
-                            grounding_score=float(p.get("grounding_ratio", 0.0)),
+                            grounding_score=0.0,  # copilot path retrieves no evidence — never trust a self-score
                         )
                         db_session.add(db_p)
                 if study:

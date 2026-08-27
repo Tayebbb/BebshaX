@@ -118,8 +118,9 @@ class GeneratedPersonaDraft(BaseModel):
     technology_profile: dict[str, Any]
     evidence_citations: list[dict[str, Any]] = Field(default_factory=list)
     dataset_refs: list[dict[str, Any]] = Field(default_factory=list)
-    grounding_score: float = 0.90
-    confidence: float = 0.85
+    # Honest-by-default: scores are earned by validation, never assumed.
+    grounding_score: float = 0.0
+    confidence: float = 0.0
     status: str = "ready"
     validation_warnings: list[str] = Field(default_factory=list)
     # The ACTUAL origin: "provider/model" from provenance for LLM drafts,
@@ -253,7 +254,7 @@ def generate_domain_specific_profile(
         domain_goals = [
             "Automate repetitive manual spreadsheet tracking and client invoicing",
             "Eliminate reconciliation discrepancies without buying expensive enterprise software",
-            "Keep software subscriptions under ৳{median_budget}/month",
+            f"Keep software subscriptions under ৳{median_budget}/month",
         ]
         domain_needs = [
             "Seamless integration with local payment gateways (bKash/Nagad)",
@@ -280,7 +281,7 @@ def generate_domain_specific_profile(
         domain_goals = [
             "Maintain an active physical routine despite a demanding work schedule",
             "Receive practical workout routines that require zero expensive gym equipment",
-            "Track measurable health progress without spending over ৳{median_budget}/month",
+            f"Track measurable health progress without spending over ৳{median_budget}/month",
         ]
         domain_needs = [
             "Short, high-efficiency workout sessions that fit into 30-minute windows",
@@ -306,7 +307,7 @@ def generate_domain_specific_profile(
         domain_goals = [
             "Master difficult syllabus topics efficiently within limited preparation time",
             "Access high-quality mock tests and structured topic summaries",
-            "Keep monthly educational tool expenses strictly within ৳{median_budget} BDT",
+            f"Keep monthly educational tool expenses strictly within ৳{median_budget} BDT",
         ]
         domain_needs = [
             "Clear, concise video explanations in Bangla with chapter markers",
@@ -624,15 +625,9 @@ def _generate_deterministic_persona_fallback(
         domain, median_budget, index, currency
     )
 
-    # Grounded citations
-    matched_citations = []
-    for c in evidence_claims[:3]:
-        matched_citations.append({
-            "claim_id": getattr(c, "id", ""),
-            "claim_text": getattr(c, "claim_text", ""),
-            "category": getattr(c, "category", "general"),
-            "confidence": getattr(c, "confidence", 0.85),
-        })
+    # Template drafts cite nothing — every claim below is SYNTHETIC, so the
+    # citations list is honestly empty instead of decorating with claims[:3].
+    matched_citations: list[dict[str, Any]] = []
 
     bio = template.get("bio", f"{name} is a {age}-year-old {occupation.lower()} based in {location}.")
     quote = template.get("quote", f"I need an intelligent tool that keeps my priorities on track within my ৳{median_budget}/month budget.")
@@ -727,6 +722,7 @@ def _generate_deterministic_persona_fallback(
             "behaviors": behaviors,
             "commercial_profile": commercial_profile,
             "evidence_citations": matched_citations,
+            "claim_provenance": detailed_attributes["claim_provenance"],
         },
         seg_char,
         evidence_claims,
@@ -940,7 +936,12 @@ async def generate_personas_for_study(
                             constraints[k] = v
                 constraints["max_monthly_budget"] = budget_num
 
-                detailed_attributes = dict(fallback_template.get("detailed_attributes", {}))
+                # Bangladeshi archetype templates only backfill Bangladeshi
+                # personas — a US-market persona must not inherit bKash habits.
+                is_bd_context = "bangladesh" in str(location).lower() or str(country_code).upper() == "BD"
+                detailed_attributes = (
+                    dict(fallback_template.get("detailed_attributes", {})) if is_bd_context else {}
+                )
                 if isinstance(p_raw.get("detailed_attributes"), dict):
                     for k, v in p_raw["detailed_attributes"].items():
                         if v:
@@ -965,14 +966,27 @@ async def generate_personas_for_study(
                     claim_provenance[group] = classed
                 detailed_attributes["claim_provenance"] = claim_provenance
 
-                matched_citations = []
-                for c in claims[:3]:
-                    matched_citations.append({
-                        "claim_id": getattr(c, "id", ""),
-                        "claim_text": getattr(c, "claim_text", ""),
-                        "category": getattr(c, "category", "general"),
-                        "confidence": getattr(c, "confidence", 0.85),
-                    })
+                # Citations mirror what the persona actually cites — the union
+                # of verified evidence_ids across its claims, never claims[:3].
+                claim_by_id = {getattr(c, "id", ""): c for c in claims}
+                cited_ids = sorted(
+                    {
+                        eid
+                        for group_entries in claim_provenance.values()
+                        for entry in group_entries
+                        for eid in entry.get("evidence_ids", [])
+                        if eid in claim_by_id
+                    }
+                )
+                matched_citations = [
+                    {
+                        "claim_id": cid,
+                        "claim_text": getattr(claim_by_id[cid], "claim_text", ""),
+                        "category": getattr(claim_by_id[cid], "category", "general"),
+                        "confidence": getattr(claim_by_id[cid], "confidence", 0.0),
+                    }
+                    for cid in cited_ids
+                ]
 
                 commercial_prof = {
                     "monthly_budget_bdt": budget_num,
@@ -992,6 +1006,7 @@ async def generate_personas_for_study(
                         "behaviors": p_raw.get("behaviors", fallback_draft.behaviors),
                         "commercial_profile": commercial_prof,
                         "evidence_citations": matched_citations,
+                        "claim_provenance": claim_provenance,
                     },
                     seg_char,
                     claims,

@@ -40,6 +40,48 @@ interface PersonaLibraryViewProps {
   onNavigateToSegmentation?: () => void;
 }
 
+/** Per-claim provenance entry persisted by the generator in detailed_attributes.claim_provenance */
+interface ClaimEntry {
+  value: string;
+  provenance?: string;
+  evidence_ids?: string[];
+}
+
+const PROV_STYLES: Record<string, { fg: string; bg: string }> = {
+  OBSERVED: { fg: 'var(--accent-emerald)', bg: 'rgba(16, 185, 129, 0.12)' },
+  INFERRED: { fg: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
+  SYNTHETIC: { fg: 'var(--text-secondary)', bg: 'var(--fill-soft-2)' },
+};
+
+const ProvenanceChip: React.FC<{ label?: string }> = ({ label }) => {
+  if (!label || !PROV_STYLES[label]) return null;
+  const s = PROV_STYLES[label];
+  return (
+    <span
+      title={
+        label === 'OBSERVED'
+          ? 'Cited to a verified evidence claim shown during generation'
+          : label === 'INFERRED'
+          ? 'Reasoned from business context or evidence — no direct citation'
+          : 'Plausible assumption — no evidence grounding'
+      }
+      style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.05em', color: s.fg, background: s.bg, padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}
+    >
+      {label}
+    </span>
+  );
+};
+
+/** Claims with provenance when the generator recorded it; plain strings otherwise. */
+function claimEntries(persona: SyntheticPersona, group: 'goals' | 'needs' | 'pain_points'): ClaimEntry[] {
+  const prov = (persona.detailed_attributes as Record<string, unknown> | undefined)?.claim_provenance as
+    | Record<string, ClaimEntry[]>
+    | undefined;
+  const classed = prov?.[group];
+  if (Array.isArray(classed) && classed.length > 0) return classed;
+  return ((persona[group] as string[] | undefined) || []).map((v) => ({ value: v }));
+}
+
 export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   studyId,
   onStartInterviewWithPersona,
@@ -136,8 +178,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       if (selectedSegmentFilter !== 'all' && p.segment_id !== selectedSegmentFilter) return false;
       if (selectedStatusFilter !== 'all' && p.status !== selectedStatusFilter) return false;
       if (selectedRunFilter !== 'all' && p.generation_run_id !== selectedRunFilter) return false;
-      if (selectedGroundingFilter === 'high' && p.grounding_score < 0.90) return false;
-      if (selectedGroundingFilter === 'medium' && (p.grounding_score < 0.80 || p.grounding_score >= 0.90)) return false;
+      if (selectedGroundingFilter === 'high' && p.grounding_score < 0.5) return false;
+      if (selectedGroundingFilter === 'medium' && (p.grounding_score <= 0 || p.grounding_score >= 0.5)) return false;
 
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -266,6 +308,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           </div>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
             Saved personas and audiences you can reuse in any study.
+          </p>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+            Synthetic participants — findings are research hypotheses to validate with real users.
           </p>
         </div>
 
@@ -469,9 +514,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               cursor: 'pointer',
             }}
           >
-            <option value="all">All Grounding Scores</option>
-            <option value="high">High Grounding (≥90%)</option>
-            <option value="medium">Medium Grounding (80–89%)</option>
+            <option value="all">All Grounding Levels</option>
+            <option value="high">Majority Observed (≥50%)</option>
+            <option value="medium">Some Observed Evidence (&gt;0%)</option>
           </select>
 
           {/* Export Actions */}
@@ -952,7 +997,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       v{inspectingPersona.version}
                     </span>
                     <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: inspectingPersona.status === 'ready' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)', color: inspectingPersona.status === 'ready' ? 'var(--accent-emerald)' : '#F59E0B', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-                      {inspectingPersona.status === 'ready' ? 'Verified' : 'Needs Review'}
+                      {inspectingPersona.status === 'ready' ? 'Passed checks' : 'Needs Review'}
                     </span>
                   </div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
@@ -1082,19 +1127,19 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         <Target size={14} /> Core Goals
                       </div>
                       <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
-                        {inspectingPersona.goals?.map((g, idx) => (
-                          <li key={idx}>{g}</li>
+                        {claimEntries(inspectingPersona, 'goals').map((e, idx) => (
+                          <li key={idx}>{e.value}<ProvenanceChip label={e.provenance} /></li>
                         ))}
                       </ul>
                     </div>
 
                     <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-cyan)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
-                        <CheckCircle2 size={14} /> Observed Needs
+                        <CheckCircle2 size={14} /> Needs
                       </div>
                       <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
-                        {inspectingPersona.needs?.map((n, idx) => (
-                          <li key={idx}>{n}</li>
+                        {claimEntries(inspectingPersona, 'needs').map((e, idx) => (
+                          <li key={idx}>{e.value}<ProvenanceChip label={e.provenance} /></li>
                         ))}
                       </ul>
                     </div>
@@ -1107,8 +1152,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         <AlertCircle size={14} /> Pain Points & Anxieties
                       </div>
                       <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
-                        {inspectingPersona.pain_points?.map((pp, idx) => (
-                          <li key={idx}>{pp}</li>
+                        {claimEntries(inspectingPersona, 'pain_points').map((e, idx) => (
+                          <li key={idx}>{e.value}<ProvenanceChip label={e.provenance} /></li>
                         ))}
                       </ul>
                     </div>
@@ -1425,7 +1470,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {inspectorTab === 'grounding' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                    Every synthetic persona is anchored in empirical findings extracted during study research runs.
+                    Claims this persona cites from the study's evidence runs. Personas without citations are labeled
+                    INFERRED/SYNTHETIC in the profile tab — absence of evidence is shown, never papered over.
                   </div>
 
                   {inspectingPersona.evidence_citations && inspectingPersona.evidence_citations.length > 0 ? (
@@ -1436,7 +1482,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             {c.category || 'General Finding'}
                           </span>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            Confidence: {c.confidence ? `${Math.round(c.confidence * 100)}%` : '88%'}
+                            Confidence: {c.confidence ? `${Math.round(c.confidence * 100)}%` : 'n/a'}
                           </span>
                         </div>
                         <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.45 }}>

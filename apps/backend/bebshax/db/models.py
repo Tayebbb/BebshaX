@@ -255,8 +255,8 @@ class Personas(Base):
     dataset_refs: Mapped[list[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=list
     )
-    grounding_score: Mapped[float] = mapped_column(Float, default=0.88)
-    confidence: Mapped[float] = mapped_column(Float, default=0.85)
+    grounding_score: Mapped[float] = mapped_column(Float, default=0.0)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
     validation_warnings: Mapped[list[str]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=list
     )

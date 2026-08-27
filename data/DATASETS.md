@@ -25,6 +25,10 @@ Each dataset has exactly one role in `bebshax/persona/evidence.py::DATASET_ROLES
 
 Unknown dataset files default to `grounding` (the drop-a-real-corpus-in extension path); every managed dataset above must have an explicit row — test-enforced.
 
+## Coverage & Representativeness
+
+These datasets are **slices, not representative samples**: they skew toward specific domains (office-product reviews, English-language dialogues, exam-style probes) and specific populations. No conclusion drawn from them — or from personas grounded in them — generalizes to 'all users'. BebshaX produces synthetic research participants; synthetic findings are research signals and hypotheses, not ground truth. Validate consequential decisions with real users.
+
 ## Dataset Manifest & Gebru Datasheets
 
 ### `personahub_sample`

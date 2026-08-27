@@ -215,6 +215,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
       report: { bg: 'rgba(99, 102, 241, 0.12)', text: '#818CF8', border: 'rgba(99, 102, 241, 0.3)' },
       review: { bg: 'rgba(245, 158, 11, 0.12)', text: '#FBBF24', border: 'rgba(245, 158, 11, 0.3)' },
       web: { bg: 'rgba(59, 130, 246, 0.12)', text: '#60A5FA', border: 'rgba(59, 130, 246, 0.3)' },
+      curated_sample: { bg: 'rgba(156, 163, 175, 0.15)', text: 'var(--text-secondary)', border: 'rgba(156, 163, 175, 0.35)' },
     };
     const c = colors[type] || { bg: 'rgba(156, 163, 175, 0.12)', text: 'var(--text-muted)', border: 'rgba(156, 163, 175, 0.3)' };
     return (
@@ -230,7 +231,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           textTransform: 'uppercase',
         }}
       >
-        {type}
+        {type === 'curated_sample' ? 'SAMPLE' : type}
       </span>
     );
   };
@@ -303,7 +304,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               </h1>
             </div>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-              Empirical market grounding, public sources, and verified claim confidence
+              Collected sources, extracted claims, and per-claim support status — sample sources are labeled
             </p>
           </div>
         </div>
@@ -417,17 +418,17 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
               <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                {summary?.evidence_coverage ?? 68}%
+                {summary?.evidence_coverage ?? 0}%
               </span>
               <span style={{ fontSize: '0.8rem', color: 'var(--accent-emerald)', fontWeight: 600 }}>
-                {summary?.supported_count ?? 3} verified claims
+                {summary?.supported_count ?? 0} supported claims
               </span>
             </div>
             <div style={{ height: '5px', background: 'var(--border-subtle)', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
               <div
                 style={{
                   height: '100%',
-                  width: `${summary?.evidence_coverage ?? 68}%`,
+                  width: `${summary?.evidence_coverage ?? 0}%`,
                   background: 'linear-gradient(90deg, #14B8A6 0%, var(--accent-emerald) 100%)',
                 }}
               />
@@ -448,14 +449,14 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
               <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>
-                {summary?.supported_pct ?? 60}%
+                {summary?.supported_pct ?? 0}%
               </span>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                ({summary?.supported_count ?? 3} claims)
+                ({summary?.supported_count ?? 0} claims)
               </span>
             </div>
             <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: '8px 0 0 0' }}>
-              Citations from public forums, surveys & reports
+              Claims citing verified chunks from collected sources
             </p>
           </div>
 
@@ -473,10 +474,10 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
               <span style={{ fontSize: '1.9rem', fontWeight: 800, color: '#F59E0B' }}>
-                {summary?.inferred_pct ?? 20}%
+                {summary?.inferred_pct ?? 0}%
               </span>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                ({summary?.inferred_count ?? 1} claim)
+                ({summary?.inferred_count ?? 0} claims)
               </span>
             </div>
             <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: '8px 0 0 0' }}>
@@ -498,10 +499,10 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
               <span style={{ fontSize: '1.9rem', fontWeight: 800, color: '#EF4444' }}>
-                {summary?.unsupported_pct ?? 20}%
+                {summary?.unsupported_pct ?? 0}%
               </span>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                ({summary?.unsupported_count ?? 1} claim)
+                ({summary?.unsupported_count ?? 0} claims)
               </span>
             </div>
             <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: '8px 0 0 0' }}>
@@ -706,7 +707,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                         {claim.supporting_source_ids.length > 0 ? (
-                          <>Supported by {claim.supporting_source_ids.length} empirical sources</>
+                          <>Cites {claim.supporting_source_ids.length} collected source{claim.supporting_source_ids.length === 1 ? '' : 's'}</>
                         ) : claim.contradicting_source_ids.length > 0 ? (
                           <span style={{ color: '#EF4444' }}>Contradicted by {claim.contradicting_source_ids.length} sources</span>
                         ) : (

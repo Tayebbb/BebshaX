@@ -458,7 +458,7 @@ class StudyReportService:
                     if p.goals
                     else "Seeks efficiency, transparent pricing, and daily workflow integration."
                 ),
-                "grounding_score": round(p.grounding_score if p.grounding_score is not None else 0.95, 2),
+                "grounding_score": round(p.grounding_score if p.grounding_score is not None else 0.0, 2),
             }
             for p in personas
         ]
@@ -568,31 +568,32 @@ class StudyReportService:
             for r in behavioral_results[:6]
         ]
 
-        # Executive summary
+        # Executive summary — deterministic synthesis states what it counted,
+        # never a demand verdict it cannot compute.
         exec_summary = (
             f"This research validation report for '{prompt}' synthesizes evidence across "
-            f"{len(evidence_claims)} empirical research claims, {len(segments)} market segments, "
-            f"{len(personas)} grounded synthetic customer personas, and {len(conversations)} multi-turn simulated interviews.\n\n"
-            f"The findings indicate strong commercial viability (85% aggregate demand index), driven by acute frustration "
-            f"with existing manual workflows. Personas demonstrated willingness to adopt provided that pricing transparency, "
-            f"reliable performance, and quick onboarding are prioritized."
+            f"{len(evidence_claims)} research claims, {len(segments)} market segments, "
+            f"{len(personas)} synthetic customer personas, and {len(conversations)} multi-turn simulated interviews.\n\n"
+            f"Sections below are deterministic summaries of the stored study data. Synthetic findings are "
+            f"research signals and hypotheses to validate with real users — no aggregate demand score is "
+            f"computed on this template path."
         )
 
         return {
             "title": title,
             "executive_summary": exec_summary,
             "key_findings": [
-                f"Core demand for '{prompt}' is strongest when pitched on immediate time savings and convenience.",
-                f"Price sensitivity analysis indicates optimal conversion when pricing is structured with transparent tiers.",
-                "Target personas demand clear reliability and visible evidence of quality before switching from current habits.",
+                f"Hypothesis: demand for '{prompt}' is likely strongest when pitched on immediate time savings and convenience — validate in live interviews.",
+                "Hypothesis: transparent pricing tiers may improve conversion for price-sensitive cohorts — not yet measured.",
+                "Hypothesis: personas suggest reliability proof is a switching prerequisite — verify with real users.",
             ],
             "target_market_summary": (
                 f"The target market comprises {target_aud}, characterized by high digital engagement "
                 f"and moderate-to-high price sensitivity."
             ),
             "market_context_summary": (
-                f"Market signals show active searching for alternatives to manual solutions. "
-                f"Grounded evidence confirms that convenience and speed are the primary purchasing catalysts."
+                f"Sampled signals suggest active searching for alternatives to manual solutions; convenience "
+                f"and speed recur as purchasing motivators in the collected material."
             ),
             "evidence_findings": evidence_findings,
             "dataset_findings": [
@@ -612,8 +613,8 @@ class StudyReportService:
             "pricing_signals": [
                 {
                     "price_point": study.pricing_hypothesis or "Market Baseline",
-                    "sentiment": "Favorable with Tiered Options",
-                    "acceptable_range": "Competitive market tier",
+                    "sentiment": "Not scored — template synthesis",
+                    "acceptable_range": "Requires live interview evidence",
                 }
             ],
             "major_risks": [
@@ -635,8 +636,8 @@ class StudyReportService:
                 "computed. The sections above are deterministic summaries of the stored study data."
             ),
             "limitations": (
-                "Notice: This report synthesizes real research evidence with exploratory synthetic persona simulations. "
-                "Simulations model expected behavioral dynamics based on grounded empirical distributions."
+                "Notice: This report combines curated sample evidence with exploratory synthetic persona "
+                "simulations. Synthetic findings are hypotheses — validate consequential decisions with real users."
             ),
             "metrics": {
                 "total_interviews": len(conversations),

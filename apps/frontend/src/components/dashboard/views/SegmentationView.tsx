@@ -966,7 +966,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                             {cite.category}
                           </span>
                           <span className="text-[10px] text-emerald-400 font-mono">
-                            {Math.round((cite.confidence || 0.8) * 100)}% verified
+                            {cite.confidence != null ? `${Math.round(cite.confidence * 100)}% confidence` : 'confidence n/a'}
                           </span>
                         </div>
                         <p className="text-xs text-[var(--text-primary)] font-medium leading-relaxed">

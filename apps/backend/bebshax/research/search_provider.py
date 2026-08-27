@@ -79,13 +79,16 @@ def extract_publisher(url: str, default: str = "Web Source") -> str:
         return default
 
 
-# Curated empirical corpus covering key student & consumer software research topics
+# Curated ILLUSTRATIVE corpus: hand-written sample documents used when no live
+# search provider is configured. Every entry is labeled as a BebshaX sample —
+# never attributed to a real publisher — so downstream evidence provenance
+# stays honest about what this content is.
 CURATED_RESEARCH_CORPUS = [
     {
         "title": "Discussion: How do Bangladeshi university students manage lecture notes and study routines?",
-        "url": "https://reddit.com/r/bangladesh/comments/study_habits_university_students_notes",
-        "source_type": "reddit",
-        "publisher": "Reddit r/bangladesh",
+        "url": "https://samples.bebshax.internal/forum-study-habits",
+        "source_type": "curated_sample",
+        "publisher": "BebshaX Illustrative Sample",
         "content": (
             "Most students at DU, BUET, and NSU rely on a chaotic mix of Google Drive folders, Messenger group chats, "
             "and Telegram channels for batch notes. The biggest pain point is finding past exam questions and syllabus topics "
@@ -96,9 +99,9 @@ CURATED_RESEARCH_CORPUS = [
     },
     {
         "title": "Survey Report: Tech spending and monthly subscription affordability among urban students in Dhaka",
-        "url": "https://thedailystar.net/tech-startup/news/student-subscription-spending-behavior-bangladesh",
-        "source_type": "report",
-        "publisher": "The Daily Star Tech",
+        "url": "https://samples.bebshax.internal/spending-survey",
+        "source_type": "curated_sample",
+        "publisher": "BebshaX Illustrative Sample",
         "content": (
             "A survey of 1,200 university students across Dhaka revealed that average discretionary monthly pocket money ranges "
             "from ৳3,000 to ৳8,000. For digital tools and software, 82% of students prefer micro-subscriptions under ৳300/month "
@@ -110,9 +113,9 @@ CURATED_RESEARCH_CORPUS = [
     },
     {
         "title": "Review Synthesis: Why AI study apps and pomodoro tools fail student retention",
-        "url": "https://producthunt.com/reviews/ai-study-planner-retention-complaints",
-        "source_type": "review",
-        "publisher": "Product Hunt Reviews",
+        "url": "https://samples.bebshax.internal/retention-reviews",
+        "source_type": "curated_sample",
+        "publisher": "BebshaX Illustrative Sample",
         "content": (
             "Analysis of 350+ user reviews for AI study tools shows two dominant complaints: "
             "1. Generic AI schedules that don't adjust when a student falls behind, leading to plan abandonment within 4 days. "
@@ -124,9 +127,9 @@ CURATED_RESEARCH_CORPUS = [
     },
     {
         "title": "Competitor Breakdown: Notion AI vs Quizlet vs ChatGPT for student academic productivity",
-        "url": "https://techradar.com/software/best-student-study-tools-comparison",
-        "source_type": "web",
-        "publisher": "TechRadar",
+        "url": "https://samples.bebshax.internal/competitor-breakdown",
+        "source_type": "curated_sample",
+        "publisher": "BebshaX Illustrative Sample",
         "content": (
             "Notion AI costs $10/month and offers freeform docs, but lacks automated syllabus chunking and deadline countdowns. "
             "Quizlet Plus ($35.99/year) excels at rote memorization flashcards, but provides no daily task planning or calendar sync. "
@@ -137,9 +140,9 @@ CURATED_RESEARCH_CORPUS = [
     },
     {
         "title": "Field Research: Private tutoring and coaching habits in Bangladesh academic culture",
-        "url": "https://tbsnews.net/bangladesh/education/coaching-centers-and-exam-preparation-culture",
-        "source_type": "report",
-        "publisher": "The Business Standard",
+        "url": "https://samples.bebshax.internal/coaching-culture",
+        "source_type": "curated_sample",
+        "publisher": "BebshaX Illustrative Sample",
         "content": (
             "Higher education in Bangladesh is heavily exam-centric. Students preparing for semester finals, BCS, and job recruitment "
             "spend an average of 4-6 hours daily in targeted study blocks. Peer study groups and shared question banks are the primary "
@@ -150,9 +153,9 @@ CURATED_RESEARCH_CORPUS = [
     },
     {
         "title": "Student Forum: Unrealistic pricing expectations and software payment methods",
-        "url": "https://facebook.com/groups/dhaka.university.students/posts/study_app_pricing_discussion",
-        "source_type": "reddit",
-        "publisher": "Facebook DU Student Forum",
+        "url": "https://samples.bebshax.internal/pricing-forum-poll",
+        "source_type": "curated_sample",
+        "publisher": "BebshaX Illustrative Sample",
         "content": (
             "In an open poll regarding willingness to pay for an AI homework and study assistant, 45% stated they would only use a free tier "
             "with ads, 38% agreed that ৳200-৳250/month was reasonable if it saved 5+ hours a week, and only 4% would consider ৳500+/month. "
@@ -170,7 +173,12 @@ class SearchProvider(ABC):
 
 
 class CuratedResearchProvider(SearchProvider):
-    """Deterministic, high-signal research provider matching queries against empirical domain knowledge."""
+    """Deterministic fallback provider serving clearly-labeled illustrative samples.
+
+    Used when no live search provider is configured. Output is honest sample
+    content (source_type="curated_sample") — it must never masquerade as
+    scraped web evidence.
+    """
 
     def __init__(self, corpus: list[dict[str, Any]] | None = None) -> None:
         self.corpus = corpus or CURATED_RESEARCH_CORPUS
