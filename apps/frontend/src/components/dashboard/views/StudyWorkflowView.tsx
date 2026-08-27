@@ -1820,8 +1820,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   {viewingPersona.initials || viewingPersona.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#FFFFFF', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {viewingPersona.name}
+                    {viewingPersona.data_source === 'cached' && (
+                      <span
+                        title="Served from seeded/cached data — not generated live for this study"
+                        style={{ fontSize: '0.62rem', fontWeight: 400, color: '#8D9999', background: '#141818', border: '1px solid #2A3130', padding: '2px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                      >
+                        CACHED
+                      </span>
+                    )}
                   </h3>
                   <div style={{ fontSize: '0.84rem', color: '#22D3EE' }}>{viewingPersona.archetype}</div>
                 </div>

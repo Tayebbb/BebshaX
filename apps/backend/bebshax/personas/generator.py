@@ -28,6 +28,65 @@ TEMPLATE_FALLBACK_MODEL = "deterministic-template-fallback"
 # request keeps ~1200 tokens/persona available under the 4000 ceiling.
 _MAX_PERSONAS_PER_REQUEST = 3
 
+# Claim groups that carry per-claim provenance classes (the research-critical
+# ones); other list fields stay plain strings.
+_CLASSED_GROUPS = ("goals", "needs", "pain_points")
+
+
+def _coerce_claim_list(
+    raw_list: Any, claim_id_map: dict[str, str]
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Normalize one claim group into (plain values, classed claims).
+
+    ``claim_id_map`` maps the prompt aliases actually shown to the model
+    ("C1"..) to the real evidence-claim ids, so stored citations stay
+    resolvable after generation.
+
+    Same downgrade-only policy as persona/schema.coerce_provenance:
+    - cited ids must exist among the shown aliases → OBSERVED;
+    - invalid/unknown citations are stripped and the claim downgrades to INFERRED;
+    - unknown labels (and bare strings — back-compat) are SYNTHETIC.
+    Never upgraded except by a verified citation. Verification checks citation
+    existence only, not semantic support — OBSERVED means "cited a shown
+    claim", not "entailed by it".
+    """
+    values: list[str] = []
+    classed: list[dict[str, Any]] = []
+    if not isinstance(raw_list, list):
+        return values, classed
+    for item in raw_list:
+        if isinstance(item, str):
+            text = item.strip()
+            if not text:
+                continue
+            values.append(text)
+            classed.append({"value": text, "provenance": "SYNTHETIC", "evidence_ids": []})
+            continue
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("value", "")).strip()
+        if not text:
+            continue
+        label = str(item.get("provenance", "")).strip().upper()
+        raw_ids = item.get("evidence_ids") or []
+        cited = (
+            [str(i).strip().upper() for i in raw_ids] if isinstance(raw_ids, list) else []
+        )
+        # dedupe, keep order, resolve aliases to the real evidence ids
+        resolved = list(
+            dict.fromkeys(claim_id_map[cid] for cid in cited if cid in claim_id_map)
+        )
+        if resolved:
+            prov = "OBSERVED"
+        elif label == "INFERRED" or label == "OBSERVED":
+            # claimed observed but cited nothing verifiable → inference at best
+            prov = "INFERRED"
+        else:
+            prov = "SYNTHETIC"
+        values.append(text)
+        classed.append({"value": text, "provenance": prov, "evidence_ids": resolved})
+    return values, classed
+
 
 class GeneratedPersonaDraft(BaseModel):
     name: str
@@ -652,6 +711,12 @@ def _generate_deterministic_persona_fallback(
         {"variable": "age", "value": age, "source": "Empirical Segment Profile"},
     ]
 
+    # Templates invent every claim — label them honestly.
+    detailed_attributes["claim_provenance"] = {
+        group: [{"value": v, "provenance": "SYNTHETIC", "evidence_ids": []} for v in vals]
+        for group, vals in (("goals", goals), ("needs", needs), ("pain_points", pain_points))
+    }
+
     validation = validate_synthetic_persona(
         {
             "name": name,
@@ -755,9 +820,14 @@ async def generate_personas_for_study(
                 "characteristics": seg_char,
             },
             "evidence_claims": [
-                {"text": getattr(c, "claim_text", ""), "category": getattr(c, "category", "general")}
-                for c in claims[:6]
+                {"id": f"C{i + 1}", "text": getattr(c, "claim_text", ""), "category": getattr(c, "category", "general")}
+                for i, c in enumerate(claims[:6])
             ],
+        }
+        # Alias → real evidence id, so stored citations resolve after generation.
+        # Claims without a real id keep the alias rather than losing the link.
+        claim_id_map = {
+            f"C{i + 1}": (getattr(c, "id", "") or f"C{i + 1}") for i, c in enumerate(claims[:6])
         }
 
         system_prompt = (
@@ -771,7 +841,10 @@ async def generate_personas_for_study(
             "   - domain_attributes: object tailored to the business domain (e.g. food delivery: food_source, meal_timing, delivery_frequency, delivery_concerns; SaaS: current_tools, workflow, switching_barrier, desired_features; fitness: exercise_habits, fitness_goals, workout_frequency)\n"
             "   - constraints: object with max_monthly_budget, subscription_tolerance, switching_tolerance, preferred_payment_method, price_sensitivity\n"
             "   - detailed_attributes: object with hobbies, commute_mode, work_schedule, communication_style, coping_strategies, daily_activities, decision_style, financial_attitude, tech_interest, technology_usage, time_management\n"
-            "   - goals (array of 2-4 items), needs (array), pain_points (array), behaviors (array), preferences (array), motivations (array), objections (array)\n"
+            "   - goals, needs, pain_points: arrays of claim objects {\"value\": str, \"provenance\": \"OBSERVED\"|\"INFERRED\"|\"SYNTHETIC\", \"evidence_ids\": [claim ids like \"C1\"]}.\n"
+            "     Provenance rules (citations are checked against the provided claim ids): OBSERVED only when directly supported by a provided evidence claim — cite its id(s); "
+            "INFERRED when reasonably deduced from segment/domain context; SYNTHETIC for plausible invention. Never fabricate ids.\n"
+            "   - behaviors, preferences, motivations, objections (arrays of strings)\n"
             "   - monthly_budget_bdt (number), price_sensitivity, primary_devices (array), platforms (array), tech_familiarity\n"
             "3. Ages and budgets must strictly fall within the segment's specified bounds.\n"
             "4. Ground every persona authentically in their regional lifestyle, domain behavior, and practical daily reality."
@@ -877,6 +950,21 @@ async def generate_personas_for_study(
                 for k, v in domain_attrs.items():
                     detailed_attributes[k] = v
 
+                # Per-claim provenance (downgrade-only, citations verified
+                # against the claim ids actually shown to the model).
+                claim_values: dict[str, list[str]] = {}
+                claim_provenance: dict[str, list[dict[str, Any]]] = {}
+                for group in _CLASSED_GROUPS:
+                    vals, classed = _coerce_claim_list(p_raw.get(group), claim_id_map)
+                    if not vals:
+                        vals = list(getattr(fallback_draft, group))
+                        classed = [
+                            {"value": v, "provenance": "SYNTHETIC", "evidence_ids": []} for v in vals
+                        ]
+                    claim_values[group] = vals
+                    claim_provenance[group] = classed
+                detailed_attributes["claim_provenance"] = claim_provenance
+
                 matched_citations = []
                 for c in claims[:3]:
                     matched_citations.append({
@@ -898,9 +986,9 @@ async def generate_personas_for_study(
                     {
                         "name": name,
                         "demographics": {"age": age, "occupation": occupation, "location": location},
-                        "goals": p_raw.get("goals", fallback_draft.goals),
-                        "needs": p_raw.get("needs", fallback_draft.needs),
-                        "pain_points": p_raw.get("pain_points", fallback_draft.pain_points),
+                        "goals": claim_values["goals"],
+                        "needs": claim_values["needs"],
+                        "pain_points": claim_values["pain_points"],
                         "behaviors": p_raw.get("behaviors", fallback_draft.behaviors),
                         "commercial_profile": commercial_prof,
                         "evidence_citations": matched_citations,
@@ -929,9 +1017,9 @@ async def generate_personas_for_study(
                         detailed_attributes=detailed_attributes,
                         domain_attributes=domain_attrs,
                         constraints=constraints,
-                        goals=p_raw.get("goals") or fallback_draft.goals,
-                        needs=p_raw.get("needs") or fallback_draft.needs,
-                        pain_points=p_raw.get("pain_points") or fallback_draft.pain_points,
+                        goals=claim_values["goals"],
+                        needs=claim_values["needs"],
+                        pain_points=claim_values["pain_points"],
                         behaviors=p_raw.get("behaviors") or fallback_draft.behaviors,
                         preferences=p_raw.get("preferences") or fallback_draft.preferences,
                         motivations=p_raw.get("motivations") or fallback_draft.motivations,

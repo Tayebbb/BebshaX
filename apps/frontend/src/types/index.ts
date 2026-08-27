@@ -140,6 +140,7 @@ export interface Persona {
   name: string;
   status: "active" | "draft" | "archived";
   version: number;
+  data_source?: "live" | "cached";
   archetype: string;
   tagline: string;
   quote?: string;

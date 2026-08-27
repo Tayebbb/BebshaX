@@ -672,6 +672,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           <span style={{ fontSize: '0.68rem', color: '#14B8A6', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
                             {persona.country_code || 'BD'}
                           </span>
+                          {persona.data_source === 'cached' && (
+                            <span
+                              title="Served from seeded/cached data — not generated live for this study"
+                              style={{ fontSize: '0.62rem', color: '#8D9999', background: '#141818', border: '1px solid #2A3130', padding: '1px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                            >
+                              CACHED
+                            </span>
+                          )}
                         </div>
                         <div style={{ fontSize: '0.8rem', color: '#8D9999', marginTop: '2px' }}>
                           {persona.demographics?.age ? `${persona.demographics.age} yo • ` : ''}
@@ -1031,9 +1039,19 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#22D3EE', fontWeight: 700, letterSpacing: '0.05em' }}>Archetype Tagline</div>
                         <div style={{ fontSize: '1.05rem', fontWeight: 600, color: '#F4F7F7', marginTop: '2px' }}>{inspectingPersona.tagline}</div>
                       </div>
-                      <span style={{ fontSize: '0.78rem', color: '#14B8A6', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
-                        {inspectingPersona.country_code || 'BD'} • {inspectingPersona.origin_country || 'Bangladesh'}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {inspectingPersona.data_source === 'cached' && (
+                          <span
+                            title="Served from seeded/cached data — not generated live for this study"
+                            style={{ fontSize: '0.7rem', color: '#8D9999', background: '#141818', border: '1px solid #2A3130', padding: '3px 8px', borderRadius: '6px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                          >
+                            CACHED
+                          </span>
+                        )}
+                        <span style={{ fontSize: '0.78rem', color: '#14B8A6', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                          {inspectingPersona.country_code || 'BD'} • {inspectingPersona.origin_country || 'Bangladesh'}
+                        </span>
+                      </div>
                     </div>
                   )}
 

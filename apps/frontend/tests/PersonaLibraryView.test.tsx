@@ -146,6 +146,7 @@ const mockPersonas: SyntheticPersona[] = [
     name: 'Tanvir Ahmed',
     status: 'ready',
     version: 1,
+    data_source: 'cached',
     generation_model: 'qwen3.5-grounded',
     archetype: 'Exam Achiever Archetype',
     demographics: {
@@ -225,6 +226,17 @@ describe('PersonaLibraryView Component', () => {
     expect(screen.getByText('94%')).toBeInTheDocument();
     expect(screen.getByText('91%')).toBeInTheDocument();
     expect(screen.getAllByText('Synthetic Persona').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('labels cached personas with a CACHED badge and leaves live ones unlabelled', async () => {
+    render(<PersonaLibraryView studyId="study_123" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Tanvir Ahmed')).toBeInTheDocument();
+    });
+
+    // per_02 is data_source: 'cached'; per_01 has no data_source (live default)
+    expect(screen.getAllByText('CACHED')).toHaveLength(1);
   });
 
   it('filters personas by search query', async () => {

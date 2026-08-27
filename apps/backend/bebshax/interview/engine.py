@@ -20,6 +20,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator
 from contextlib import aclosing
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -63,10 +64,34 @@ _TOPIC_DEFINITIONS = [
 
 # --- Numeric self-consistency helpers (deterministic, format-level) ---------
 
-# TODO(locale): money cues are BDT-centric — derive currency markers from the
-# persona's identity once non-BD personas become a real workload.
+# Currency cue markers by persona country (data table, not code branches).
+# Row = (min plausible money-rate amount, cue markers). BD stays the default:
+# the platform's persona corpus is Bangladesh-first and an unknown country
+# must not silently widen what counts as a money claim. Extend by adding a
+# row + a test. Anchoring rule: purely alphanumeric markers get \b word
+# boundaries; anything else (symbols, dotted abbreviations like "kr.") is
+# matched literally — keep non-word markers unambiguous.
+_CURRENCY_MARKERS: dict[str, tuple[float, tuple[str, ...]]] = {
+    "BD": (10.0, ("৳", "tk", "bdt", "taka")),
+    "US": (1.0, ("$", "usd", "dollar", "dollars", "buck", "bucks")),
+    "GB": (1.0, ("£", "gbp", "pound", "pounds", "quid")),
+    "EU": (1.0, ("€", "eur", "euro", "euros")),
+    "IN": (5.0, ("₹", "inr", "rupee", "rupees", "rs")),
+}
+
+
+@lru_cache(maxsize=16)
+def _currency_cue_for(country_code: str) -> tuple[float, re.Pattern[str]]:
+    min_amount, markers = _CURRENCY_MARKERS.get(country_code, _CURRENCY_MARKERS["BD"])
+    parts = [
+        rf"\b{re.escape(m)}\b" if m.isalnum() else re.escape(m) for m in markers
+    ]
+    return min_amount, re.compile("|".join(parts), re.IGNORECASE)
+
+
+# Optional BDT suffix only swallows the unit token next to the number — the
+# per-country cue regex above is what actually gates a match.
 _MONEY_NUM = re.compile(r"(\d[\d,]{0,8})(?:\s*(?:৳|tk\b|bdt\b|taka\b))?", re.IGNORECASE)
-_CURRENCY_CUE = re.compile(r"৳|\btk\b|\bbdt\b|\btaka\b", re.IGNORECASE)
 _DAY_CUE = re.compile(r"per day|a day|/day|daily|each day|every day|yesterday", re.IGNORECASE)
 _MONTH_CUE = re.compile(r"per month|a month|/month|monthly|/mo\b|month\b", re.IGNORECASE)
 _SPEND_TOPIC_WORDS = ("lunch", "food", "meal", "spend", "budget", "cost", "pay", "price")
@@ -78,13 +103,16 @@ def _shares_spend_topic(a: str, b: str) -> bool:
     return any(w in a for w in _SPEND_TOPIC_WORDS) and any(w in b for w in _SPEND_TOPIC_WORDS)
 
 
-def _extract_money_rates(text: str) -> list[tuple[float, str]]:
+def _extract_money_rates(text: str, country_code: str | None = None) -> list[tuple[float, str]]:
     """Extract (monthly-normalized amount, raw snippet) money-rate claims.
 
     An amount counts only with a currency cue nearby AND a period cue — in the
     same sentence, or (day cues only) anywhere in the turn: "Yesterday I got
     biryani. It cost 120 taka." puts the cue one sentence earlier.
+    Currency cues and the minimum plausible amount come from the persona's
+    country (BD default).
     """
+    min_amount, currency_cue = _currency_cue_for((country_code or "BD").upper())
     rates: list[tuple[float, str]] = []
     turn_has_day_cue = bool(_DAY_CUE.search(text))
     for sentence in re.split(r"[.!?]", text):
@@ -99,10 +127,10 @@ def _extract_money_rates(text: str) -> list[tuple[float, str]]:
             if not raw_num.isdigit():
                 continue
             amount = float(raw_num)
-            if amount < 10:  # not a plausible BDT money rate
+            if amount < min_amount:  # below any plausible money rate for this locale
                 continue
             window = sentence[max(0, m.start() - 30): m.end() + 45]
-            if not _CURRENCY_CUE.search(window):
+            if not currency_cue.search(window):
                 continue
             snippet = sentence[max(0, m.start() - 15): m.end() + 40].strip()
             if month and (not day or abs(month.start() - m.start()) < abs(day.start() - m.start())):
@@ -447,13 +475,14 @@ class InterviewEngine:
         # Numeric self-consistency: the persona's own prior spend-rate claims
         # (observed live: "120 taka" per day in turn 1 vs "25,000-30,000 BDT a
         # month on lunch" in turn 2 — a 7x contradiction no reader should trust).
-        current_rates = _extract_money_rates(reply_lower)
+        persona_country = getattr(persona, "country_code", None)
+        current_rates = _extract_money_rates(reply_lower, persona_country)
         if current_rates and prior_persona_texts:
             for prior_text in prior_persona_texts:
                 prior_lower = prior_text.lower()
                 if not _shares_spend_topic(prior_lower, reply_lower):
                     continue
-                for prior_monthly, prior_raw in _extract_money_rates(prior_lower):
+                for prior_monthly, prior_raw in _extract_money_rates(prior_lower, persona_country):
                     for cur_monthly, cur_raw in current_rates:
                         if prior_monthly <= 0 or cur_monthly <= 0:
                             continue

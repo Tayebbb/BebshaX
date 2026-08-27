@@ -75,6 +75,17 @@ class Settings(BaseSettings):
     # without it a blocked signin surfaces as a bare 403.
     require_email_verification: bool | None = None
 
+    # Rate limiter deployment knobs (slowapi). Default in-memory storage is
+    # per-process — fine for the single-worker dev/demo topology, silently
+    # wrong behind multiple workers. Point this at a shared backend
+    # (e.g. memcached://…) when scaling out.
+    rate_limit_storage_uri: str | None = None
+    # Only enable behind exactly one proxy you control: when off (default),
+    # the client socket address keys the limit; when on, the LAST
+    # X-Forwarded-For hop (the one your proxy appended) is trusted — earlier
+    # hops are client-controlled. Never enable on a directly-exposed server.
+    rate_limit_trust_forwarded_for: bool = False
+
     @property
     def email_verification_enforced(self) -> bool:
         if self.require_email_verification is not None:

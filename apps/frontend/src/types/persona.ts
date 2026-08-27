@@ -112,6 +112,7 @@ export interface SyntheticPersona {
   avatar_url?: string;
   status: PersonaStatus;
   version: number;
+  data_source?: 'live' | 'cached';
   generation_model?: string;
   archetype?: string;
   tagline?: string;

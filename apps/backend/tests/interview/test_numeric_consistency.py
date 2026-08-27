@@ -40,6 +40,32 @@ class TestExtractMoneyRates:
         assert _extract_money_rates("the tv costs 45000 taka at the shop") == []
 
 
+class TestLocaleAwareCurrencyCues:
+    """Cue markers come from the persona's country — BD stays the default."""
+
+    def test_dollar_amounts_count_for_us_personas(self) -> None:
+        rates = _extract_money_rates("i spend about $45 per day on food", "US")
+        assert rates and rates[0][0] == 45 * 30
+
+    def test_small_amounts_use_locale_minimum(self) -> None:
+        # $5/day is a real US money rate; 5 would be noise under the BDT floor
+        rates = _extract_money_rates("coffee runs me $5 a day", "US")
+        assert rates and rates[0][0] == 5 * 30
+
+    def test_dollar_amounts_do_not_count_for_bd_default(self) -> None:
+        # Unknown/absent country must not widen what counts as a money claim.
+        assert _extract_money_rates("i spend about $45 per day on food") == []
+        assert _extract_money_rates("i spend about $45 per day on food", "XX") == []
+
+    def test_rupee_word_counts_for_in_personas(self) -> None:
+        rates = _extract_money_rates("around 900 rupees a month for tiffin", "IN")
+        assert rates and rates[0][0] == 900.0
+
+    def test_taka_still_works_when_country_is_bd(self) -> None:
+        rates = _extract_money_rates("i spend around 25,000 bdt on lunch per month", "BD")
+        assert rates and rates[0][0] == 25000.0
+
+
 class TestNumericContradiction:
     QUESTION = "How much do you spend on lunch?"
     TURN1 = (

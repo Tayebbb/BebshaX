@@ -197,6 +197,77 @@ async def test_malformed_llm_output_falls_back_to_labeled_templates():
 
 
 @pytest.mark.asyncio
+async def test_claim_provenance_is_verified_and_downgrade_only():
+    """Cited ids are checked against the claims actually shown; nothing upgrades."""
+    import json as _json
+    from types import SimpleNamespace
+
+    claim = SimpleNamespace(
+        id="ev_1", claim_text="Students cap spending at ৳400/mo", category="economics", confidence=0.9
+    )
+    reply = _json.dumps(
+        {
+            "personas": [
+                {
+                    "name": "Tania Rahman",
+                    "age": 22,
+                    "occupation": "Student",
+                    "location": "Dhaka",
+                    "monthly_budget_bdt": 350,
+                    "goals": [
+                        {"value": "stay under ৳400/mo", "provenance": "OBSERVED", "evidence_ids": ["c1"]},
+                        {"value": "fabricated citation", "provenance": "OBSERVED", "evidence_ids": ["C9"]},
+                        "plain legacy string",
+                    ],
+                    "needs": [{"value": "flexible billing", "provenance": "INFERRED", "evidence_ids": []}],
+                    "pain_points": [{"value": "mystery label", "provenance": "banana", "evidence_ids": []}],
+                }
+            ]
+        }
+    )
+    drafts = await generate_personas_for_study(
+        study=_study_mock(),
+        segments=[MockSegment("seg_1", "Budget Students", 100.0)],
+        target_count=1,
+        distribution_strategy="equal",
+        evidence_claims=[claim],
+        llm_service=_FakeLLM(reply),
+    )
+    assert len(drafts) == 1
+    d = drafts[0]
+    # ORM-facing fields stay plain strings, in model order
+    assert d.goals == ["stay under ৳400/mo", "fabricated citation", "plain legacy string"]
+    prov = d.detailed_attributes["claim_provenance"]
+    g0, g1, g2 = prov["goals"]
+    # lowercase cited alias "c1" matches case-insensitively and resolves to
+    # the REAL evidence id — auditable after generation
+    assert g0 == {"value": "stay under ৳400/mo", "provenance": "OBSERVED", "evidence_ids": ["ev_1"]}
+    # C9 was never shown → citation stripped, OBSERVED downgraded to INFERRED
+    assert g1 == {"value": "fabricated citation", "provenance": "INFERRED", "evidence_ids": []}
+    # bare strings are unclassified invention
+    assert g2 == {"value": "plain legacy string", "provenance": "SYNTHETIC", "evidence_ids": []}
+    assert prov["needs"][0]["provenance"] == "INFERRED"
+    assert prov["pain_points"][0]["provenance"] == "SYNTHETIC"  # unknown label
+
+
+@pytest.mark.asyncio
+async def test_template_fallback_claims_are_all_synthetic():
+    drafts = await generate_personas_for_study(
+        study=_study_mock(),
+        segments=[MockSegment("seg_1", "Budget Students", 100.0)],
+        target_count=2,
+        distribution_strategy="equal",
+        evidence_claims=[],
+        llm_service=None,
+    )
+    for d in drafts:
+        prov = d.detailed_attributes["claim_provenance"]
+        for group in ("goals", "needs", "pain_points"):
+            assert prov[group], f"{group} classes missing"
+            assert all(c["provenance"] == "SYNTHETIC" and c["evidence_ids"] == [] for c in prov[group])
+
+
+@pytest.mark.asyncio
 async def test_large_quota_is_sub_batched_and_never_template_ized():
     """A 6-persona single-segment quota must split into ≤3-persona requests
     (one whole-segment request exceeds the output budget and would fail or
