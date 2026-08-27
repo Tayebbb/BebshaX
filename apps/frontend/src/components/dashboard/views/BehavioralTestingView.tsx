@@ -92,7 +92,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
   };
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
       {/* Top Header */}
       <div
         style={{
@@ -339,7 +339,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
 
       {/* Tests Grid */}
       {isLoading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '18px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(360px, 100%), 1fr))', gap: '18px' }}>
           {[1, 2, 3].map((i) => (
             <div
               key={i}
@@ -406,7 +406,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))',
             gap: '18px',
           }}
         >

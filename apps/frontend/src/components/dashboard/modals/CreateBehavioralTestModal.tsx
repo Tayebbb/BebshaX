@@ -401,7 +401,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))',
                   gap: '12px',
                 }}
               >
@@ -487,7 +487,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
 
               {/* Dynamic Type-specific form fields */}
               {selectedType === 'pricing_test' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '14px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Proposed Price (BDT ৳)
@@ -533,7 +533,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                       <option value="per_use">Pay per meal / per use</option>
                     </select>
                   </div>
-                  <div style={{ gridColumn: 'span 2' }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Current Alternative Personas Use
                     </label>
@@ -879,7 +879,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))',
                     gap: '8px',
                     padding: '12px',
                     backgroundColor: 'var(--bg-card)',
@@ -891,19 +891,19 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     <>
                       <div><span style={{ color: 'var(--text-muted)' }}>Price:</span> <strong style={{ color: 'var(--text-primary)' }}>{price}</strong></div>
                       <div><span style={{ color: 'var(--text-muted)' }}>Billing:</span> <strong style={{ color: 'var(--text-primary)' }}>{billingPeriod}</strong></div>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>Alternative:</span> <strong style={{ color: 'var(--text-primary)' }}>{alternative}</strong></div>
+                      <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)' }}>Alternative:</span> <strong style={{ color: 'var(--text-primary)' }}>{alternative}</strong></div>
                     </>
                   )}
                   {selectedType === 'feature_test' && (
                     <>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>Feature:</span> <strong style={{ color: 'var(--text-primary)' }}>{featureName}</strong></div>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>Benefit:</span> <strong style={{ color: 'var(--text-primary)' }}>{benefit}</strong></div>
+                      <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)' }}>Feature:</span> <strong style={{ color: 'var(--text-primary)' }}>{featureName}</strong></div>
+                      <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)' }}>Benefit:</span> <strong style={{ color: 'var(--text-primary)' }}>{benefit}</strong></div>
                     </>
                   )}
                   {selectedType === 'message_test' && (
                     <>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>Headline:</span> <strong style={{ color: 'var(--text-primary)' }}>{headline}</strong></div>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>CTA:</span> <strong style={{ color: 'var(--text-primary)' }}>{cta}</strong></div>
+                      <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)' }}>Headline:</span> <strong style={{ color: 'var(--text-primary)' }}>{headline}</strong></div>
+                      <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)' }}>CTA:</span> <strong style={{ color: 'var(--text-primary)' }}>{cta}</strong></div>
                     </>
                   )}
                 </div>

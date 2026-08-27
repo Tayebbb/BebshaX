@@ -403,6 +403,24 @@ html.theme-transition *::after {
   to { opacity: 1; transform: none; }
 }
 
+/* Small screens: modals use the full width, app headers clear the mobile bar */
+@media (max-width: 720px) {
+  .bx-backdrop {
+    padding: 10px !important;
+  }
+  .bx-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 94dvh !important;
+    border-radius: 16px !important;
+  }
+}
+@media (max-width: 900px) {
+  .bx-appheader {
+    top: 52px !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bx-view,
   .bx-stagger,

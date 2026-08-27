@@ -659,6 +659,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-pure)', color: 'var(--text-main)' }}>
       {/* Top Header with Stepper */}
       <header
+        className="bx-appheader"
         style={{
           borderBottom: '1px solid var(--border-subtle)',
           background: 'var(--bg-glass)',
@@ -666,7 +667,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           position: 'sticky',
           top: 0,
           zIndex: 30,
-          padding: '12px 24px',
+          padding: '12px clamp(12px, 3vw, 24px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -758,7 +759,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       </header>
 
       {/* Main Workflow Container */}
-      <main style={{ flex: 1, padding: '28px 40px', maxWidth: '1280px', width: '100%', margin: '0 auto' }}>
+      <main style={{ flex: 1, padding: '28px clamp(14px, 4vw, 40px)', maxWidth: '1280px', width: '100%', margin: '0 auto' }}>
         {/* ============================================================
             STEP 1: CONTEXT & ASSUMPTION GATHERING
            ============================================================ */}
@@ -833,7 +834,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       <div style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-main)', marginTop: '4px' }}>
                         {msg.goalCardData.summary}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px', fontSize: '0.78rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(180px, 100%), 1fr))', gap: '8px', marginTop: '12px', fontSize: '0.78rem' }}>
                         <div>
                           <span style={{ color: 'var(--text-secondary)' }}>Target Audience: </span>
                           <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{msg.goalCardData.target_audience}</span>
@@ -1230,7 +1231,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             )}
 
             {/* Persona Cards Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap: '20px' }}>
               {isGeneratingPersonas &&
                 personas.length === 0 &&
                 Array.from({
@@ -2090,7 +2091,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               {viewingPersona.description || viewingPersona.tagline}
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: '10px', background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
               <div>
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Age: </span>
                 <span style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{viewingPersona.demographics?.age || '28'}</span>
@@ -2141,7 +2142,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.06em', marginBottom: '8px' }}>
                   LIFESTYLE & ROUTINE SNAPSHOT
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(160px, 100%), 1fr))', gap: '8px', fontSize: '0.78rem' }}>
                   {viewingPersona.detailed_attributes.commute_mode && (
                     <div><span style={{ color: 'var(--text-secondary)' }}>Commute: </span><span style={{ color: 'var(--text-main)' }}>{viewingPersona.detailed_attributes.commute_mode}</span></div>
                   )}

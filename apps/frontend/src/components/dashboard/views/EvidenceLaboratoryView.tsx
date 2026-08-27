@@ -248,8 +248,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
     >
       {/* Top Header */}
       <header
+        className="bx-appheader"
         style={{
-          padding: '20px 32px',
+          padding: '20px clamp(14px, 3.5vw, 32px)',
           borderBottom: '1px solid var(--bg-card-hover)',
           background: 'var(--bg-secondary)',
           display: 'flex',
@@ -342,7 +343,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
       </header>
 
       {/* Main Content Body */}
-      <div style={{ maxWidth: '1400px', width: '100%', margin: '0 auto', padding: '28px 32px' }}>
+      <div style={{ maxWidth: '1400px', width: '100%', margin: '0 auto', padding: '28px clamp(14px, 3.5vw, 32px)' }}>
         {/* Research Running Stepper Banner */}
         {isRunningResearch && (
           <div
@@ -906,6 +907,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
       {/* Claim Provenance Modal */}
       {selectedClaimDetail && (
         <div
+          className="bx-backdrop"
           style={{
             position: 'fixed',
             inset: 0,
@@ -920,6 +922,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           onClick={() => setSelectedClaimDetail(null)}
         >
           <div
+            className="bx-modal"
             style={{
               background: 'var(--bg-secondary)',
               border: '1px solid #2A3042',

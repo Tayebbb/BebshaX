@@ -191,7 +191,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
   const isRunning = activeRun?.status === 'running' || activeRun?.status === 'pending';
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
       {/* Top Breadcrumb & Actions */}
       <div
         style={{
@@ -522,7 +522,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(340px, 100%), 1fr))',
               gap: '16px',
               marginBottom: '28px',
             }}
@@ -687,7 +687,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap: '14px' }}>
               {activeRun.results?.map((res) => {
                 const isPositive = res.decision.includes('positive') || res.decision.includes('buy');
                 const isNegative = res.decision.includes('negative') || res.decision.includes('not') || res.decision.includes('unlikely');
@@ -766,6 +766,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
       {selectedPersonaResult && (
         <div
           data-testid="persona-modal"
+          className="bx-backdrop"
           style={{
             position: 'fixed',
             inset: 0,
@@ -780,6 +781,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
           onClick={() => setSelectedPersonaResult(null)}
         >
           <div
+            className="bx-modal"
             style={{
               width: '100%',
               maxWidth: '680px',
@@ -875,7 +877,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               )}
 
               {/* Motivators vs Objections */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: '12px' }}>
                 <div style={{ padding: '12px', backgroundColor: 'rgba(16, 185, 129, 0.08)', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                   <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--status-success-text)', marginBottom: '6px' }}>Motivators</div>
                   <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '0.8rem', color: 'var(--text-primary)' }}>

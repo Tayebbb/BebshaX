@@ -14,6 +14,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
     <div
       role="dialog"
       aria-modal="true"
+      className="bx-backdrop"
       style={{
         position: 'fixed',
         inset: 0,
@@ -28,6 +29,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
       onClick={onClose}
     >
       <div
+        className="bx-modal"
         style={{
           width: '100%',
           maxWidth: '560px',

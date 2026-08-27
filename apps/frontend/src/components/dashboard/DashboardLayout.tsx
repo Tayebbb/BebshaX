@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Menu,
   PenSquare,
   LayoutGrid,
   Contact2,
@@ -164,7 +165,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [activeRunId, setActiveRunId] = useState<string | undefined>(initialParsed.runId);
   const [activeCompareRunIds, setActiveCompareRunIds] = useState<string[]>(initialParsed.compareRunIds || []);
 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsedState, setIsSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 900px)').matches,
+  );
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  // On mobile the sidebar is a full drawer — never the collapsed rail
+  const isSidebarCollapsed = !isMobile && isSidebarCollapsedState;
   const [isRecentStudiesOpen, setIsRecentStudiesOpen] = useState(true);
   const [recentStudies, setRecentStudies] = useState<Study[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
@@ -226,7 +233,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
   const displayName = user?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
 
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 900px)');
+    const onChange = (e: MediaQueryListEvent) => {
+      setIsMobile(e.matches);
+      if (!e.matches) setIsMobileNavOpen(false);
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
   const handleTabClick = (tab: DashboardTab) => {
+    setIsMobileNavOpen(false);
     if (tab === 'new-study') navigate('/create-study');
     else if (tab === 'dashboard') navigate('/dashboard');
     else if (tab === 'personas') navigate('/persona-library');
@@ -267,6 +286,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     // Reopening an existing study: never re-seed the copilot chat with the
     // stale creation prompt — saved messages are restored from the study.
     setInitialWorkflowPrompt(undefined);
+    setIsMobileNavOpen(false);
     setActiveStudyId(studyId);
     setActiveStep(step);
     navigate(`/research/${studyId}/step${step}`);
@@ -318,24 +338,43 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         overflowX: 'clip',
       }}
     >
+      {/* Mobile drawer backdrop */}
+      {isMobile && isMobileNavOpen && (
+        <div
+          onClick={() => setIsMobileNavOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'var(--glass-strong)', backdropFilter: 'blur(4px)', zIndex: 120 }}
+        />
+      )}
+
       {/* ============================================================
           LEFT SIDEBAR (Matches Screenshots 1, 2, 3, 4)
          ============================================================ */}
       <aside
         style={{
-          width: isSidebarCollapsed ? '72px' : '240px',
+          width: isSidebarCollapsed ? '72px' : isMobile ? '280px' : '240px',
           background: 'var(--bg-pure)',
           borderRight: '1px solid var(--fill-soft-2)',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: isSidebarCollapsed ? '20px 10px' : '20px 16px',
-          transition: 'width 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
           flexShrink: 0,
-          position: 'sticky',
           top: 0,
-          height: '100vh',
-          zIndex: 40,
+          height: isMobile ? '100dvh' : '100vh',
+          ...(isMobile
+            ? {
+                position: 'fixed',
+                left: 0,
+                transform: isMobileNavOpen ? 'translateX(0)' : 'translateX(-105%)',
+                transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                boxShadow: isMobileNavOpen ? '0 24px 64px rgba(0, 0, 0, 0.45)' : 'none',
+                zIndex: 130,
+              }
+            : {
+                position: 'sticky',
+                transition: 'width 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+                zIndex: 40,
+              }),
         }}
       >
         {/* Top Brand Header — scrolls internally so the theme toggle and
@@ -368,7 +407,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             <button
               type="button"
               aria-label="Toggle sidebar"
-              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              onClick={() => (isMobile ? setIsMobileNavOpen(false) : setIsSidebarCollapsed(!isSidebarCollapsedState))}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -841,11 +880,54 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           MAIN VIEW AREA
          ============================================================ */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Mobile top bar — opens the nav drawer */}
+        {isMobile && (
+          <div
+            style={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 95,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              minHeight: '52px',
+              boxSizing: 'border-box',
+              padding: '8px 14px',
+              background: 'var(--bg-glass)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              borderBottom: '1px solid var(--border-subtle)',
+            }}
+          >
+            <button
+              type="button"
+              aria-label="Open navigation"
+              onClick={() => setIsMobileNavOpen(true)}
+              style={{
+                background: 'var(--fill-soft)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-primary)',
+                borderRadius: '9px',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <Menu size={18} />
+            </button>
+            <BebshaXLogo size={22} textSize="1rem" onClick={() => navigate('/create-study')} />
+          </div>
+        )}
+
         {/* Top Greeting Header Bar (Screenshot 1) */}
         {activeTab !== 'study-workflow' && (
           <header
             style={{
-              padding: '24px 40px 0 40px',
+              padding: '20px clamp(16px, 4vw, 40px) 0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -985,7 +1067,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         )}
 
         {activeTab === 'segmentation' && (
-          <div style={{ padding: '24px 40px' }}>
+          <div style={{ padding: '24px clamp(16px, 4vw, 40px)' }}>
             <SegmentationView
               studyId={activeStudyId || 'study_default'}
               onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}

@@ -55,6 +55,16 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-08-28) — Fully responsive layout for all device sizes
+
+Owner brief: "make the website fully responsive for all device sizes." The landing page, auth page, and the scoped-CSS views (`ns-`/`sd-`/`iv-`) already had breakpoints; this pass closed the gaps in the inline-styled dashboard shell and views.
+
+- **Mobile nav drawer** ([DashboardLayout.tsx](../apps/frontend/src/components/dashboard/DashboardLayout.tsx)): at ≤900 px (live `matchMedia` listener, resize-safe both directions) the sticky sidebar becomes an off-canvas fixed drawer (translateX, 280 px, shadow) behind a blurred backdrop, opened from a new sticky mobile top bar (hamburger + brand). Nav clicks, study opens, and the backdrop all close it; the collapse toggle doubles as drawer-close on mobile; the collapsed-rail mode is desktop-only.
+- **Sticky header stacking**: workflow and evidence headers got a `bx-appheader` class; a ≤900 px rule offsets them 52 px so they stack under the mobile bar instead of sliding beneath it.
+- **Inline styles can't take media queries — two techniques used instead**: fluid `clamp(…, vw, …)` horizontal padding on every view container (40/32 px gutters compress to 14–16 px on phones), and `minmax(min(Xpx, 100%), 1fr)` on all 10 card grids whose fixed 320–380 px minimums forced horizontal overflow on narrow screens. Fixed `1fr 1fr` detail grids became wrap-safe `auto-fit` grids; six `gridColumn: 'span 2'` children became `'1 / -1'` (span 2 breaks in a one-column auto-fit grid).
+- **Modals**: ≤720 px rule gives `.bx-modal` full width, 94dvh height cap, tighter radius; the four modals missing the `bx-backdrop`/`bx-modal` classes (LegalModal, OpenRouterDiagnosticModal, Evidence claim modal, Behavioral persona modal) were classed — which also gives them the standard entrance choreography. Both data tables were confirmed to already sit in `overflow-x: auto` wrappers.
+- Verified in the embedded browser at 390×844 (auth, launcher, drawer open/close, workflow with wrapped stepper, persona library, interviews, behavioral, dashboard, landing — **0 px horizontal overflow on every screen**, light and dark), 768×1024 (drawer mode, 0 overflow), and 1440 (desktop sidebar returns; live resize across the breakpoint works both ways). **418 backend + 79 frontend tests, tsc build, `theme:check` 0 drift.**
+
 ### Maintenance (2026-08-28) — GSAP motion system + light-mode completion + scroll-reveal layer
 
 Owner brief: transform the console's motion into a premium, cinematic, spatial system using GSAP as the single animation engine for choreographed work (per the GSAP guidelines now in `.github/copilot-instructions.md`), while finishing light-mode sync across every component. Principle applied: one motion system per element — the existing CSS `bx-*` primitives keep handling simple entrances; GSAP is used only where CSS cannot: coordinated timelines, value tweens, and dependency-driven choreography.

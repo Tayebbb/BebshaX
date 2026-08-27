@@ -40,7 +40,7 @@ export const ModelRouterView: React.FC = () => {
   return (
     <div
       style={{
-        padding: '32px 40px',
+        padding: '32px clamp(16px, 4vw, 40px)',
         maxWidth: '1200px',
         margin: '0 auto',
         width: '100%',
@@ -102,7 +102,7 @@ export const ModelRouterView: React.FC = () => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
           gap: '20px',
           marginBottom: '32px',
         }}

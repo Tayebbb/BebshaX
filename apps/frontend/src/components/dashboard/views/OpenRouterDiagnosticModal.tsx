@@ -53,7 +53,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
   if (!isOpen) return null;
 
   return (
-    <div style={{
+    <div className="bx-backdrop" style={{
       position: 'fixed',
       inset: 0,
       background: 'rgba(0, 0, 0, 0.75)',
@@ -64,7 +64,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
       zIndex: 100,
       padding: '20px',
     }}>
-      <div style={{
+      <div className="bx-modal" style={{
         background: '#121417',
         border: '1px solid var(--border-soft)',
         borderRadius: '16px',

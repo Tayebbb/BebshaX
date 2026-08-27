@@ -250,7 +250,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   };
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
       {/* =========================================================================
           1. HEADER & ACTIONS
          ========================================================================= */}
@@ -524,7 +524,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           4. PERSONA CARDS GRID / SKELETON / EMPTY STATE
          ========================================================================= */}
       {isLoading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: '20px' }}>
           {[1, 2, 3, 4, 5, 6].map((idx) => (
             <div key={idx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px', height: '320px', animation: 'pulse 1.5s infinite' }}>
               <div style={{ height: '48px', width: '48px', borderRadius: '50%', background: 'var(--bg-card-hover)', marginBottom: '16px' }} />
@@ -1076,7 +1076,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   </div>
 
                   {/* Goals & Needs Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))', gap: '16px' }}>
                     <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-emerald)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
                         <Target size={14} /> Core Goals
@@ -1101,7 +1101,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   </div>
 
                   {/* Pain Points & Objections Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))', gap: '16px' }}>
                     <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#F59E0B', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
                         <AlertCircle size={14} /> Pain Points & Anxieties
@@ -1629,7 +1629,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
                     Quota Allocation Strategy
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: '10px' }}>
                     <div
                       onClick={() => setDistributionStrategy('population_weighted')}
                       style={{
