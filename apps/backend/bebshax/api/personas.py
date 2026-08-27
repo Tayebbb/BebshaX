@@ -218,6 +218,12 @@ async def generate_study_personas_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except ContextWindowExceeded as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except AllCandidatesFailed as exc:
+        raise HTTPException(
+            status_code=503, detail="no LLM route could serve persona generation"
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -364,6 +370,12 @@ async def regenerate_study_persona_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ContextWindowExceeded as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except AllCandidatesFailed as exc:
+        raise HTTPException(
+            status_code=503, detail="no LLM route could serve persona regeneration"
+        ) from exc
 
     segment_name = None
     if persona.segment_id:

@@ -44,8 +44,18 @@ def evidence_store(tmp_path) -> EvidenceStore:
         encoding="utf-8",
     )
     (processed / "amazon_reviews_office_products.jsonl").write_text(
+        "\n".join(
+            json.dumps({"text": t})
+            for t in [
+                "The food delivery arrived late twice and the packaging leaked everywhere.",
+                "As a student I order food delivery online and rising fees frustrate me constantly.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (processed / "empathetic_dialogues_slice.jsonl").write_text(
         json.dumps(
-            {"text": "The food delivery arrived late twice and the packaging leaked everywhere."}
+            {"utterance": "I order food online as a student and the delivery fees keep surprising me."}
         ),
         encoding="utf-8",
     )

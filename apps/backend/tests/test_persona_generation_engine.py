@@ -118,6 +118,153 @@ async def test_generate_personas_for_study_fallback():
         assert len(d.goals) >= 1
         assert len(d.pain_points) >= 1
         assert "monthly_budget_bdt" in d.commercial_profile
+        # template drafts carry their honest origin label
+        assert d.generation_model == "deterministic-template-fallback"
+
+
+class _FakeLLM:
+    """Minimal llm_service stub: returns a fixed reply with provenance."""
+
+    def __init__(self, text: str, provider: str = "fake", model: str = "m9") -> None:
+        self._text = text
+        self._provider = provider
+        self._model = model
+
+    async def complete(self, request):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            text=self._text,
+            provenance=SimpleNamespace(
+                served_by_provider=self._provider, served_by_model=self._model
+            ),
+        )
+
+
+def _study_mock():
+    mock_study = MagicMock()
+    mock_study.title = "Exam Prep Platform"
+    mock_study.prompt = "Affordable study planning"
+    mock_study.target_audience = "College students"
+    mock_study.pricing_hypothesis = "৳300/month"
+    return mock_study
+
+
+@pytest.mark.asyncio
+async def test_llm_drafts_are_stamped_with_the_real_serving_model():
+    import json as _json
+
+    reply = _json.dumps(
+        {
+            "personas": [
+                {
+                    "name": "Tania Rahman",
+                    "age": 22,
+                    "occupation": "Student",
+                    "location": "Dhaka",
+                    "monthly_budget_bdt": 350,
+                    "goals": ["pass exams"],
+                    "pain_points": ["expensive coaching"],
+                }
+            ]
+        }
+    )
+    drafts = await generate_personas_for_study(
+        study=_study_mock(),
+        segments=[MockSegment("seg_1", "Budget Students", 100.0)],
+        target_count=1,
+        distribution_strategy="equal",
+        evidence_claims=[],
+        llm_service=_FakeLLM(reply, provider="ollama", model="llama3.2:3b"),
+    )
+    assert len(drafts) == 1
+    # provenance-derived origin — never the old fabricated "qwen3.5-grounded"
+    assert drafts[0].generation_model == "ollama/llama3.2:3b"
+
+
+@pytest.mark.asyncio
+async def test_malformed_llm_output_falls_back_to_labeled_templates():
+    drafts = await generate_personas_for_study(
+        study=_study_mock(),
+        segments=[MockSegment("seg_1", "Budget Students", 100.0)],
+        target_count=2,
+        distribution_strategy="equal",
+        evidence_claims=[],
+        llm_service=_FakeLLM("this is not json at all"),
+    )
+    assert len(drafts) == 2
+    assert all(d.generation_model == "deterministic-template-fallback" for d in drafts)
+
+
+@pytest.mark.asyncio
+async def test_large_quota_is_sub_batched_and_never_template_ized():
+    """A 6-persona single-segment quota must split into ≤3-persona requests
+    (one whole-segment request exceeds the output budget and would fail or
+    silently template-ize the segment — critic finding)."""
+    import json as _json
+
+    calls: list[int] = []
+
+    class _BatchLLM:
+        async def complete(self, request):
+            from types import SimpleNamespace
+
+            payload = _json.loads(request.messages[-1].content)
+            n = payload["count_to_generate"]
+            calls.append(n)
+            assert request.max_output_tokens <= 4000
+            personas = [
+                {
+                    "name": f"Persona {len(calls)}-{i}",
+                    "age": 25 + i,
+                    "occupation": "Student",
+                    "location": "Dhaka",
+                    "monthly_budget_bdt": 400,
+                    "goals": ["study"],
+                    "pain_points": ["cost"],
+                }
+                for i in range(n)
+            ]
+            return SimpleNamespace(
+                text=_json.dumps({"personas": personas}),
+                provenance=SimpleNamespace(served_by_provider="fake", served_by_model="m1"),
+            )
+
+    drafts = await generate_personas_for_study(
+        study=_study_mock(),
+        segments=[MockSegment("seg_1", "Budget Students", 100.0)],
+        target_count=6,
+        distribution_strategy="equal",
+        evidence_claims=[],
+        llm_service=_BatchLLM(),
+    )
+    assert len(drafts) == 6
+    assert calls == [3, 3]  # sub-batched, never one 6-persona request
+    assert all(d.generation_model == "fake/m1" for d in drafts)  # zero templates
+
+
+@pytest.mark.asyncio
+async def test_infrastructure_failures_propagate_not_masquerade():
+    """AllCandidatesFailed must surface honestly — never silently replaced
+    with template personas pretending to be research output (R2/R6)."""
+    from bebshax.llm.failures import AllCandidatesFailed
+
+    class _DeadLLM:
+        async def complete(self, request):
+            class _Prov:
+                attempts: list = []
+
+            raise AllCandidatesFailed(_Prov())
+
+    with pytest.raises(AllCandidatesFailed):
+        await generate_personas_for_study(
+            study=_study_mock(),
+            segments=[MockSegment("seg_1", "Budget Students", 100.0)],
+            target_count=1,
+            distribution_strategy="equal",
+            evidence_claims=[],
+            llm_service=_DeadLLM(),
+        )
 
 
 @pytest.mark.asyncio

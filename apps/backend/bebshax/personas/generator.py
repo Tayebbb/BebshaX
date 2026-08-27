@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import random
 import re
@@ -10,9 +11,22 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from bebshax.llm.failures import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.personas.validator import validate_synthetic_persona
+
+logger = logging.getLogger(__name__)
+
+# Honest origin label for template-built personas — rows must never claim an
+# LLM produced them (M-series honesty rules).
+TEMPLATE_FALLBACK_MODEL = "deterministic-template-fallback"
+
+# One request per whole segment can exceed the output budget — adapters treat
+# a budget-exhausted completion as a failed attempt (silent-truncation guard),
+# so large quotas would fail or template-ize entire segments. ≤3 personas per
+# request keeps ~1200 tokens/persona available under the 4000 ceiling.
+_MAX_PERSONAS_PER_REQUEST = 3
 
 
 class GeneratedPersonaDraft(BaseModel):
@@ -49,6 +63,9 @@ class GeneratedPersonaDraft(BaseModel):
     confidence: float = 0.85
     status: str = "ready"
     validation_warnings: list[str] = Field(default_factory=list)
+    # The ACTUAL origin: "provider/model" from provenance for LLM drafts,
+    # TEMPLATE_FALLBACK_MODEL for deterministic ones. Never a fabricated label.
+    generation_model: Optional[str] = None
 
 
 def calculate_segment_quotas(
@@ -684,6 +701,7 @@ def _generate_deterministic_persona_fallback(
         confidence=validation.confidence,
         status=validation.status,
         validation_warnings=validation.warnings,
+        generation_model=TEMPLATE_FALLBACK_MODEL,
     )
 
 
@@ -726,8 +744,8 @@ async def generate_personas_for_study(
                 global_idx += 1
             continue
 
-        # LLM-assisted generation
-        prompt_payload = {
+        # LLM-assisted generation — in sub-batches (see _MAX_PERSONAS_PER_REQUEST)
+        base_payload = {
             "study_context": study_ctx,
             "detected_domain": detected_domain,
             "segment": {
@@ -740,7 +758,6 @@ async def generate_personas_for_study(
                 {"text": getattr(c, "claim_text", ""), "category": getattr(c, "category", "general")}
                 for c in claims[:6]
             ],
-            "count_to_generate": count_for_seg,
         }
 
         system_prompt = (
@@ -760,30 +777,63 @@ async def generate_personas_for_study(
             "4. Ground every persona authentically in their regional lifestyle, domain behavior, and practical daily reality."
         )
 
-        request = LLMRequest(
-            task=TaskType.PERSONA_GENERATION,
-            messages=[
-                ChatMessage(role="system", content=system_prompt),
-                ChatMessage(role="user", content=json.dumps(prompt_payload)),
-            ],
-            json_mode=True,
-            temperature=0.3,
-        )
+        raw_personas: list[tuple[dict, str]] = []  # (persona dict, serving provider/model)
+        template_fill = 0  # personas owed by failed/empty batches — filled honestly below
+        remaining = count_for_seg
+        while remaining > 0:
+            batch_count = min(remaining, _MAX_PERSONAS_PER_REQUEST)
+            remaining -= batch_count
+            request = LLMRequest(
+                task=TaskType.PERSONA_GENERATION,
+                messages=[
+                    ChatMessage(role="system", content=system_prompt),
+                    ChatMessage(role="user", content=json.dumps({**base_payload, "count_to_generate": batch_count})),
+                ],
+                json_mode=True,
+                # 0.75, not 0.3: low temperature makes every segment's personas
+                # converge on the same archetype phrasing — diversity is a core
+                # quality metric. Structure safety comes from json_mode + the
+                # per-field validation below, not from a frozen sampler.
+                temperature=0.75,
+                # ~1200 tokens covers one persona's full schema with headroom;
+                # the adapter raises on budget-exhausted completions.
+                max_output_tokens=min(1200 * batch_count, 4000),
+            )
+            try:
+                result = await llm_service.complete(request)
+                served_by = (
+                    f"{result.provenance.served_by_provider}/{result.provenance.served_by_model}"
+                    if result.provenance.served_by_provider
+                    else "llm/unknown"
+                )
+                cleaned = re.sub(r"^```(?:json)?\s*", "", result.text.strip())
+                cleaned = re.sub(r"\s*```$", "", cleaned)
+                parsed = json.loads(cleaned)
+                batch_personas = parsed.get("personas", []) if isinstance(parsed, dict) else []
+                if batch_personas:
+                    # pair each draft with ITS batch's serving model — pool
+                    # failover mid-segment must not misattribute earlier batches
+                    raw_personas.extend((p, served_by) for p in batch_personas[:batch_count])
+                else:
+                    logger.warning(
+                        "persona generation returned no personas for segment %s — "
+                        "filling batch with labeled templates",
+                        seg_name,
+                    )
+                    template_fill += batch_count
+            except (AllCandidatesFailed, ContextWindowExceeded):
+                # Honest infrastructure failure — never quietly replaced with
+                # template personas pretending to be research output (R2/R6).
+                raise
+            except Exception:
+                logger.warning(
+                    "persona generation failed for segment %s — filling batch with labeled templates",
+                    seg_name,
+                    exc_info=True,
+                )
+                template_fill += batch_count
 
-        try:
-            result = await llm_service.complete(request)
-            cleaned = re.sub(r"^```(?:json)?\s*", "", result.text.strip())
-            cleaned = re.sub(r"\s*```$", "", cleaned)
-            parsed = json.loads(cleaned)
-            personas_list = parsed.get("personas", []) if isinstance(parsed, dict) else []
-
-            if not personas_list:
-                for i in range(count_for_seg):
-                    all_generated.append(_generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims))
-                    global_idx += 1
-                continue
-
-            for p_raw in personas_list[:count_for_seg]:
+        for p_raw, served_by in raw_personas[: count_for_seg - template_fill]:
                 fallback_draft = _generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims)
                 fallback_template = _RICH_ARCHETYPE_TEMPLATES[global_idx % len(_RICH_ARCHETYPE_TEMPLATES)]
                 name = p_raw.get("name") or fallback_template["name"]
@@ -898,14 +948,15 @@ async def generate_personas_for_study(
                         confidence=validation.confidence,
                         status=validation.status,
                         validation_warnings=validation.warnings,
+                        generation_model=served_by,
                     )
                 )
                 global_idx += 1
 
-        except Exception:
-            for i in range(count_for_seg):
-                all_generated.append(_generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims))
-                global_idx += 1
+        # Personas owed by failed/empty batches — honestly labeled templates.
+        for _ in range(min(template_fill, count_for_seg)):
+            all_generated.append(_generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims))
+            global_idx += 1
 
     return all_generated
 

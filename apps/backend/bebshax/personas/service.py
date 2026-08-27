@@ -206,7 +206,10 @@ class PersonaGenerationService:
                     name=draft.name,
                     status=draft.status,
                     version=1,
-                    generation_model="qwen3.5-grounded" if self.llm_service else "deterministic-empirical-generator",
+                    # The draft carries its true origin (provenance-derived
+                    # provider/model or the template label) — never a
+                    # fabricated constant.
+                    generation_model=draft.generation_model or "deterministic-empirical-generator",
                     archetype=draft.archetype,
                     tagline=draft.tagline,
                     country_code=draft.country_code,

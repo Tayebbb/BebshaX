@@ -135,6 +135,11 @@ def preprocess_empathetic_dialogues(raw_files: List[Path], output_file: Path) ->
     """Preprocess EmpatheticDialogues parquet files."""
     total_written = 0
 
+    def _clean(text: str) -> str:
+        # The raw corpus escapes commas as "_comma_" (CSV-era artifact) —
+        # unescape so evidence text reads as natural language.
+        return text.replace("_comma_", ",").strip()
+
     with open(output_file, "w", encoding="utf-8") as out_f:
         for pf in raw_files:
             if not pf.exists():
@@ -146,9 +151,9 @@ def preprocess_empathetic_dialogues(raw_files: List[Path], output_file: Path) ->
                     "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, f"ed-{pf.stem}-{i}")),
                     "conv_id": str(row.get("conv_id", "")),
                     "speaker_idx": int(row.get("speaker_idx", 0)),
-                    "utterance": str(row.get("utterance", "")).strip(),
+                    "utterance": _clean(str(row.get("utterance", ""))),
                     "emotion": str(row.get("context", "")).strip(),
-                    "situation": str(row.get("prompt", "")).strip(),
+                    "situation": _clean(str(row.get("prompt", ""))),
                 }
                 out_f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 total_written += 1
@@ -526,10 +531,23 @@ def generate_datasets_md(entries: List[DatasetEntry]) -> None:
         "",
         "Profiles follow a strict subset relationship: `minimal` ⊂ `development` ⊂ `evaluation` ⊂ `full`.",
         "",
-        "- **`minimal` (< 1 GB):** Persona seeds, conversation grounding, and health probes (`personahub_sample`, `synthetic_persona_chat`, `mmlu_micro`, `gsm8k_micro`).",
-        "- **`development` (< 5 GB):** Minimal + representative business review evidence and empathetic dialogues (`amazon_reviews_office_products`, `empathetic_dialogues_slice`).",
+        "- **`minimal` (< 1 GB):** Persona diversity seeds, dialogue examples, and health probes (`personahub_sample`, `synthetic_persona_chat`, `mmlu_micro`, `gsm8k_micro`). **No grounding corpora** — with only this profile the evidence store is empty and every persona claim is honestly INFERRED/SYNTHETIC (never fabricated OBSERVED).",
+        "- **`development` (< 5 GB):** Minimal + the citable grounding corpora — real business review evidence and empathetic dialogues (`amazon_reviews_office_products`, `empathetic_dialogues_slice`).",
         "- **`evaluation` (< 5 GB):** Development + router benchmark evaluation suites (`router_arena`, `xroute_bench`).",
         "- **`full` (< 10 GB):** Evaluation + optional/gated conversation sets and personality traits (`lmsys_chat_1m`, `mbti_personality_traits`).",
+        "",
+        "## Evidence Roles",
+        "",
+        "Each dataset has exactly one role in `bebshax/persona/evidence.py::DATASET_ROLES` — a data table, not filename luck:",
+        "",
+        "| Role | Meaning | Datasets |",
+        "| --- | --- | --- |",
+        "| `grounding` | Real-world records personas may cite as OBSERVED evidence | `amazon_reviews_office_products`, `empathetic_dialogues_slice`, `mbti_personality_traits` |",
+        "| `seed` | Synthetic diversity sketches — generation perspective only, NEVER citable | `personahub_sample` |",
+        "| `dialogue_examples` | Synthetic/LLM-generated conversations — never evidence | `synthetic_persona_chat`, `lmsys_chat_1m` |",
+        "| `probe` | Routing/capability checks — never evidence | `mmlu_micro`, `gsm8k_micro`, `router_arena`, `xroute_bench` |",
+        "",
+        "Unknown dataset files default to `grounding` (the drop-a-real-corpus-in extension path); every managed dataset above must have an explicit row — test-enforced.",
         "",
         "## Dataset Manifest & Gebru Datasheets",
         "",

@@ -107,11 +107,14 @@ async def run_interview(llm, tag: str) -> dict:
 
     async with session_maker() as session:
         business = await create_business(
-            session, "TiffinBox", "healthy Bengali lunch subscription, 3000 BDT/month, Dhaka"
+            session,
+            "TiffinBox",
+            "healthy Bengali lunch subscription, 3000 BDT/month, Dhaka",
+            owner_id="usr_system_holder",
         )
         profile = _persona()
         profile.business_id = business.id
-        await save_persona(session, profile)
+        await save_persona(session, profile, owner_id="usr_system_holder")
 
     memory = MemoryService(session_maker, HashEmbedding())
     engine = InterviewEngine(llm, session_maker, memory=memory)

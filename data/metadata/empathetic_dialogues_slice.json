@@ -66,7 +66,7 @@
   "raw_sha256": null,
   "processed_sha256": null,
   "actual_raw_sha256": "b87be2fcc3db1e49a132eb1d3d03d8ab17518399e6113e6f643ebb6956cd2c81",
-  "actual_processed_sha256": "11273629096f405a97f6cbee9d8d7d37241cd887008c5d5b6e426a842a013ee8",
+  "actual_processed_sha256": "91ff9b3a98af6c692d1502dbc0085841e5ee5c3f263d88db6f7f946b4dbb06d2",
   "processed_record_count": 88703,
-  "processed_size_bytes": 29842640
+  "processed_size_bytes": 29495750
 }

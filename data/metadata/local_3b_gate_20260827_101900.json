@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-08-27T04:19:00.620827+00:00",
+  "bar": 8.0,
+  "rubric_weights": {
+    "persona_consistency": 0.25,
+    "naturalness": 0.2,
+    "instruction_following": 0.15,
+    "context_memory": 0.15,
+    "specificity": 0.15,
+    "response_stability": 0.1
+  },
+  "arm_a": {
+    "model": "ollama/llama3.2:3b",
+    "tag": "local/llama3.2:3b",
+    "turns": [
+      {
+        "question": "Walk me through what you ate for lunch yesterday — where did it come from and what did it cost?",
+        "reply": "So, I had my usual street lunch yesterday. It was actually a bit of a struggle because I'm trying to cut back on oily food that makes me feel sluggish in the afternoons. So, I went to this one spot near my office that serves decent Bengali home-style food - you know, like dal, fish curry, and rice. The lady who runs it is really nice and knows exactly how much of each ingredient to put in so it's not too oily.\n\nI think the total cost was around 120 BDT for a plate. It was actually pretty good value considering I usually spend around 150-200 BDT on lunch if I'm eating at a restaurant or ordering from a food cart elsewhere. But, you know, sometimes it's nice to have options and this spot is one of the better ones in that price range.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 12722
+      },
+      {
+        "question": "What is the most frustrating part of how you handle lunch on workdays?",
+        "reply": "Honestly, I'd say it's the energy crash that comes at around 3 pm every day. You know, after eating all that oily food for lunch, I just feel really sluggish and tired. It's like my body is saying, \"Okay, time to take a nap.\" And I'm trying to be productive until then, but it's hard.\n\nI've tried some of those energy-boosting drinks or snacks from the convenience store, but they don't really work for me. I mean, I'd rather not spend that extra money on something just to get through the rest of the day. It feels like I'm just putting Band-Aids on my problems instead of addressing the root cause.\n\nI wish there was a way to make healthier food options more affordable and convenient, you know? Something that would allow me to eat well without breaking the bank or feeling guilty about it.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 4585
+      },
+      {
+        "question": "Would you pay 3000 BDT per month for healthy delivered lunches? Why or why not?",
+        "reply": "Honestly, I'm not sure if 3000 BDT is a price point I'd be comfortable with. Like I said, I try to stick to my budget of around 150-200 BDT per day for lunch. That's just what I'm used to and it works for me.\n\nI mean, don't get me wrong, the idea of healthy delivered lunches sounds great in theory... but 3000 BDT is a lot of money. I'd need to be convinced that this service would really deliver (no pun intended) on its promises and make a significant impact on my daily life.\n\nFor me, it's not just about the food itself, it's also about the cost per meal. If I'm paying 3000 BDT for a month, that's like, 150-200 BDT per day... which is exactly what I already spend on lunch every day. I'd need to know that this service would offer something unique or better value than what I can get from my usual options.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 6363
+      },
+      {
+        "question": "Earlier you told me what lunch costs you — how does that compare over a month?",
+        "reply": "Yeah, so I mentioned earlier that my daily lunch budget is around 100-150 BDT. So, if I do the math... for a whole month, it would be around 2,500 to 3,600 BDT.\n\nNow, comparing that to the 3000 BDT you mentioned, it's actually not that far off. And like I said before, I'm trying to cut back on oily food that makes me feel sluggish in the afternoons... so if a healthy delivered lunch service could help with that, maybe I'd be more willing to pay a bit more.\n\nBut at the end of the day, it's still about whether or not I think the value is there. Can this service really deliver on its promises and make a difference in my daily life?",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 5048
+      },
+      {
+        "question": "What would make you cancel such a subscription after the first month?",
+        "reply": "Honestly, if a service fails to meet my expectations or can't deliver on its promises, I'd probably cancel it within the first week. That's just how I am - I like to stick with what works and cut loose when something doesn't.\n\nFor me, if a healthy delivered lunch service couldn't provide at least 3-4 days of decent, non-oily food that really helps me power through my day, I'd probably start feeling frustrated and cancel it. Maybe after the first week, I'd give them another chance, but if they're not meeting their promises, there's no point in continuing.\n\nI'm also pretty particular about my lunch - like, I need something that's not just healthy, but also tastes good and is convenient to eat on-the-go. If a service can't deliver on those fronts, I'd lose interest quickly.",
+        "served_by": "ollama/llama3.2:3b",
+        "latency_ms": 5119
+      }
+    ],
+    "total_ms": 33838,
+    "avg_ms": 6768,
+    "weighted": 9.05,
+    "dims": {
+      "persona_consistency": 9,
+      "naturalness": 8,
+      "instruction_following": 9,
+      "context_memory": 10,
+      "specificity": 9,
+      "response_stability": 10
+    }
+  },
+  "arm_b": {
+    "model": "freellmpool/fast (see served_by)",
+    "tag": "freellmpool/fast",
+    "turns": [
+      {
+        "question": "Walk me through what you ate for lunch yesterday — where did it come from and what did it cost?",
+        "reply": "Yesterday was a regular workday. I grabbed a plate of dal and rice from the street vendor near my office. It usually costs around 120 BDT. I know it's not the healthiest option, but it's quick and affordable. I also had a piece of fruit for dessert, which was about 30 BDT. So, total lunch cost was around 150 BDT.",
+        "served_by": "llm7/codestral-latest",
+        "latency_ms": 7003
+      },
+      {
+        "question": "What is the most frustrating part of how you handle lunch on workdays?",
+        "reply": "The most frustrating part is the energy crash I get in the afternoon. After eating that oily street lunch, I feel sluggish and tired. It's hard to focus on my work, and I end up taking a nap in the afternoon. It's not good for my productivity, and I feel guilty about it.",
+        "served_by": "llm7/codestral-latest",
+        "latency_ms": 1120
+      },
+      {
+        "question": "Would you pay 3000 BDT per month for healthy delivered lunches? Why or why not?",
+        "reply": "I haven't thought about that much, but usually I'd probably say no. 3000 BDT is a lot of money for me. I'm careful with my money, and I don't have that much extra to spend on subscriptions. Also, I'm not sure if the food will be as good as what I'm used to. I like the taste of Bengali home-style food, and I'm not sure if a delivery service will be able to match that.",
+        "served_by": "llm7/codestral-latest",
+        "latency_ms": 2311
+      },
+      {
+        "question": "Earlier you told me what lunch costs you — how does that compare over a month?",
+        "reply": "I usually spend around 100-150 BDT per day on lunch. That's about 2,500-3,600 BDT per month. I know that's not a lot, but I need to be careful with my money. I don't have a lot of extra to spend, so I try to keep my lunch costs as low as possible.",
+        "served_by": "llm7/codestral-latest",
+        "latency_ms": 1099
+      },
+      {
+        "question": "What would make you cancel such a subscription after the first month?",
+        "reply": "If the food doesn't taste as good as what I'm used to, that would make me cancel. I'm not sure if a delivery service will be able to match the taste of Bengali home-style food. Also, if the delivery is too slow or the food arrives cold, that would be frustrating. I'm not sure if I can deal with that.",
+        "served_by": "llm7/codestral-latest",
+        "latency_ms": 1073
+      }
+    ],
+    "total_ms": 12607,
+    "avg_ms": 2521,
+    "weighted": 8.05,
+    "dims": {
+      "persona_consistency": 8,
+      "naturalness": 7,
+      "instruction_following": 8,
+      "context_memory": 9,
+      "specificity": 8,
+      "response_stability": 9
+    }
+  },
+  "judge": {
+    "route": "llm7/codestral-latest",
+    "notes": "A maintains consistency and naturalness better, while B is slightly more concise but less vivid."
+  }
+}
