@@ -45,12 +45,12 @@ export const BebshaXLogo: React.FC<BebshaXLogoProps> = ({
         <defs>
           <linearGradient id="goldStroke" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#FDE68A" />
-            <stop offset="50%" stopColor="#F6C878" />
+            <stop offset="50%" stopColor="var(--status-warn-text)" />
             <stop offset="100%" stopColor="#D4AF37" />
           </linearGradient>
           <linearGradient id="goldGlow" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#FFFBEB" />
-            <stop offset="100%" stopColor="#F6C878" />
+            <stop offset="100%" stopColor="var(--status-warn-text)" />
           </linearGradient>
           <filter id="nodeGlow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" />
@@ -92,7 +92,7 @@ export const BebshaXLogo: React.FC<BebshaXLogoProps> = ({
 
             {/* Central Nexus Core Node */}
             <circle cx="16" cy="16" r="3.2" fill="url(#goldGlow)" filter="url(#nodeGlow)" />
-            <circle cx="16" cy="16" r="1.4" fill="#080909" />
+            <circle cx="16" cy="16" r="1.4" fill="var(--bg-pure)" />
           </g>
         )}
 
@@ -114,7 +114,7 @@ export const BebshaXLogo: React.FC<BebshaXLogoProps> = ({
             <circle cx="16" cy="29.5" r="2.5" fill="url(#goldGlow)" filter="url(#nodeGlow)" />
             <circle cx="3" cy="16" r="2.5" fill="url(#goldGlow)" filter="url(#nodeGlow)" />
             <circle cx="16" cy="16" r="3.4" fill="url(#goldGlow)" filter="url(#nodeGlow)" />
-            <circle cx="16" cy="16" r="1.5" fill="#080909" />
+            <circle cx="16" cy="16" r="1.5" fill="var(--bg-pure)" />
           </g>
         )}
 
@@ -148,7 +148,7 @@ export const BebshaXLogo: React.FC<BebshaXLogoProps> = ({
             fontSize: textSize,
             fontWeight: 700,
             letterSpacing: '-0.03em',
-            color: '#FFFFFF',
+            color: 'var(--text-main)',
             display: 'inline-flex',
             alignItems: 'baseline',
           }}

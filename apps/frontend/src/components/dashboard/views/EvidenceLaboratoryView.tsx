@@ -157,7 +157,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             alignItems: 'center',
             gap: '5px',
             background: 'rgba(16, 185, 129, 0.12)',
-            color: '#10B981',
+            color: 'var(--accent-emerald)',
             border: '1px solid rgba(16, 185, 129, 0.3)',
             padding: '3px 10px',
             borderRadius: '6px',
@@ -216,7 +216,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
       review: { bg: 'rgba(245, 158, 11, 0.12)', text: '#FBBF24', border: 'rgba(245, 158, 11, 0.3)' },
       web: { bg: 'rgba(59, 130, 246, 0.12)', text: '#60A5FA', border: 'rgba(59, 130, 246, 0.3)' },
     };
-    const c = colors[type] || { bg: 'rgba(156, 163, 175, 0.12)', text: '#9CA3AF', border: 'rgba(156, 163, 175, 0.3)' };
+    const c = colors[type] || { bg: 'rgba(156, 163, 175, 0.12)', text: 'var(--text-muted)', border: 'rgba(156, 163, 175, 0.3)' };
     return (
       <span
         style={{
@@ -242,7 +242,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
         flexDirection: 'column',
         minHeight: '100vh',
         background: '#08090B',
-        color: '#F5F7FA',
+        color: 'var(--text-primary)',
         fontFamily: 'Inter, -apple-system, sans-serif',
       }}
     >
@@ -250,8 +250,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
       <header
         style={{
           padding: '20px 32px',
-          borderBottom: '1px solid #1E2330',
-          background: '#0D0F14',
+          borderBottom: '1px solid var(--bg-card-hover)',
+          background: 'var(--bg-secondary)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -265,9 +265,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             <button
               onClick={onBack}
               style={{
-                background: '#12151C',
-                border: '1px solid #1E2330',
-                color: '#9299A5',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--bg-card-hover)',
+                color: 'var(--text-secondary)',
                 borderRadius: '8px',
                 padding: '8px 12px',
                 display: 'flex',
@@ -284,9 +284,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span
                 style={{
-                  background: 'rgba(20, 184, 166, 0.15)',
-                  color: '#22D3EE',
-                  border: '1px solid rgba(20, 184, 166, 0.3)',
+                  background: 'var(--accent-subtle)',
+                  color: 'var(--accent-cyan)',
+                  border: '1px solid var(--border-hover)',
                   padding: '2px 8px',
                   borderRadius: '4px',
                   fontSize: '0.72rem',
@@ -297,11 +297,11 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               >
                 Evidence Laboratory
               </span>
-              <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#F5F7FA' }}>
+              <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
                 {study?.title || study?.prompt || 'Study Research & Evidence'}
               </h1>
             </div>
-            <p style={{ fontSize: '0.82rem', color: '#8D9999', margin: '4px 0 0 0' }}>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
               Empirical market grounding, public sources, and verified claim confidence
             </p>
           </div>
@@ -313,7 +313,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           disabled={isRunningResearch}
           style={{
             background: isRunningResearch ? '#0D9488' : 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-            color: '#080A0A',
+            color: 'var(--text-on-accent)',
             border: 'none',
             borderRadius: '8px',
             padding: '10px 20px',
@@ -323,7 +323,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            boxShadow: '0 4px 14px rgba(20, 184, 166, 0.35)',
+            boxShadow: '0 4px 14px var(--border-hover)',
             transition: 'all 0.2s ease',
           }}
         >
@@ -347,22 +347,22 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
         {isRunningResearch && (
           <div
             style={{
-              background: '#0D1111',
+              background: 'var(--bg-secondary)',
               border: '1px solid #14B8A6',
               borderRadius: '12px',
               padding: '20px 24px',
               marginBottom: '24px',
-              boxShadow: '0 8px 24px rgba(20, 184, 166, 0.15)',
+              boxShadow: '0 8px 24px var(--accent-subtle)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <RefreshCw size={18} color="#22D3EE" className="spin" />
-                <span style={{ fontSize: '0.92rem', fontWeight: 600, color: '#F5F7FA' }}>
+                <RefreshCw size={18} color="var(--accent-cyan)" className="spin" />
+                <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                   {researchStatusText}
                 </span>
               </div>
-              <span style={{ fontSize: '0.8rem', color: '#22D3EE', fontWeight: 600 }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
                 Step {researchProgressStep} of 7
               </span>
             </div>
@@ -380,10 +380,10 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                       height: '6px',
                       borderRadius: '3px',
                       background: isPassed
-                        ? '#10B981'
+                        ? 'var(--accent-emerald)'
                         : isCurrent
                         ? '#14B8A6'
-                        : '#202727',
+                        : 'var(--border-subtle)',
                       transition: 'background 0.3s ease',
                     }}
                   />
@@ -405,29 +405,29 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           {/* Coverage Card */}
           <div
             style={{
-              background: '#0D1111',
-              border: '1px solid #202727',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '10px',
               padding: '18px 20px',
             }}
           >
-            <div style={{ fontSize: '0.78rem', color: '#8D9999', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, marginBottom: '6px' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, marginBottom: '6px' }}>
               Evidence Coverage
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ fontSize: '1.9rem', fontWeight: 800, color: '#F5F7FA' }}>
+              <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                 {summary?.evidence_coverage ?? 68}%
               </span>
-              <span style={{ fontSize: '0.8rem', color: '#10B981', fontWeight: 600 }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--accent-emerald)', fontWeight: 600 }}>
                 {summary?.supported_count ?? 3} verified claims
               </span>
             </div>
-            <div style={{ height: '5px', background: '#202727', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
+            <div style={{ height: '5px', background: 'var(--border-subtle)', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
               <div
                 style={{
                   height: '100%',
                   width: `${summary?.evidence_coverage ?? 68}%`,
-                  background: 'linear-gradient(90deg, #14B8A6 0%, #10B981 100%)',
+                  background: 'linear-gradient(90deg, #14B8A6 0%, var(--accent-emerald) 100%)',
                 }}
               />
             </div>
@@ -436,24 +436,24 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           {/* Supported Card */}
           <div
             style={{
-              background: '#0D1111',
+              background: 'var(--bg-secondary)',
               border: '1px solid rgba(16, 185, 129, 0.25)',
               borderRadius: '10px',
               padding: '18px 20px',
             }}
           >
-            <div style={{ fontSize: '0.78rem', color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, marginBottom: '6px' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--accent-emerald)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, marginBottom: '6px' }}>
               Supported Evidence (Green)
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ fontSize: '1.9rem', fontWeight: 800, color: '#10B981' }}>
+              <span style={{ fontSize: '1.9rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>
                 {summary?.supported_pct ?? 60}%
               </span>
-              <span style={{ fontSize: '0.8rem', color: '#9299A5' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 ({summary?.supported_count ?? 3} claims)
               </span>
             </div>
-            <p style={{ fontSize: '0.74rem', color: '#9299A5', margin: '8px 0 0 0' }}>
+            <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: '8px 0 0 0' }}>
               Citations from public forums, surveys & reports
             </p>
           </div>
@@ -461,7 +461,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           {/* Inferred Card */}
           <div
             style={{
-              background: '#0D0F14',
+              background: 'var(--bg-secondary)',
               border: '1px solid rgba(245, 158, 11, 0.25)',
               borderRadius: '10px',
               padding: '18px 20px',
@@ -474,11 +474,11 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               <span style={{ fontSize: '1.9rem', fontWeight: 800, color: '#F59E0B' }}>
                 {summary?.inferred_pct ?? 20}%
               </span>
-              <span style={{ fontSize: '0.8rem', color: '#9299A5' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 ({summary?.inferred_count ?? 1} claim)
               </span>
             </div>
-            <p style={{ fontSize: '0.74rem', color: '#9299A5', margin: '8px 0 0 0' }}>
+            <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: '8px 0 0 0' }}>
               Plausible extrapolation needing interview probe
             </p>
           </div>
@@ -486,7 +486,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           {/* Unsupported Card */}
           <div
             style={{
-              background: '#0D0F14',
+              background: 'var(--bg-secondary)',
               border: '1px solid rgba(239, 68, 68, 0.25)',
               borderRadius: '10px',
               padding: '18px 20px',
@@ -499,11 +499,11 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               <span style={{ fontSize: '1.9rem', fontWeight: 800, color: '#EF4444' }}>
                 {summary?.unsupported_pct ?? 20}%
               </span>
-              <span style={{ fontSize: '0.8rem', color: '#9299A5' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 ({summary?.unsupported_count ?? 1} claim)
               </span>
             </div>
-            <p style={{ fontSize: '0.74rem', color: '#9299A5', margin: '8px 0 0 0' }}>
+            <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: '8px 0 0 0' }}>
               Ungrounded assumptions or contradicted points
             </p>
           </div>
@@ -515,7 +515,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            borderBottom: '1px solid #1E2330',
+            borderBottom: '1px solid var(--bg-card-hover)',
             marginBottom: '20px',
           }}
         >
@@ -526,7 +526,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 background: 'transparent',
                 border: 'none',
                 borderBottom: activeTab === 'claims' ? '2px solid #6366F1' : '2px solid transparent',
-                color: activeTab === 'claims' ? '#F5F7FA' : '#9299A5',
+                color: activeTab === 'claims' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 padding: '12px 4px',
                 fontSize: '0.9rem',
                 fontWeight: activeTab === 'claims' ? 600 : 400,
@@ -546,7 +546,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 background: 'transparent',
                 border: 'none',
                 borderBottom: activeTab === 'sources' ? '2px solid #6366F1' : '2px solid transparent',
-                color: activeTab === 'sources' ? '#F5F7FA' : '#9299A5',
+                color: activeTab === 'sources' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 padding: '12px 4px',
                 fontSize: '0.9rem',
                 fontWeight: activeTab === 'sources' ? 600 : 400,
@@ -566,7 +566,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 background: 'transparent',
                 border: 'none',
                 borderBottom: activeTab === 'runs' ? '2px solid #6366F1' : '2px solid transparent',
-                color: activeTab === 'runs' ? '#F5F7FA' : '#9299A5',
+                color: activeTab === 'runs' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 padding: '12px 4px',
                 fontSize: '0.9rem',
                 fontWeight: activeTab === 'runs' ? 600 : 400,
@@ -583,7 +583,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
 
           {/* Search Bar */}
           <div style={{ position: 'relative', width: '280px' }}>
-            <Search size={14} color="#9299A5" style={{ position: 'absolute', left: '12px', top: '10px' }} />
+            <Search size={14} color="var(--text-secondary)" style={{ position: 'absolute', left: '12px', top: '10px' }} />
             <input
               type="text"
               placeholder="Search claims & evidence..."
@@ -591,11 +591,11 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
                 width: '100%',
-                background: '#0D0F14',
-                border: '1px solid #1E2330',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--bg-card-hover)',
                 borderRadius: '6px',
                 padding: '7px 12px 7px 34px',
-                color: '#F5F7FA',
+                color: 'var(--text-primary)',
                 fontSize: '0.84rem',
                 outline: 'none',
               }}
@@ -608,7 +608,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           <div>
             {/* Filter Pills */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.8rem', color: '#9299A5', marginRight: '4px' }}>Filter Status:</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginRight: '4px' }}>Filter Status:</span>
               {[
                 { id: 'all', label: 'All' },
                 { id: 'supported', label: 'Evidence-Supported (Green)' },
@@ -619,9 +619,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                   key={pill.id}
                   onClick={() => setStatusFilter(pill.id)}
                   style={{
-                    background: statusFilter === pill.id ? 'rgba(99, 102, 241, 0.2)' : '#0D0F14',
-                    color: statusFilter === pill.id ? '#818CF8' : '#9299A5',
-                    border: statusFilter === pill.id ? '1px solid #6366F1' : '1px solid #1E2330',
+                    background: statusFilter === pill.id ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-secondary)',
+                    color: statusFilter === pill.id ? '#818CF8' : 'var(--text-secondary)',
+                    border: statusFilter === pill.id ? '1px solid #6366F1' : '1px solid var(--bg-card-hover)',
                     borderRadius: '20px',
                     padding: '5px 12px',
                     fontSize: '0.78rem',
@@ -640,8 +640,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 <div
                   key={claim.id}
                   style={{
-                    background: '#0D0F14',
-                    border: '1px solid #1E2330',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--bg-card-hover)',
                     borderRadius: '10px',
                     padding: '20px',
                     display: 'flex',
@@ -655,9 +655,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                       {getStatusBadge(claim.status)}
                       <span
                         style={{
-                          background: '#12151C',
-                          color: '#9299A5',
-                          border: '1px solid #1E2330',
+                          background: 'var(--bg-card)',
+                          color: 'var(--text-secondary)',
+                          border: '1px solid var(--bg-card-hover)',
                           padding: '2px 8px',
                           borderRadius: '4px',
                           fontSize: '0.74rem',
@@ -670,40 +670,40 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.8rem', color: '#9299A5' }}>Confidence:</span>
-                      <div style={{ width: '60px', height: '6px', background: '#1E2330', borderRadius: '3px', overflow: 'hidden' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Confidence:</span>
+                      <div style={{ width: '60px', height: '6px', background: 'var(--bg-card-hover)', borderRadius: '3px', overflow: 'hidden' }}>
                         <div
                           style={{
                             height: '100%',
                             width: `${Math.round(claim.confidence * 100)}%`,
                             background:
                               claim.status === 'supported'
-                                ? '#10B981'
+                                ? 'var(--accent-emerald)'
                                 : claim.status === 'inference'
                                 ? '#F59E0B'
                                 : '#EF4444',
                           }}
                         />
                       </div>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#F5F7FA' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                         {Math.round(claim.confidence * 100)}%
                       </span>
                     </div>
                   </div>
 
-                  <p style={{ fontSize: '0.96rem', fontWeight: 600, color: '#F5F7FA', margin: '4px 0 0 0', lineHeight: 1.5 }}>
+                  <p style={{ fontSize: '0.96rem', fontWeight: 600, color: 'var(--text-primary)', margin: '4px 0 0 0', lineHeight: 1.5 }}>
                     {claim.claim_text}
                   </p>
 
                   {claim.rationale && (
-                    <p style={{ fontSize: '0.84rem', color: '#9299A5', margin: 0, lineHeight: 1.4 }}>
+                    <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
                       {claim.rationale}
                     </p>
                   )}
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid #1E2330' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid var(--bg-card-hover)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.78rem', color: '#9299A5' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                         {claim.supporting_source_ids.length > 0 ? (
                           <>Supported by {claim.supporting_source_ids.length} empirical sources</>
                         ) : claim.contradicting_source_ids.length > 0 ? (
@@ -739,12 +739,12 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               {filteredClaims.length === 0 && (
                 <div
                   style={{
-                    background: '#0D0F14',
-                    border: '1px solid #1E2330',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--bg-card-hover)',
                     borderRadius: '10px',
                     padding: '40px 20px',
                     textAlign: 'center',
-                    color: '#9299A5',
+                    color: 'var(--text-secondary)',
                   }}
                 >
                   <p style={{ fontSize: '0.92rem', margin: '0 0 12px 0' }}>No claims match your filters.</p>
@@ -754,8 +754,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                       setSearchQuery('');
                     }}
                     style={{
-                      background: '#12151C',
-                      border: '1px solid #1E2330',
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--bg-card-hover)',
                       color: '#818CF8',
                       borderRadius: '6px',
                       padding: '6px 14px',
@@ -775,7 +775,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
         {activeTab === 'sources' && (
           <div>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.8rem', color: '#9299A5', marginRight: '4px' }}>Source Type:</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginRight: '4px' }}>Source Type:</span>
               {[
                 { id: 'all', label: 'All Sources' },
                 { id: 'web', label: 'Web' },
@@ -787,9 +787,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                   key={pill.id}
                   onClick={() => setSourceTypeFilter(pill.id)}
                   style={{
-                    background: sourceTypeFilter === pill.id ? 'rgba(99, 102, 241, 0.2)' : '#0D0F14',
-                    color: sourceTypeFilter === pill.id ? '#818CF8' : '#9299A5',
-                    border: sourceTypeFilter === pill.id ? '1px solid #6366F1' : '1px solid #1E2330',
+                    background: sourceTypeFilter === pill.id ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-secondary)',
+                    color: sourceTypeFilter === pill.id ? '#818CF8' : 'var(--text-secondary)',
+                    border: sourceTypeFilter === pill.id ? '1px solid #6366F1' : '1px solid var(--bg-card-hover)',
                     borderRadius: '20px',
                     padding: '5px 12px',
                     fontSize: '0.78rem',
@@ -807,8 +807,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 <div
                   key={src.id}
                   style={{
-                    background: '#0D0F14',
-                    border: '1px solid #1E2330',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--bg-card-hover)',
                     borderRadius: '10px',
                     padding: '20px',
                     display: 'flex',
@@ -825,7 +825,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '0.78rem', color: '#10B981', fontWeight: 600 }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--accent-emerald)', fontWeight: 600 }}>
                         {Math.round(src.relevance_score * 100)}% Relevance
                       </span>
                       {src.url && (
@@ -833,7 +833,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                           href={src.url}
                           target="_blank"
                           rel="noreferrer"
-                          style={{ color: '#9299A5', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', textDecoration: 'none' }}
+                          style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', textDecoration: 'none' }}
                         >
                           Open <ExternalLink size={12} />
                         </a>
@@ -841,11 +841,11 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                     </div>
                   </div>
 
-                  <h3 style={{ fontSize: '0.98rem', fontWeight: 600, color: '#F5F7FA', margin: '4px 0 0 0' }}>
+                  <h3 style={{ fontSize: '0.98rem', fontWeight: 600, color: 'var(--text-primary)', margin: '4px 0 0 0' }}>
                     {src.title}
                   </h3>
 
-                  <p style={{ fontSize: '0.86rem', color: '#9299A5', margin: 0, lineHeight: 1.5 }}>
+                  <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
                     {src.content}
                   </p>
                 </div>
@@ -861,8 +861,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               <div
                 key={r.id}
                 style={{
-                  background: '#0D0F14',
-                  border: '1px solid #1E2330',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--bg-card-hover)',
                   borderRadius: '10px',
                   padding: '18px 20px',
                   display: 'flex',
@@ -875,7 +875,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                     <span
                       style={{
                         background: r.status === 'completed' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
-                        color: r.status === 'completed' ? '#10B981' : '#818CF8',
+                        color: r.status === 'completed' ? 'var(--accent-emerald)' : '#818CF8',
                         padding: '2px 8px',
                         borderRadius: '4px',
                         fontSize: '0.74rem',
@@ -885,16 +885,16 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                     >
                       {r.status}
                     </span>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#F5F7FA' }}>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                       Research Run {r.id.slice(0, 10)}
                     </span>
                   </div>
-                  <p style={{ fontSize: '0.78rem', color: '#9299A5', margin: 0 }}>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0 }}>
                     {r.query_count} queries generated • {r.source_count} sources collected • {r.claim_count} claims synthesized
                   </p>
                 </div>
 
-                <div style={{ fontSize: '0.8rem', color: '#9299A5' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   {r.completed_at ? new Date(r.completed_at).toLocaleString() : new Date(r.created_at).toLocaleString()}
                 </div>
               </div>
@@ -921,7 +921,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
         >
           <div
             style={{
-              background: '#0D0F14',
+              background: 'var(--bg-secondary)',
               border: '1px solid #2A3042',
               borderRadius: '12px',
               maxWidth: '750px',
@@ -945,7 +945,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: '#9299A5',
+                  color: 'var(--text-secondary)',
                   fontSize: '1.2rem',
                   cursor: 'pointer',
                 }}
@@ -956,15 +956,15 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
 
             <div style={{ marginBottom: '14px' }}>{getStatusBadge(selectedClaimDetail.status)}</div>
 
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#F5F7FA', margin: '0 0 12px 0', lineHeight: 1.4 }}>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px 0', lineHeight: 1.4 }}>
               {selectedClaimDetail.claim_text}
             </h2>
 
             {/* Why does BebshaX believe this? */}
             <div
               style={{
-                background: '#12151C',
-                border: '1px solid #1E2330',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--bg-card-hover)',
                 borderRadius: '8px',
                 padding: '16px',
                 marginBottom: '20px',
@@ -973,7 +973,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#818CF8', marginBottom: '6px' }}>
                 Why does BebshaX evaluate this as {selectedClaimDetail.status.toUpperCase()}?
               </div>
-              <p style={{ fontSize: '0.86rem', color: '#F5F7FA', margin: 0, lineHeight: 1.5 }}>
+              <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
                 {selectedClaimDetail.rationale ||
                   'Extracted through semantic matching of domain research sources and verified against student survey distributions.'}
               </p>
@@ -981,7 +981,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
 
             {/* Supporting Sources */}
             <div style={{ marginBottom: '20px' }}>
-              <h4 style={{ fontSize: '0.86rem', fontWeight: 600, color: '#9299A5', textTransform: 'uppercase', marginBottom: '10px' }}>
+              <h4 style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '10px' }}>
                 Supporting Empirical Citations ({selectedClaimDetail.supporting_sources.length})
               </h4>
 
@@ -990,8 +990,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                   <div
                     key={src.id}
                     style={{
-                      background: '#12151C',
-                      border: '1px solid #1E2330',
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--bg-card-hover)',
                       borderRadius: '8px',
                       padding: '14px',
                     }}
@@ -1005,20 +1005,20 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                           href={src.url}
                           target="_blank"
                           rel="noreferrer"
-                          style={{ color: '#9299A5', fontSize: '0.76rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          style={{ color: 'var(--text-secondary)', fontSize: '0.76rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
                         >
                           Link <ExternalLink size={11} />
                         </a>
                       )}
                     </div>
-                    <p style={{ fontSize: '0.84rem', color: '#F5F7FA', margin: 0, lineHeight: 1.4 }}>
+                    <p style={{ fontSize: '0.84rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.4 }}>
                       "{src.content}"
                     </p>
                   </div>
                 ))}
 
                 {selectedClaimDetail.supporting_sources.length === 0 && (
-                  <p style={{ fontSize: '0.84rem', color: '#9299A5', fontStyle: 'italic' }}>
+                  <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
                     No direct supporting citations found in the corpus. This claim is flagged as an unverified model assumption.
                   </p>
                 )}
@@ -1030,7 +1030,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 onClick={() => setSelectedClaimDetail(null)}
                 style={{
                   background: '#6366F1',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 18px',

@@ -94,12 +94,12 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
               <Bot className="w-3 h-3" />
               Adaptive Persona Interviews
             </span>
-            <span className="text-xs text-[#8D9999]">Part 6 Research Layer</span>
+            <span className="text-xs text-[var(--text-secondary)]">Part 6 Research Layer</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
             Customer Interview Lab
           </h1>
-          <p className="text-xs md:text-sm text-[#8D9999] mt-1">
+          <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-1">
             Engage with grounded synthetic personas to pressure-test pricing, discover friction,
             and extract structured behavioral insights with turn-level provenance.
           </p>
@@ -116,47 +116,47 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
 
       {/* 2. Metrics Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[#111717] border border-[#1F2C2C] rounded-2xl p-5 space-y-2 shadow-md">
-          <div className="flex items-center justify-between text-[#7F9191]">
+        <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
+          <div className="flex items-center justify-between text-[var(--text-muted)]">
             <span className="text-xs font-semibold uppercase tracking-wider">Total Interviews</span>
             <MessageSquare className="w-4 h-4 text-teal-400" />
           </div>
           <div className="text-2xl font-black text-white">{metrics.total_interviews}</div>
-          <p className="text-[11px] text-[#718282]">Recorded research sessions</p>
+          <p className="text-[11px] text-[var(--text-muted)]">Recorded research sessions</p>
         </div>
 
-        <div className="bg-[#111717] border border-[#1F2C2C] rounded-2xl p-5 space-y-2 shadow-md">
-          <div className="flex items-center justify-between text-[#7F9191]">
+        <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
+          <div className="flex items-center justify-between text-[var(--text-muted)]">
             <span className="text-xs font-semibold uppercase tracking-wider">Active Sessions</span>
             <Activity className="w-4 h-4 text-cyan-400" />
           </div>
           <div className="text-2xl font-black text-cyan-400">{metrics.active_interviews}</div>
-          <p className="text-[11px] text-[#718282]">Conversations in progress</p>
+          <p className="text-[11px] text-[var(--text-muted)]">Conversations in progress</p>
         </div>
 
-        <div className="bg-[#111717] border border-[#1F2C2C] rounded-2xl p-5 space-y-2 shadow-md">
-          <div className="flex items-center justify-between text-[#7F9191]">
+        <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
+          <div className="flex items-center justify-between text-[var(--text-muted)]">
             <span className="text-xs font-semibold uppercase tracking-wider">Completed</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-black text-emerald-400">{metrics.completed_interviews}</div>
-          <p className="text-[11px] text-[#718282]">Synthesized sessions</p>
+          <p className="text-[11px] text-[var(--text-muted)]">Synthesized sessions</p>
         </div>
 
-        <div className="bg-[#111717] border border-[#1F2C2C] rounded-2xl p-5 space-y-2 shadow-md">
-          <div className="flex items-center justify-between text-[#7F9191]">
+        <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
+          <div className="flex items-center justify-between text-[var(--text-muted)]">
             <span className="text-xs font-semibold uppercase tracking-wider">Structured Insights</span>
             <Award className="w-4 h-4 text-amber-400" />
           </div>
           <div className="text-2xl font-black text-amber-400">
             {metrics.total_insights_generated}
           </div>
-          <p className="text-[11px] text-[#718282]">Turn-provenance claims</p>
+          <p className="text-[11px] text-[var(--text-muted)]">Turn-provenance claims</p>
         </div>
       </div>
 
       {/* 3. Search and Filters */}
-      <div className="bg-[#111717] border border-[#1F2C2C] rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+      <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         {/* Search Input */}
         <form onSubmit={handleSearchSubmit} className="flex-1 relative">
           <Search className="w-4 h-4 text-[#5D6F6F] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -165,36 +165,36 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by persona name, objective, or topic..."
-            className="w-full bg-[#162020] border border-[#233333] focus:border-teal-500 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-[#5D6F6F] focus:outline-none transition-colors"
+            className="w-full bg-[var(--bg-card-hover)] border border-[var(--border-medium)] focus:border-teal-500 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-[#5D6F6F] focus:outline-none transition-colors"
           />
         </form>
 
         {/* Filters */}
         <div className="flex items-center gap-3 shrink-0">
-          <div className="flex items-center gap-1.5 bg-[#162020] border border-[#233333] rounded-xl px-3 py-1.5 text-xs">
-            <Filter className="w-3.5 h-3.5 text-[#7F9191]" />
+          <div className="flex items-center gap-1.5 bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-xl px-3 py-1.5 text-xs">
+            <Filter className="w-3.5 h-3.5 text-[var(--text-muted)]" />
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="bg-transparent text-[#B5C7C7] text-xs font-medium focus:outline-none cursor-pointer"
             >
-              <option value="all" className="bg-[#162020]">All Statuses</option>
-              <option value="active" className="bg-[#162020]">Active</option>
-              <option value="completed" className="bg-[#162020]">Completed</option>
+              <option value="all" className="bg-[var(--bg-card-hover)]">All Statuses</option>
+              <option value="active" className="bg-[var(--bg-card-hover)]">Active</option>
+              <option value="completed" className="bg-[var(--bg-card-hover)]">Completed</option>
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-[#162020] border border-[#233333] rounded-xl px-3 py-1.5 text-xs">
+          <div className="flex items-center gap-1.5 bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-xl px-3 py-1.5 text-xs">
             <select
               value={selectedObjective}
               onChange={(e) => setSelectedObjective(e.target.value)}
               className="bg-transparent text-[#B5C7C7] text-xs font-medium focus:outline-none cursor-pointer"
             >
-              <option value="all" className="bg-[#162020]">All Objectives</option>
-              <option value="Problem" className="bg-[#162020]">Problem Discovery</option>
-              <option value="Pricing" className="bg-[#162020]">Pricing & WTP</option>
-              <option value="Feature" className="bg-[#162020]">Feature Reaction</option>
-              <option value="Objection" className="bg-[#162020]">Objections</option>
+              <option value="all" className="bg-[var(--bg-card-hover)]">All Objectives</option>
+              <option value="Problem" className="bg-[var(--bg-card-hover)]">Problem Discovery</option>
+              <option value="Pricing" className="bg-[var(--bg-card-hover)]">Pricing & WTP</option>
+              <option value="Feature" className="bg-[var(--bg-card-hover)]">Feature Reaction</option>
+              <option value="Objection" className="bg-[var(--bg-card-hover)]">Objections</option>
             </select>
           </div>
         </div>
@@ -209,18 +209,18 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
 
       {/* 4. Interviews List Grid */}
       {isLoading ? (
-        <div className="p-16 text-center text-[#8D9999] space-y-4">
+        <div className="p-16 text-center text-[var(--text-secondary)] space-y-4">
           <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs">Loading study interviews...</p>
         </div>
       ) : filteredInterviews.length === 0 ? (
-        <div className="p-12 text-center bg-[#111717] border border-[#1F2C2C] rounded-2xl space-y-4">
+        <div className="p-12 text-center bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 mx-auto">
             <MessageSquare className="w-7 h-7" />
           </div>
           <div className="space-y-1">
             <h3 className="text-base font-bold text-white">No Interviews Found</h3>
-            <p className="text-xs text-[#8D9999] max-w-md mx-auto">
+            <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto">
               {searchQuery || selectedStatus !== 'all'
                 ? 'No interview sessions match your active filters. Try clearing your search.'
                 : 'You have not conducted any persona interviews yet. Launch your first adaptive interview from the Persona Library!'}
@@ -248,7 +248,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
               <div
                 key={item.id}
                 onClick={() => onOpenInterview(item.id)}
-                className="bg-[#111717] border border-[#1F2C2C] hover:border-teal-500/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all duration-200 cursor-pointer shadow-md hover:shadow-teal-500/5 group"
+                className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] hover:border-teal-500/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all duration-200 cursor-pointer shadow-md hover:shadow-teal-500/5 group"
               >
                 {/* Card Top: Persona & Status */}
                 <div className="space-y-3">
@@ -288,7 +288,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                   </div>
 
                   {/* Objective & Tier */}
-                  <div className="bg-[#151D1D] border border-[#213030] rounded-xl p-2.5 text-xs space-y-1">
+                  <div className="bg-[var(--bg-card-hover)] border border-[#213030] rounded-xl p-2.5 text-xs space-y-1">
                     <div className="text-[10px] text-[#6E8080] font-semibold uppercase tracking-wider">
                       Research Objective
                     </div>
@@ -299,7 +299,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                 </div>
 
                 {/* Card Middle: Progress & Topics */}
-                <div className="space-y-3 pt-2 border-t border-white/5 text-xs text-[#8D9999]">
+                <div className="space-y-3 pt-2 border-t border-white/5 text-xs text-[var(--text-secondary)]">
                   {/* Turn Progress */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[11px]">
@@ -316,7 +316,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
 
                   {/* Explored Topics & Insights Badges */}
                   <div className="flex items-center justify-between text-[11px] pt-1">
-                    <span className="flex items-center gap-1 text-[#8D9999]">
+                    <span className="flex items-center gap-1 text-[var(--text-secondary)]">
                       <Layers className="w-3.5 h-3.5 text-cyan-400" />
                       {exploredCount} topics explored
                     </span>

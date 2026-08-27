@@ -654,12 +654,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#080909', color: '#FFFFFF' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-pure)', color: 'var(--text-main)' }}>
       {/* Top Header with Stepper */}
       <header
         style={{
-          borderBottom: '1px solid #202727',
-          background: 'rgba(8, 9, 9, 0.95)',
+          borderBottom: '1px solid var(--border-subtle)',
+          background: 'var(--bg-glass)',
           backdropFilter: 'blur(12px)',
           position: 'sticky',
           top: 0,
@@ -668,16 +668,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px 16px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0, flex: '1 1 auto' }}>
           <button
             type="button"
             onClick={onExit}
             style={{
               background: 'transparent',
-              border: '1px solid #202727',
-              color: '#8D9999',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)',
               borderRadius: '8px',
               padding: '6px 12px',
               fontSize: '0.8rem',
@@ -692,7 +694,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             style={{
               fontSize: '0.95rem',
               fontWeight: 600,
-              color: '#FFFFFF',
+              color: 'var(--text-main)',
+              minWidth: 0,
               maxWidth: '360px',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -704,13 +707,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         </div>
 
         {/* 5-Step Stepper */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {stepLabels.map((s, idx) => {
             const isDone = s.num < currentStep;
             const isCurrent = s.num === currentStep;
             return (
               <React.Fragment key={s.num}>
-                {idx > 0 && <div style={{ width: '16px', height: '1px', background: isDone ? '#14B8A6' : '#202727' }} />}
+                {idx > 0 && <div style={{ width: '16px', height: '1px', background: isDone ? '#14B8A6' : 'var(--border-subtle)' }} />}
                 <button
                   type="button"
                   onClick={() => handleStepChange(s.num)}
@@ -721,8 +724,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     padding: '6px 12px',
                     borderRadius: '8px',
                     border: isCurrent ? '1px solid #14B8A6' : '1px solid transparent',
-                    background: isCurrent ? 'rgba(20, 184, 166, 0.12)' : isDone ? 'rgba(255, 255, 255, 0.03)' : 'transparent',
-                    color: isCurrent ? '#22D3EE' : isDone ? '#14B8A6' : '#8D9999',
+                    background: isCurrent ? 'var(--accent-subtle)' : isDone ? 'var(--fill-soft)' : 'transparent',
+                    color: isCurrent ? 'var(--accent-cyan)' : isDone ? '#14B8A6' : 'var(--text-secondary)',
                     fontSize: '0.8rem',
                     fontWeight: isCurrent || isDone ? 600 : 400,
                     cursor: 'pointer',
@@ -733,8 +736,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       width: '18px',
                       height: '18px',
                       borderRadius: '50%',
-                      background: isDone ? '#14B8A6' : isCurrent ? '#22D3EE' : '#202727',
-                      color: isDone || isCurrent ? '#080909' : '#8D9999',
+                      background: isDone ? '#14B8A6' : isCurrent ? 'var(--accent-cyan)' : 'var(--border-subtle)',
+                      color: isDone || isCurrent ? 'var(--bg-pure)' : 'var(--text-secondary)',
                       fontSize: '0.7rem',
                       fontWeight: 700,
                       display: 'flex',
@@ -760,10 +763,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         {currentStep === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-              <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#FFFFFF', margin: '0 0 6px 0' }}>
+              <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 6px 0' }}>
                 Design your user interviews
               </h1>
-              <p style={{ fontSize: '0.9rem', color: '#8D9999', margin: 0 }}>
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
                 Enter your product idea. BebshaX will refine your research objective, discover market evidence, and build grounded personas.
               </p>
             </div>
@@ -772,8 +775,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             <div
               ref={copilotChatRef}
               style={{
-                background: '#111616',
-                border: '1px solid #202727',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '16px',
                 padding: '24px',
                 minHeight: '340px',
@@ -785,12 +788,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               }}
             >
               {copilotMessages.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#8D9999', margin: 'auto', padding: '32px 0' }}>
+                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', margin: 'auto', padding: '32px 0' }}>
                   <Sparkles size={28} className="text-teal-400 mx-auto mb-2" />
-                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#FFFFFF' }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-main)' }}>
                     What business idea or product concept would you like to validate?
                   </div>
-                  <div style={{ fontSize: '0.82rem', color: '#8D9999', marginTop: '4px' }}>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                     Type your idea below to start conversational context refinement.
                   </div>
                 </div>
@@ -802,11 +805,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   style={{
                     alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
                     maxWidth: '80%',
-                    background: msg.role === 'user' ? 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)' : '#161C1C',
-                    color: '#FFFFFF',
+                    background: msg.role === 'user' ? 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)' : 'var(--bg-card-hover)',
+                    color: 'var(--text-main)',
                     padding: '14px 18px',
                     borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                    border: msg.role === 'user' ? 'none' : '1px solid #202727',
+                    border: msg.role === 'user' ? 'none' : '1px solid var(--border-subtle)',
                   }}
                 >
                   <div style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.content}</div>
@@ -815,26 +818,26 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     <div
                       style={{
                         marginTop: '14px',
-                        background: '#0D1111',
-                        border: '1px solid rgba(20, 184, 166, 0.35)',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-hover)',
                         borderRadius: '12px',
                         padding: '16px',
                       }}
                     >
-                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#22D3EE', letterSpacing: '0.06em' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.06em' }}>
                         {msg.goalCardData.title}
                       </div>
-                      <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#FFFFFF', marginTop: '4px' }}>
+                      <div style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-main)', marginTop: '4px' }}>
                         {msg.goalCardData.summary}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px', fontSize: '0.78rem' }}>
                         <div>
-                          <span style={{ color: '#8D9999' }}>Target Audience: </span>
-                          <span style={{ color: '#F4F7F7', fontWeight: 600 }}>{msg.goalCardData.target_audience}</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>Target Audience: </span>
+                          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{msg.goalCardData.target_audience}</span>
                         </div>
                         <div>
-                          <span style={{ color: '#8D9999' }}>Hypothesis: </span>
-                          <span style={{ color: '#F4F7F7', fontWeight: 600 }}>{msg.goalCardData.core_hypothesis}</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>Hypothesis: </span>
+                          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{msg.goalCardData.core_hypothesis}</span>
                         </div>
                       </div>
 
@@ -845,12 +848,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                           marginTop: '14px',
                           width: '100%',
                           background: showRoleSelection
-                            ? 'rgba(20, 184, 166, 0.16)'
+                            ? 'var(--accent-subtle)'
                             : 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                           border: showRoleSelection ? '1px solid #14B8A6' : 'none',
                           borderRadius: '8px',
                           padding: '10px 16px',
-                          color: showRoleSelection ? '#2DD4BF' : '#080909',
+                          color: showRoleSelection ? 'var(--accent-teal-bright)' : 'var(--bg-pure)',
                           fontWeight: 700,
                           fontSize: '0.85rem',
                           cursor: 'pointer',
@@ -869,7 +872,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               ))}
 
               {isCopilotTyping && (
-                <div style={{ alignSelf: 'flex-start', color: '#8D9999', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ alignSelf: 'flex-start', color: 'var(--text-secondary)', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Sparkles size={14} className="text-teal-400 animate-spin" />
                   Synthesizing market context & assumptions...
                 </div>
@@ -891,11 +894,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 placeholder="Type here to answer or give more context..."
                 style={{
                   flex: 1,
-                  background: '#111616',
-                  border: '1px solid #202727',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '12px',
                   padding: '12px 18px',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontSize: '0.9rem',
                   outline: 'none',
                 }}
@@ -909,7 +912,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   border: 'none',
                   borderRadius: '12px',
                   padding: '0 24px',
-                  color: '#080909',
+                  color: 'var(--text-on-accent)',
                   fontWeight: 700,
                   fontSize: '0.9rem',
                   cursor: isCopilotTyping || !step1Prompt.trim() ? 'not-allowed' : 'pointer',
@@ -921,15 +924,15 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
             {/* Role Selection Drawer when ready */}
             {showRoleSelection && (
-              <div ref={roleSelectionRef} style={{ background: '#111616', border: '1px solid #202727', borderRadius: '16px', padding: '24px' }}>
+              <div ref={roleSelectionRef} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
-                    <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+                    <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
                       SUGGESTED ROLES FOR YOUR STUDY
                     </h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.8rem', color: '#14B8A6', fontWeight: 600 }}>Persona Panel Configured</span>
-                      <span style={{ fontSize: '0.82rem', color: '#8D9999' }}>• Grounded in empirical evidence and dataset distributions</span>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>• Grounded in empirical evidence and dataset distributions</span>
                     </div>
                   </div>
                   <button
@@ -941,14 +944,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       border: 'none',
                       borderRadius: '8px',
                       padding: '10px 20px',
-                      color: '#080909',
+                      color: 'var(--text-on-accent)',
                       fontWeight: 700,
                       fontSize: '0.88rem',
                       cursor: isGeneratingPersonas ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
-                      boxShadow: '0 4px 14px rgba(20, 184, 166, 0.25)',
+                      boxShadow: '0 4px 14px var(--accent-glow)',
                     }}
                   >
                     <Sparkles size={16} />
@@ -959,7 +962,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 {/* Stacked Roles List */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {isLoadingRoles && suggestedRoles.length === 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8D9999', fontSize: '0.85rem', padding: '14px 4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '0.85rem', padding: '14px 4px' }}>
                       <Sparkles size={14} className="text-teal-400 animate-spin" />
                       Discovering suggested roles for your study...
                     </div>
@@ -971,8 +974,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                         key={role.id}
                         onClick={() => handleToggleRole(role.id)}
                         style={{
-                          background: isSelected ? 'rgba(20, 184, 166, 0.08)' : '#0D1111',
-                          border: isSelected ? '1px solid #14B8A6' : '1px solid #202727',
+                          background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-secondary)',
+                          border: isSelected ? '1px solid #14B8A6' : '1px solid var(--border-subtle)',
                           borderRadius: '12px',
                           padding: '14px 18px',
                           cursor: 'pointer',
@@ -981,7 +984,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                           justifyContent: 'space-between',
                           gap: '16px',
                           transition: 'all 0.2s ease',
-                          boxShadow: isSelected ? '0 4px 16px -4px rgba(20, 184, 166, 0.15)' : 'none',
+                          boxShadow: isSelected ? '0 4px 16px -4px var(--accent-subtle)' : 'none',
                         }}
                       >
                         {/* Left Info: Checkbox + Role Name + Description */}
@@ -991,8 +994,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                               width: '22px',
                               height: '22px',
                               borderRadius: '6px',
-                              border: isSelected ? '1px solid #14B8A6' : '1px solid #334155',
-                              background: isSelected ? '#14B8A6' : '#161B1B',
+                              border: isSelected ? '1px solid #14B8A6' : '1px solid var(--border-medium)',
+                              background: isSelected ? '#14B8A6' : 'var(--bg-card-hover)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -1000,7 +1003,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                               transition: 'all 0.2s ease',
                             }}
                           >
-                            {isSelected && <Check size={14} color="#080909" strokeWidth={3} />}
+                            {isSelected && <Check size={14} color="var(--bg-pure)" strokeWidth={3} />}
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
@@ -1010,7 +1013,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                                   fontSize: '0.86rem',
                                   fontWeight: 700,
                                   letterSpacing: '0.04em',
-                                  color: isSelected ? '#22D3EE' : '#FFFFFF',
+                                  color: isSelected ? 'var(--accent-cyan)' : 'var(--text-main)',
                                 }}
                               >
                                 {role.role}
@@ -1021,8 +1024,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                                     fontSize: '0.7rem',
                                     padding: '2px 8px',
                                     borderRadius: '9999px',
-                                    background: 'rgba(20, 184, 166, 0.16)',
-                                    color: '#2DD4BF',
+                                    background: 'var(--accent-subtle)',
+                                    color: 'var(--accent-teal-bright)',
                                     fontWeight: 600,
                                   }}
                                 >
@@ -1033,7 +1036,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                             <p
                               style={{
                                 fontSize: '0.8rem',
-                                color: '#8D9999',
+                                color: 'var(--text-secondary)',
                                 margin: 0,
                                 lineHeight: 1.4,
                               }}
@@ -1050,8 +1053,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                             display: 'flex',
                             alignItems: 'center',
                             gap: '8px',
-                            background: '#161B1B',
-                            border: '1px solid #283333',
+                            background: 'var(--bg-card-hover)',
+                            border: '1px solid var(--border-medium)',
                             borderRadius: '8px',
                             padding: '4px 6px',
                             flexShrink: 0,
@@ -1063,9 +1066,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                             onClick={(e) => handleDecrementRole(role.id, e)}
                             disabled={role.count <= 0}
                             style={{
-                              background: role.count > 0 ? '#202727' : 'transparent',
+                              background: role.count > 0 ? 'var(--border-subtle)' : 'transparent',
                               border: 'none',
-                              color: role.count > 0 ? '#FFFFFF' : '#4B5563',
+                              color: role.count > 0 ? 'var(--text-main)' : 'var(--text-faint)',
                               borderRadius: '6px',
                               width: '26px',
                               height: '26px',
@@ -1085,7 +1088,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                               fontWeight: 700,
                               minWidth: '20px',
                               textAlign: 'center',
-                              color: role.count > 0 ? '#22D3EE' : '#64748B',
+                              color: role.count > 0 ? 'var(--accent-cyan)' : 'var(--text-muted)',
                             }}
                           >
                             {role.count}
@@ -1096,9 +1099,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                             aria-label={`Increase ${role.role} count`}
                             onClick={(e) => handleIncrementRole(role.id, e)}
                             style={{
-                              background: '#202727',
+                              background: 'var(--border-subtle)',
                               border: 'none',
-                              color: '#FFFFFF',
+                              color: 'var(--text-main)',
                               borderRadius: '6px',
                               width: '26px',
                               height: '26px',
@@ -1132,7 +1135,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 style={{
                   background: 'rgba(239, 68, 68, 0.08)',
                   border: '1px solid rgba(239, 68, 68, 0.4)',
-                  color: '#FCA5A5',
+                  color: 'var(--status-error-text)',
                   borderRadius: '8px',
                   padding: '12px 16px',
                   fontSize: '0.88rem',
@@ -1143,10 +1146,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>
-                <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#FFFFFF', margin: '0 0 4px 0' }}>
+                <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
                   Grounded Persona Library
                 </h1>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', color: '#8D9999' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
                   <span>Total Personas</span>
                   <span>({personas.length})</span>
                   <span>• Grounded in empirical evidence & distributions</span>
@@ -1159,9 +1162,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   onClick={handleGeneratePersonas}
                   disabled={isGeneratingPersonas}
                   style={{
-                    background: '#111616',
-                    border: '1px solid #202727',
-                    color: '#22D3EE',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--accent-cyan)',
                     borderRadius: '8px',
                     padding: '8px 16px',
                     fontSize: '0.84rem',
@@ -1182,7 +1185,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   style={{
                     background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                     border: 'none',
-                    color: '#080909',
+                    color: 'var(--text-on-accent)',
                     borderRadius: '8px',
                     padding: '8px 20px',
                     fontSize: '0.84rem',
@@ -1207,11 +1210,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
-                  background: 'rgba(20, 184, 166, 0.06)',
-                  border: '1px solid rgba(20, 184, 166, 0.25)',
+                  background: 'var(--accent-subtle)',
+                  border: '1px solid var(--accent-glow)',
                   borderRadius: '12px',
                   padding: '14px 18px',
-                  color: '#2DD4BF',
+                  color: 'var(--accent-teal-bright)',
                   fontSize: '0.88rem',
                   fontWeight: 600,
                 }}
@@ -1234,8 +1237,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     className="bx-stagger"
                     style={{
                       ['--bx-i' as string]: Math.min(i, 12),
-                      background: '#111616',
-                      border: '1px solid #202727',
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border-subtle)',
                       borderRadius: '16px',
                       padding: '20px',
                       display: 'flex',
@@ -1268,8 +1271,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   className="bx-stagger bx-lift"
                   style={{
                     ['--bx-i' as string]: Math.min(cardIdx, 12),
-                    background: '#111616',
-                    border: '1px solid #202727',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
                     borderRadius: '16px',
                     padding: '20px',
                     display: 'flex',
@@ -1285,7 +1288,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                           height: '42px',
                           borderRadius: '10px',
                           background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-                          color: '#080909',
+                          color: 'var(--text-on-accent)',
                           fontWeight: 700,
                           fontSize: '1rem',
                           display: 'flex',
@@ -1297,42 +1300,42 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       </div>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#FFFFFF' }}>{p.name}</div>
-                          <span style={{ fontSize: '0.65rem', color: '#14B8A6', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>{p.name}</div>
+                          <span style={{ fontSize: '0.65rem', color: '#14B8A6', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
                             {p.country_code || 'BD'}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.78rem', color: '#22D3EE' }}>{p.archetype || p.role_title}</div>
-                        {p.tagline && <div style={{ fontSize: '0.74rem', color: '#8D9999' }}>{p.tagline}</div>}
+                        <div style={{ fontSize: '0.78rem', color: 'var(--accent-cyan)' }}>{p.archetype || p.role_title}</div>
+                        {p.tagline && <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>{p.tagline}</div>}
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={(e) => handleRemovePersona(p.id, e)}
-                      style={{ background: 'transparent', border: 'none', color: '#535D5D', cursor: 'pointer' }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: 'pointer' }}
                     >
                       <Trash2 size={15} />
                     </button>
                   </div>
 
                   {p.personality && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', background: '#0D1111', padding: '6px 8px', borderRadius: '6px', border: '1px solid #1E2626', textAlign: 'center' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', background: 'var(--bg-secondary)', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
                       {[
                         { l: 'O', v: p.personality.openness, c: '#38BDF8' },
-                        { l: 'C', v: p.personality.conscientiousness, c: '#10B981' },
+                        { l: 'C', v: p.personality.conscientiousness, c: 'var(--accent-emerald)' },
                         { l: 'E', v: p.personality.extroversion, c: '#F59E0B' },
                         { l: 'A', v: p.personality.agreeableness, c: '#A855F7' },
                         { l: 'N', v: p.personality.neuroticism, c: '#EC4899' },
                       ].map((t) => (
                         <div key={t.l} style={{ fontSize: '0.65rem' }}>
                           <span style={{ color: t.c, fontWeight: 700 }}>{t.v}</span>
-                          <span style={{ color: '#8D9999', marginLeft: '2px' }}>{t.l}</span>
+                          <span style={{ color: 'var(--text-secondary)', marginLeft: '2px' }}>{t.l}</span>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  <p style={{ fontSize: '0.84rem', color: '#D1D5DB', lineHeight: 1.45, margin: 0 }}>
+                  <p style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.45, margin: 0 }}>
                     {p.description || p.tagline || (p.quote ? `"${p.quote}"` : '')}
                   </p>
 
@@ -1355,7 +1358,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     >
                       View full profile <ArrowRight size={13} />
                     </button>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '6px' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-emerald)', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '6px' }}>
                       {Math.round((p.grounding_ratio || 0.95) * 100)}% Grounded
                     </span>
                   </div>
@@ -1373,13 +1376,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   gap: '12px',
                   textAlign: 'center',
                   padding: '64px 24px',
-                  border: '1px dashed #202727',
+                  border: '1px dashed var(--border-subtle)',
                   borderRadius: '16px',
-                  color: '#8D9999',
+                  color: 'var(--text-secondary)',
                 }}
               >
                 <Sparkles size={28} className="text-teal-400" />
-                <div style={{ fontSize: '1rem', fontWeight: 600, color: '#FFFFFF' }}>No personas yet</div>
+                <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>No personas yet</div>
                 <div style={{ fontSize: '0.85rem', maxWidth: '420px' }}>
                   Generate grounded personas from your approved research goal and selected roles.
                 </div>
@@ -1392,7 +1395,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     border: 'none',
                     borderRadius: '8px',
                     padding: '10px 20px',
-                    color: '#080909',
+                    color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '0.85rem',
                     cursor: 'pointer',
@@ -1416,10 +1419,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#FFFFFF', margin: '0 0 4px 0' }}>
+                <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
                   Interview Script & Probing Rules
                 </h1>
-                <p style={{ fontSize: '0.88rem', color: '#8D9999', margin: 0 }}>
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0 }}>
                   Customize the core questions the AI interviewer will ask across your personas.
                 </p>
               </div>
@@ -1429,9 +1432,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   type="button"
                   onClick={handleGenerateScript}
                   style={{
-                    background: '#111616',
-                    border: '1px solid #202727',
-                    color: '#22D3EE',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--accent-cyan)',
                     borderRadius: '8px',
                     padding: '8px 16px',
                     fontSize: '0.84rem',
@@ -1447,7 +1450,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   style={{
                     background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                     border: 'none',
-                    color: '#080909',
+                    color: 'var(--text-on-accent)',
                     borderRadius: '8px',
                     padding: '8px 20px',
                     fontSize: '0.84rem',
@@ -1470,8 +1473,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 <div
                   key={idx}
                   style={{
-                    background: '#111616',
-                    border: '1px solid #202727',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
                     borderRadius: '12px',
                     padding: '16px 20px',
                     display: 'flex',
@@ -1495,7 +1498,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       flex: 1,
                       background: 'transparent',
                       border: 'none',
-                      color: '#FFFFFF',
+                      color: 'var(--text-main)',
                       fontSize: '0.9rem',
                       outline: 'none',
                     }}
@@ -1507,7 +1510,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       setQuestions(nextQ);
                       if (studyId) api.updateStudy(studyId, { script_questions: nextQ }).catch(() => {});
                     }}
-                    style={{ background: 'transparent', border: 'none', color: '#535D5D', cursor: 'pointer' }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: 'pointer' }}
                   >
                     <Trash2 size={15} />
                   </button>
@@ -1524,11 +1527,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 placeholder="Add another interview question..."
                 style={{
                   flex: 1,
-                  background: '#111616',
-                  border: '1px solid #202727',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '10px',
                   padding: '12px 16px',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontSize: '0.88rem',
                   outline: 'none',
                 }}
@@ -1544,9 +1547,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   }
                 }}
                 style={{
-                  background: 'rgba(20, 184, 166, 0.15)',
-                  border: '1px solid rgba(20, 184, 166, 0.3)',
-                  color: '#22D3EE',
+                  background: 'var(--accent-subtle)',
+                  border: '1px solid var(--border-hover)',
+                  color: 'var(--accent-cyan)',
                   borderRadius: '10px',
                   padding: '0 20px',
                   fontWeight: 600,
@@ -1567,10 +1570,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>
-                <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#FFFFFF', margin: '0 0 4px 0' }}>
+                <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
                   Synthetic Persona Interviews
                 </h1>
-                <p style={{ fontSize: '0.88rem', color: '#8D9999', margin: 0 }}>
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0 }}>
                   Multi-turn qualitative interviews simulated across {personas.length} personas.
                 </p>
               </div>
@@ -1585,7 +1588,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     border: 'none',
                     borderRadius: '8px',
                     padding: '10px 20px',
-                    color: '#080909',
+                    color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '0.88rem',
                     cursor: isBatchRunning ? 'not-allowed' : 'pointer',
@@ -1603,9 +1606,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   onClick={handleGenerateFinalReport}
                   disabled={isGeneratingReport}
                   style={{
-                    background: '#111616',
+                    background: 'var(--bg-card)',
                     border: '1px solid #14B8A6',
-                    color: '#22D3EE',
+                    color: 'var(--accent-cyan)',
                     borderRadius: '8px',
                     padding: '10px 20px',
                     fontSize: '0.88rem',
@@ -1633,13 +1636,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   gap: '12px',
                   textAlign: 'center',
                   padding: '48px 24px',
-                  border: '1px dashed #202727',
+                  border: '1px dashed var(--border-subtle)',
                   borderRadius: '16px',
-                  color: '#8D9999',
+                  color: 'var(--text-secondary)',
                 }}
               >
                 <MessageSquare size={26} className="text-teal-400" />
-                <div style={{ fontSize: '1rem', fontWeight: 600, color: '#FFFFFF' }}>No personas to interview yet</div>
+                <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>No personas to interview yet</div>
                 <div style={{ fontSize: '0.85rem', maxWidth: '420px' }}>
                   Generate grounded personas in the Personas step first — then run interviews here.
                 </div>
@@ -1652,7 +1655,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     border: 'none',
                     borderRadius: '8px',
                     padding: '10px 20px',
-                    color: '#080909',
+                    color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '0.85rem',
                     cursor: 'pointer',
@@ -1676,9 +1679,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       setConversationId(null);
                     }}
                     style={{
-                      background: isActive ? 'rgba(20, 184, 166, 0.15)' : '#111616',
-                      border: isActive ? '1px solid #14B8A6' : '1px solid #202727',
-                      color: isActive ? '#22D3EE' : '#8D9999',
+                      background: isActive ? 'var(--accent-subtle)' : 'var(--bg-card)',
+                      border: isActive ? '1px solid #14B8A6' : '1px solid var(--border-subtle)',
+                      color: isActive ? 'var(--accent-cyan)' : 'var(--text-secondary)',
                       padding: '8px 14px',
                       borderRadius: '8px',
                       fontSize: '0.84rem',
@@ -1701,13 +1704,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                             ? 'rgba(16, 185, 129, 0.15)'
                             : status === 'in_progress'
                             ? 'rgba(34, 211, 238, 0.15)'
-                            : 'rgba(255, 255, 255, 0.05)',
+                            : 'var(--fill-soft)',
                         color:
                           status === 'completed'
-                            ? '#10B981'
+                            ? 'var(--accent-emerald)'
                             : status === 'in_progress'
-                            ? '#22D3EE'
-                            : '#8D9999',
+                            ? 'var(--accent-cyan)'
+                            : 'var(--text-secondary)',
                       }}
                     >
                       {status === 'completed' ? 'Completed' : status === 'in_progress' ? 'Running' : 'Pending'}
@@ -1722,8 +1725,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             <div
               ref={interviewChatRef}
               style={{
-                background: '#111616',
-                border: '1px solid #202727',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '16px',
                 padding: '24px',
                 minHeight: '380px',
@@ -1735,12 +1738,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               }}
             >
               {chatMessages.length === 0 && (
-                <div style={{ textAlign: 'center', color: '#8D9999', margin: 'auto', padding: '32px 0' }}>
+                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', margin: 'auto', padding: '32px 0' }}>
                   <MessageSquare size={28} className="text-teal-400 mx-auto mb-2" />
-                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#FFFFFF' }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-main)' }}>
                     Interactive Interview Transcript
                   </div>
-                  <div style={{ fontSize: '0.82rem', color: '#8D9999', marginTop: '4px' }}>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                     Click &quot;Run All Synthetic Interviews&quot; or ask a specific follow-up question below.
                   </div>
                 </div>
@@ -1759,20 +1762,20 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       ? 'rgba(239, 68, 68, 0.08)'
                       : msg.role === 'user'
                       ? 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)'
-                      : '#161C1C',
-                    color: isErrorTurn ? '#FCA5A5' : '#FFFFFF',
+                      : 'var(--bg-card-hover)',
+                    color: isErrorTurn ? 'var(--status-error-text)' : 'var(--text-main)',
                     padding: '14px 18px',
                     borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                     border: isErrorTurn
                       ? '1px solid rgba(239, 68, 68, 0.4)'
                       : msg.role === 'user'
                       ? 'none'
-                      : '1px solid #202727',
+                      : '1px solid var(--border-subtle)',
                   }}
                 >
                   <div style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.content}</div>
                   {msg.role !== 'user' && msg.served_by && (
-                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.72rem', color: '#22D3EE' }}>
+                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.72rem', color: 'var(--accent-cyan)' }}>
                       <Zap size={11} />
                       <span>Served by {msg.served_by}</span>
                       {msg.latency_ms && <span>• {Math.round(msg.latency_ms)}ms</span>}
@@ -1783,7 +1786,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               })}
 
               {isSimulating && (
-                <div style={{ alignSelf: 'flex-start', color: '#8D9999', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ alignSelf: 'flex-start', color: 'var(--text-secondary)', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Sparkles size={14} className="text-teal-400 animate-spin" />
                   Generating grounded synthetic response...
                 </div>
@@ -1799,11 +1802,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 placeholder="Ask a follow-up interview question..."
                 style={{
                   flex: 1,
-                  background: '#111616',
-                  border: '1px solid #202727',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '12px',
                   padding: '12px 18px',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontSize: '0.88rem',
                   outline: 'none',
                 }}
@@ -1814,7 +1817,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 style={{
                   background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                   border: 'none',
-                  color: '#080909',
+                  color: 'var(--text-on-accent)',
                   borderRadius: '12px',
                   padding: '0 20px',
                   fontWeight: 700,
@@ -1838,7 +1841,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 style={{
                   background: 'rgba(239, 68, 68, 0.08)',
                   border: '1px solid rgba(239, 68, 68, 0.4)',
-                  color: '#FCA5A5',
+                  color: 'var(--status-error-text)',
                   borderRadius: '8px',
                   padding: '12px 16px',
                   fontSize: '0.88rem',
@@ -1859,7 +1862,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     padding: '3px 8px',
                     borderRadius: '6px',
                     background: report ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                    color: report ? '#10B981' : '#FCA5A5',
+                    color: report ? 'var(--accent-emerald)' : 'var(--status-error-text)',
                     border: report ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
                   }}
                 >
@@ -1867,10 +1870,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     ? `Decision Report Ready • Version ${report.version || 1} ${availableReports.length > 1 ? `(${availableReports.length} versions)` : ''}`
                     : 'No report generated yet'}
                 </span>
-                <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#FFFFFF', margin: '8px 0 4px 0' }}>
+                <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '8px 0 4px 0' }}>
                   {report?.title || study?.title || 'Market Research & Validation Report'}
                 </h1>
-                <p style={{ fontSize: '0.84rem', color: '#8D9999', margin: 0 }}>
+                <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
                   Synthesized from {personas.length} grounded synthetic personas and empirical research claims.
                 </p>
               </div>
@@ -1880,9 +1883,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   type="button"
                   onClick={copyReportMarkdown}
                   style={{
-                    background: '#111616',
-                    border: '1px solid #202727',
-                    color: '#FFFFFF',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-main)',
                     borderRadius: '8px',
                     padding: '8px 14px',
                     fontSize: '0.82rem',
@@ -1901,7 +1904,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   style={{
                     background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                     border: 'none',
-                    color: '#080909',
+                    color: 'var(--text-on-accent)',
                     borderRadius: '8px',
                     padding: '8px 16px',
                     fontSize: '0.82rem',
@@ -1919,20 +1922,20 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
             {/* Metrics Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-              <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px' }}>
-                <div style={{ fontSize: '0.78rem', color: '#8D9999' }}>Demand Signal</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10B981', marginTop: '4px' }}>
+              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Demand Signal</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent-emerald)', marginTop: '4px' }}>
                   {report?.metrics?.demand_score != null ? `${report.metrics.demand_score}%` : '—'}
                 </div>
               </div>
-              <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px' }}>
-                <div style={{ fontSize: '0.78rem', color: '#8D9999' }}>Grounded Personas</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#22D3EE', marginTop: '4px' }}>
+              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Grounded Personas</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent-cyan)', marginTop: '4px' }}>
                   {personas.length}
                 </div>
               </div>
-              <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px' }}>
-                <div style={{ fontSize: '0.78rem', color: '#8D9999' }}>Confidence Score</div>
+              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Confidence Score</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#14B8A6', marginTop: '4px' }}>
                   {report?.metrics?.confidence_score != null
                     ? `${Math.round(report.metrics.confidence_score * 100)}%`
@@ -1942,19 +1945,19 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             </div>
 
             {/* Executive Summary */}
-            <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '16px', padding: '24px' }}>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#22D3EE', margin: '0 0 12px 0' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-cyan)', margin: '0 0 12px 0' }}>
                 Executive Summary
               </h2>
-              <p style={{ fontSize: '0.9rem', color: '#E5E7EB', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-line' }}>
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-line' }}>
                 {report?.executive_summary ||
                   `Research validation report for "${study?.prompt || 'business concept'}". Personas indicate high adoption willingness driven by convenience, speed, and transparent pricing.`}
               </p>
             </div>
 
             {/* Key Findings */}
-            <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '16px', padding: '24px' }}>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#FFFFFF', margin: '0 0 14px 0' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 14px 0' }}>
                 Key Findings
               </h2>
               <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1965,7 +1968,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     'Clear onboarding and visible evidence of quality prevent early drop-off.',
                   ]
                 ).map((kf, i) => (
-                  <li key={i} style={{ fontSize: '0.88rem', color: '#D1D5DB', lineHeight: 1.5 }}>
+                  <li key={i} style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
                     {kf}
                   </li>
                 ))}
@@ -1973,8 +1976,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             </div>
 
             {/* Recommendations */}
-            <div style={{ background: '#111616', border: '1px solid #202727', borderRadius: '16px', padding: '24px' }}>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#10B981', margin: '0 0 14px 0' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-emerald)', margin: '0 0 14px 0' }}>
                 Strategic Recommendations
               </h2>
               <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1984,7 +1987,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     'Emphasize speed and reliability in all messaging and product tutorials.',
                   ]
                 ).map((rec, i) => (
-                  <li key={i} style={{ fontSize: '0.88rem', color: '#D1D5DB', lineHeight: 1.5 }}>
+                  <li key={i} style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
                     {rec}
                   </li>
                 ))}
@@ -1992,8 +1995,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             </div>
 
             {/* Methodology & Limitations Disclaimer */}
-            <div style={{ background: 'rgba(20, 184, 166, 0.05)', border: '1px solid rgba(20, 184, 166, 0.2)', borderRadius: '12px', padding: '16px 20px', fontSize: '0.8rem', color: '#8D9999', lineHeight: 1.5 }}>
-              <strong style={{ color: '#22D3EE' }}>Research Methodology Note:</strong> This report synthesizes real empirical research evidence and public dataset parameters with exploratory synthetic persona simulations. Simulations model expected behavioral dynamics based on grounded empirical distributions.
+            <div style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', borderRadius: '12px', padding: '16px 20px', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              <strong style={{ color: 'var(--accent-cyan)' }}>Research Methodology Note:</strong> This report synthesizes real empirical research evidence and public dataset parameters with exploratory synthetic persona simulations. Simulations model expected behavioral dynamics based on grounded empirical distributions.
             </div>
           </div>
         )}
@@ -2019,8 +2022,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           <div
             className="bx-modal"
             style={{
-              background: '#111616',
-              border: '1px solid #202727',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '20px',
               maxWidth: '640px',
               width: '100%',
@@ -2041,7 +2044,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     height: '48px',
                     borderRadius: '12px',
                     background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-                    color: '#080909',
+                    color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '1.2rem',
                     display: 'flex',
@@ -2052,72 +2055,72 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   {viewingPersona.initials || viewingPersona.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#FFFFFF', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {viewingPersona.name}
                     {viewingPersona.data_source === 'cached' && (
                       <span
                         title="Served from seeded/cached data — not generated live for this study"
-                        style={{ fontSize: '0.62rem', fontWeight: 400, color: '#8D9999', background: '#141818', border: '1px solid #2A3130', padding: '2px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                        style={{ fontSize: '0.62rem', fontWeight: 400, color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
                       >
                         CACHED
                       </span>
                     )}
                   </h3>
-                  <div style={{ fontSize: '0.84rem', color: '#22D3EE' }}>{viewingPersona.archetype}</div>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--accent-cyan)' }}>{viewingPersona.archetype}</div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setViewingPersona(null)}
-                style={{ background: 'transparent', border: 'none', color: '#8D9999', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
               >
                 <X size={18} />
               </button>
             </div>
 
-            <p style={{ fontSize: '0.88rem', color: '#D1D5DB', lineHeight: 1.5, margin: 0 }}>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5, margin: 0 }}>
               {viewingPersona.description || viewingPersona.tagline}
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#0D1111', padding: '14px', borderRadius: '10px', border: '1px solid #202727' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
               <div>
-                <span style={{ fontSize: '0.72rem', color: '#8D9999' }}>Age: </span>
-                <span style={{ fontSize: '0.82rem', color: '#FFF' }}>{viewingPersona.demographics?.age || '28'}</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Age: </span>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{viewingPersona.demographics?.age || '28'}</span>
               </div>
               <div>
-                <span style={{ fontSize: '0.72rem', color: '#8D9999' }}>Occupation: </span>
-                <span style={{ fontSize: '0.82rem', color: '#FFF' }}>{viewingPersona.demographics?.occupation || viewingPersona.archetype || 'Professional'}</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Occupation: </span>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{viewingPersona.demographics?.occupation || viewingPersona.archetype || 'Professional'}</span>
               </div>
               <div>
-                <span style={{ fontSize: '0.72rem', color: '#8D9999' }}>Location: </span>
-                <span style={{ fontSize: '0.82rem', color: '#FFF' }}>{viewingPersona.demographics?.location || 'Dhaka, Bangladesh'}</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Location: </span>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{viewingPersona.demographics?.location || 'Dhaka, Bangladesh'}</span>
               </div>
               <div>
-                <span style={{ fontSize: '0.72rem', color: '#8D9999' }}>Country: </span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Country: </span>
                 <span style={{ fontSize: '0.82rem', color: '#14B8A6', fontWeight: 600 }}>{viewingPersona.origin_country || viewingPersona.country_code || 'BD'}</span>
               </div>
             </div>
 
             {/* Big Five Personality */}
             {viewingPersona.personality && (
-              <div style={{ background: '#0D1111', padding: '14px', borderRadius: '10px', border: '1px solid #202727' }}>
+              <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
                 <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#14B8A6', letterSpacing: '0.06em', marginBottom: '8px' }}>
                   BIG FIVE PERSONALITY PROFILE
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', textAlign: 'center' }}>
                   {[
                     { label: 'Openness', val: viewingPersona.personality.openness, color: '#38BDF8' },
-                    { label: 'Conscientious', val: viewingPersona.personality.conscientiousness, color: '#10B981' },
+                    { label: 'Conscientious', val: viewingPersona.personality.conscientiousness, color: 'var(--accent-emerald)' },
                     { label: 'Extroversion', val: viewingPersona.personality.extroversion, color: '#F59E0B' },
                     { label: 'Agreeable', val: viewingPersona.personality.agreeableness, color: '#A855F7' },
                     { label: 'Neuroticism', val: viewingPersona.personality.neuroticism, color: '#EC4899' },
                   ].map((t) => (
                     <div key={t.label}>
                       <div style={{ fontSize: '0.75rem', fontWeight: 700, color: t.color }}>{t.val}</div>
-                      <div style={{ height: '3px', background: '#202727', borderRadius: '2px', overflow: 'hidden', margin: '3px 0' }}>
+                      <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden', margin: '3px 0' }}>
                         <div style={{ width: `${t.val}%`, height: '100%', background: t.color }} />
                       </div>
-                      <div style={{ fontSize: '0.65rem', color: '#8D9999' }}>{t.label}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{t.label}</div>
                     </div>
                   ))}
                 </div>
@@ -2126,28 +2129,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
             {/* Key Lifestyle Attributes */}
             {viewingPersona.detailed_attributes && Object.keys(viewingPersona.detailed_attributes).length > 0 && (
-              <div style={{ background: '#0D1111', padding: '14px', borderRadius: '10px', border: '1px solid #202727' }}>
-                <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#22D3EE', letterSpacing: '0.06em', marginBottom: '8px' }}>
+              <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.06em', marginBottom: '8px' }}>
                   LIFESTYLE & ROUTINE SNAPSHOT
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
                   {viewingPersona.detailed_attributes.commute_mode && (
-                    <div><span style={{ color: '#8D9999' }}>Commute: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.commute_mode}</span></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>Commute: </span><span style={{ color: 'var(--text-main)' }}>{viewingPersona.detailed_attributes.commute_mode}</span></div>
                   )}
                   {viewingPersona.detailed_attributes.work_schedule && (
-                    <div><span style={{ color: '#8D9999' }}>Schedule: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.work_schedule}</span></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>Schedule: </span><span style={{ color: 'var(--text-main)' }}>{viewingPersona.detailed_attributes.work_schedule}</span></div>
                   )}
                   {viewingPersona.detailed_attributes.food_source && (
-                    <div><span style={{ color: '#8D9999' }}>Food: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.food_source}</span></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>Food: </span><span style={{ color: 'var(--text-main)' }}>{viewingPersona.detailed_attributes.food_source}</span></div>
                   )}
                   {viewingPersona.detailed_attributes.payment_method && (
-                    <div><span style={{ color: '#8D9999' }}>Payment: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.payment_method}</span></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>Payment: </span><span style={{ color: 'var(--text-main)' }}>{viewingPersona.detailed_attributes.payment_method}</span></div>
                   )}
                   {viewingPersona.detailed_attributes.communication_style && (
-                    <div><span style={{ color: '#8D9999' }}>Communication: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.communication_style}</span></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>Communication: </span><span style={{ color: 'var(--text-main)' }}>{viewingPersona.detailed_attributes.communication_style}</span></div>
                   )}
                   {viewingPersona.detailed_attributes.hobbies && (
-                    <div style={{ gridColumn: '1 / -1' }}><span style={{ color: '#8D9999' }}>Hobbies: </span><span style={{ color: '#FFF' }}>{viewingPersona.detailed_attributes.hobbies}</span></div>
+                    <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-secondary)' }}>Hobbies: </span><span style={{ color: 'var(--text-main)' }}>{viewingPersona.detailed_attributes.hobbies}</span></div>
                   )}
                 </div>
               </div>
@@ -2155,7 +2158,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
             {/* Grounded Claims & Provenance */}
             <div>
-              <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#22D3EE', letterSpacing: '0.06em', marginBottom: '8px' }}>
+              <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.06em', marginBottom: '8px' }}>
                 GROUNDED BEHAVIORAL CLAIMS & PROVENANCE
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -2163,9 +2166,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   { category: 'Goals', title: 'Streamline daily tasks', description: 'Wants to minimize overhead' },
                   { category: 'Pain Points', title: 'High recurring cost', description: 'Sensitivity to expensive software' },
                 ]).map((attr: any, idx: number) => (
-                  <div key={idx} style={{ background: '#0D1111', padding: '10px 12px', borderRadius: '8px', border: '1px solid #202727' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#FFF' }}>{attr.title}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#8D9999', marginTop: '2px' }}>{attr.description}</div>
+                  <div key={idx} style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>{attr.title}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{attr.description}</div>
                   </div>
                 ))}
               </div>

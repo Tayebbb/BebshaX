@@ -33,7 +33,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
           maxWidth: '560px',
           maxHeight: '80vh',
           backgroundColor: '#121414',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          border: '1px solid var(--border-soft)',
           borderRadius: '16px',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
           display: 'flex',
@@ -47,7 +47,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
         <div
           style={{
             padding: '20px 24px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            borderBottom: '1px solid var(--fill-soft-2)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -55,9 +55,9 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {type === 'terms' ? (
-              <FileText size={20} color="#F6C878" />
+              <FileText size={20} color="var(--status-warn-text)" />
             ) : (
-              <ShieldCheck size={20} color="#F6C878" />
+              <ShieldCheck size={20} color="var(--status-warn-text)" />
             )}
             <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#F4F4F5' }}>
               {type === 'terms' ? 'BebshaX Terms of Service' : 'BebshaX Privacy Policy'}
@@ -114,7 +114,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
                 <strong>1. Data Collection:</strong> BebshaX collects your account email, name, and the research study descriptions you provide to synthesize relevant target personas and simulate user interviews.
               </p>
               <p>
-                <strong>2. Grounded Dataset Provenance:</strong> Persona attributes are tagged with strict provenance classifications (<code style={{ color: '#F6C878' }}>OBSERVED</code>, <code style={{ color: '#F6C878' }}>INFERRED</code>, <code style={{ color: '#F6C878' }}>SYNTHETIC</code>) and grounded against open behavioral corpora.
+                <strong>2. Grounded Dataset Provenance:</strong> Persona attributes are tagged with strict provenance classifications (<code style={{ color: 'var(--status-warn-text)' }}>OBSERVED</code>, <code style={{ color: 'var(--status-warn-text)' }}>INFERRED</code>, <code style={{ color: 'var(--status-warn-text)' }}>SYNTHETIC</code>) and grounded against open behavioral corpora.
               </p>
               <p>
                 <strong>3. Privacy & Zero PII Leakage:</strong> We never share your proprietary study concepts with third-party advertisers. All LLM inferences are routed through stateless free model pools with complete 14-field provenance tracking.
@@ -130,7 +130,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
         <div
           style={{
             padding: '16px 24px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            borderTop: '1px solid var(--fill-soft-2)',
             display: 'flex',
             justifyContent: 'flex-end',
           }}
@@ -141,7 +141,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
             style={{
               padding: '8px 20px',
               borderRadius: '8px',
-              background: '#F6C878',
+              background: 'var(--status-warn-text)',
               color: '#18181B',
               border: 'none',
               fontWeight: 700,

@@ -256,14 +256,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <h1 style={{ fontSize: '1.85rem', fontWeight: 600, color: '#F4F7F7', letterSpacing: '-0.02em', margin: 0 }}>
+            <h1 style={{ fontSize: '1.85rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Persona Library
             </h1>
-            <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: 'rgba(20, 184, 166, 0.12)', color: '#14B8A6', border: '1px solid rgba(20, 184, 166, 0.25)' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: 'var(--accent-subtle)', color: '#14B8A6', border: '1px solid var(--accent-glow)' }}>
               Synthetic Agents
             </span>
           </div>
-          <p style={{ fontSize: '0.9rem', color: '#8D9999', margin: 0 }}>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
             Saved personas and audiences you can reuse in any study.
           </p>
         </div>
@@ -275,12 +275,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               value={activeStudyId}
               onChange={(e) => setActiveStudyId(e.target.value)}
               style={{
-                background: '#0D1111',
-                border: '1px solid #202727',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '10px',
                 padding: '9px 14px',
                 fontSize: '0.85rem',
-                color: '#F4F7F7',
+                color: 'var(--text-primary)',
                 outline: 'none',
                 cursor: 'pointer',
               }}
@@ -298,7 +298,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             onClick={() => setShowGenerateModal(true)}
             style={{
               background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-              color: '#080A0A',
+              color: 'var(--text-on-accent)',
               border: 'none',
               borderRadius: '10px',
               padding: '9px 18px',
@@ -308,7 +308,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               alignItems: 'center',
               gap: '6px',
               cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(20, 184, 166, 0.25)',
+              boxShadow: '0 4px 14px var(--accent-glow)',
               transition: 'all 0.16s ease',
             }}
           >
@@ -329,43 +329,43 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           marginBottom: '28px',
         }}
       >
-        <div style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#14B8A6' }}>
+        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#14B8A6' }}>
             <User size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#F4F7F7', lineHeight: 1.1 }}>{metrics.total}</div>
-            <div style={{ fontSize: '0.8rem', color: '#8D9999', marginTop: '2px' }}>Total Synthetic Personas</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{metrics.total}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Total Synthetic Personas</div>
           </div>
         </div>
 
-        <div style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(34, 211, 238, 0.12)', border: '1px solid rgba(34, 211, 238, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22D3EE' }}>
+        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(34, 211, 238, 0.12)', border: '1px solid rgba(34, 211, 238, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-cyan)' }}>
             <Layers size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#F4F7F7', lineHeight: 1.1 }}>{metrics.repSegments}</div>
-            <div style={{ fontSize: '0.8rem', color: '#8D9999', marginTop: '2px' }}>Represented Segments</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{metrics.repSegments}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Represented Segments</div>
           </div>
         </div>
 
-        <div style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10B981' }}>
+        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-emerald)' }}>
             <ShieldCheck size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#10B981', lineHeight: 1.1 }}>{metrics.avgScore}%</div>
-            <div style={{ fontSize: '0.8rem', color: '#8D9999', marginTop: '2px' }}>Avg. Grounding Score</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--accent-emerald)', lineHeight: 1.1 }}>{metrics.avgScore}%</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Avg. Grounding Score</div>
           </div>
         </div>
 
-        <div style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F59E0B' }}>
             <CheckCircle2 size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#F4F7F7', lineHeight: 1.1 }}>{metrics.readyCount} / {metrics.total}</div>
-            <div style={{ fontSize: '0.8rem', color: '#8D9999', marginTop: '2px' }}>Verified & Ready</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{metrics.readyCount} / {metrics.total}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Verified & Ready</div>
           </div>
         </div>
       </div>
@@ -380,14 +380,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           gap: '12px',
           marginBottom: '24px',
           flexWrap: 'wrap',
-          background: '#0D1111',
-          border: '1px solid #202727',
+          background: 'var(--bg-secondary)',
+          border: '1px solid var(--border-subtle)',
           borderRadius: '14px',
           padding: '12px 16px',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px' }}>
-          <Search size={16} color="#8D9999" />
+          <Search size={16} color="var(--text-secondary)" />
           <input
             type="text"
             placeholder="Search personas by name, occupation, goals, or pain points..."
@@ -397,13 +397,13 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               background: 'transparent',
               border: 'none',
               outline: 'none',
-              color: '#F4F7F7',
+              color: 'var(--text-primary)',
               fontSize: '0.88rem',
               width: '100%',
             }}
           />
           {searchQuery && (
-            <button type="button" onClick={() => setSearchQuery('')} style={{ background: 'none', border: 'none', color: '#8D9999', cursor: 'pointer' }}>
+            <button type="button" onClick={() => setSearchQuery('')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
               <X size={14} />
             </button>
           )}
@@ -415,12 +415,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             value={selectedSegmentFilter}
             onChange={(e) => setSelectedSegmentFilter(e.target.value)}
             style={{
-              background: '#141818',
-              border: '1px solid #202727',
+              background: 'var(--bg-card-hover)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '8px',
               padding: '6px 12px',
               fontSize: '0.82rem',
-              color: '#F4F7F7',
+              color: 'var(--text-primary)',
               outline: 'none',
               cursor: 'pointer',
             }}
@@ -438,12 +438,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             value={selectedStatusFilter}
             onChange={(e) => setSelectedStatusFilter(e.target.value)}
             style={{
-              background: '#141818',
-              border: '1px solid #202727',
+              background: 'var(--bg-card-hover)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '8px',
               padding: '6px 12px',
               fontSize: '0.82rem',
-              color: '#F4F7F7',
+              color: 'var(--text-primary)',
               outline: 'none',
               cursor: 'pointer',
             }}
@@ -458,12 +458,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             value={selectedGroundingFilter}
             onChange={(e) => setSelectedGroundingFilter(e.target.value)}
             style={{
-              background: '#141818',
-              border: '1px solid #202727',
+              background: 'var(--bg-card-hover)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '8px',
               padding: '6px 12px',
               fontSize: '0.82rem',
-              color: '#F4F7F7',
+              color: 'var(--text-primary)',
               outline: 'none',
               cursor: 'pointer',
             }}
@@ -474,19 +474,19 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           </select>
 
           {/* Export Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderLeft: '1px solid #202727', paddingLeft: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderLeft: '1px solid var(--border-subtle)', paddingLeft: '10px' }}>
             <button
               type="button"
               onClick={handleExportJSON}
               disabled={filteredPersonas.length === 0}
               title="Export filtered personas as JSON"
               style={{
-                background: '#141818',
-                border: '1px solid #202727',
+                background: 'var(--bg-card-hover)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '8px',
                 padding: '6px 10px',
                 fontSize: '0.78rem',
-                color: '#8D9999',
+                color: 'var(--text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
@@ -501,12 +501,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               disabled={filteredPersonas.length === 0}
               title="Export filtered personas as CSV"
               style={{
-                background: '#141818',
-                border: '1px solid #202727',
+                background: 'var(--bg-card-hover)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '8px',
                 padding: '6px 10px',
                 fontSize: '0.78rem',
-                color: '#8D9999',
+                color: 'var(--text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
@@ -525,32 +525,32 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       {isLoading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
           {[1, 2, 3, 4, 5, 6].map((idx) => (
-            <div key={idx} style={{ background: '#0D1111', border: '1px solid #202727', borderRadius: '16px', padding: '24px', height: '320px', animation: 'pulse 1.5s infinite' }}>
-              <div style={{ height: '48px', width: '48px', borderRadius: '50%', background: '#141818', marginBottom: '16px' }} />
-              <div style={{ height: '20px', width: '60%', background: '#141818', borderRadius: '6px', marginBottom: '10px' }} />
-              <div style={{ height: '14px', width: '80%', background: '#141818', borderRadius: '4px', marginBottom: '18px' }} />
-              <div style={{ height: '60px', width: '100%', background: '#141818', borderRadius: '8px' }} />
+            <div key={idx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px', height: '320px', animation: 'pulse 1.5s infinite' }}>
+              <div style={{ height: '48px', width: '48px', borderRadius: '50%', background: 'var(--bg-card-hover)', marginBottom: '16px' }} />
+              <div style={{ height: '20px', width: '60%', background: 'var(--bg-card-hover)', borderRadius: '6px', marginBottom: '10px' }} />
+              <div style={{ height: '14px', width: '80%', background: 'var(--bg-card-hover)', borderRadius: '4px', marginBottom: '18px' }} />
+              <div style={{ height: '60px', width: '100%', background: 'var(--bg-card-hover)', borderRadius: '8px' }} />
             </div>
           ))}
         </div>
       ) : error ? (
         <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '16px', padding: '32px', textAlign: 'center' }}>
           <AlertTriangle size={32} color="#EF4444" style={{ margin: '0 auto 12px' }} />
-          <h3 style={{ fontSize: '1.1rem', color: '#F4F7F7', margin: '0 0 6px 0' }}>Failed to Load Personas</h3>
-          <p style={{ fontSize: '0.88rem', color: '#8D9999', margin: '0 0 16px 0' }}>{error}</p>
-          <button type="button" onClick={loadStudyData} style={{ background: '#14B8A6', color: '#080A0A', border: 'none', borderRadius: '8px', padding: '8px 16px', fontWeight: 600, cursor: 'pointer' }}>
+          <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', margin: '0 0 6px 0' }}>Failed to Load Personas</h3>
+          <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: '0 0 16px 0' }}>{error}</p>
+          <button type="button" onClick={loadStudyData} style={{ background: '#14B8A6', color: 'var(--text-on-accent)', border: 'none', borderRadius: '8px', padding: '8px 16px', fontWeight: 600, cursor: 'pointer' }}>
             Retry
           </button>
         </div>
       ) : filteredPersonas.length === 0 ? (
-        <div style={{ background: '#0D1111', border: '1px dashed #202727', borderRadius: '18px', padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(20, 184, 166, 0.1)', border: '1px solid rgba(20, 184, 166, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#14B8A6' }}>
+        <div style={{ background: 'var(--bg-secondary)', border: '1px dashed var(--border-subtle)', borderRadius: '18px', padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#14B8A6' }}>
             <Sparkles size={26} />
           </div>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#F4F7F7', margin: '0 0 8px 0' }}>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px 0' }}>
             {personas.length === 0 ? 'No Synthetic Personas Generated Yet' : 'No Personas Match Your Filter'}
           </h3>
-          <p style={{ fontSize: '0.9rem', color: '#8D9999', maxWidth: '480px', margin: '0 auto 20px', lineHeight: 1.5 }}>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 20px', lineHeight: 1.5 }}>
             {personas.length === 0
               ? 'Generate synthetic consumer simulation agents grounded in your study market segments, pricing quartiles, and research claims.'
               : 'Try clearing your search query or adjusting segment and status filters to see available personas.'}
@@ -561,7 +561,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               onClick={() => setShowGenerateModal(true)}
               style={{
                 background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-                color: '#080A0A',
+                color: 'var(--text-on-accent)',
                 border: 'none',
                 borderRadius: '10px',
                 padding: '10px 22px',
@@ -586,9 +586,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                 setSelectedGroundingFilter('all');
               }}
               style={{
-                background: '#141818',
-                border: '1px solid #202727',
-                color: '#F4F7F7',
+                background: 'var(--bg-card-hover)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-primary)',
                 borderRadius: '8px',
                 padding: '8px 16px',
                 fontSize: '0.85rem',
@@ -617,8 +617,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                 className="bx-stagger"
                 style={{
                   ['--bx-i' as string]: Math.min(cardIdx, 12),
-                  background: '#0D1111',
-                  border: '1px solid #202727',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '16px',
                   padding: '22px',
                   display: 'flex',
@@ -633,7 +633,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.4)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#202727';
+                  e.currentTarget.style.borderColor = 'var(--border-subtle)';
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               >
@@ -647,14 +647,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           width: '44px',
                           height: '44px',
                           borderRadius: '12px',
-                          background: 'linear-gradient(135deg, rgba(20, 184, 166, 0.3) 0%, rgba(34, 211, 238, 0.15) 100%)',
-                          border: '1px solid rgba(20, 184, 166, 0.3)',
+                          background: 'linear-gradient(135deg, var(--border-hover) 0%, rgba(34, 211, 238, 0.15) 100%)',
+                          border: '1px solid var(--border-hover)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontSize: '0.95rem',
                           fontWeight: 700,
-                          color: '#22D3EE',
+                          color: 'var(--accent-cyan)',
                           letterSpacing: '0.04em',
                           flexShrink: 0,
                         }}
@@ -663,27 +663,27 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       </div>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: '#F4F7F7', margin: 0 }}>
+                          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                             {persona.name}
                           </h3>
                           {persona.version > 1 && (
-                            <span style={{ fontSize: '0.68rem', color: '#8D9999', background: '#141818', padding: '1px 5px', borderRadius: '4px' }}>
+                            <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '1px 5px', borderRadius: '4px' }}>
                               v{persona.version}
                             </span>
                           )}
-                          <span style={{ fontSize: '0.68rem', color: '#14B8A6', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                          <span style={{ fontSize: '0.68rem', color: '#14B8A6', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
                             {persona.country_code || 'BD'}
                           </span>
                           {persona.data_source === 'cached' && (
                             <span
                               title="Served from seeded/cached data — not generated live for this study"
-                              style={{ fontSize: '0.62rem', color: '#8D9999', background: '#141818', border: '1px solid #2A3130', padding: '1px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                              style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '1px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
                             >
                               CACHED
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: '#8D9999', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                           {persona.demographics?.age ? `${persona.demographics.age} yo • ` : ''}
                           {persona.demographics?.occupation || persona.archetype || 'Consumer'}
                         </div>
@@ -698,7 +698,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         padding: '3px 8px',
                         borderRadius: '6px',
                         background: isReady ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                        color: isReady ? '#10B981' : '#F59E0B',
+                        color: isReady ? 'var(--accent-emerald)' : '#F59E0B',
                         border: `1px solid ${isReady ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`,
                         whiteSpace: 'nowrap',
                       }}
@@ -709,45 +709,45 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
                   {/* Tagline / Evocative Archetype */}
                   {persona.tagline && (
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#22D3EE', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <Sparkles size={12} color="#22D3EE" />
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--accent-cyan)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Sparkles size={12} color="var(--accent-cyan)" />
                       <span>{persona.tagline}</span>
                     </div>
                   )}
 
                   {/* Segment & Synthetic Tag */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 500, padding: '2px 8px', borderRadius: '6px', background: 'rgba(34, 211, 238, 0.1)', color: '#22D3EE', border: '1px solid rgba(34, 211, 238, 0.2)' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 500, padding: '2px 8px', borderRadius: '6px', background: 'rgba(34, 211, 238, 0.1)', color: 'var(--accent-cyan)', border: '1px solid rgba(34, 211, 238, 0.2)' }}>
                       {persona.segment_name || 'Target Segment'}
                     </span>
-                    <span style={{ fontSize: '0.72rem', color: '#8D9999', background: '#141818', padding: '2px 7px', borderRadius: '5px', border: '1px solid #202727' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '2px 7px', borderRadius: '5px', border: '1px solid var(--border-subtle)' }}>
                       Synthetic Persona
                     </span>
-                    <span style={{ fontSize: '0.72rem', color: '#8D9999', background: '#141818', padding: '2px 7px', borderRadius: '5px', border: '1px solid #202727' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '2px 7px', borderRadius: '5px', border: '1px solid var(--border-subtle)' }}>
                       {persona.origin_country || 'Bangladesh'}
                     </span>
                   </div>
 
                   {/* Big Five Personality Micro Bars */}
                   {persona.personality && (
-                    <div style={{ background: '#141818', border: '1px solid #1E2626', borderRadius: '8px', padding: '8px 10px', marginBottom: '12px' }}>
-                      <div style={{ fontSize: '0.7rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '8px 10px', marginBottom: '12px' }}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Brain size={11} color="#14B8A6" /> Big Five Traits
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', textAlign: 'center' }}>
                         {[
                           { label: 'O', name: 'Openness', val: persona.personality.openness, color: '#38BDF8' },
-                          { label: 'C', name: 'Conscientiousness', val: persona.personality.conscientiousness, color: '#10B981' },
+                          { label: 'C', name: 'Conscientiousness', val: persona.personality.conscientiousness, color: 'var(--accent-emerald)' },
                           { label: 'E', name: 'Extroversion', val: persona.personality.extroversion, color: '#F59E0B' },
                           { label: 'A', name: 'Agreeableness', val: persona.personality.agreeableness, color: '#A855F7' },
                           { label: 'N', name: 'Neuroticism', val: persona.personality.neuroticism, color: '#EC4899' },
                         ].map((trait) => (
                           <div key={trait.label} title={`${trait.name}: ${trait.val}/100`}>
                             <div style={{ fontSize: '0.68rem', fontWeight: 600, color: trait.color }}>{trait.val}</div>
-                            <div style={{ height: '3px', background: '#202727', borderRadius: '2px', overflow: 'hidden', margin: '2px 0' }}>
+                            <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden', margin: '2px 0' }}>
                               <div style={{ width: `${trait.val}%`, height: '100%', background: trait.color }} />
                             </div>
-                            <div style={{ fontSize: '0.62rem', color: '#8D9999' }}>{trait.label}</div>
+                            <div style={{ fontSize: '0.62rem', color: 'var(--text-secondary)' }}>{trait.label}</div>
                           </div>
                         ))}
                       </div>
@@ -755,26 +755,26 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   )}
 
                   {/* Bio or Quote preview */}
-                  <p style={{ fontSize: '0.84rem', color: '#C8D2D2', lineHeight: 1.45, margin: '0 0 12px 0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  <p style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.45, margin: '0 0 12px 0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                     {persona.quote ? `"${persona.quote}"` : persona.bio}
                   </p>
 
                   {/* Goal and Pain Point Pills */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
                     {persona.goals?.[0] && (
-                      <div style={{ fontSize: '0.78rem', color: '#A0AFAF', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         <Target size={12} color="#14B8A6" style={{ flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{persona.goals[0]}</span>
                       </div>
                     )}
                     {persona.pain_points?.[0] && (
-                      <div style={{ fontSize: '0.78rem', color: '#A0AFAF', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         <AlertCircle size={12} color="#F59E0B" style={{ flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{persona.pain_points[0]}</span>
                       </div>
                     )}
                     {persona.detailed_attributes?.work_schedule && (
-                      <div style={{ fontSize: '0.74rem', color: '#8D9999', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         <Clock size={11} color="#38BDF8" style={{ flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{persona.detailed_attributes.work_schedule}</span>
                       </div>
@@ -783,19 +783,19 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                 </div>
 
                 {/* Card Footer: Commercial budget, Grounding score meter, Deep Dive Button */}
-                <div style={{ borderTop: '1px solid #1A2222', paddingTop: '14px' }}>
+                <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: '#8D9999' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       <CreditCard size={13} color="#14B8A6" />
                       <span>{persona.commercial_profile?.monthly_budget_bdt ? `৳${persona.commercial_profile.monthly_budget_bdt}/mo` : '৳350/mo'}</span>
                     </div>
 
                     {/* Grounding Score */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div style={{ width: '48px', height: '5px', borderRadius: '3px', background: '#1A2222', overflow: 'hidden' }}>
-                        <div style={{ width: `${groundingPct}%`, height: '100%', background: groundingPct >= 90 ? '#10B981' : '#14B8A6' }} />
+                      <div style={{ width: '48px', height: '5px', borderRadius: '3px', background: 'var(--border-subtle)', overflow: 'hidden' }}>
+                        <div style={{ width: `${groundingPct}%`, height: '100%', background: groundingPct >= 90 ? 'var(--accent-emerald)' : '#14B8A6' }} />
                       </div>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: groundingPct >= 90 ? '#10B981' : '#14B8A6' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: groundingPct >= 90 ? 'var(--accent-emerald)' : '#14B8A6' }}>
                         {groundingPct}%
                       </span>
                     </div>
@@ -810,13 +810,13 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       }}
                       style={{
                         flex: 1,
-                        background: '#141818',
-                        border: '1px solid #202727',
+                        background: 'var(--bg-card-hover)',
+                        border: '1px solid var(--border-subtle)',
                         borderRadius: '8px',
                         padding: '7px 12px',
                         fontSize: '0.82rem',
                         fontWeight: 600,
-                        color: '#F4F7F7',
+                        color: 'var(--text-primary)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
@@ -825,14 +825,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         transition: 'all 0.16s ease',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(20, 184, 166, 0.12)';
-                        e.currentTarget.style.borderColor = 'rgba(20, 184, 166, 0.3)';
+                        e.currentTarget.style.background = 'var(--accent-subtle)';
+                        e.currentTarget.style.borderColor = 'var(--border-hover)';
                         e.currentTarget.style.color = '#14B8A6';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#141818';
-                        e.currentTarget.style.borderColor = '#202727';
-                        e.currentTarget.style.color = '#F4F7F7';
+                        e.currentTarget.style.background = 'var(--bg-card-hover)';
+                        e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                        e.currentTarget.style.color = 'var(--text-primary)';
                       }}
                     >
                       Deep Dive Inspector
@@ -848,7 +848,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           border: '1px solid rgba(34, 211, 238, 0.25)',
                           borderRadius: '8px',
                           padding: '7px 10px',
-                          color: '#22D3EE',
+                          color: 'var(--accent-cyan)',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
@@ -865,8 +865,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         onClick={() => onTestBehaviorWithPersona(persona.id)}
                         title="Simulate Behavioral Scenario with this persona (Part 7)"
                         style={{
-                          background: 'rgba(20, 184, 166, 0.1)',
-                          border: '1px solid rgba(20, 184, 166, 0.25)',
+                          background: 'var(--accent-subtle)',
+                          border: '1px solid var(--accent-glow)',
                           borderRadius: '8px',
                           padding: '7px 10px',
                           color: '#14B8A6',
@@ -909,8 +909,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           <div
             className="bx-modal"
             style={{
-              background: '#0D1111',
-              border: '1px solid #202727',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '20px',
               maxWidth: '900px',
               width: '100%',
@@ -923,38 +923,38 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div style={{ padding: '24px 28px', borderBottom: '1px solid #202727', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
+            <div style={{ padding: '24px 28px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div
                   style={{
                     width: '54px',
                     height: '54px',
                     borderRadius: '16px',
-                    background: 'linear-gradient(135deg, rgba(20, 184, 166, 0.3) 0%, rgba(34, 211, 238, 0.15) 100%)',
-                    border: '1px solid rgba(20, 184, 166, 0.35)',
+                    background: 'linear-gradient(135deg, var(--border-hover) 0%, rgba(34, 211, 238, 0.15) 100%)',
+                    border: '1px solid var(--border-hover)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '1.2rem',
                     fontWeight: 700,
-                    color: '#22D3EE',
+                    color: 'var(--accent-cyan)',
                   }}
                 >
                   {inspectingPersona.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#F4F7F7', margin: 0 }}>
+                    <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                       {inspectingPersona.name}
                     </h2>
-                    <span style={{ fontSize: '0.72rem', color: '#8D9999', background: '#141818', padding: '2px 6px', borderRadius: '4px' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '2px 6px', borderRadius: '4px' }}>
                       v{inspectingPersona.version}
                     </span>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: inspectingPersona.status === 'ready' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)', color: inspectingPersona.status === 'ready' ? '#10B981' : '#F59E0B', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: inspectingPersona.status === 'ready' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)', color: inspectingPersona.status === 'ready' ? 'var(--accent-emerald)' : '#F59E0B', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
                       {inspectingPersona.status === 'ready' ? 'Verified' : 'Needs Review'}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.85rem', color: '#8D9999', marginTop: '3px' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
                     {inspectingPersona.demographics?.age} yo • {inspectingPersona.demographics?.occupation} • {inspectingPersona.demographics?.location}
                   </div>
                 </div>
@@ -966,12 +966,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   onClick={() => handleRegeneratePersona(inspectingPersona.id)}
                   disabled={isRegenerating}
                   style={{
-                    background: '#141818',
-                    border: '1px solid #202727',
+                    background: 'var(--bg-card-hover)',
+                    border: '1px solid var(--border-subtle)',
                     borderRadius: '8px',
                     padding: '6px 12px',
                     fontSize: '0.8rem',
-                    color: '#8D9999',
+                    color: 'var(--text-secondary)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -984,7 +984,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setInspectingPersona(null)}
-                  style={{ background: 'none', border: 'none', color: '#8D9999', cursor: 'pointer', padding: '6px' }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px' }}
                 >
                   <X size={18} />
                 </button>
@@ -992,7 +992,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             </div>
 
             {/* Modal Tabs Bar */}
-            <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #202727', padding: '0 28px', background: '#090C0C', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', padding: '0 28px', background: '#090C0C', overflowX: 'auto' }}>
               {[
                 { id: 'profile', label: 'Persona Profile', icon: <User size={14} /> },
                 { id: 'personality', label: 'Personality (Big Five)', icon: <Brain size={14} /> },
@@ -1015,7 +1015,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       padding: '12px 16px',
                       fontSize: '0.84rem',
                       fontWeight: isActive ? 600 : 500,
-                      color: isActive ? '#14B8A6' : '#8D9999',
+                      color: isActive ? '#14B8A6' : 'var(--text-secondary)',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -1040,19 +1040,19 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   {inspectingPersona.tagline && (
                     <div style={{ background: 'rgba(34, 211, 238, 0.08)', border: '1px solid rgba(34, 211, 238, 0.25)', borderRadius: '12px', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div>
-                        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: '#22D3EE', fontWeight: 700, letterSpacing: '0.05em' }}>Archetype Tagline</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 600, color: '#F4F7F7', marginTop: '2px' }}>{inspectingPersona.tagline}</div>
+                        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--accent-cyan)', fontWeight: 700, letterSpacing: '0.05em' }}>Archetype Tagline</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{inspectingPersona.tagline}</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {inspectingPersona.data_source === 'cached' && (
                           <span
                             title="Served from seeded/cached data — not generated live for this study"
-                            style={{ fontSize: '0.7rem', color: '#8D9999', background: '#141818', border: '1px solid #2A3130', padding: '3px 8px', borderRadius: '6px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                            style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '3px 8px', borderRadius: '6px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
                           >
                             CACHED
                           </span>
                         )}
-                        <span style={{ fontSize: '0.78rem', color: '#14B8A6', background: 'rgba(20, 184, 166, 0.12)', border: '1px solid rgba(20, 184, 166, 0.25)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                        <span style={{ fontSize: '0.78rem', color: '#14B8A6', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
                           {inspectingPersona.country_code || 'BD'} • {inspectingPersona.origin_country || 'Bangladesh'}
                         </span>
                       </div>
@@ -1060,15 +1060,15 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   )}
 
                   {/* Bio & Quote */}
-                  <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
+                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#14B8A6', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
                       <Quote size={14} /> Consumer Bio & Direct Perspective
                     </div>
-                    <p style={{ fontSize: '0.9rem', color: '#F4F7F7', lineHeight: 1.55, margin: '0 0 10px 0' }}>
+                    <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.55, margin: '0 0 10px 0' }}>
                       {inspectingPersona.bio}
                     </p>
                     {inspectingPersona.quote && (
-                      <div style={{ fontStyle: 'italic', color: '#22D3EE', fontSize: '0.86rem', borderLeft: '2px solid #22D3EE', paddingLeft: '10px' }}>
+                      <div style={{ fontStyle: 'italic', color: 'var(--accent-cyan)', fontSize: '0.86rem', borderLeft: '2px solid var(--accent-cyan)', paddingLeft: '10px' }}>
                         "{inspectingPersona.quote}"
                       </div>
                     )}
@@ -1076,22 +1076,22 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
                   {/* Goals & Needs Grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10B981', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
+                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-emerald)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
                         <Target size={14} /> Core Goals
                       </div>
-                      <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: '#C8D2D2' }}>
+                      <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
                         {inspectingPersona.goals?.map((g, idx) => (
                           <li key={idx}>{g}</li>
                         ))}
                       </ul>
                     </div>
 
-                    <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#22D3EE', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
+                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-cyan)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
                         <CheckCircle2 size={14} /> Observed Needs
                       </div>
-                      <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: '#C8D2D2' }}>
+                      <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
                         {inspectingPersona.needs?.map((n, idx) => (
                           <li key={idx}>{n}</li>
                         ))}
@@ -1101,22 +1101,22 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
                   {/* Pain Points & Objections Grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#F59E0B', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
                         <AlertCircle size={14} /> Pain Points & Anxieties
                       </div>
-                      <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: '#C8D2D2' }}>
+                      <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
                         {inspectingPersona.pain_points?.map((pp, idx) => (
                           <li key={idx}>{pp}</li>
                         ))}
                       </ul>
                     </div>
 
-                    <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#EF4444', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
                         <AlertTriangle size={14} /> Buying Objections
                       </div>
-                      <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: '#C8D2D2' }}>
+                      <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
                         {inspectingPersona.objections?.map((obj, idx) => (
                           <li key={idx}>{obj}</li>
                         ))}
@@ -1129,17 +1129,17 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {/* TAB: PERSONALITY (BIG FIVE) */}
               {inspectorTab === 'personality' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                  <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '14px', padding: '20px' }}>
+                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                       <div>
-                        <h4 style={{ fontSize: '1rem', fontWeight: 600, color: '#F4F7F7', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <Brain size={18} color="#14B8A6" /> Big Five Trait Spectrum
                         </h4>
-                        <p style={{ fontSize: '0.82rem', color: '#8D9999', margin: '4px 0 0 0' }}>
+                        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
                           Quantified psychometric scale (0–100) governing simulation conversational tone, risk tolerance, and decision pace.
                         </p>
                       </div>
-                      <span style={{ fontSize: '0.75rem', background: 'rgba(20, 184, 166, 0.12)', color: '#14B8A6', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                      <span style={{ fontSize: '0.75rem', background: 'var(--accent-subtle)', color: '#14B8A6', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>
                         OCEAN Psychometrics
                       </span>
                     </div>
@@ -1159,7 +1159,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             name: 'Conscientiousness',
                             val: inspectingPersona.personality.conscientiousness ?? 50,
                             desc: 'Self-discipline, organization, diligence, and goal-oriented planning.',
-                            color: '#10B981',
+                            color: 'var(--accent-emerald)',
                           },
                           {
                             key: 'extroversion',
@@ -1183,20 +1183,20 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             color: '#EC4899',
                           },
                         ].map((trait) => (
-                          <div key={trait.key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '10px', padding: '14px' }}>
+                          <div key={trait.key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#F4F7F7' }}>{trait.name}</div>
+                              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>{trait.name}</div>
                               <div style={{ fontSize: '0.95rem', fontWeight: 700, color: trait.color }}>{trait.val} / 100</div>
                             </div>
-                            <div style={{ height: '7px', background: '#1A2222', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+                            <div style={{ height: '7px', background: 'var(--border-subtle)', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
                               <div style={{ width: `${trait.val}%`, height: '100%', background: `linear-gradient(90deg, ${trait.color}99, ${trait.color})`, borderRadius: '4px' }} />
                             </div>
-                            <p style={{ fontSize: '0.78rem', color: '#8D9999', margin: 0, lineHeight: 1.4 }}>{trait.desc}</p>
+                            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>{trait.desc}</p>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div style={{ textAlign: 'center', color: '#8D9999', padding: '24px' }}>
+                      <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '24px' }}>
                         No psychometric score data recorded for this persona.
                       </div>
                     )}
@@ -1207,14 +1207,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {/* TAB: LIFESTYLE & ROUTINE (45+ DETAILED ATTRIBUTES) */}
               {inspectorTab === 'lifestyle' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                  <div style={{ fontSize: '0.85rem', color: '#8D9999' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                     Granular behavioral context comprising daily habits, coping strategies, cultural affiliations, and operational realities.
                   </div>
 
                   {inspectingPersona.detailed_attributes ? (
                     <>
                       {/* Section 1: Work & Daily Schedule */}
-                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
+                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#38BDF8', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <Briefcase size={16} /> Work, Commute & Schedule Context
                         </div>
@@ -1229,9 +1229,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'daily_activities', label: 'Daily Activities' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
                               </div>
                             ) : null
                           ))}
@@ -1239,8 +1239,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       </div>
 
                       {/* Section 2: Living & Sustenance */}
-                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#10B981', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
+                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-emerald)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <Coffee size={16} /> Living, Meals & Household Structure
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
@@ -1254,9 +1254,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'hobbies', label: 'Hobbies & Interests' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
                               </div>
                             ) : null
                           ))}
@@ -1264,7 +1264,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       </div>
 
                       {/* Section 3: Mindset, Psychology & Communication */}
-                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
+                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#F59E0B', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <Compass size={16} /> Mindset, Psychology & Communication Style
                         </div>
@@ -1283,9 +1283,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'learning_style', label: 'Learning Style' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
                               </div>
                             ) : null
                           ))}
@@ -1293,7 +1293,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       </div>
 
                       {/* Section 4: Culture, Beliefs & Social Values */}
-                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
+                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#A855F7', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <Globe size={16} /> Culture, Beliefs & Life Priorities
                         </div>
@@ -1315,9 +1315,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'community_engagement', label: 'Community Engagement' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
                               </div>
                             ) : null
                           ))}
@@ -1325,7 +1325,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       </div>
 
                       {/* Section 5: Finance & Technology */}
-                      <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '18px' }}>
+                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#EC4899', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <DollarSign size={16} /> Financial Mindset & Technology Adoption
                         </div>
@@ -1341,9 +1341,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'technology_usage', label: 'Technology Usage' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: '#0D1111', border: '1px solid #1E2626', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: '#8D9999', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: '#F4F7F7', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
                               </div>
                             ) : null
                           ))}
@@ -1351,7 +1351,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       </div>
                     </>
                   ) : (
-                    <div style={{ textAlign: 'center', color: '#8D9999', padding: '24px' }}>
+                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '24px' }}>
                       No detailed lifestyle attributes recorded for this persona.
                     </div>
                   )}
@@ -1362,31 +1362,31 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {inspectorTab === 'commercial' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
-                    <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#8D9999', marginBottom: '4px' }}>Estimated Monthly Budget</div>
+                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Estimated Monthly Budget</div>
                       <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#14B8A6' }}>
                         ৳{inspectingPersona.commercial_profile?.monthly_budget_bdt || 350} / mo
                       </div>
                     </div>
 
-                    <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#8D9999', marginBottom: '4px' }}>Price Sensitivity</div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#F4F7F7' }}>
+                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Price Sensitivity</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                         {inspectingPersona.commercial_profile?.price_sensitivity || 'High'}
                       </div>
                     </div>
 
-                    <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#8D9999', marginBottom: '4px' }}>Payment Preference</div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#22D3EE' }}>
+                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Payment Preference</div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
                         {inspectingPersona.commercial_profile?.payment_preference || 'bKash / Nagad Mobile Wallet'}
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#F4F7F7', marginBottom: '8px' }}>Willingness-to-Pay Range</div>
-                    <p style={{ fontSize: '0.86rem', color: '#C8D2D2', margin: 0 }}>
+                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Willingness-to-Pay Range</div>
+                    <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', margin: 0 }}>
                       {inspectingPersona.commercial_profile?.willingness_to_pay || '৳250–৳400 / month based on empirical student budget distributions.'}
                     </p>
                   </div>
@@ -1396,22 +1396,22 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {/* TAB 3: TECHNOLOGY PROFILE */}
               {inspectorTab === 'technology' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#F4F7F7', marginBottom: '10px' }}>Primary Devices</div>
+                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>Primary Devices</div>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {inspectingPersona.technology_profile?.primary_devices?.map((d, idx) => (
-                        <span key={idx} style={{ background: '#1E2626', color: '#22D3EE', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid rgba(34, 211, 238, 0.2)' }}>
+                        <span key={idx} style={{ background: 'var(--border-subtle)', color: 'var(--accent-cyan)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid rgba(34, 211, 238, 0.2)' }}>
                           {d}
                         </span>
                       ))}
                     </div>
                   </div>
 
-                  <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#F4F7F7', marginBottom: '10px' }}>Frequently Used Platforms</div>
+                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>Frequently Used Platforms</div>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {inspectingPersona.technology_profile?.platforms?.map((p, idx) => (
-                        <span key={idx} style={{ background: '#1E2626', color: '#14B8A6', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid rgba(20, 184, 166, 0.2)' }}>
+                        <span key={idx} style={{ background: 'var(--border-subtle)', color: '#14B8A6', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid var(--accent-glow)' }}>
                           {p}
                         </span>
                       ))}
@@ -1423,28 +1423,28 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {/* TAB 4: EVIDENCE CITATIONS */}
               {inspectorTab === 'grounding' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ fontSize: '0.84rem', color: '#8D9999' }}>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
                     Every synthetic persona is anchored in empirical findings extracted during study research runs.
                   </div>
 
                   {inspectingPersona.evidence_citations && inspectingPersona.evidence_citations.length > 0 ? (
                     inspectingPersona.evidence_citations.map((c, idx) => (
-                      <div key={idx} style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
+                      <div key={idx} style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#14B8A6', textTransform: 'uppercase' }}>
                             {c.category || 'General Finding'}
                           </span>
-                          <span style={{ fontSize: '0.75rem', color: '#8D9999' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                             Confidence: {c.confidence ? `${Math.round(c.confidence * 100)}%` : '88%'}
                           </span>
                         </div>
-                        <p style={{ fontSize: '0.88rem', color: '#F4F7F7', margin: 0, lineHeight: 1.45 }}>
+                        <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.45 }}>
                           "{c.claim_text}"
                         </p>
                       </div>
                     ))
                   ) : (
-                    <div style={{ padding: '24px', textAlign: 'center', color: '#8D9999', fontSize: '0.85rem' }}>
+                    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                       No direct claim citations recorded for this persona.
                     </div>
                   )}
@@ -1477,16 +1477,16 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {/* TAB 5: DATASET PROVENANCE */}
               {inspectorTab === 'dataset' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ fontSize: '0.84rem', color: '#8D9999' }}>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
                     Dataset distributions that constrained demographic and commercial boundaries.
                   </div>
 
-                  <div style={{ background: '#141818', border: '1px solid #202727', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#F4F7F7', marginBottom: '10px' }}>Variable Constraints</div>
+                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>Variable Constraints</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {inspectingPersona.dataset_refs?.map((ref, idx) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #1A2222', fontSize: '0.82rem' }}>
-                          <span style={{ color: '#8D9999' }}>{ref.variable}</span>
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)', fontSize: '0.82rem' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>{ref.variable}</span>
                           <span style={{ color: '#14B8A6', fontWeight: 600 }}>{String(ref.value)}</span>
                         </div>
                       ))}
@@ -1497,8 +1497,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div style={{ padding: '16px 28px', borderTop: '1px solid #202727', background: '#090C0C', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '0.78rem', color: '#8D9999' }}>
+            <div style={{ padding: '16px 28px', borderTop: '1px solid var(--border-subtle)', background: '#090C0C', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                 Persona ID: <code style={{ color: '#14B8A6' }}>{inspectingPersona.id}</code>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1511,7 +1511,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     }}
                     style={{
                       background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-                      color: '#080A0A',
+                      color: 'var(--text-on-accent)',
                       border: 'none',
                       borderRadius: '8px',
                       padding: '8px 16px',
@@ -1530,9 +1530,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   type="button"
                   onClick={() => setInspectingPersona(null)}
                   style={{
-                    background: '#141818',
-                    border: '1px solid #202727',
-                    color: '#F4F7F7',
+                    background: 'var(--bg-card-hover)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-primary)',
                     borderRadius: '8px',
                     padding: '8px 16px',
                     fontSize: '0.84rem',
@@ -1569,8 +1569,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           <div
             className="bx-modal"
             style={{
-              background: '#0D1111',
-              border: '1px solid #202727',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '20px',
               maxWidth: '560px',
               width: '100%',
@@ -1581,15 +1581,15 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
               <div>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#F4F7F7', margin: '0 0 4px 0' }}>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px 0' }}>
                   Generate Synthetic Personas
                 </h2>
-                <p style={{ fontSize: '0.85rem', color: '#8D9999', margin: 0 }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
                   Synthesize data-grounded simulation agents across market segments.
                 </p>
               </div>
               {!isGenerating && (
-                <button type="button" onClick={() => setShowGenerateModal(false)} style={{ background: 'none', border: 'none', color: '#8D9999', cursor: 'pointer' }}>
+                <button type="button" onClick={() => setShowGenerateModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                   <X size={18} />
                 </button>
               )}
@@ -1605,7 +1605,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                 {/* Personas per segment */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#F4F7F7', marginBottom: '8px' }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
                     Personas per Market Segment: {personasPerSegment}
                   </label>
                   <input
@@ -1616,7 +1616,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     onChange={(e) => setPersonasPerSegment(Number(e.target.value))}
                     style={{ width: '100%', accentColor: '#14B8A6', cursor: 'pointer' }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#8D9999', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                     <span>1 Persona</span>
                     <span>3 Personas</span>
                     <span>6 Personas</span>
@@ -1625,25 +1625,25 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
                 {/* Distribution Strategy */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#F4F7F7', marginBottom: '8px' }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
                     Quota Allocation Strategy
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div
                       onClick={() => setDistributionStrategy('population_weighted')}
                       style={{
-                        background: distributionStrategy === 'population_weighted' ? 'rgba(20, 184, 166, 0.12)' : '#141818',
-                        border: `1px solid ${distributionStrategy === 'population_weighted' ? '#14B8A6' : '#202727'}`,
+                        background: distributionStrategy === 'population_weighted' ? 'var(--accent-subtle)' : 'var(--bg-card-hover)',
+                        border: `1px solid ${distributionStrategy === 'population_weighted' ? '#14B8A6' : 'var(--border-subtle)'}`,
                         borderRadius: '10px',
                         padding: '12px',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'population_weighted' ? '#14B8A6' : '#F4F7F7', marginBottom: '2px' }}>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'population_weighted' ? '#14B8A6' : 'var(--text-primary)', marginBottom: '2px' }}>
                         Population-Weighted
                       </div>
-                      <div style={{ fontSize: '0.74rem', color: '#8D9999' }}>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
                         Allocates personas proportionally by segment market share.
                       </div>
                     </div>
@@ -1651,18 +1651,18 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     <div
                       onClick={() => setDistributionStrategy('equal')}
                       style={{
-                        background: distributionStrategy === 'equal' ? 'rgba(20, 184, 166, 0.12)' : '#141818',
-                        border: `1px solid ${distributionStrategy === 'equal' ? '#14B8A6' : '#202727'}`,
+                        background: distributionStrategy === 'equal' ? 'var(--accent-subtle)' : 'var(--bg-card-hover)',
+                        border: `1px solid ${distributionStrategy === 'equal' ? '#14B8A6' : 'var(--border-subtle)'}`,
                         borderRadius: '10px',
                         padding: '12px',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'equal' ? '#14B8A6' : '#F4F7F7', marginBottom: '2px' }}>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'equal' ? '#14B8A6' : 'var(--text-primary)', marginBottom: '2px' }}>
                         Equal Distribution
                       </div>
-                      <div style={{ fontSize: '0.74rem', color: '#8D9999' }}>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
                         Generates equal number of personas for each segment.
                       </div>
                     </div>
@@ -1674,7 +1674,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowGenerateModal(false)}
-                    style={{ background: '#141818', border: '1px solid #202727', color: '#8D9999', borderRadius: '8px', padding: '9px 16px', fontSize: '0.84rem', cursor: 'pointer' }}
+                    style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', borderRadius: '8px', padding: '9px 16px', fontSize: '0.84rem', cursor: 'pointer' }}
                   >
                     Cancel
                   </button>
@@ -1683,7 +1683,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     onClick={handleTriggerGeneration}
                     style={{
                       background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-                      color: '#080A0A',
+                      color: 'var(--text-on-accent)',
                       border: 'none',
                       borderRadius: '8px',
                       padding: '9px 18px',
@@ -1726,14 +1726,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             justifyContent: 'center',
                             fontSize: '0.75rem',
                             fontWeight: 700,
-                            background: isDone ? '#10B981' : isCurrent ? 'rgba(20, 184, 166, 0.2)' : '#141818',
-                            color: isDone ? '#080A0A' : isCurrent ? '#14B8A6' : '#8D9999',
-                            border: `1px solid ${isDone ? '#10B981' : isCurrent ? '#14B8A6' : '#202727'}`,
+                            background: isDone ? 'var(--accent-emerald)' : isCurrent ? 'var(--accent-glow)' : 'var(--bg-card-hover)',
+                            color: isDone ? 'var(--bg-pure)' : isCurrent ? '#14B8A6' : 'var(--text-secondary)',
+                            border: `1px solid ${isDone ? 'var(--accent-emerald)' : isCurrent ? '#14B8A6' : 'var(--border-subtle)'}`,
                           }}
                         >
                           {isDone ? <CheckCircle2 size={14} /> : s.step}
                         </div>
-                        <span style={{ fontSize: '0.86rem', color: isDone || isCurrent ? '#F4F7F7' : '#8D9999', fontWeight: isCurrent ? 600 : 400 }}>
+                        <span style={{ fontSize: '0.86rem', color: isDone || isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: isCurrent ? 600 : 400 }}>
                           {s.label}
                         </span>
                       </div>
@@ -1741,8 +1741,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   })}
                 </div>
 
-                <div style={{ height: '6px', borderRadius: '3px', background: '#141818', overflow: 'hidden' }}>
-                  <div style={{ width: `${(generationStep / 5) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #14B8A6, #22D3EE)', transition: 'width 0.4s ease' }} />
+                <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-card-hover)', overflow: 'hidden' }}>
+                  <div style={{ width: `${(generationStep / 5) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #14B8A6, var(--accent-cyan))', transition: 'width 0.4s ease' }} />
                 </div>
               </div>
             )}

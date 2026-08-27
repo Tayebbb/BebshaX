@@ -215,11 +215,12 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
   });
 
   it('shows loading banner and skeleton cards while persona generation is in flight, then clears them', async () => {
-    let resolveGeneration!: (personas: unknown[]) => void;
+    type GeneratedPersonas = Awaited<ReturnType<typeof api.generateStudyPersonas>>;
+    let resolveGeneration!: (personas: GeneratedPersonas) => void;
     vi.spyOn(api, 'generateStudyPersonas').mockReturnValue(
-      new Promise((resolve) => {
+      new Promise<GeneratedPersonas>((resolve) => {
         resolveGeneration = resolve;
-      }) as ReturnType<typeof api.generateStudyPersonas>
+      })
     );
 
     const { container } = render(
@@ -247,7 +248,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
         initials: 'TP',
         role_title: 'Primary User',
         description: 'A generated persona.',
-      },
+      } as GeneratedPersonas[number],
     ]);
 
     // Resolved: skeletons and banner replaced by the persona card

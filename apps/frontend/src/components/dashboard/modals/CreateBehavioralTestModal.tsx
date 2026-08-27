@@ -289,14 +289,14 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
           width: '100%',
           maxWidth: '780px',
           maxHeight: '90vh',
-          backgroundColor: '#0F172A',
-          border: '1px solid rgba(20, 184, 166, 0.25)',
+          backgroundColor: 'var(--bg-card)',
+          border: '1px solid var(--accent-glow)',
           borderRadius: '16px',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(20, 184, 166, 0.1)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px var(--accent-subtle)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          color: '#F8FAFC',
+          color: 'var(--text-primary)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -304,7 +304,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
         <div
           style={{
             padding: '20px 24px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            borderBottom: '1px solid var(--fill-soft-2)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -317,8 +317,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 width: '38px',
                 height: '38px',
                 borderRadius: '10px',
-                backgroundColor: 'rgba(20, 184, 166, 0.15)',
-                border: '1px solid rgba(20, 184, 166, 0.3)',
+                backgroundColor: 'var(--accent-subtle)',
+                border: '1px solid var(--border-hover)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -328,10 +328,10 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               <Sliders size={20} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-main)' }}>
                 New Behavioral Simulation
               </h2>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#94A3B8' }}>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 Step {step} of 4 — {step === 1 ? 'Choose Test Type' : step === 2 ? 'Configure Scenario' : step === 3 ? 'Select Population' : 'Preview & Confirm'}
               </p>
             </div>
@@ -341,7 +341,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#64748B',
+              color: 'var(--text-muted)',
               cursor: 'pointer',
               padding: '6px',
               borderRadius: '8px',
@@ -355,7 +355,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
         </div>
 
         {/* Stepper Progress Bar */}
-        <div style={{ display: 'flex', height: '3px', backgroundColor: 'rgba(255, 255, 255, 0.05)' }}>
+        <div style={{ display: 'flex', height: '3px', backgroundColor: 'var(--fill-soft)' }}>
           {[1, 2, 3, 4].map((s) => (
             <div
               key={s}
@@ -377,7 +377,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 backgroundColor: 'rgba(239, 68, 68, 0.15)',
                 border: '1px solid rgba(239, 68, 68, 0.3)',
                 borderRadius: '8px',
-                color: '#FCA5A5',
+                color: 'var(--status-error-text)',
                 fontSize: '0.85rem',
                 marginBottom: '20px',
               }}
@@ -390,10 +390,10 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
           {step === 1 && (
             <div>
               <div style={{ marginBottom: '18px' }}>
-                <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 600, color: '#F1F5F9' }}>
+                <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                   What product decision do you want to test?
                 </h3>
-                <p style={{ margin: 0, fontSize: '0.82rem', color: '#94A3B8' }}>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                   Simulations test persona economic constraints, cognitive friction, and switching resistance.
                 </p>
               </div>
@@ -414,8 +414,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                       style={{
                         padding: '16px',
                         borderRadius: '12px',
-                        backgroundColor: isSelected ? 'rgba(20, 184, 166, 0.12)' : 'rgba(30, 41, 59, 0.6)',
-                        border: isSelected ? '1px solid #14B8A6' : '1px solid rgba(255, 255, 255, 0.08)',
+                        backgroundColor: isSelected ? 'var(--accent-subtle)' : 'rgba(30, 41, 59, 0.6)',
+                        border: isSelected ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
                       }}
@@ -431,25 +431,25 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                           >
                             {opt.icon}
                           </div>
-                          <span style={{ fontWeight: 600, fontSize: '0.95rem', color: '#FFFFFF' }}>{opt.title}</span>
+                          <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)' }}>{opt.title}</span>
                         </div>
                         <span
                           style={{
                             fontSize: '0.7rem',
                             padding: '3px 8px',
                             borderRadius: '999px',
-                            backgroundColor: 'rgba(20, 184, 166, 0.15)',
-                            color: '#2DD4BF',
-                            border: '1px solid rgba(20, 184, 166, 0.3)',
+                            backgroundColor: 'var(--accent-subtle)',
+                            color: 'var(--accent-teal-bright)',
+                            border: '1px solid var(--border-hover)',
                           }}
                         >
                           {opt.tag}
                         </span>
                       </div>
-                      <p style={{ margin: '0 0 8px 0', fontSize: '0.8rem', color: '#94A3B8', lineHeight: 1.4 }}>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
                         {opt.description}
                       </p>
-                      <div style={{ fontSize: '0.72rem', color: '#64748B', fontStyle: 'italic' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                         {opt.example}
                       </div>
                     </div>
@@ -463,7 +463,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#E2E8F0', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                   Test Name
                 </label>
                 <input
@@ -475,9 +475,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     width: '100%',
                     padding: '10px 14px',
                     borderRadius: '8px',
-                    backgroundColor: '#1E293B',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    color: '#F8FAFC',
+                    backgroundColor: 'var(--bg-card-hover)',
+                    border: '1px solid var(--border-soft)',
+                    color: 'var(--text-primary)',
                     fontSize: '0.9rem',
                     outline: 'none',
                     boxSizing: 'border-box',
@@ -489,7 +489,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               {selectedType === 'pricing_test' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#E2E8F0', marginBottom: '6px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Proposed Price (BDT ৳)
                     </label>
                     <input
@@ -501,16 +501,16 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                         width: '100%',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        backgroundColor: '#1E293B',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#F8FAFC',
+                        backgroundColor: 'var(--bg-card-hover)',
+                        border: '1px solid var(--border-soft)',
+                        color: 'var(--text-primary)',
                         fontSize: '0.9rem',
                         boxSizing: 'border-box',
                       }}
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#E2E8F0', marginBottom: '6px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Billing Period
                     </label>
                     <select
@@ -520,9 +520,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                         width: '100%',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        backgroundColor: '#1E293B',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#F8FAFC',
+                        backgroundColor: 'var(--bg-card-hover)',
+                        border: '1px solid var(--border-soft)',
+                        color: 'var(--text-primary)',
                         fontSize: '0.9rem',
                         boxSizing: 'border-box',
                       }}
@@ -534,7 +534,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     </select>
                   </div>
                   <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#E2E8F0', marginBottom: '6px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Current Alternative Personas Use
                     </label>
                     <input
@@ -546,9 +546,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                         width: '100%',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        backgroundColor: '#1E293B',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#F8FAFC',
+                        backgroundColor: 'var(--bg-card-hover)',
+                        border: '1px solid var(--border-soft)',
+                        color: 'var(--text-primary)',
                         fontSize: '0.9rem',
                         boxSizing: 'border-box',
                       }}
@@ -560,7 +560,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               {selectedType === 'feature_test' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#E2E8F0', marginBottom: '6px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Feature Name
                     </label>
                     <input
@@ -572,16 +572,16 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                         width: '100%',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        backgroundColor: '#1E293B',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#F8FAFC',
+                        backgroundColor: 'var(--bg-card-hover)',
+                        border: '1px solid var(--border-soft)',
+                        color: 'var(--text-primary)',
                         fontSize: '0.9rem',
                         boxSizing: 'border-box',
                       }}
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#E2E8F0', marginBottom: '6px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Key Claimed Benefit
                     </label>
                     <input
@@ -593,9 +593,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                         width: '100%',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        backgroundColor: '#1E293B',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#F8FAFC',
+                        backgroundColor: 'var(--bg-card-hover)',
+                        border: '1px solid var(--border-soft)',
+                        color: 'var(--text-primary)',
                         fontSize: '0.9rem',
                         boxSizing: 'border-box',
                       }}
@@ -607,7 +607,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               {selectedType === 'message_test' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#E2E8F0', marginBottom: '6px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Marketing Headline / Value Prop
                     </label>
                     <input
@@ -619,16 +619,16 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                         width: '100%',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        backgroundColor: '#1E293B',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#F8FAFC',
+                        backgroundColor: 'var(--bg-card-hover)',
+                        border: '1px solid var(--border-soft)',
+                        color: 'var(--text-primary)',
                         fontSize: '0.9rem',
                         boxSizing: 'border-box',
                       }}
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#E2E8F0', marginBottom: '6px' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Call to Action (CTA)
                     </label>
                     <input
@@ -640,9 +640,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                         width: '100%',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        backgroundColor: '#1E293B',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#F8FAFC',
+                        backgroundColor: 'var(--bg-card-hover)',
+                        border: '1px solid var(--border-soft)',
+                        color: 'var(--text-primary)',
                         fontSize: '0.9rem',
                         boxSizing: 'border-box',
                       }}
@@ -652,7 +652,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               )}
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#E2E8F0', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                   Detailed Scenario Context (Optional)
                 </label>
                 <textarea
@@ -664,9 +664,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     width: '100%',
                     padding: '10px 14px',
                     borderRadius: '8px',
-                    backgroundColor: '#1E293B',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    color: '#F8FAFC',
+                    backgroundColor: 'var(--bg-card-hover)',
+                    border: '1px solid var(--border-soft)',
+                    color: 'var(--text-primary)',
                     fontSize: '0.85rem',
                     resize: 'vertical',
                     boxSizing: 'border-box',
@@ -680,10 +680,10 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div>
-                <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 600, color: '#F1F5F9' }}>
+                <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Select Target Population
                 </h3>
-                <p style={{ margin: 0, fontSize: '0.82rem', color: '#94A3B8' }}>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                   Run this behavioral scenario against your grounded synthetic customer population.
                 </p>
               </div>
@@ -697,8 +697,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     gap: '12px',
                     padding: '14px 16px',
                     borderRadius: '10px',
-                    backgroundColor: populationType === 'all' ? 'rgba(20, 184, 166, 0.12)' : 'rgba(30, 41, 59, 0.5)',
-                    border: populationType === 'all' ? '1px solid #14B8A6' : '1px solid rgba(255, 255, 255, 0.08)',
+                    backgroundColor: populationType === 'all' ? 'var(--accent-subtle)' : 'rgba(30, 41, 59, 0.5)',
+                    border: populationType === 'all' ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
                     cursor: 'pointer',
                   }}
                 >
@@ -710,8 +710,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     style={{ accentColor: '#14B8A6' }}
                   />
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#FFFFFF' }}>All Personas in Study</div>
-                    <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>All Personas in Study</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                       Simulate across all {personas.length} synthetic personas in this study.
                     </div>
                   </div>
@@ -724,8 +724,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     gap: '12px',
                     padding: '14px 16px',
                     borderRadius: '10px',
-                    backgroundColor: populationType === 'segment' ? 'rgba(20, 184, 166, 0.12)' : 'rgba(30, 41, 59, 0.5)',
-                    border: populationType === 'segment' ? '1px solid #14B8A6' : '1px solid rgba(255, 255, 255, 0.08)',
+                    backgroundColor: populationType === 'segment' ? 'var(--accent-subtle)' : 'rgba(30, 41, 59, 0.5)',
+                    border: populationType === 'segment' ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
                     cursor: 'pointer',
                   }}
                 >
@@ -737,8 +737,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     style={{ accentColor: '#14B8A6' }}
                   />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#FFFFFF' }}>Specific Market Segment</div>
-                    <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Specific Market Segment</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                       Target only personas within a specific grounded customer segment.
                     </div>
                   </div>
@@ -754,7 +754,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                           alignItems: 'center',
                           gap: '8px',
                           fontSize: '0.85rem',
-                          color: '#E2E8F0',
+                          color: 'var(--text-primary)',
                           cursor: 'pointer',
                         }}
                       >
@@ -778,8 +778,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     gap: '12px',
                     padding: '14px 16px',
                     borderRadius: '10px',
-                    backgroundColor: populationType === 'selected_personas' ? 'rgba(20, 184, 166, 0.12)' : 'rgba(30, 41, 59, 0.5)',
-                    border: populationType === 'selected_personas' ? '1px solid #14B8A6' : '1px solid rgba(255, 255, 255, 0.08)',
+                    backgroundColor: populationType === 'selected_personas' ? 'var(--accent-subtle)' : 'rgba(30, 41, 59, 0.5)',
+                    border: populationType === 'selected_personas' ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
                     cursor: 'pointer',
                   }}
                 >
@@ -791,8 +791,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     style={{ accentColor: '#14B8A6' }}
                   />
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#FFFFFF' }}>Selected Personas</div>
-                    <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Selected Personas</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                       Manually pick individual personas to evaluate.
                     </div>
                   </div>
@@ -809,7 +809,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     maxHeight: '180px',
                     overflowY: 'auto',
                     padding: '8px',
-                    backgroundColor: '#1E293B',
+                    backgroundColor: 'var(--bg-card-hover)',
                     borderRadius: '8px',
                   }}
                 >
@@ -825,7 +825,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                           gap: '8px',
                           padding: '6px 10px',
                           borderRadius: '6px',
-                          backgroundColor: isChecked ? 'rgba(20, 184, 166, 0.2)' : 'transparent',
+                          backgroundColor: isChecked ? 'var(--accent-glow)' : 'transparent',
                           cursor: 'pointer',
                           fontSize: '0.82rem',
                         }}
@@ -836,7 +836,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                           onChange={() => {}}
                           style={{ accentColor: '#14B8A6' }}
                         />
-                        <span style={{ color: isChecked ? '#FFFFFF' : '#94A3B8' }}>{p.name}</span>
+                        <span style={{ color: isChecked ? 'var(--text-main)' : 'var(--text-secondary)' }}>{p.name}</span>
                       </div>
                     );
                   })}
@@ -853,11 +853,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   padding: '16px',
                   backgroundColor: 'rgba(30, 41, 59, 0.6)',
                   borderRadius: '12px',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  border: '1px solid var(--fill-soft-2)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94A3B8' }}>
+                  <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
                     Scenario Summary
                   </span>
                   <span
@@ -865,16 +865,16 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                       fontSize: '0.72rem',
                       padding: '3px 10px',
                       borderRadius: '999px',
-                      backgroundColor: 'rgba(20, 184, 166, 0.15)',
-                      color: '#2DD4BF',
-                      border: '1px solid rgba(20, 184, 166, 0.3)',
+                      backgroundColor: 'var(--accent-subtle)',
+                      color: 'var(--accent-teal-bright)',
+                      border: '1px solid var(--border-hover)',
                     }}
                   >
                     {TEST_TYPE_OPTIONS.find((t) => t.type === selectedType)?.title}
                   </span>
                 </div>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '1.1rem', color: '#FFFFFF' }}>{name}</h4>
-                <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#94A3B8' }}>{description}</p>
+                <h4 style={{ margin: '0 0 6px 0', fontSize: '1.1rem', color: 'var(--text-main)' }}>{name}</h4>
+                <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{description}</p>
 
                 <div
                   style={{
@@ -882,28 +882,28 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     gridTemplateColumns: '1fr 1fr',
                     gap: '8px',
                     padding: '12px',
-                    backgroundColor: '#0F172A',
+                    backgroundColor: 'var(--bg-card)',
                     borderRadius: '8px',
                     fontSize: '0.82rem',
                   }}
                 >
                   {selectedType === 'pricing_test' && (
                     <>
-                      <div><span style={{ color: '#64748B' }}>Price:</span> <strong style={{ color: '#F1F5F9' }}>{price}</strong></div>
-                      <div><span style={{ color: '#64748B' }}>Billing:</span> <strong style={{ color: '#F1F5F9' }}>{billingPeriod}</strong></div>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#64748B' }}>Alternative:</span> <strong style={{ color: '#F1F5F9' }}>{alternative}</strong></div>
+                      <div><span style={{ color: 'var(--text-muted)' }}>Price:</span> <strong style={{ color: 'var(--text-primary)' }}>{price}</strong></div>
+                      <div><span style={{ color: 'var(--text-muted)' }}>Billing:</span> <strong style={{ color: 'var(--text-primary)' }}>{billingPeriod}</strong></div>
+                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>Alternative:</span> <strong style={{ color: 'var(--text-primary)' }}>{alternative}</strong></div>
                     </>
                   )}
                   {selectedType === 'feature_test' && (
                     <>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#64748B' }}>Feature:</span> <strong style={{ color: '#F1F5F9' }}>{featureName}</strong></div>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#64748B' }}>Benefit:</span> <strong style={{ color: '#F1F5F9' }}>{benefit}</strong></div>
+                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>Feature:</span> <strong style={{ color: 'var(--text-primary)' }}>{featureName}</strong></div>
+                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>Benefit:</span> <strong style={{ color: 'var(--text-primary)' }}>{benefit}</strong></div>
                     </>
                   )}
                   {selectedType === 'message_test' && (
                     <>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#64748B' }}>Headline:</span> <strong style={{ color: '#F1F5F9' }}>{headline}</strong></div>
-                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: '#64748B' }}>CTA:</span> <strong style={{ color: '#F1F5F9' }}>{cta}</strong></div>
+                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>Headline:</span> <strong style={{ color: 'var(--text-primary)' }}>{headline}</strong></div>
+                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-muted)' }}>CTA:</span> <strong style={{ color: 'var(--text-primary)' }}>{cta}</strong></div>
                     </>
                   )}
                 </div>
@@ -916,18 +916,18 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '12px 16px',
-                  backgroundColor: 'rgba(20, 184, 166, 0.08)',
+                  backgroundColor: 'var(--accent-subtle)',
                   borderRadius: '10px',
-                  border: '1px solid rgba(20, 184, 166, 0.2)',
+                  border: '1px solid var(--accent-glow)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <Users size={18} className="text-teal-400" />
-                  <span style={{ fontSize: '0.88rem', color: '#E2E8F0' }}>
+                  <span style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>
                     <strong>{getActivePersonaCount()}</strong> personas will be simulated
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#2DD4BF' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--accent-teal-bright)' }}>
                   <ShieldCheck size={14} />
                   <span>Synthetic Simulation</span>
                 </div>
@@ -936,7 +936,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               <div
                 style={{
                   fontSize: '0.75rem',
-                  color: '#64748B',
+                  color: 'var(--text-muted)',
                   lineHeight: 1.4,
                   padding: '4px 8px',
                 }}
@@ -951,7 +951,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
         <div
           style={{
             padding: '16px 24px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            borderTop: '1px solid var(--fill-soft-2)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -968,9 +968,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 gap: '8px',
                 padding: '10px 18px',
                 borderRadius: '8px',
-                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                color: '#CBD5E1',
+                backgroundColor: 'var(--fill-soft)',
+                border: '1px solid var(--border-soft)',
+                color: 'var(--text-primary)',
                 fontSize: '0.85rem',
                 fontWeight: 500,
                 cursor: 'pointer',
@@ -991,8 +991,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 padding: '10px 18px',
                 borderRadius: '8px',
                 backgroundColor: 'transparent',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                color: '#94A3B8',
+                border: '1px solid var(--border-soft)',
+                color: 'var(--text-secondary)',
                 fontSize: '0.85rem',
                 cursor: 'pointer',
               }}
@@ -1011,7 +1011,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   borderRadius: '8px',
                   backgroundColor: '#0D9488',
                   border: 'none',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontSize: '0.85rem',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -1033,7 +1033,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   borderRadius: '8px',
                   backgroundColor: '#14B8A6',
                   border: 'none',
-                  color: '#042F2E',
+                  color: 'var(--accent-subtle)',
                   fontSize: '0.88rem',
                   fontWeight: 700,
                   cursor: isSubmitting ? 'not-allowed' : 'pointer',

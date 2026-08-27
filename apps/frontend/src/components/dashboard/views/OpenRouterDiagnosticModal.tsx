@@ -66,7 +66,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
     }}>
       <div style={{
         background: '#121417',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
+        border: '1px solid var(--border-soft)',
         borderRadius: '16px',
         width: '100%',
         maxWidth: '640px',
@@ -76,11 +76,11 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
         {/* Modal Header */}
         <div style={{
           padding: '18px 24px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          borderBottom: '1px solid var(--fill-soft-2)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: 'rgba(255, 255, 255, 0.02)',
+          background: 'var(--fill-soft)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
@@ -97,10 +97,10 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
               <Cpu size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: '#fff' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)' }}>
                 OpenRouter Diagnostic Panel
               </h3>
-              <p style={{ margin: 0, fontSize: '0.78rem', color: '#9ca3af' }}>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 Server-side API key health & live completion verification
               </p>
             </div>
@@ -110,7 +110,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#9ca3af',
+              color: 'var(--text-muted)',
               cursor: 'pointer',
               padding: '6px',
               borderRadius: '6px',
@@ -142,8 +142,8 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
 
           {/* Configuration Status Card */}
           <div style={{
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'var(--fill-soft)',
+            border: '1px solid var(--fill-soft-2)',
             borderRadius: '12px',
             padding: '16px',
             display: 'flex',
@@ -151,7 +151,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
             gap: '12px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.84rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <KeyRound size={14} /> Server Configuration
               </span>
               <span style={{
@@ -160,7 +160,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
                 padding: '3px 8px',
                 borderRadius: '6px',
                 background: health?.configured ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                color: health?.configured ? '#4ade80' : '#f87171',
+                color: health?.configured ? '#4ade80' : 'var(--status-error-text)',
                 border: `1px solid ${health?.configured ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
               }}>
                 {health?.configured ? 'KEY CONFIGURED' : 'MISSING KEY'}
@@ -168,7 +168,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.84rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Activity size={14} /> Connection Status
               </span>
               <span style={{
@@ -177,7 +177,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
                 padding: '3px 8px',
                 borderRadius: '6px',
                 background: health?.status === 'healthy' ? 'rgba(34, 197, 94, 0.15)' : health?.status === 'rate_limited' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                color: health?.status === 'healthy' ? '#4ade80' : health?.status === 'rate_limited' ? '#fbbf24' : '#f87171',
+                color: health?.status === 'healthy' ? '#4ade80' : health?.status === 'rate_limited' ? '#fbbf24' : 'var(--status-error-text)',
               }}>
                 {health?.status === 'healthy' ? 'CONNECTED & VERIFIED' : health?.status?.toUpperCase() || 'UNKNOWN'}
               </span>
@@ -185,7 +185,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
 
             {health?.latency_ms !== undefined && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.84rem', color: '#9ca3af' }}>Round-trip Latency</span>
+                <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>Round-trip Latency</span>
                 <span style={{ fontSize: '0.84rem', color: '#60a5fa', fontWeight: 600 }}>{health.latency_ms} ms</span>
               </div>
             )}
@@ -193,7 +193,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
 
           {/* Model Selection Input */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: 500 }}>
+            <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-primary)', marginBottom: '6px', fontWeight: 500 }}>
               Test Target Model:
             </label>
             <input
@@ -204,15 +204,15 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
               style={{
                 width: '100%',
                 background: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
+                border: '1px solid var(--border-soft)',
                 borderRadius: '8px',
                 padding: '10px 14px',
-                color: '#fff',
+                color: 'var(--text-main)',
                 fontSize: '0.86rem',
                 outline: 'none',
               }}
             />
-            <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
               Defaults to <code>OPENROUTER_MODEL</code> or <code>meta-llama/llama-3.3-70b-instruct:free</code>.
             </div>
           </div>
@@ -225,14 +225,14 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
               background: health.status === 'healthy' ? 'rgba(34, 197, 94, 0.06)' : 'rgba(239, 68, 68, 0.06)',
               border: `1px solid ${health.status === 'healthy' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
               fontSize: '0.82rem',
-              color: health.status === 'healthy' ? '#86efac' : '#fca5a5',
+              color: health.status === 'healthy' ? '#86efac' : 'var(--status-error-text)',
             }}>
               {health.message}
             </div>
           )}
 
           {error && (
-            <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', fontSize: '0.82rem' }}>
+            <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-error-text)', fontSize: '0.82rem' }}>
               {error}
             </div>
           )}
@@ -241,21 +241,21 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
         {/* Modal Footer */}
         <div style={{
           padding: '16px 24px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          borderTop: '1px solid var(--fill-soft-2)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: 'rgba(255, 255, 255, 0.02)',
+          background: 'var(--fill-soft)',
         }}>
           <button
             onClick={loadHealth}
             disabled={loading}
             style={{
               background: 'transparent',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
+              border: '1px solid var(--border-soft)',
               borderRadius: '8px',
               padding: '8px 14px',
-              color: '#9ca3af',
+              color: 'var(--text-muted)',
               fontSize: '0.82rem',
               cursor: 'pointer',
               display: 'flex',
@@ -275,7 +275,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
               border: 'none',
               borderRadius: '8px',
               padding: '9px 18px',
-              color: '#fff',
+              color: 'var(--text-main)',
               fontSize: '0.84rem',
               fontWeight: 600,
               cursor: testing ? 'not-allowed' : 'pointer',

@@ -9,9 +9,12 @@ import {
   CheckCircle2,
   KeyRound,
   ShieldCheck,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
+import { useTheme } from '../../context/ThemeContext';
 import { OtpInput } from './OtpInput';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 import { LegalModal } from './LegalModal';
@@ -20,8 +23,121 @@ interface AuthPageProps {
   initialMode?: 'signin' | 'signup' | 'signup-email' | 'forgot-password' | 'verify-otp' | 'reset-password-otp';
 }
 
+// Dark-theme tokens matching the app shell (DashboardLayout / StudyWorkflowView).
+const headingStyle: React.CSSProperties = {
+  fontSize: '1.45rem',
+  fontWeight: 600,
+  color: 'var(--text-main)',
+  letterSpacing: '-0.02em',
+  marginBottom: '6px',
+};
+const subtitleStyle: React.CSSProperties = { fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 };
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: '0.8rem',
+  fontWeight: 600,
+  color: 'var(--text-label)',
+  marginBottom: '6px',
+};
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: '42px',
+  padding: '0 12px',
+  borderRadius: '8px',
+  border: '1px solid var(--border-subtle)',
+  fontSize: '0.88rem',
+  color: 'var(--text-main)',
+  background: 'var(--bg-secondary)',
+  outline: 'none',
+  transition: 'border 0.2s, box-shadow 0.2s',
+};
+const passwordInputStyle: React.CSSProperties = { ...inputStyle, padding: '0 40px 0 12px' };
+const focusInput = (e: React.FocusEvent<HTMLInputElement>) => {
+  e.target.style.borderColor = '#14B8A6';
+  e.target.style.boxShadow = '0 0 0 3px var(--accent-glow)';
+};
+const blurInput = (e: React.FocusEvent<HTMLInputElement>) => {
+  e.target.style.borderColor = 'var(--border-subtle)';
+  e.target.style.boxShadow = 'none';
+};
+const ctaStyle = (disabled: boolean): React.CSSProperties => ({
+  width: '100%',
+  height: '44px',
+  borderRadius: '10px',
+  background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+  color: 'var(--text-on-accent)',
+  border: 'none',
+  fontSize: '0.9rem',
+  fontWeight: 700,
+  cursor: disabled ? 'not-allowed' : 'pointer',
+  opacity: disabled ? 0.55 : 1,
+  transition: 'all 0.2s ease',
+  boxShadow: '0 2px 14px var(--accent-glow)',
+});
+const linkStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  color: 'var(--accent-teal-bright)',
+  fontWeight: 700,
+  cursor: 'pointer',
+  padding: 0,
+};
+const backLinkStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  background: 'none',
+  border: 'none',
+  color: 'var(--text-secondary)',
+  fontSize: '0.82rem',
+  fontWeight: 500,
+  cursor: 'pointer',
+  padding: 0,
+  marginBottom: '16px',
+};
+const eyeButtonStyle: React.CSSProperties = {
+  position: 'absolute',
+  right: '12px',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  background: 'none',
+  border: 'none',
+  color: 'var(--text-muted)',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0,
+};
+const dividerLineStyle: React.CSSProperties = { flex: 1, height: '1px', background: 'var(--border-subtle)' };
+const dividerTextStyle: React.CSSProperties = {
+  fontSize: '0.66rem',
+  fontWeight: 700,
+  color: 'var(--text-muted)',
+  letterSpacing: '0.08em',
+};
+const googleButtonStyle: React.CSSProperties = {
+  width: '100%',
+  height: '42px',
+  borderRadius: '8px',
+  background: 'var(--google-btn-bg)',
+  color: 'var(--google-btn-fg)',
+  border: '1px solid var(--border-subtle)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '10px',
+  fontSize: '0.85rem',
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'background 0.2s ease',
+  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.35)',
+};
+const footerSwitchTextStyle: React.CSSProperties = { fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 };
+
 export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) => {
   const { currentPath, navigate } = useNavigation();
+  const { theme, toggleTheme } = useTheme();
   const {
     signin,
     signup,
@@ -306,10 +422,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
       style={{
         minHeight: '100vh',
         width: '100%',
-        backgroundColor: '#080909',
+        backgroundColor: 'var(--bg-pure)',
         backgroundImage: `
-          radial-gradient(circle at 50% 35%, rgba(246, 200, 120, 0.12) 0%, rgba(246, 200, 120, 0.03) 45%, transparent 75%),
-          radial-gradient(circle, rgba(255, 255, 255, 0.08) 1.15px, transparent 1.15px)
+          radial-gradient(circle at 50% 35%, var(--accent-subtle) 0%, var(--accent-subtle) 45%, transparent 75%),
+          radial-gradient(circle, var(--fill-soft-2) 1.15px, transparent 1.15px)
         `,
         backgroundSize: '100% 100%, 18px 18px',
         display: 'flex',
@@ -332,31 +448,58 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
-          background: 'rgba(255, 255, 255, 0.08)',
+          background: 'var(--fill-soft-2)',
           backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
+          border: '1px solid var(--border-soft)',
           borderRadius: '10px',
           padding: '8px 14px',
           fontSize: '0.82rem',
           fontWeight: 600,
-          color: '#E5E7EB',
+          color: 'var(--text-primary)',
           cursor: 'pointer',
           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
           transition: 'all 0.2s ease',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.14)';
-          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-          e.currentTarget.style.color = '#FFFFFF';
+          e.currentTarget.style.background = 'var(--border-soft)';
+          e.currentTarget.style.borderColor = 'var(--border-soft)';
+          e.currentTarget.style.color = 'var(--text-main)';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-          e.currentTarget.style.color = '#E5E7EB';
+          e.currentTarget.style.background = 'var(--fill-soft-2)';
+          e.currentTarget.style.borderColor = 'var(--border-soft)';
+          e.currentTarget.style.color = 'var(--text-primary)';
         }}
       >
         <ArrowLeft size={15} />
         <span>Back to BebshaX</span>
+      </button>
+
+      {/* Theme toggle at Top-Right */}
+      <button
+        type="button"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        style={{
+          position: 'absolute',
+          top: '24px',
+          right: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '38px',
+          height: '38px',
+          background: 'var(--fill-soft-2)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid var(--border-soft)',
+          borderRadius: '10px',
+          color: 'var(--text-primary)',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+        }}
+      >
+        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
       {/* Brand Header */}
@@ -368,16 +511,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         />
       </div>
 
-      {/* Centered Floating White Card */}
+      {/* Centered Floating Card */}
       <div
         className="bx-modal"
         style={{
           width: '100%',
           maxWidth: '440px',
-          background: '#FFFFFF',
+          background: 'var(--bg-card)',
           borderRadius: '24px',
-          border: '1px solid #EAEAEA',
-          boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02)',
+          border: '1px solid var(--border-subtle)',
+          boxShadow: '0 24px 48px -16px rgba(0, 0, 0, 0.6), 0 1px 0 var(--fill-soft) inset',
           padding: '38px 32px',
           position: 'relative',
         }}
@@ -389,8 +532,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               padding: '12px 14px',
               borderRadius: '10px',
               background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-              color: '#DC2626',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              color: 'var(--status-error-text)',
               fontSize: '0.82rem',
               marginBottom: '18px',
             }}
@@ -411,8 +554,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               padding: '10px 14px',
               borderRadius: '10px',
               background: 'rgba(16, 185, 129, 0.08)',
-              border: '1px solid rgba(16, 185, 129, 0.2)',
-              color: '#059669',
+              border: '1px solid rgba(16, 185, 129, 0.35)',
+              color: 'var(--status-success-text)',
               fontSize: '0.82rem',
               marginBottom: '18px',
             }}
@@ -428,18 +571,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         {view === 'signin' && (
           <div>
             <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <h1
-                style={{
-                  fontSize: '1.45rem',
-                  fontWeight: 600,
-                  color: '#1E2319',
-                  letterSpacing: '-0.02em',
-                  marginBottom: '6px',
-                }}
-              >
+              <h1 style={headingStyle}>
                 Welcome back
               </h1>
-              <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
+              <p style={subtitleStyle}>
                 Sign in to your account to continue
               </p>
             </div>
@@ -449,23 +584,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               type="button"
               onClick={handleGoogleAuth}
               disabled={isLoading}
-              style={{
-                width: '100%',
-                height: '42px',
-                borderRadius: '8px',
-                background: '#18181B',
-                color: '#FFFFFF',
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'background 0.2s ease',
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-              }}
+              style={googleButtonStyle}
             >
               <svg width="18" height="18" viewBox="0 0 24 24">
                 <path
@@ -497,32 +616,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 margin: '22px 0',
               }}
             >
-              <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
-              <span
-                style={{
-                  fontSize: '0.66rem',
-                  fontWeight: 700,
-                  color: '#9CA3AF',
-                  letterSpacing: '0.08em',
-                }}
-              >
+              <div style={dividerLineStyle} />
+              <span style={dividerTextStyle}>
                 OR CONTINUE WITH EMAIL
               </span>
-              <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
+              <div style={dividerLineStyle} />
             </div>
 
             {/* Form */}
             <form onSubmit={handleSignIn}>
               <div style={{ marginBottom: '16px' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#374151',
-                    marginBottom: '6px',
-                  }}
-                >
+                <label style={labelStyle}>
                   Email
                 </label>
                 <input
@@ -533,26 +637,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  style={{
-                    width: '100%',
-                    height: '42px',
-                    padding: '0 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    fontSize: '0.88rem',
-                    color: '#111827',
-                    background: '#FFFFFF',
-                    outline: 'none',
-                    transition: 'border 0.2s, box-shadow 0.2s',
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#F6C878';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#D1D5DB';
-                    e.target.style.boxShadow = 'none';
-                  }}
+                  style={inputStyle}
+                  onFocus={focusInput}
+                  onBlur={blurInput}
                 />
               </div>
 
@@ -569,7 +656,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     style={{
                       fontSize: '0.8rem',
                       fontWeight: 600,
-                      color: '#374151',
+                      color: 'var(--text-label)',
                     }}
                   >
                     Password
@@ -584,7 +671,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                       background: 'none',
                       border: 'none',
                       fontSize: '0.78rem',
-                      color: '#6B7280',
+                      color: 'var(--text-secondary)',
                       cursor: 'pointer',
                       padding: 0,
                     }}
@@ -602,74 +689,26 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
-                    style={{
-                      width: '100%',
-                      height: '42px',
-                      padding: '0 40px 0 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #D1D5DB',
-                      fontSize: '0.88rem',
-                      color: '#111827',
-                      background: '#FFFFFF',
-                      outline: 'none',
-                      transition: 'border 0.2s, box-shadow 0.2s',
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#F6C878';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#D1D5DB';
-                      e.target.style.boxShadow = 'none';
-                    }}
+                    style={passwordInputStyle}
+                    onFocus={focusInput}
+                    onBlur={blurInput}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: '#9CA3AF',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: 0,
-                    }}
+                    style={eyeButtonStyle}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
 
-              {/* Golden CTA Button */}
+              {/* Primary CTA Button */}
               <button
                 type="submit"
                 disabled={isLoading}
-                style={{
-                  width: '100%',
-                  height: '44px',
-                  borderRadius: '10px',
-                  background: isLoading ? '#F0D49D' : '#F6C878',
-                  color: '#2B2516',
-                  border: 'none',
-                  fontSize: '0.9rem',
-                  fontWeight: 700,
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLoading) (e.target as HTMLElement).style.background = '#E5B45F';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isLoading) (e.target as HTMLElement).style.background = '#F6C878';
-                }}
+                style={ctaStyle(isLoading)}
               >
                 {isLoading ? 'Signing in...' : 'Sign in'}
               </button>
@@ -677,7 +716,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
             {/* Footer Switch */}
             <div style={{ textAlign: 'center', marginTop: '22px' }}>
-              <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
+              <p style={footerSwitchTextStyle}>
                 Don't have an account?{' '}
                 <button
                   type="button"
@@ -685,14 +724,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     resetMessages();
                     navigate('/auth/signup');
                   }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#8A6B29',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    padding: 0,
-                  }}
+                  style={linkStyle}
                 >
                   Sign up
                 </button>
@@ -707,18 +739,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         {view === 'signup' && (
           <div>
             <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <h1
-                style={{
-                  fontSize: '1.45rem',
-                  fontWeight: 600,
-                  color: '#1E2319',
-                  letterSpacing: '-0.02em',
-                  marginBottom: '6px',
-                }}
-              >
+              <h1 style={headingStyle}>
                 Create your account
               </h1>
-              <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
+              <p style={subtitleStyle}>
                 Start your first research study in under a minute.
               </p>
             </div>
@@ -728,23 +752,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               type="button"
               onClick={handleGoogleAuth}
               disabled={isLoading}
-              style={{
-                width: '100%',
-                height: '42px',
-                borderRadius: '8px',
-                background: '#18181B',
-                color: '#FFFFFF',
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'background 0.2s ease',
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-              }}
+              style={googleButtonStyle}
             >
               <svg width="18" height="18" viewBox="0 0 24 24">
                 <path
@@ -774,7 +782,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 justifyContent: 'center',
                 gap: '4px',
                 marginTop: '8px',
-                color: '#9CA3AF',
+                color: 'var(--text-muted)',
                 fontSize: '0.72rem',
               }}
             >
@@ -790,18 +798,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 margin: '20px 0',
               }}
             >
-              <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
-              <span
-                style={{
-                  fontSize: '0.66rem',
-                  fontWeight: 700,
-                  color: '#9CA3AF',
-                  letterSpacing: '0.08em',
-                }}
-              >
+              <div style={dividerLineStyle} />
+              <span style={dividerTextStyle}>
                 MORE WAYS
               </span>
-              <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
+              <div style={dividerLineStyle} />
             </div>
 
             {/* Sign up with email button */}
@@ -815,8 +816,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 width: '100%',
                 padding: '14px 16px',
                 borderRadius: '12px',
-                border: '1px solid #E5E7EB',
-                background: '#FFFFFF',
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--bg-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -825,12 +826,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 textAlign: 'left',
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.background = '#F9FAFB';
-                (e.currentTarget as HTMLElement).style.borderColor = '#D1D5DB';
+                (e.currentTarget as HTMLElement).style.background = 'var(--bg-card-hover)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-medium)';
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.background = '#FFFFFF';
-                (e.currentTarget as HTMLElement).style.borderColor = '#E5E7EB';
+                (e.currentTarget as HTMLElement).style.background = 'var(--bg-secondary)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)';
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -839,30 +840,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     width: '36px',
                     height: '36px',
                     borderRadius: '8px',
-                    background: '#F3F4F6',
+                    background: 'var(--accent-subtle)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#4B5563',
+                    color: 'var(--accent-teal-bright)',
                   }}
                 >
                   <Mail size={18} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1E2319' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>
                     Sign up with email
                   </div>
-                  <div style={{ fontSize: '0.74rem', color: '#6B7280' }}>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
                     Use a work email and password with instant OTP
                   </div>
                 </div>
               </div>
-              <ChevronRight size={18} color="#9CA3AF" />
+              <ChevronRight size={18} color="var(--text-muted)" />
             </button>
 
             {/* Footer Switch */}
             <div style={{ textAlign: 'center', marginTop: '26px' }}>
-              <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
+              <p style={footerSwitchTextStyle}>
                 Already have an account?{' '}
                 <button
                   type="button"
@@ -870,14 +871,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     resetMessages();
                     navigate('/auth/signin');
                   }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#8A6B29',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    padding: 0,
-                  }}
+                  style={linkStyle}
                 >
                   Sign in
                 </button>
@@ -897,52 +891,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 resetMessages();
                 setView('signup');
               }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'none',
-                border: 'none',
-                color: '#6B7280',
-                fontSize: '0.82rem',
-                fontWeight: 500,
-                cursor: 'pointer',
-                padding: 0,
-                marginBottom: '16px',
-              }}
+              style={backLinkStyle}
             >
               <ArrowLeft size={14} />
               <span>Back to all options</span>
             </button>
 
             <div style={{ marginBottom: '20px' }}>
-              <h1
-                style={{
-                  fontSize: '1.45rem',
-                  fontWeight: 600,
-                  color: '#1E2319',
-                  letterSpacing: '-0.02em',
-                  marginBottom: '6px',
-                }}
-              >
+              <h1 style={headingStyle}>
                 Sign up with email
               </h1>
-              <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
+              <p style={subtitleStyle}>
                 We'll send a 6-digit verification code to confirm your address.
               </p>
             </div>
 
             <form onSubmit={handleSignUp}>
               <div style={{ marginBottom: '14px' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#374151',
-                    marginBottom: '6px',
-                  }}
-                >
+                <label style={labelStyle}>
                   Full name
                 </label>
                 <input
@@ -953,39 +919,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="John Doe"
-                  style={{
-                    width: '100%',
-                    height: '42px',
-                    padding: '0 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    fontSize: '0.88rem',
-                    color: '#111827',
-                    background: '#FFFFFF',
-                    outline: 'none',
-                    transition: 'border 0.2s, box-shadow 0.2s',
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#F6C878';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#D1D5DB';
-                    e.target.style.boxShadow = 'none';
-                  }}
+                  style={inputStyle}
+                  onFocus={focusInput}
+                  onBlur={blurInput}
                 />
               </div>
 
               <div style={{ marginBottom: '14px' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#374151',
-                    marginBottom: '6px',
-                  }}
-                >
+                <label style={labelStyle}>
                   Work email
                 </label>
                 <input
@@ -996,39 +937,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  style={{
-                    width: '100%',
-                    height: '42px',
-                    padding: '0 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    fontSize: '0.88rem',
-                    color: '#111827',
-                    background: '#FFFFFF',
-                    outline: 'none',
-                    transition: 'border 0.2s, box-shadow 0.2s',
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#F6C878';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#D1D5DB';
-                    e.target.style.boxShadow = 'none';
-                  }}
+                  style={inputStyle}
+                  onFocus={focusInput}
+                  onBlur={blurInput}
                 />
               </div>
 
               <div style={{ marginBottom: '22px' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#374151',
-                    marginBottom: '6px',
-                  }}
-                >
+                <label style={labelStyle}>
                   Password
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -1040,77 +956,29 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Create a password"
-                    style={{
-                      width: '100%',
-                      height: '42px',
-                      padding: '0 40px 0 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #D1D5DB',
-                      fontSize: '0.88rem',
-                      color: '#111827',
-                      background: '#FFFFFF',
-                      outline: 'none',
-                      transition: 'border 0.2s, box-shadow 0.2s',
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#F6C878';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#D1D5DB';
-                      e.target.style.boxShadow = 'none';
-                    }}
+                    style={passwordInputStyle}
+                    onFocus={focusInput}
+                    onBlur={blurInput}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: '#9CA3AF',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: 0,
-                    }}
+                    style={eyeButtonStyle}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                <div style={{ fontSize: '0.74rem', color: '#9CA3AF', marginTop: '6px' }}>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '6px' }}>
                   At least 8 characters, alphanumeric.
                 </div>
               </div>
 
-              {/* Create account golden button */}
+              {/* Create account button */}
               <button
                 type="submit"
                 disabled={isLoading}
-                style={{
-                  width: '100%',
-                  height: '44px',
-                  borderRadius: '10px',
-                  background: isLoading ? '#F0D49D' : '#F6C878',
-                  color: '#2B2516',
-                  border: 'none',
-                  fontSize: '0.9rem',
-                  fontWeight: 700,
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLoading) (e.target as HTMLElement).style.background = '#E5B45F';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isLoading) (e.target as HTMLElement).style.background = '#F6C878';
-                }}
+                style={ctaStyle(isLoading)}
               >
                 {isLoading ? 'Creating account...' : 'Create account'}
               </button>
@@ -1118,7 +986,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
             {/* Footer Switch */}
             <div style={{ textAlign: 'center', marginTop: '22px' }}>
-              <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
+              <p style={footerSwitchTextStyle}>
                 Already have an account?{' '}
                 <button
                   type="button"
@@ -1126,14 +994,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     resetMessages();
                     navigate('/auth/signin');
                   }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#8A6B29',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    padding: 0,
-                  }}
+                  style={linkStyle}
                 >
                   Sign in
                 </button>
@@ -1153,19 +1014,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 resetMessages();
                 setView('signup-email');
               }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'none',
-                border: 'none',
-                color: '#6B7280',
-                fontSize: '0.82rem',
-                fontWeight: 500,
-                cursor: 'pointer',
-                padding: 0,
-                marginBottom: '16px',
-              }}
+              style={backLinkStyle}
             >
               <ArrowLeft size={14} />
               <span>Back / Change email</span>
@@ -1177,8 +1026,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   width: '48px',
                   height: '48px',
                   borderRadius: '12px',
-                  background: 'rgba(246, 200, 120, 0.15)',
-                  color: '#D4AF37',
+                  background: 'var(--accent-subtle)',
+                  color: 'var(--accent-teal-bright)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1187,19 +1036,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               >
                 <ShieldCheck size={24} />
               </div>
-              <h1
-                style={{
-                  fontSize: '1.45rem',
-                  fontWeight: 600,
-                  color: '#1E2319',
-                  letterSpacing: '-0.02em',
-                  marginBottom: '6px',
-                }}
-              >
+              <h1 style={headingStyle}>
                 Enter verification code
               </h1>
-              <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0, lineHeight: 1.5 }}>
-                We sent a 6-digit code to <strong style={{ color: '#111827' }}>{email || 'your email'}</strong>.
+              <p style={{ ...subtitleStyle, lineHeight: 1.5 }}>
+                We sent a 6-digit code to <strong style={{ color: 'var(--text-main)' }}>{email || 'your email'}</strong>.
               </p>
             </div>
 
@@ -1209,38 +1050,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               <button
                 type="submit"
                 disabled={isLoading || otp.length < 6}
-                style={{
-                  width: '100%',
-                  height: '44px',
-                  borderRadius: '10px',
-                  background: (isLoading || otp.length < 6) ? '#F0D49D' : '#F6C878',
-                  color: '#2B2516',
-                  border: 'none',
-                  fontSize: '0.9rem',
-                  fontWeight: 700,
-                  cursor: (isLoading || otp.length < 6) ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
-                }}
+                style={ctaStyle(isLoading || otp.length < 6)}
               >
                 {isLoading ? 'Verifying...' : 'Verify & Continue'}
               </button>
             </form>
 
             <div style={{ textAlign: 'center', marginTop: '20px' }}>
-              <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
+              <p style={footerSwitchTextStyle}>
                 Didn't receive the code?{' '}
                 <button
                   type="button"
                   disabled={countdown > 0 || isResending}
                   onClick={() => handleResendOtp('email-verification')}
                   style={{
-                    background: 'none',
-                    border: 'none',
-                    color: countdown > 0 ? '#9CA3AF' : '#8A6B29',
-                    fontWeight: 700,
+                    ...linkStyle,
+                    color: countdown > 0 ? 'var(--text-muted)' : 'var(--accent-teal-bright)',
                     cursor: countdown > 0 ? 'not-allowed' : 'pointer',
-                    padding: 0,
                   }}
                 >
                   {countdown > 0 ? `Resend in ${countdown}s` : isResending ? 'Sending...' : 'Resend code'}
@@ -1261,52 +1087,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 resetMessages();
                 navigate('/auth/signin');
               }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'none',
-                border: 'none',
-                color: '#6B7280',
-                fontSize: '0.82rem',
-                fontWeight: 500,
-                cursor: 'pointer',
-                padding: 0,
-                marginBottom: '16px',
-              }}
+              style={backLinkStyle}
             >
               <ArrowLeft size={14} />
               <span>Back to sign in</span>
             </button>
 
             <div style={{ marginBottom: '20px' }}>
-              <h1
-                style={{
-                  fontSize: '1.45rem',
-                  fontWeight: 600,
-                  color: '#1E2319',
-                  letterSpacing: '-0.02em',
-                  marginBottom: '6px',
-                }}
-              >
+              <h1 style={headingStyle}>
                 Reset password
               </h1>
-              <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0 }}>
+              <p style={subtitleStyle}>
                 Enter your email to receive a 6-digit reset code.
               </p>
             </div>
 
             <form onSubmit={handleForgotPassword}>
               <div style={{ marginBottom: '20px' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#374151',
-                    marginBottom: '6px',
-                  }}
-                >
+                <label style={labelStyle}>
                   Email address
                 </label>
                 <input
@@ -1317,42 +1115,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  style={{
-                    width: '100%',
-                    height: '42px',
-                    padding: '0 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    fontSize: '0.88rem',
-                    color: '#111827',
-                    background: '#FFFFFF',
-                    outline: 'none',
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#F6C878';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#D1D5DB';
-                    e.target.style.boxShadow = 'none';
-                  }}
+                  style={inputStyle}
+                  onFocus={focusInput}
+                  onBlur={blurInput}
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isLoading}
-                style={{
-                  width: '100%',
-                  height: '44px',
-                  borderRadius: '10px',
-                  background: isLoading ? '#F0D49D' : '#F6C878',
-                  color: '#2B2516',
-                  border: 'none',
-                  fontSize: '0.9rem',
-                  fontWeight: 700,
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                }}
+                style={ctaStyle(isLoading)}
               >
                 {isLoading ? 'Sending code...' : 'Send reset code'}
               </button>
@@ -1371,19 +1143,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 resetMessages();
                 setView('forgot-password');
               }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'none',
-                border: 'none',
-                color: '#6B7280',
-                fontSize: '0.82rem',
-                fontWeight: 500,
-                cursor: 'pointer',
-                padding: 0,
-                marginBottom: '16px',
-              }}
+              style={backLinkStyle}
             >
               <ArrowLeft size={14} />
               <span>Back / Change email</span>
@@ -1395,8 +1155,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   width: '48px',
                   height: '48px',
                   borderRadius: '12px',
-                  background: 'rgba(246, 200, 120, 0.15)',
-                  color: '#D4AF37',
+                  background: 'var(--accent-subtle)',
+                  color: 'var(--accent-teal-bright)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1405,49 +1165,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               >
                 <KeyRound size={24} />
               </div>
-              <h1
-                style={{
-                  fontSize: '1.45rem',
-                  fontWeight: 600,
-                  color: '#1E2319',
-                  letterSpacing: '-0.02em',
-                  marginBottom: '6px',
-                }}
-              >
+              <h1 style={headingStyle}>
                 Set new password
               </h1>
-              <p style={{ fontSize: '0.84rem', color: '#6B7280', margin: 0, lineHeight: 1.5 }}>
-                Enter the 6-digit code sent to <strong style={{ color: '#111827' }}>{email}</strong> and your new password.
+              <p style={{ ...subtitleStyle, lineHeight: 1.5 }}>
+                Enter the 6-digit code sent to <strong style={{ color: 'var(--text-main)' }}>{email}</strong> and your new password.
               </p>
             </div>
 
             <form onSubmit={handleResetPasswordWithOtp}>
               <div style={{ marginBottom: '12px' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#374151',
-                    marginBottom: '4px',
-                    textAlign: 'center',
-                  }}
-                >
+                <label style={{ ...labelStyle, marginBottom: '4px', textAlign: 'center' }}>
                   6-digit reset code
                 </label>
                 <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
               </div>
 
               <div style={{ marginBottom: '14px' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#374151',
-                    marginBottom: '6px',
-                  }}
-                >
+                <label style={labelStyle}>
                   New password
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -1459,32 +1194,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="At least 8 characters"
-                    style={{
-                      width: '100%',
-                      height: '42px',
-                      padding: '0 40px 0 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #D1D5DB',
-                      fontSize: '0.88rem',
-                      color: '#111827',
-                      background: '#FFFFFF',
-                      outline: 'none',
-                    }}
+                    style={passwordInputStyle}
+                    onFocus={focusInput}
+                    onBlur={blurInput}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: '#9CA3AF',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
+                    style={eyeButtonStyle}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -1492,15 +1209,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               </div>
 
               <div style={{ marginBottom: '22px' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: '#374151',
-                    marginBottom: '6px',
-                  }}
-                >
+                <label style={labelStyle}>
                   Confirm new password
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -1512,32 +1221,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Repeat new password"
-                    style={{
-                      width: '100%',
-                      height: '42px',
-                      padding: '0 40px 0 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #D1D5DB',
-                      fontSize: '0.88rem',
-                      color: '#111827',
-                      background: '#FFFFFF',
-                      outline: 'none',
-                    }}
+                    style={passwordInputStyle}
+                    onFocus={focusInput}
+                    onBlur={blurInput}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: '#9CA3AF',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
+                    style={eyeButtonStyle}
                   >
                     {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -1547,37 +1238,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               <button
                 type="submit"
                 disabled={isLoading || otp.length < 6}
-                style={{
-                  width: '100%',
-                  height: '44px',
-                  borderRadius: '10px',
-                  background: (isLoading || otp.length < 6) ? '#F0D49D' : '#F6C878',
-                  color: '#2B2516',
-                  border: 'none',
-                  fontSize: '0.9rem',
-                  fontWeight: 700,
-                  cursor: (isLoading || otp.length < 6) ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 8px rgba(246, 200, 120, 0.35)',
-                }}
+                style={ctaStyle(isLoading || otp.length < 6)}
               >
                 {isLoading ? 'Resetting...' : 'Reset Password & Sign In'}
               </button>
             </form>
 
             <div style={{ textAlign: 'center', marginTop: '20px' }}>
-              <p style={{ fontSize: '0.82rem', color: '#6B7280', margin: 0 }}>
+              <p style={footerSwitchTextStyle}>
                 Didn't receive the code?{' '}
                 <button
                   type="button"
                   disabled={countdown > 0 || isResending}
                   onClick={() => handleResendOtp('forget-password')}
                   style={{
-                    background: 'none',
-                    border: 'none',
-                    color: countdown > 0 ? '#9CA3AF' : '#8A6B29',
-                    fontWeight: 700,
+                    ...linkStyle,
+                    color: countdown > 0 ? 'var(--text-muted)' : 'var(--accent-teal-bright)',
                     cursor: countdown > 0 ? 'not-allowed' : 'pointer',
-                    padding: 0,
                   }}
                 >
                   {countdown > 0 ? `Resend in ${countdown}s` : isResending ? 'Sending...' : 'Resend code'}
@@ -1590,7 +1267,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
       {/* Global Terms & Privacy Disclaimer */}
       <div style={{ textAlign: 'center', marginTop: '20px' }}>
-        <p style={{ fontSize: '0.74rem', color: '#9CA3AF', lineHeight: 1.4 }}>
+        <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
           By creating an account, you agree to our{' '}
           <button
             type="button"
@@ -1598,7 +1275,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
             style={{
               background: 'none',
               border: 'none',
-              color: '#6B7280',
+              color: 'var(--text-secondary)',
               textDecoration: 'underline',
               cursor: 'pointer',
               padding: 0,
@@ -1614,7 +1291,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
             style={{
               background: 'none',
               border: 'none',
-              color: '#6B7280',
+              color: 'var(--text-secondary)',
               textDecoration: 'underline',
               cursor: 'pointer',
               padding: 0,

@@ -99,9 +99,9 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in bx-backdrop">
-      <div className="bg-[#121818] border border-[#202E2E] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] bx-modal">
+      <div className="bg-[#121818] border border-[var(--border-medium)] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] bx-modal">
         {/* Modal Header */}
-        <div className="p-6 border-b border-[#202E2E] flex items-center justify-between bg-[#0E1313]">
+        <div className="p-6 border-b border-[var(--border-medium)] flex items-center justify-between bg-[#0E1313]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 font-bold text-lg">
               {persona.avatar_url ? (
@@ -124,7 +124,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
                   Synthetic Persona
                 </span>
               </div>
-              <p className="text-xs text-[#8D9999] mt-0.5">
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                 {persona.demographics?.occupation || 'Customer Archetype'} •{' '}
                 {persona.demographics?.location || 'Bangladesh'} • Budget: ৳{monthlyBudget}/mo
               </p>
@@ -132,16 +132,16 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-[#8D9999] hover:text-white p-2 rounded-lg hover:bg-[#1A2323] transition-colors"
+            className="text-[var(--text-secondary)] hover:text-white p-2 rounded-lg hover:bg-[#1A2323] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-sm text-[#8D9999]">
+        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-sm text-[var(--text-secondary)]">
           {/* Grounding Context Alert */}
-          <div className="bg-[#162020] border border-teal-500/20 rounded-xl p-4 flex items-start gap-3">
+          <div className="bg-[var(--bg-card-hover)] border border-teal-500/20 rounded-xl p-4 flex items-start gap-3">
             <Sparkles className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
             <div className="text-xs leading-relaxed text-[#B2CCCC]">
               <span className="font-semibold text-white">Adaptive Anti-Sycophantic Agent: </span>
@@ -176,7 +176,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
                     className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
                       isSelected
                         ? 'bg-teal-500/10 border-teal-500 text-white'
-                        : 'bg-[#151D1D] border-[#223030] hover:border-[#334646] text-[#A0AEAE]'
+                        : 'bg-[var(--bg-card-hover)] border-[var(--border-medium)] hover:border-[#334646] text-[#A0AEAE]'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -196,7 +196,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
                   onChange={(e) => setCustomObjectiveText(e.target.value)}
                   placeholder="e.g. Ask about how they manage weekly budgeting and whether a ৳150 weekly fee works..."
                   rows={3}
-                  className="w-full bg-[#151D1D] border border-[#263737] rounded-xl p-3 text-white text-xs placeholder-[#5E7070] focus:outline-none focus:border-teal-500"
+                  className="w-full bg-[var(--bg-card-hover)] border border-[#263737] rounded-xl p-3 text-white text-xs placeholder-[#5E7070] focus:outline-none focus:border-teal-500"
                 />
               </div>
             )}
@@ -236,7 +236,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
                     className={`p-3 rounded-xl border text-center cursor-pointer transition-all ${
                       isSelected
                         ? 'bg-teal-500/10 border-teal-500 text-white'
-                        : 'bg-[#151D1D] border-[#223030] hover:border-[#334646] text-[#A0AEAE]'
+                        : 'bg-[var(--bg-card-hover)] border-[var(--border-medium)] hover:border-[#334646] text-[#A0AEAE]'
                     }`}
                   >
                     <div className="font-semibold text-xs text-white">{tier.label}</div>
@@ -250,10 +250,10 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-5 border-t border-[#202E2E] bg-[#0E1313] flex items-center justify-between">
+        <div className="p-5 border-t border-[var(--border-medium)] bg-[#0E1313] flex items-center justify-between">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-[#253535] text-[#8D9999] hover:text-white hover:bg-[#1A2323] text-xs font-medium transition-colors"
+            className="px-4 py-2.5 rounded-xl border border-[#253535] text-[var(--text-secondary)] hover:text-white hover:bg-[#1A2323] text-xs font-medium transition-colors"
           >
             Cancel
           </button>

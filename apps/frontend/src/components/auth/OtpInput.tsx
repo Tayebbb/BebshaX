@@ -121,24 +121,24 @@ export const OtpInput: React.FC<OtpInputProps> = ({
             height: '52px',
             borderRadius: '10px',
             border: digits[index]
-              ? '2px solid #F6C878'
-              : '1px solid #D1D5DB',
-            background: '#FFFFFF',
-            color: '#111827',
+              ? '2px solid #14B8A6'
+              : '1px solid var(--border-subtle)',
+            background: 'var(--bg-secondary)',
+            color: 'var(--text-main)',
             fontSize: '1.35rem',
             fontWeight: 700,
             textAlign: 'center',
             outline: 'none',
             transition: 'all 0.15s ease',
-            boxShadow: digits[index] ? '0 0 0 3px rgba(246, 200, 120, 0.25)' : 'none',
+            boxShadow: digits[index] ? '0 0 0 3px var(--accent-subtle)' : 'none',
           }}
           onFocus={(e) => {
-            e.target.style.borderColor = '#F6C878';
-            e.target.style.boxShadow = '0 0 0 3px rgba(246, 200, 120, 0.35)';
+            e.target.style.borderColor = '#14B8A6';
+            e.target.style.boxShadow = '0 0 0 3px var(--accent-glow)';
           }}
           onBlur={(e) => {
             if (!digits[index]) {
-              e.target.style.borderColor = '#D1D5DB';
+              e.target.style.borderColor = 'var(--border-subtle)';
               e.target.style.boxShadow = 'none';
             }
           }}

@@ -62,14 +62,14 @@ export const ModelRouterView: React.FC = () => {
             style={{
               fontSize: '1.85rem',
               fontWeight: 500,
-              color: '#FFFFFF',
+              color: 'var(--text-main)',
               letterSpacing: '-0.02em',
               margin: '0 0 6px 0',
             }}
           >
             Model Router & Telemetry
           </h1>
-          <p style={{ fontSize: '0.9rem', color: '#9CA3AF', margin: 0 }}>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', margin: 0 }}>
             Live FreeLLMpool provider health matrix, task routing pools, and Rule R3 LLM provenance traces.
           </p>
         </div>
@@ -79,11 +79,11 @@ export const ModelRouterView: React.FC = () => {
           onClick={loadData}
           disabled={isLoading}
           style={{
-            background: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            background: 'var(--fill-soft)',
+            border: '1px solid var(--border-soft)',
             borderRadius: '10px',
             padding: '8px 16px',
-            color: '#FFFFFF',
+            color: 'var(--text-main)',
             fontSize: '0.84rem',
             fontWeight: 500,
             display: 'flex',
@@ -110,46 +110,46 @@ export const ModelRouterView: React.FC = () => {
         {/* Zero-Budget Routing Engine */}
         <div
           style={{
-            background: 'rgba(255, 255, 255, 0.02)',
-            border: '1px solid rgba(255, 255, 255, 0.07)',
+            background: 'var(--fill-soft)',
+            border: '1px solid var(--fill-soft-2)',
             borderRadius: '16px',
             padding: '24px',
             boxShadow: '0 12px 30px rgba(0, 0, 0, 0.4)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <Cpu size={20} color="#10B981" />
-            <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+            <Cpu size={20} color="var(--accent-emerald)" />
+            <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
               FreeLLMpool Routing Engine
             </h2>
           </div>
-          <div style={{ fontSize: '0.84rem', color: '#9CA3AF', lineHeight: 1.6 }}>
-            <div>Operational Budget: <strong style={{ color: '#10B981' }}>Zero API Cost (Free Tier Aggregation)</strong></div>
-            <div>Total Model Routes: <strong style={{ color: '#FFFFFF' }}>222 Free Model Routes</strong></div>
-            <div>Reliability Fallback: <strong style={{ color: '#F6C878' }}>Local Ollama (Qwen / LLaMA)</strong></div>
+          <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            <div>Operational Budget: <strong style={{ color: 'var(--accent-emerald)' }}>Zero API Cost (Free Tier Aggregation)</strong></div>
+            <div>Total Model Routes: <strong style={{ color: 'var(--text-main)' }}>222 Free Model Routes</strong></div>
+            <div>Reliability Fallback: <strong style={{ color: 'var(--status-warn-text)' }}>Local Ollama (Qwen / LLaMA)</strong></div>
           </div>
         </div>
 
         {/* Task Pool Routing Topology */}
         <div
           style={{
-            background: 'rgba(255, 255, 255, 0.02)',
-            border: '1px solid rgba(255, 255, 255, 0.07)',
+            background: 'var(--fill-soft)',
+            border: '1px solid var(--fill-soft-2)',
             borderRadius: '16px',
             padding: '24px',
             boxShadow: '0 12px 30px rgba(0, 0, 0, 0.4)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <Layers size={20} color="#F6C878" />
-            <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+            <Layers size={20} color="var(--status-warn-text)" />
+            <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
               Active Task Pools
             </h2>
           </div>
-          <div style={{ fontSize: '0.84rem', color: '#9CA3AF', lineHeight: 1.6 }}>
-            <div>Reasoning Pool: <strong style={{ color: '#FFFFFF' }}>Persona Generation & Consistency</strong></div>
-            <div>Conversation Pool: <strong style={{ color: '#FFFFFF' }}>Multi-Turn Persona Interviews</strong></div>
-            <div>Emergency Pool: <strong style={{ color: '#F6C878' }}>Local-First Fallback (Ollama)</strong></div>
+          <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            <div>Reasoning Pool: <strong style={{ color: 'var(--text-main)' }}>Persona Generation & Consistency</strong></div>
+            <div>Conversation Pool: <strong style={{ color: 'var(--text-main)' }}>Multi-Turn Persona Interviews</strong></div>
+            <div>Emergency Pool: <strong style={{ color: 'var(--status-warn-text)' }}>Local-First Fallback (Ollama)</strong></div>
           </div>
         </div>
       </div>
@@ -157,16 +157,16 @@ export const ModelRouterView: React.FC = () => {
       {/* Live Provider Health Matrix */}
       <div
         style={{
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid rgba(255, 255, 255, 0.07)',
+          background: 'var(--fill-soft)',
+          border: '1px solid var(--fill-soft-2)',
           borderRadius: '16px',
           padding: '24px',
           marginBottom: '32px',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-          <Activity size={18} color="#F6C878" />
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+          <Activity size={18} color="var(--status-warn-text)" />
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
             Live Provider Health Matrix
           </h2>
         </div>
@@ -178,8 +178,8 @@ export const ModelRouterView: React.FC = () => {
               <div
                 key={p.name}
                 style={{
-                  background: 'rgba(255, 255, 255, 0.025)',
-                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  background: 'var(--fill-soft)',
+                  border: '1px solid var(--fill-soft-2)',
                   borderRadius: '12px',
                   padding: '16px',
                   display: 'flex',
@@ -188,7 +188,7 @@ export const ModelRouterView: React.FC = () => {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 600, color: '#FFFFFF', textTransform: 'capitalize', fontSize: '0.92rem' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-main)', textTransform: 'capitalize', fontSize: '0.92rem' }}>
                     {p.name}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -197,20 +197,20 @@ export const ModelRouterView: React.FC = () => {
                         width: '8px',
                         height: '8px',
                         borderRadius: '50%',
-                        background: isHealthy ? '#10B981' : '#F59E0B',
+                        background: isHealthy ? 'var(--accent-emerald)' : '#F59E0B',
                         boxShadow: isHealthy ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none',
                       }}
                     />
-                    <span style={{ fontSize: '0.72rem', color: isHealthy ? '#10B981' : '#F59E0B', textTransform: 'capitalize' }}>
+                    <span style={{ fontSize: '0.72rem', color: isHealthy ? 'var(--accent-emerald)' : '#F59E0B', textTransform: 'capitalize' }}>
                       {p.status}
                     </span>
                   </div>
                 </div>
-                <div style={{ fontSize: '0.78rem', color: '#9CA3AF' }}>
-                  Type: <span style={{ color: '#E5E7EB' }}>{p.type.replace(/_/g, ' ')}</span>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Type: <span style={{ color: 'var(--text-primary)' }}>{p.type.replace(/_/g, ' ')}</span>
                 </div>
-                <div style={{ fontSize: '0.78rem', color: '#9CA3AF' }}>
-                  Models: <span style={{ color: '#F6C878', fontWeight: 600 }}>{p.available_models} active</span>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Models: <span style={{ color: 'var(--status-warn-text)', fontWeight: 600 }}>{p.available_models} active</span>
                 </div>
                 {p.active_cooldowns > 0 && (
                   <div style={{ fontSize: '0.72rem', color: '#F59E0B', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -227,16 +227,16 @@ export const ModelRouterView: React.FC = () => {
       {routesStatus?.pools && routesStatus.pools.length > 0 && (
         <div
           style={{
-            background: 'rgba(255, 255, 255, 0.02)',
-            border: '1px solid rgba(255, 255, 255, 0.07)',
+            background: 'var(--fill-soft)',
+            border: '1px solid var(--fill-soft-2)',
             borderRadius: '16px',
             padding: '24px',
             marginBottom: '32px',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-            <Layers size={18} color="#10B981" />
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+            <Layers size={18} color="var(--accent-emerald)" />
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
               Pool Concurrency & Candidate Allocation
             </h2>
           </div>
@@ -246,25 +246,25 @@ export const ModelRouterView: React.FC = () => {
               <div
                 key={pool.name}
                 style={{
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: 'var(--fill-soft)',
+                  border: '1px solid var(--fill-soft)',
                   borderRadius: '10px',
                   padding: '14px',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ fontWeight: 600, color: '#FFFFFF', textTransform: 'capitalize', fontSize: '0.88rem' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-main)', textTransform: 'capitalize', fontSize: '0.88rem' }}>
                     {pool.name}
                   </span>
-                  <span style={{ fontSize: '0.74rem', color: '#F6C878', fontWeight: 600 }}>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--status-warn-text)', fontWeight: 600 }}>
                     {pool.candidates_count} candidates
                   </span>
                 </div>
-                <div style={{ fontSize: '0.76rem', color: '#9CA3AF' }}>
-                  Max Concurrency: <strong style={{ color: '#E5E7EB' }}>{pool.max_concurrency}</strong>
+                <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                  Max Concurrency: <strong style={{ color: 'var(--text-primary)' }}>{pool.max_concurrency}</strong>
                 </div>
-                <div style={{ fontSize: '0.76rem', color: '#9CA3AF' }}>
-                  Active Requests: <strong style={{ color: pool.active_requests > 0 ? '#10B981' : '#9CA3AF' }}>{pool.active_requests}</strong>
+                <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                  Active Requests: <strong style={{ color: pool.active_requests > 0 ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>{pool.active_requests}</strong>
                 </div>
               </div>
             ))}
@@ -275,27 +275,27 @@ export const ModelRouterView: React.FC = () => {
       {/* Provenance Record Traces (Rule R3) */}
       <div
         style={{
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid rgba(255, 255, 255, 0.07)',
+          background: 'var(--fill-soft)',
+          border: '1px solid var(--fill-soft-2)',
           borderRadius: '16px',
           padding: '24px',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Shield size={18} color="#F6C878" />
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+            <Shield size={18} color="var(--status-warn-text)" />
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
               Recent Provenance Traces (Rule R3)
             </h2>
           </div>
-          <span style={{ fontSize: '0.78rem', color: '#9CA3AF' }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             Every LLM request produces 14-field verified provenance
           </span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {provenance.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px', color: '#6B7280', fontSize: '0.86rem' }}>
+            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
               No recent provenance traces found. Run a research study or persona generation to generate traces.
             </div>
           ) : (
@@ -304,7 +304,7 @@ export const ModelRouterView: React.FC = () => {
                 key={rec.request_id}
                 style={{
                   background: 'rgba(255, 255, 255, 0.015)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  border: '1px solid var(--fill-soft)',
                   borderRadius: '12px',
                   padding: '14px 18px',
                   display: 'flex',
@@ -319,7 +319,7 @@ export const ModelRouterView: React.FC = () => {
                   <span
                     style={{
                       fontFamily: 'monospace',
-                      color: '#F6C878',
+                      color: 'var(--status-warn-text)',
                       background: 'rgba(246, 200, 120, 0.1)',
                       padding: '2px 6px',
                       borderRadius: '6px',
@@ -328,13 +328,13 @@ export const ModelRouterView: React.FC = () => {
                   >
                     {rec.request_id.slice(0, 10)}
                   </span>
-                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{rec.task}</span>
+                  <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{rec.task}</span>
                   {rec.pool && (
                     <span
                       style={{
                         fontSize: '0.72rem',
-                        color: '#9CA3AF',
-                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: 'var(--text-muted)',
+                        background: 'var(--fill-soft)',
                         padding: '2px 6px',
                         borderRadius: '4px',
                         textTransform: 'uppercase',
@@ -345,9 +345,9 @@ export const ModelRouterView: React.FC = () => {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', color: '#9CA3AF' }}>
-                  <span style={{ color: '#E5E7EB' }}>
-                    Served: <strong style={{ color: '#FFFFFF' }}>{rec.served_by_provider || 'pollinations'}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--text-muted)' }}>
+                  <span style={{ color: 'var(--text-primary)' }}>
+                    Served: <strong style={{ color: 'var(--text-main)' }}>{rec.served_by_provider || 'pollinations'}</strong>
                     {rec.served_by_model && ` (${rec.served_by_model})`}
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -356,7 +356,7 @@ export const ModelRouterView: React.FC = () => {
                   </span>
                   <span
                     style={{
-                      color: rec.success ? '#10B981' : '#EF4444',
+                      color: rec.success ? 'var(--accent-emerald)' : '#EF4444',
                       fontWeight: 600,
                       display: 'flex',
                       alignItems: 'center',

@@ -7,6 +7,7 @@ import { AuthPage } from './components/auth/AuthPage';
 import { AuthModal } from './components/auth/AuthModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NavigationProvider, useNavigation } from './context/NavigationContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -57,11 +58,11 @@ const AppContent: React.FC = () => {
       <div
         style={{
           minHeight: '100vh',
-          backgroundColor: '#080909',
+          backgroundColor: 'var(--bg-pure)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#F6C878',
+          color: 'var(--status-warn-text)',
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
@@ -70,13 +71,13 @@ const AppContent: React.FC = () => {
               width: '32px',
               height: '32px',
               border: '3px solid rgba(246, 200, 120, 0.15)',
-              borderTopColor: '#F6C878',
+              borderTopColor: 'var(--status-warn-text)',
               borderRadius: '50%',
               animation: 'authSpin 0.7s linear infinite',
             }}
           />
           <style>{`@keyframes authSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-          <span style={{ fontSize: '0.82rem', color: '#9CA3AF', letterSpacing: '0.03em' }}>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', letterSpacing: '0.03em' }}>
             Checking authentication...
           </span>
         </div>
@@ -184,11 +185,13 @@ const AppContent: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <NavigationProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </NavigationProvider>
+    <ThemeProvider>
+      <NavigationProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </NavigationProvider>
+    </ThemeProvider>
   );
 };
 

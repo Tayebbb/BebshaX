@@ -10,9 +10,12 @@ import {
   Globe,
   Sliders,
   MessageSquare,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
+import { useTheme } from '../../context/ThemeContext';
 import { NewStudyView } from './views/NewStudyView';
 import { StudiesDashboardView } from './views/StudiesDashboardView';
 import { PersonaLibraryView } from './views/PersonaLibraryView';
@@ -149,6 +152,7 @@ const parseDashboardPath = (path: string): {
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingPage }) => {
   const { user, logout } = useAuth();
   const { currentPath, navigate } = useNavigation();
+  const { theme, toggleTheme } = useTheme();
 
   const initialParsed = parseDashboardPath(currentPath);
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialParsed.tab);
@@ -306,8 +310,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       style={{
         display: 'flex',
         minHeight: '100vh',
-        background: '#080909',
-        color: '#FFFFFF',
+        background: 'var(--bg-pure)',
+        color: 'var(--text-main)',
         position: 'relative',
         // 'hidden' would make this a scroll container and break the sidebar's
         // position:sticky; 'clip' clips overflow without doing that.
@@ -320,8 +324,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       <aside
         style={{
           width: isSidebarCollapsed ? '72px' : '240px',
-          background: '#080909',
-          borderRight: '1px solid rgba(255, 255, 255, 0.08)',
+          background: 'var(--bg-pure)',
+          borderRight: '1px solid var(--fill-soft-2)',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
@@ -367,7 +371,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: '#6B7280',
+                color: 'var(--text-muted)',
                 cursor: 'pointer',
                 padding: '4px',
                 borderRadius: '6px',
@@ -397,9 +401,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     width: '100%',
                     padding: isSidebarCollapsed ? '10px 0' : '10px 12px',
                     borderRadius: '10px',
-                    background: isActive ? 'rgba(20, 184, 166, 0.12)' : 'transparent',
-                    color: isActive ? '#22D3EE' : '#8D9999',
-                    border: isActive ? '1px solid rgba(20, 184, 166, 0.28)' : '1px solid transparent',
+                    background: isActive ? 'var(--accent-subtle)' : 'transparent',
+                    color: isActive ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+                    border: isActive ? '1px solid var(--accent-glow)' : '1px solid transparent',
                     fontSize: '0.86rem',
                     fontWeight: isActive ? 600 : 400,
                     cursor: 'pointer',
@@ -407,18 +411,18 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   }}
                   onMouseEnter={(e) => {
                     if (!isActive) {
-                      e.currentTarget.style.color = '#FFFFFF';
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                      e.currentTarget.style.color = 'var(--text-main)';
+                      e.currentTarget.style.background = 'var(--fill-soft)';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!isActive) {
-                      e.currentTarget.style.color = '#8D9999';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
                       e.currentTarget.style.background = 'transparent';
                     }
                   }}
                 >
-                  <span style={{ color: isActive ? '#14B8A6' : '#8D9999' }}>{item.icon}</span>
+                  <span style={{ color: isActive ? '#14B8A6' : 'var(--text-secondary)' }}>{item.icon}</span>
                   {!isSidebarCollapsed && <span>{item.label}</span>}
                 </button>
               );
@@ -439,7 +443,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
-                  color: '#8D9999',
+                  color: 'var(--text-secondary)',
                   cursor: 'pointer',
                   marginBottom: '6px',
                 }}
@@ -452,12 +456,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '4px' }}>
                   {loadingRecent ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '6px 8px' }}>
-                      <div style={{ height: '14px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.06)' }} />
-                      <div style={{ height: '14px', width: '75%', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.06)' }} />
-                      <div style={{ height: '14px', width: '60%', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.06)' }} />
+                      <div style={{ height: '14px', borderRadius: '4px', background: 'var(--fill-soft-2)' }} />
+                      <div style={{ height: '14px', width: '75%', borderRadius: '4px', background: 'var(--fill-soft-2)' }} />
+                      <div style={{ height: '14px', width: '60%', borderRadius: '4px', background: 'var(--fill-soft-2)' }} />
                     </div>
                   ) : recentStudies.length === 0 ? (
-                    <div style={{ padding: '8px 10px', fontSize: '0.78rem', color: '#8D9999', lineHeight: 1.45 }}>
+                    <div style={{ padding: '8px 10px', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
                       No studies yet.<br />
                       <span
                         onClick={() => handleTabClick('new-study')}
@@ -492,7 +496,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                               padding: '7px 8px',
                               borderRadius: '8px',
                               fontSize: '0.8rem',
-                              color: '#8D9999',
+                              color: 'var(--text-secondary)',
                               cursor: 'pointer',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
@@ -500,11 +504,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                               transition: 'color 0.16s ease',
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.color = '#FFFFFF';
-                              e.currentTarget.style.background = '#111616';
+                              e.currentTarget.style.color = 'var(--text-main)';
+                              e.currentTarget.style.background = 'var(--bg-card)';
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.color = '#8D9999';
+                              e.currentTarget.style.color = 'var(--text-secondary)';
                               e.currentTarget.style.background = 'transparent';
                             }}
                             title={displayTitle}
@@ -515,7 +519,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                                   width: '6px',
                                   height: '6px',
                                   borderRadius: '50%',
-                                  background: '#10B981',
+                                  background: 'var(--accent-emerald)',
                                   flexShrink: 0,
                                 }}
                               />
@@ -529,7 +533,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                         onClick={() => handleTabClick('dashboard')}
                         style={{
                           fontSize: '0.78rem',
-                          color: '#22D3EE',
+                          color: 'var(--accent-cyan)',
                           fontWeight: 600,
                           padding: '6px 8px',
                           cursor: 'pointer',
@@ -547,6 +551,40 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
         {/* Bottom User Profile Section */}
         <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isSidebarCollapsed ? 'center' : 'flex-start',
+              gap: '10px',
+              width: '100%',
+              padding: isSidebarCollapsed ? '8px 0' : '8px 12px',
+              marginBottom: '8px',
+              borderRadius: '10px',
+              background: 'transparent',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'background 0.2s ease, color 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--fill-soft)';
+              e.currentTarget.style.color = 'var(--text-main)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--text-secondary)';
+            }}
+          >
+            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+            {!isSidebarCollapsed && <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
+          </button>
           <div
             onClick={() => setShowUserMenu(!showUserMenu)}
             style={{
@@ -556,7 +594,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
               padding: isSidebarCollapsed ? '8px 0' : '8px 12px',
               borderRadius: '12px',
-              background: showUserMenu ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+              background: showUserMenu ? 'var(--fill-soft-2)' : 'var(--fill-soft)',
               border: 'none',
               outline: 'none',
               cursor: 'pointer',
@@ -590,7 +628,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     height: '30px',
                     borderRadius: '50%',
                     background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontWeight: 700,
                     fontSize: '0.8rem',
                     display: 'flex',
@@ -608,7 +646,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   style={{
                     fontSize: '0.84rem',
                     fontWeight: 600,
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     letterSpacing: '0.02em',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
@@ -625,7 +663,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 style={{
                   fontSize: '0.7rem',
                   fontWeight: 600,
-                  color: '#F6C878',
+                  color: 'var(--status-warn-text)',
                   background: 'rgba(246, 200, 120, 0.12)',
                   border: 'none',
                   outline: 'none',
@@ -660,7 +698,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               <div
                 style={{
                   padding: '6px 8px 10px 8px',
-                  borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderBottom: '1px solid var(--fill-soft-2)',
                   marginBottom: '6px',
                   display: 'flex',
                   alignItems: 'center',
@@ -691,8 +729,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                       width: '32px',
                       height: '32px',
                       borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #F6C878 0%, #D4AF37 100%)',
-                      color: '#080909',
+                      background: 'linear-gradient(135deg, var(--status-warn-text) 0%, #D4AF37 100%)',
+                      color: 'var(--text-on-accent)',
                       fontWeight: 700,
                       fontSize: '0.82rem',
                       display: 'flex',
@@ -709,7 +747,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     style={{
                       fontSize: '0.84rem',
                       fontWeight: 600,
-                      color: '#FFFFFF',
+                      color: 'var(--text-main)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -720,7 +758,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   <span
                     style={{
                       fontSize: '0.72rem',
-                      color: '#9CA3AF',
+                      color: 'var(--text-muted)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -747,14 +785,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     background: 'transparent',
                     border: 'none',
                     outline: 'none',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontSize: '0.82rem',
                     textAlign: 'left',
                     cursor: 'pointer',
                     borderRadius: '8px',
                     transition: 'background 0.15s ease',
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)')}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fill-soft)')}
                   onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
                   <Globe size={14} /> Marketing Site
@@ -815,7 +853,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             <div
               style={{
                 fontSize: '0.95rem',
-                color: '#E5E7EB',
+                color: 'var(--text-primary)',
                 fontWeight: 500,
                 letterSpacing: '-0.01em',
               }}

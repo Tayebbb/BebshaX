@@ -183,7 +183,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn pb-16" data-testid="segmentation-view">
       {/* Top Banner / Metrics Header */}
-      <div className="bg-[#0D1111] border border-[#202727] rounded-xl p-6 shadow-xl relative overflow-hidden">
+      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-6 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div>
@@ -192,8 +192,8 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 <PieChart className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-[#F4F7F7] tracking-tight">Market Segmentation</h1>
-                <p className="text-sm text-[#8D9999]">
+                <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Market Segmentation</h1>
+                <p className="text-sm text-[var(--text-secondary)]">
                   Evidence + Dataset Profiles + Business Context → Data-Grounded Market Segments
                 </p>
               </div>
@@ -202,18 +202,18 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
           {/* Quick Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-[#111616] border border-[#202727] px-4 py-2.5 rounded-lg">
-              <span className="text-xs text-[#8D9999] block font-medium">Empirical Cohort</span>
+            <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-lg">
+              <span className="text-xs text-[var(--text-secondary)] block font-medium">Empirical Cohort</span>
               <span className="text-lg font-bold text-teal-400 font-mono">
-                {totalSurveyed.toLocaleString()} <span className="text-xs text-[#8D9999] font-normal">records</span>
+                {totalSurveyed.toLocaleString()} <span className="text-xs text-[var(--text-secondary)] font-normal">records</span>
               </span>
             </div>
-            <div className="bg-[#111616] border border-[#202727] px-4 py-2.5 rounded-lg">
-              <span className="text-xs text-[#8D9999] block font-medium">Segments Built</span>
-              <span className="text-lg font-bold text-[#22D3EE] font-mono">{segments.length}</span>
+            <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-lg">
+              <span className="text-xs text-[var(--text-secondary)] block font-medium">Segments Built</span>
+              <span className="text-lg font-bold text-[var(--accent-cyan)] font-mono">{segments.length}</span>
             </div>
-            <div className="bg-[#111616] border border-[#202727] px-4 py-2.5 rounded-lg">
-              <span className="text-xs text-[#8D9999] block font-medium">Data Readiness</span>
+            <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-lg">
+              <span className="text-xs text-[var(--text-secondary)] block font-medium">Data Readiness</span>
               <span
                 className={`text-sm font-semibold capitalize mt-0.5 block ${
                   readiness?.status === 'ready'
@@ -226,9 +226,9 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 {readiness?.status?.replace('_', ' ') || 'Checking...'}
               </span>
             </div>
-            <div className="bg-[#111616] border border-[#202727] px-4 py-2.5 rounded-lg">
-              <span className="text-xs text-[#8D9999] block font-medium">Algorithm</span>
-              <span className="text-xs font-semibold text-[#F4F7F7] mt-1 block truncate">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-lg">
+              <span className="text-xs text-[var(--text-secondary)] block font-medium">Algorithm</span>
+              <span className="text-xs font-semibold text-[var(--text-primary)] mt-1 block truncate">
                 Quantile Clustering
               </span>
             </div>
@@ -251,7 +251,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
       {/* Pre-Segmentation Readiness Card */}
       {readiness && (
-        <div className="bg-[#0D1111] border border-[#202727] rounded-xl p-5 shadow-lg">
+        <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-5 shadow-lg">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <div
@@ -273,7 +273,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-semibold text-[#F4F7F7]">Pre-Segmentation Assessment</h2>
+                  <h2 className="text-base font-semibold text-[var(--text-primary)]">Pre-Segmentation Assessment</h2>
                   <span
                     className={`text-xs px-2.5 py-0.5 rounded-full font-medium uppercase tracking-wider ${
                       readiness.status === 'ready'
@@ -286,22 +286,22 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     {readiness.status.replace('_', ' ')}
                   </span>
                 </div>
-                <p className="text-xs text-[#8D9999] mt-1 max-w-3xl leading-relaxed">
+                <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-3xl leading-relaxed">
                   {readiness.guidance_message}
                 </p>
 
                 {/* Usable Variables Badges */}
                 {readiness.usable_variables.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2 mt-3">
-                    <span className="text-xs text-[#8D9999] font-medium mr-1">Candidate Variables:</span>
+                    <span className="text-xs text-[var(--text-secondary)] font-medium mr-1">Candidate Variables:</span>
                     {readiness.usable_variables.map((v) => (
                       <span
                         key={v.name}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#111616] border border-[#202727] text-xs text-[#F4F7F7]"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)]"
                         title={`${v.source_dataset_name} • ${v.coverage_percentage}% coverage`}
                       >
                         <span className="text-teal-400 font-mono font-medium">{v.name}</span>
-                        <span className="text-[10px] text-[#8D9999] bg-[#080A0A] px-1 rounded">
+                        <span className="text-[10px] text-[var(--text-secondary)] bg-[var(--bg-pure)] px-1 rounded">
                           {v.coverage_percentage}%
                         </span>
                       </span>
@@ -313,13 +313,13 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
             {/* Run Controls */}
             <div className="flex items-center gap-3 self-end md:self-center flex-shrink-0">
-              <div className="flex items-center gap-2 bg-[#111616] border border-[#202727] px-3 py-1.5 rounded-lg">
-                <span className="text-xs text-[#8D9999] font-medium">Clusters:</span>
+              <div className="flex items-center gap-2 bg-[var(--bg-card)] border border-[var(--border-subtle)] px-3 py-1.5 rounded-lg">
+                <span className="text-xs text-[var(--text-secondary)] font-medium">Clusters:</span>
                 <select
                   value={desiredClusters}
                   onChange={(e) => setDesiredClusters(Number(e.target.value))}
                   disabled={isExecuting}
-                  className="bg-[#080A0A] border border-[#202727] rounded text-xs text-[#F4F7F7] px-2 py-1 focus:outline-none focus:border-teal-500 font-mono"
+                  className="bg-[var(--bg-pure)] border border-[var(--border-subtle)] rounded text-xs text-[var(--text-primary)] px-2 py-1 focus:outline-none focus:border-teal-500 font-mono"
                   data-testid="cluster-count-select"
                 >
                   <option value={2}>2 Segments</option>
@@ -335,7 +335,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-xs tracking-wide transition-all shadow-md ${
                   isExecuting || !readiness.can_run
                     ? 'bg-teal-500/30 text-teal-300/50 cursor-not-allowed border border-teal-500/20'
-                    : 'bg-teal-500 text-[#080A0A] hover:bg-teal-400 active:scale-95 shadow-teal-500/20'
+                    : 'bg-teal-500 text-[var(--bg-pure)] hover:bg-teal-400 active:scale-95 shadow-teal-500/20'
                 }`}
               >
                 {isExecuting ? (
@@ -357,13 +357,13 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
       {/* Execution Stepper */}
       {isExecuting && (
-        <div className="bg-[#0D1111] border border-teal-500/40 rounded-xl p-5 shadow-xl animate-pulse">
+        <div className="bg-[var(--bg-secondary)] border border-teal-500/40 rounded-xl p-5 shadow-xl animate-pulse">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-teal-400 flex items-center gap-2">
               <RefreshCw className="w-4 h-4 animate-spin text-teal-400" />
               Segmentation Engine in Progress
             </h3>
-            <span className="text-xs font-mono text-[#8D9999]">
+            <span className="text-xs font-mono text-[var(--text-secondary)]">
               Step {executionStep + 1} of {executionSteps.length}
             </span>
           </div>
@@ -373,10 +373,10 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 <div
                   className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                     idx < executionStep
-                      ? 'bg-emerald-500 text-[#080A0A]'
+                      ? 'bg-emerald-500 text-[var(--bg-pure)]'
                       : idx === executionStep
-                      ? 'bg-teal-500 text-[#080A0A] ring-2 ring-teal-500/30'
-                      : 'bg-[#111616] text-[#8D9999] border border-[#202727]'
+                      ? 'bg-teal-500 text-[var(--bg-pure)] ring-2 ring-teal-500/30'
+                      : 'bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-subtle)]'
                   }`}
                 >
                   {idx < executionStep ? '✓' : idx + 1}
@@ -384,10 +384,10 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 <span
                   className={`text-xs ${
                     idx === executionStep
-                      ? 'text-[#F4F7F7] font-semibold'
+                      ? 'text-[var(--text-primary)] font-semibold'
                       : idx < executionStep
                       ? 'text-emerald-400/80'
-                      : 'text-[#8D9999]'
+                      : 'text-[var(--text-secondary)]'
                   }`}
                 >
                   {step}
@@ -399,17 +399,17 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
       )}
 
       {/* Filter and Action Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0D1111] border border-[#202727] p-3.5 rounded-xl">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] p-3.5 rounded-xl">
         <div className="flex items-center gap-3 w-full sm:w-auto">
           {/* Search Box */}
           <div className="relative flex-1 sm:w-64">
-            <Search className="w-4 h-4 text-[#8D9999] absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search segments, needs..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#111616] border border-[#202727] rounded-lg pl-9 pr-3 py-1.5 text-xs text-[#F4F7F7] placeholder-[#8D9999] focus:outline-none focus:border-teal-500"
+              className="w-full bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg pl-9 pr-3 py-1.5 text-xs text-[var(--text-primary)] placeholder-[var(--text-secondary)] focus:outline-none focus:border-teal-500"
               data-testid="search-segments-input"
             />
           </div>
@@ -418,7 +418,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-[#111616] border border-[#202727] rounded-lg text-xs text-[#F4F7F7] px-3 py-1.5 focus:outline-none focus:border-teal-500"
+            className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg text-xs text-[var(--text-primary)] px-3 py-1.5 focus:outline-none focus:border-teal-500"
             data-testid="status-filter-select"
           >
             <option value="all">All Statuses</option>
@@ -443,7 +443,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           <button
             onClick={handleExportJSON}
             disabled={segments.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#111616] border border-[#202727] text-xs text-[#8D9999] hover:text-[#F4F7F7] hover:border-teal-500/40 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-teal-500/40 transition-colors"
             title="Export as JSON"
             data-testid="export-json-btn"
           >
@@ -454,7 +454,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           <button
             onClick={handleExportCSV}
             disabled={segments.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#111616] border border-[#202727] text-xs text-[#8D9999] hover:text-[#F4F7F7] hover:border-teal-500/40 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-teal-500/40 transition-colors"
             title="Export as CSV"
             data-testid="export-csv-btn"
           >
@@ -467,19 +467,19 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
       {/* Segments Grid */}
       {filteredSegments.length === 0 ? (
         <div
-          className="bg-[#0D1111] border border-[#202727] rounded-xl p-12 text-center text-[#8D9999]"
+          className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-12 text-center text-[var(--text-secondary)]"
           data-testid="no-segments-placeholder"
         >
-          <PieChart className="w-12 h-12 text-[#8D9999]/40 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-[#F4F7F7]">No Market Segments Available</h3>
-          <p className="text-xs text-[#8D9999] max-w-md mx-auto mt-1 mb-5">
+          <PieChart className="w-12 h-12 text-[var(--text-secondary)]/40 mx-auto mb-3" />
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">No Market Segments Available</h3>
+          <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto mt-1 mb-5">
             Run segmentation above or upload empirical study data to discover meaningful customer clusters.
           </p>
           <div className="flex items-center justify-center gap-3">
             {onNavigateToEvidence && (
               <button
                 onClick={onNavigateToEvidence}
-                className="px-4 py-2 rounded-lg bg-[#111616] border border-[#202727] text-xs text-[#22D3EE] hover:border-cyan-500 transition-colors"
+                className="px-4 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--accent-cyan)] hover:border-cyan-500 transition-colors"
               >
                 Inspect Evidence Lab
               </button>
@@ -504,7 +504,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
               <div
                 key={segment.id}
                 data-testid={`segment-card-${segment.id}`}
-                className="bg-[#0D1111] border border-[#202727] hover:border-teal-500/40 rounded-xl p-5 transition-all shadow-lg flex flex-col justify-between group relative overflow-hidden"
+                className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] hover:border-teal-500/40 rounded-xl p-5 transition-all shadow-lg flex flex-col justify-between group relative overflow-hidden"
               >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/5 rounded-full blur-2xl pointer-events-none group-hover:bg-teal-500/10 transition-colors" />
 
@@ -514,7 +514,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleToggleCompare(segment.id)}
-                        className="text-[#8D9999] hover:text-teal-400 transition-colors"
+                        className="text-[var(--text-secondary)] hover:text-teal-400 transition-colors"
                         title="Select for comparison"
                         data-testid={`compare-checkbox-${segment.id}`}
                       >
@@ -524,7 +524,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                           <Square className="w-4 h-4" />
                         )}
                       </button>
-                      <span className="text-[10px] font-mono uppercase tracking-wider bg-[#111616] border border-[#202727] text-teal-400 px-2 py-0.5 rounded">
+                      <span className="text-[10px] font-mono uppercase tracking-wider bg-[var(--bg-card)] border border-[var(--border-subtle)] text-teal-400 px-2 py-0.5 rounded">
                         {segment.cluster_label}
                       </span>
                     </div>
@@ -541,22 +541,22 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                   </div>
 
                   {/* Title & Population Share */}
-                  <h3 className="text-base font-bold text-[#F4F7F7] group-hover:text-teal-300 transition-colors line-clamp-1">
+                  <h3 className="text-base font-bold text-[var(--text-primary)] group-hover:text-teal-300 transition-colors line-clamp-1">
                     {segment.name}
                   </h3>
 
                   {/* Population Progress Bar */}
                   <div className="mt-2.5 mb-3.5">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-[#8D9999]">Population Share</span>
-                      <span className="text-[#F4F7F7] font-mono font-semibold">
+                      <span className="text-[var(--text-secondary)]">Population Share</span>
+                      <span className="text-[var(--text-primary)] font-mono font-semibold">
                         {segment.population_percentage}%{' '}
-                        <span className="text-[#8D9999] font-normal">
+                        <span className="text-[var(--text-secondary)] font-normal">
                           ({segment.population_count.toLocaleString()} rows)
                         </span>
                       </span>
                     </div>
-                    <div className="h-1.5 w-full bg-[#111616] rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-[var(--bg-card)] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-teal-500 to-cyan-400 rounded-full"
                         style={{ width: `${Math.min(100, segment.population_percentage)}%` }}
@@ -565,28 +565,28 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                   </div>
 
                   {/* Short Description */}
-                  <p className="text-xs text-[#8D9999] line-clamp-2 leading-relaxed mb-4">
+                  <p className="text-xs text-[var(--text-secondary)] line-clamp-2 leading-relaxed mb-4">
                     {segment.description}
                   </p>
 
                   {/* Key Attribute Pills */}
-                  <div className="grid grid-cols-2 gap-2 bg-[#111616] border border-[#202727] p-2.5 rounded-lg mb-4 text-xs">
+                  <div className="grid grid-cols-2 gap-2 bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg mb-4 text-xs">
                     <div>
-                      <span className="text-[10px] text-[#8D9999] block">Budget Range</span>
+                      <span className="text-[10px] text-[var(--text-secondary)] block">Budget Range</span>
                       <span className="font-semibold text-teal-400 font-mono">{budgetRange}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#8D9999] block">Age Cohort</span>
-                      <span className="font-semibold text-[#F4F7F7] font-mono">{ageRange}</span>
+                      <span className="text-[10px] text-[var(--text-secondary)] block">Age Cohort</span>
+                      <span className="font-semibold text-[var(--text-primary)] font-mono">{ageRange}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#8D9999] block">Tech Familiarity</span>
-                      <span className="font-semibold text-[#F4F7F7]">
+                      <span className="text-[10px] text-[var(--text-secondary)] block">Tech Familiarity</span>
+                      <span className="font-semibold text-[var(--text-primary)]">
                         {behav?.technology_familiarity || 'Medium'}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#8D9999] block">Confidence</span>
+                      <span className="text-[10px] text-[var(--text-secondary)] block">Confidence</span>
                       <span className="font-semibold text-cyan-400 font-mono">
                         {Math.round(segment.confidence_score * 100)}%
                       </span>
@@ -595,8 +595,8 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 </div>
 
                 {/* Card Footer Actions */}
-                <div className="flex items-center justify-between pt-3 border-t border-[#202727] gap-2">
-                  <div className="flex items-center gap-1.5 text-xs text-[#8D9999]">
+                <div className="flex items-center justify-between pt-3 border-t border-[var(--border-subtle)] gap-2">
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
                     <FileText className="w-3.5 h-3.5 text-teal-400" />
                     <span>{segment.evidence_citations?.length || 0} citations</span>
                   </div>
@@ -622,22 +622,22 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
       {/* Floating Comparison Sticky Bar */}
       {comparedSegmentIds.length >= 2 && (
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#0D1111] border border-teal-500/50 rounded-xl px-5 py-3 shadow-2xl flex items-center gap-4 animate-slideUp backdrop-blur-md"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[var(--bg-secondary)] border border-teal-500/50 rounded-xl px-5 py-3 shadow-2xl flex items-center gap-4 animate-slideUp backdrop-blur-md"
           data-testid="floating-compare-bar"
         >
-          <span className="text-xs font-semibold text-[#F4F7F7]">
+          <span className="text-xs font-semibold text-[var(--text-primary)]">
             {comparedSegmentIds.length} segments selected for side-by-side comparison
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setComparedSegmentIds([])}
-              className="text-xs text-[#8D9999] hover:text-[#F4F7F7] px-2 py-1"
+              className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-2 py-1"
             >
               Clear
             </button>
             <button
               onClick={handleOpenComparisonModal}
-              className="px-3.5 py-1.5 bg-teal-500 text-[#080A0A] font-bold text-xs rounded-lg hover:bg-teal-400 transition-colors shadow-lg"
+              className="px-3.5 py-1.5 bg-teal-500 text-[var(--bg-pure)] font-bold text-xs rounded-lg hover:bg-teal-400 transition-colors shadow-lg"
             >
               Compare Now
             </button>
@@ -654,24 +654,24 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             data-testid="compare-modal-backdrop"
           />
           <div
-            className="relative z-10 w-full max-w-5xl bg-[#0D1111] border border-[#202727] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative z-10 w-full max-w-5xl bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             data-testid="comparison-modal"
           >
-            <div className="p-5 border-b border-[#202727] flex items-center justify-between bg-[#111616]">
+            <div className="p-5 border-b border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-card)]">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-teal-500/10 text-teal-400 rounded-lg">
                   <Sliders className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-[#F4F7F7]">Side-by-Side Segment Comparison</h3>
-                  <p className="text-xs text-[#8D9999]">
+                  <h3 className="text-lg font-bold text-[var(--text-primary)]">Side-by-Side Segment Comparison</h3>
+                  <p className="text-xs text-[var(--text-secondary)]">
                     Comparing {comparisonResult.compared_count} segments on empirical dimensions
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsComparing(false)}
-                className="text-[#8D9999] hover:text-[#F4F7F7] p-1.5 rounded-lg hover:bg-[#202727]"
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--border-subtle)]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -680,8 +680,8 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             <div className="p-6 overflow-x-auto overflow-y-auto space-y-6">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-[#202727]">
-                    <th className="p-3 text-[#8D9999] font-medium w-44">Dimension</th>
+                  <tr className="border-b border-[var(--border-subtle)]">
+                    <th className="p-3 text-[var(--text-secondary)] font-medium w-44">Dimension</th>
                     {comparisonResult.comparison_matrix.map((c) => (
                       <th key={c.segment_id} className="p-3 text-teal-400 font-bold min-w-[200px]">
                         {c.name}
@@ -689,17 +689,17 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#202727]/60">
+                <tbody className="divide-y divide-[var(--border-subtle)]/60">
                   <tr>
-                    <td className="p-3 text-[#8D9999] font-medium">Cluster Label</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Cluster Label</td>
                     {comparisonResult.comparison_matrix.map((c) => (
-                      <td key={c.segment_id} className="p-3 font-mono text-[#F4F7F7]">
+                      <td key={c.segment_id} className="p-3 font-mono text-[var(--text-primary)]">
                         {c.cluster_label}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[#8D9999] font-medium">Population Share</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Population Share</td>
                     {comparisonResult.comparison_matrix.map((c) => (
                       <td key={c.segment_id} className="p-3 font-semibold text-teal-400 font-mono">
                         {c.population_percentage}% ({c.population_count.toLocaleString()} rows)
@@ -707,39 +707,39 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[#8D9999] font-medium">Median Budget</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Median Budget</td>
                     {comparisonResult.comparison_matrix.map((c) => (
-                      <td key={c.segment_id} className="p-3 font-mono text-[#22D3EE] font-bold">
+                      <td key={c.segment_id} className="p-3 font-mono text-[var(--accent-cyan)] font-bold">
                         {c.median_budget}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[#8D9999] font-medium">Budget Range</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Budget Range</td>
                     {comparisonResult.comparison_matrix.map((c) => (
-                      <td key={c.segment_id} className="p-3 text-[#F4F7F7] font-mono">
+                      <td key={c.segment_id} className="p-3 text-[var(--text-primary)] font-mono">
                         {c.budget_range}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[#8D9999] font-medium">Age Cohort</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Age Cohort</td>
                     {comparisonResult.comparison_matrix.map((c) => (
-                      <td key={c.segment_id} className="p-3 text-[#F4F7F7] font-mono">
+                      <td key={c.segment_id} className="p-3 text-[var(--text-primary)] font-mono">
                         {c.age_range}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[#8D9999] font-medium">Tech Familiarity</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Tech Familiarity</td>
                     {comparisonResult.comparison_matrix.map((c) => (
-                      <td key={c.segment_id} className="p-3 text-[#F4F7F7]">
+                      <td key={c.segment_id} className="p-3 text-[var(--text-primary)]">
                         {c.tech_familiarity}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[#8D9999] font-medium">Evidence Citations</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Evidence Citations</td>
                     {comparisonResult.comparison_matrix.map((c) => (
                       <td key={c.segment_id} className="p-3 text-emerald-400 font-semibold">
                         {c.evidence_citations_count} claims verified
@@ -747,9 +747,9 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[#8D9999] font-medium">Differentiation Rationale</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Differentiation Rationale</td>
                     {comparisonResult.comparison_matrix.map((c) => (
-                      <td key={c.segment_id} className="p-3 text-[#8D9999] leading-relaxed">
+                      <td key={c.segment_id} className="p-3 text-[var(--text-secondary)] leading-relaxed">
                         {c.differentiation}
                       </td>
                     ))}
@@ -758,10 +758,10 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
               </table>
             </div>
 
-            <div className="p-4 border-t border-[#202727] bg-[#111616] flex justify-end">
+            <div className="p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-card)] flex justify-end">
               <button
                 onClick={() => setIsComparing(false)}
-                className="px-4 py-2 rounded-lg bg-[#202727] text-[#F4F7F7] text-xs font-semibold hover:bg-[#202727]/80"
+                className="px-4 py-2 rounded-lg bg-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-semibold hover:bg-[var(--border-subtle)]/80"
               >
                 Close Comparison
               </button>
@@ -779,30 +779,30 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             data-testid="detail-modal-backdrop"
           />
           <div
-            className="relative z-10 w-full max-w-3xl bg-[#0D1111] border border-[#202727] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative z-10 w-full max-w-3xl bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             data-testid="segment-detail-modal"
           >
             {/* Modal Header */}
-            <div className="p-6 border-b border-[#202727] bg-[#111616] flex items-center justify-between">
+            <div className="p-6 border-b border-[var(--border-subtle)] bg-[var(--bg-card)] flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-teal-500/10 text-teal-400 border border-teal-500/30 rounded-xl">
                   <PieChart className="w-6 h-6" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold text-[#F4F7F7]">{selectedSegment.name}</h3>
-                    <span className="text-xs px-2 py-0.5 rounded bg-[#080A0A] border border-[#202727] text-teal-400 font-mono">
+                    <h3 className="text-lg font-bold text-[var(--text-primary)]">{selectedSegment.name}</h3>
+                    <span className="text-xs px-2 py-0.5 rounded bg-[var(--bg-pure)] border border-[var(--border-subtle)] text-teal-400 font-mono">
                       {selectedSegment.cluster_label}
                     </span>
                   </div>
-                  <p className="text-xs text-[#8D9999] mt-0.5">
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                     {selectedSegment.population_percentage}% population • {selectedSegment.population_count.toLocaleString()} empirical records
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setSelectedSegment(null)}
-                className="text-[#8D9999] hover:text-[#F4F7F7] p-1.5 rounded-lg hover:bg-[#202727]"
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--border-subtle)]"
                 data-testid="close-detail-modal-btn"
               >
                 <X className="w-5 h-5" />
@@ -810,7 +810,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             </div>
 
             {/* Modal Navigation Tabs */}
-            <div className="flex items-center gap-2 px-6 pt-3 border-b border-[#202727] bg-[#0D1111] overflow-x-auto">
+            <div className="flex items-center gap-2 px-6 pt-3 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)] overflow-x-auto">
               {[
                 { id: 'overview', label: 'Overview' },
                 { id: 'demographics', label: 'Demographics' },
@@ -825,7 +825,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                   className={`px-3.5 py-2 text-xs font-semibold border-b-2 whitespace-nowrap transition-colors ${
                     modalTab === t.id
                       ? 'border-teal-400 text-teal-400'
-                      : 'border-transparent text-[#8D9999] hover:text-[#F4F7F7]'
+                      : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   {t.label}
@@ -834,29 +834,29 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             </div>
 
             {/* Modal Tab Content */}
-            <div className="p-6 overflow-y-auto space-y-6 text-xs text-[#F4F7F7]">
+            <div className="p-6 overflow-y-auto space-y-6 text-xs text-[var(--text-primary)]">
               {modalTab === 'overview' && (
                 <div className="space-y-5" data-testid="tab-content-overview">
                   <div>
-                    <h4 className="text-xs font-semibold text-[#8D9999] uppercase tracking-wider mb-2">
+                    <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
                       Segment Description
                     </h4>
-                    <p className="bg-[#111616] border border-[#202727] p-3.5 rounded-lg leading-relaxed text-[#F4F7F7]">
+                    <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg leading-relaxed text-[var(--text-primary)]">
                       {selectedSegment.description}
                     </p>
                   </div>
 
                   <div>
-                    <h4 className="text-xs font-semibold text-[#8D9999] uppercase tracking-wider mb-2">
+                    <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
                       Key Differentiation Rationale
                     </h4>
-                    <p className="bg-[#111616] border border-[#202727] p-3.5 rounded-lg leading-relaxed text-teal-300">
+                    <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg leading-relaxed text-teal-300">
                       {selectedSegment.differentiation_summary || 'Distinct empirical behavior and economic limits.'}
                     </p>
                   </div>
 
                   <div>
-                    <h4 className="text-xs font-semibold text-[#8D9999] uppercase tracking-wider mb-2">
+                    <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
                       Identified Needs & Pain Points
                     </h4>
                     <div className="space-y-2">
@@ -864,7 +864,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                         (need, idx) => (
                           <div
                             key={idx}
-                            className="flex items-center gap-2.5 bg-[#111616] border border-[#202727] p-2.5 rounded-lg"
+                            className="flex items-center gap-2.5 bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0" />
                             <span>{need}</span>
@@ -879,31 +879,31 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
               {modalTab === 'demographics' && (
                 <div className="space-y-4" data-testid="tab-content-demographics">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-[#111616] border border-[#202727] p-3.5 rounded-lg">
-                      <span className="text-[10px] text-[#8D9999] block uppercase font-bold">Age Range</span>
+                    <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
+                      <span className="text-[10px] text-[var(--text-secondary)] block uppercase font-bold">Age Range</span>
                       <span className="text-base font-bold text-teal-400 font-mono mt-1 block">
                         {selectedSegment.characteristics?.demographics?.age_range
                           ? `${selectedSegment.characteristics.demographics.age_range[0]} – ${selectedSegment.characteristics.demographics.age_range[1]} years`
                           : '18 – 24 years'}
                       </span>
                     </div>
-                    <div className="bg-[#111616] border border-[#202727] p-3.5 rounded-lg">
-                      <span className="text-[10px] text-[#8D9999] block uppercase font-bold">Median Age</span>
-                      <span className="text-base font-bold text-[#F4F7F7] font-mono mt-1 block">
+                    <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
+                      <span className="text-[10px] text-[var(--text-secondary)] block uppercase font-bold">Median Age</span>
+                      <span className="text-base font-bold text-[var(--text-primary)] font-mono mt-1 block">
                         {selectedSegment.characteristics?.demographics?.median_age || 21} years old
                       </span>
                     </div>
                   </div>
 
-                  <div className="bg-[#111616] border border-[#202727] p-3.5 rounded-lg">
-                    <span className="text-[10px] text-[#8D9999] block uppercase font-bold">Dominant Role / Occupation</span>
-                    <span className="text-sm font-semibold text-[#F4F7F7] mt-1 block">
+                  <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
+                    <span className="text-[10px] text-[var(--text-secondary)] block uppercase font-bold">Dominant Role / Occupation</span>
+                    <span className="text-sm font-semibold text-[var(--text-primary)] mt-1 block">
                       {selectedSegment.characteristics?.demographics?.dominant_occupation || 'Undergraduate Student / Candidate'}
                     </span>
                   </div>
 
-                  <div className="bg-[#111616] border border-[#202727] p-3.5 rounded-lg">
-                    <span className="text-[10px] text-[#8D9999] block uppercase font-bold">Study Intensity</span>
+                  <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
+                    <span className="text-[10px] text-[var(--text-secondary)] block uppercase font-bold">Study Intensity</span>
                     <span className="text-sm font-semibold text-cyan-400 mt-1 block font-mono">
                       {selectedSegment.characteristics?.behavior?.study_hours_per_day
                         ? `${selectedSegment.characteristics.behavior.study_hours_per_day} hours/day`
@@ -916,31 +916,31 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
               {modalTab === 'economics' && (
                 <div className="space-y-4" data-testid="tab-content-economics">
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-[#111616] border border-[#202727] p-3 rounded-lg">
-                      <span className="text-[10px] text-[#8D9999] block">Min Budget</span>
-                      <span className="text-sm font-bold text-[#F4F7F7] font-mono">
+                    <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg">
+                      <span className="text-[10px] text-[var(--text-secondary)] block">Min Budget</span>
+                      <span className="text-sm font-bold text-[var(--text-primary)] font-mono">
                         ৳{selectedSegment.characteristics?.economics?.monthly_budget?.min || 250}
                       </span>
                     </div>
-                    <div className="bg-[#111616] border border-teal-500/40 p-3 rounded-lg">
+                    <div className="bg-[var(--bg-card)] border border-teal-500/40 p-3 rounded-lg">
                       <span className="text-[10px] text-teal-400 font-semibold block">Median Budget</span>
                       <span className="text-base font-bold text-teal-300 font-mono">
                         ৳{selectedSegment.characteristics?.economics?.monthly_budget?.median || 400}
                       </span>
                     </div>
-                    <div className="bg-[#111616] border border-[#202727] p-3 rounded-lg">
-                      <span className="text-[10px] text-[#8D9999] block">Max Budget</span>
-                      <span className="text-sm font-bold text-[#F4F7F7] font-mono">
+                    <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg">
+                      <span className="text-[10px] text-[var(--text-secondary)] block">Max Budget</span>
+                      <span className="text-sm font-bold text-[var(--text-primary)] font-mono">
                         ৳{selectedSegment.characteristics?.economics?.monthly_budget?.max || 600}
                       </span>
                     </div>
                   </div>
 
-                  <div className="bg-[#111616] border border-[#202727] p-4 rounded-lg leading-relaxed">
-                    <span className="text-[10px] text-[#8D9999] block uppercase font-bold mb-1">
+                  <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-4 rounded-lg leading-relaxed">
+                    <span className="text-[10px] text-[var(--text-secondary)] block uppercase font-bold mb-1">
                       Willingness-to-Pay Analysis
                     </span>
-                    <p className="text-[#8D9999]">
+                    <p className="text-[var(--text-secondary)]">
                       Price threshold analysis indicates sensitivity above the median budget of{' '}
                       <span className="text-teal-400 font-semibold">
                         ৳{selectedSegment.characteristics?.economics?.monthly_budget?.median || 400}/mo
@@ -954,12 +954,12 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
               {modalTab === 'evidence' && (
                 <div className="space-y-3" data-testid="tab-content-evidence">
                   {(selectedSegment.evidence_citations || []).length === 0 ? (
-                    <p className="text-[#8D9999] text-center py-6">No specific evidence claims attached to this segment.</p>
+                    <p className="text-[var(--text-secondary)] text-center py-6">No specific evidence claims attached to this segment.</p>
                   ) : (
                     selectedSegment.evidence_citations.map((cite, idx) => (
                       <div
                         key={idx}
-                        className="bg-[#111616] border border-[#202727] p-3.5 rounded-lg space-y-1.5"
+                        className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg space-y-1.5"
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-mono uppercase text-teal-400 font-semibold">
@@ -969,11 +969,11 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                             {Math.round((cite.confidence || 0.8) * 100)}% verified
                           </span>
                         </div>
-                        <p className="text-xs text-[#F4F7F7] font-medium leading-relaxed">
+                        <p className="text-xs text-[var(--text-primary)] font-medium leading-relaxed">
                           "{cite.claim_text}"
                         </p>
                         {cite.rationale && (
-                          <p className="text-[11px] text-[#8D9999] italic">{cite.rationale}</p>
+                          <p className="text-[11px] text-[var(--text-secondary)] italic">{cite.rationale}</p>
                         )}
                       </div>
                     ))
@@ -983,33 +983,33 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
               {modalTab === 'provenance' && (
                 <div className="space-y-4" data-testid="tab-content-provenance">
-                  <div className="bg-[#111616] border border-[#202727] p-3.5 rounded-lg space-y-2">
+                  <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg space-y-2">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#8D9999]">Segmentation Run ID</span>
+                      <span className="text-[var(--text-secondary)]">Segmentation Run ID</span>
                       <span className="font-mono text-teal-400">{selectedSegment.segmentation_run_id}</span>
                     </div>
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#8D9999]">Created Timestamp</span>
-                      <span className="font-mono text-[#F4F7F7]">{new Date(selectedSegment.created_at).toLocaleString()}</span>
+                      <span className="text-[var(--text-secondary)]">Created Timestamp</span>
+                      <span className="font-mono text-[var(--text-primary)]">{new Date(selectedSegment.created_at).toLocaleString()}</span>
                     </div>
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#8D9999]">Status</span>
+                      <span className="text-[var(--text-secondary)]">Status</span>
                       <span className="font-semibold text-emerald-400">{selectedSegment.status}</span>
                     </div>
                   </div>
 
                   {activeRun?.dataset_versions && activeRun.dataset_versions.length > 0 && (
                     <div>
-                      <h5 className="text-[10px] uppercase font-bold text-[#8D9999] mb-2">Connected Dataset Versions</h5>
+                      <h5 className="text-[10px] uppercase font-bold text-[var(--text-secondary)] mb-2">Connected Dataset Versions</h5>
                       <div className="space-y-2">
                         {activeRun.dataset_versions.map((ds) => (
                           <div
                             key={ds.dataset_id}
-                            className="bg-[#111616] border border-[#202727] p-3 rounded-lg flex items-center justify-between text-[11px]"
+                            className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg flex items-center justify-between text-[11px]"
                           >
                             <div>
-                              <span className="font-semibold text-[#F4F7F7] block">{ds.name}</span>
-                              <span className="text-[#8D9999] font-mono text-[10px]">
+                              <span className="font-semibold text-[var(--text-primary)] block">{ds.name}</span>
+                              <span className="text-[var(--text-secondary)] font-mono text-[10px]">
                                 Hash: {ds.content_hash}
                               </span>
                             </div>
@@ -1026,10 +1026,10 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-[#202727] bg-[#111616] flex items-center justify-between">
+            <div className="p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-card)] flex items-center justify-between">
               <button
                 onClick={() => setSelectedSegment(null)}
-                className="px-4 py-2 rounded-lg bg-[#202727] text-[#F4F7F7] text-xs font-semibold hover:bg-[#202727]/80"
+                className="px-4 py-2 rounded-lg bg-[var(--border-subtle)] text-[var(--text-primary)] text-xs font-semibold hover:bg-[var(--border-subtle)]/80"
               >
                 Close
               </button>
@@ -1040,7 +1040,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     onProceedToPersonas(selectedSegment.id);
                     setSelectedSegment(null);
                   }}
-                  className="px-4 py-2 rounded-lg bg-teal-500 text-[#080A0A] font-bold text-xs hover:bg-teal-400 transition-colors flex items-center gap-1.5 shadow-lg"
+                  className="px-4 py-2 rounded-lg bg-teal-500 text-[var(--bg-pure)] font-bold text-xs hover:bg-teal-400 transition-colors flex items-center gap-1.5 shadow-lg"
                 >
                   <span>Build Personas for this Segment</span>
                   <ArrowRight className="w-3.5 h-3.5" />

@@ -9,9 +9,14 @@
   --ns-line-soft: rgba(32, 39, 39, 0.55);
   --ns-accent: #14b8a6;
   --ns-accent-line: rgba(20, 184, 166, 0.4);
-  --ns-accent-soft: rgba(20, 184, 166, 0.1);
-  --ns-text-dim: #8d9999;
-  --ns-text-faint: #5b6666;
+  --ns-accent-soft: var(--accent-subtle);
+  --ns-text-dim: var(--text-secondary);
+  --ns-text-faint: var(--text-faint);
+  --ns-glass: var(--glass-mid);
+  --ns-glass-soft: var(--glass-soft);
+  --ns-glass-card: var(--glass-mid);
+  --ns-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --ns-heading-tail: #99f6e4;
   --ns-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
   position: relative;
@@ -95,7 +100,7 @@
   line-height: 1.12;
   margin: 0 0 12px;
   text-align: center;
-  background: linear-gradient(135deg, #ffffff 30%, #99f6e4 100%);
+  background: linear-gradient(135deg, var(--text-main) 30%, var(--ns-heading-tail) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -118,7 +123,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #f87171;
+  color: var(--status-error-text);
   font: 500 0.86rem var(--font-sans);
   animation: ns-scene-in 0.3s var(--ns-ease) both;
 }
@@ -128,31 +133,31 @@
   width: 100%;
   border-radius: 22px;
   border: 1px solid var(--ns-line);
-  background: rgba(13, 17, 17, 0.72);
+  background: var(--ns-glass);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   padding: 22px 24px 16px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--ns-shadow);
   transition: border-color 0.25s var(--ns-ease), box-shadow 0.45s var(--ns-ease);
   margin-bottom: 14px;
 }
 .ns-composer:focus-within {
   border-color: var(--ns-accent-line);
   box-shadow:
-    0 18px 50px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(20, 184, 166, 0.18),
-    0 0 46px rgba(20, 184, 166, 0.08);
+    var(--ns-shadow),
+    0 0 0 1px var(--accent-subtle),
+    0 0 46px var(--accent-subtle);
 }
 .ns-textarea {
   width: 100%;
   background: transparent;
   border: none;
   outline: none;
-  color: #ffffff;
+  color: var(--text-main);
   font: 400 1.02rem/1.6 var(--font-sans);
   resize: none;
   min-height: 76px;
-  caret-color: #2dd4bf;
+  caret-color: var(--accent-teal-bright);
 }
 .ns-textarea::placeholder { color: var(--ns-text-faint); }
 .ns-composer-bar {
@@ -175,7 +180,7 @@
   padding: 2px 7px;
   border-radius: 5px;
   border: 1px solid var(--ns-line);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--fill-soft);
   font: 600 0.62rem var(--font-mono);
   color: var(--ns-text-dim);
 }
@@ -186,16 +191,16 @@
   border: none;
   display: grid;
   place-items: center;
-  background: linear-gradient(140deg, #2dd4bf, #0d9488);
-  color: #041110;
+  background: linear-gradient(140deg, var(--accent-teal-bright), #0d9488);
+  color: var(--text-on-accent);
   cursor: pointer;
   flex-shrink: 0;
   transition: opacity 0.2s var(--ns-ease), box-shadow 0.2s var(--ns-ease), filter 0.2s var(--ns-ease);
-  box-shadow: 0 4px 16px rgba(20, 184, 166, 0.3);
+  box-shadow: 0 4px 16px var(--border-hover);
 }
 .ns-send:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 6px 22px rgba(20, 184, 166, 0.42); }
 .ns-send:disabled {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--fill-soft);
   color: var(--ns-text-faint);
   cursor: default;
   box-shadow: none;
@@ -213,7 +218,7 @@
   padding: 7px 14px;
   border-radius: 999px;
   border: 1px solid var(--ns-line-soft);
-  background: rgba(13, 17, 17, 0.55);
+  background: var(--ns-glass-soft);
   color: var(--ns-text-dim);
   font: 500 0.74rem var(--font-sans);
   cursor: pointer;
@@ -224,7 +229,7 @@
   text-overflow: ellipsis;
 }
 .ns-example:hover:not(:disabled) {
-  color: #5eead4;
+  color: var(--accent-teal-bright);
   border-color: var(--ns-accent-line);
   background: var(--ns-accent-soft);
 }
@@ -248,7 +253,7 @@
 .ns-card {
   position: relative;
   text-align: left;
-  background: rgba(13, 17, 17, 0.6);
+  background: var(--ns-glass-card);
   border: 1px solid var(--ns-line);
   border-radius: 16px;
   padding: 18px 17px;
@@ -259,11 +264,11 @@
   font-family: inherit;
   transition: background 0.22s var(--ns-ease), border-color 0.22s var(--ns-ease), box-shadow 0.22s var(--ns-ease);
 }
-.ns-card:hover { background: #111616; border-color: rgba(20, 184, 166, 0.3); }
+.ns-card:hover { background: var(--bg-card); border-color: var(--border-hover); }
 .ns-card.ns-selected {
   background: var(--ns-accent-soft);
   border-color: var(--ns-accent-line);
-  box-shadow: 0 4px 20px rgba(20, 184, 166, 0.1), inset 0 0 0 1px rgba(20, 184, 166, 0.12);
+  box-shadow: 0 4px 20px var(--accent-subtle), inset 0 0 0 1px var(--accent-subtle);
 }
 .ns-card-icon {
   width: 40px;
@@ -275,7 +280,7 @@
 }
 .ns-card-title {
   font: 600 0.92rem 'Space Grotesk', var(--font-sans);
-  color: #ffffff;
+  color: var(--text-main);
   margin: 0 0 6px;
   letter-spacing: -0.01em;
 }
@@ -294,7 +299,7 @@
   display: grid;
   place-items: center;
   background: var(--ns-accent);
-  color: #041110;
+  color: var(--text-on-accent);
   opacity: 0;
   transform: scale(0.6);
   transition: opacity 0.22s var(--ns-ease), transform 0.22s var(--ns-ease);
@@ -306,6 +311,20 @@
   .ns-composer { padding: 16px 16px 12px; border-radius: 17px; }
   .ns-hint { display: none; }
   .ns-examples { margin-bottom: 28px; }
+}
+
+/* Light theme — frosted glass flips via the global glass tokens */
+[data-theme='light'] .ns-root {
+  --ns-line: rgba(15, 35, 33, 0.14);
+  --ns-line-soft: rgba(15, 35, 33, 0.09);
+  --ns-accent: #0d9488;
+  --ns-accent-line: rgba(13, 148, 136, 0.45);
+  --ns-shadow: 0 18px 44px rgba(15, 30, 30, 0.1);
+  --ns-heading-tail: #0d9488;
+}
+[data-theme='light'] .ns-ambient::before,
+[data-theme='light'] .ns-ambient::after {
+  opacity: 0.09;
 }
 
 @media (prefers-reduced-motion: reduce) {

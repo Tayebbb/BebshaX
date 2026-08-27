@@ -22,12 +22,26 @@
   --border-subtle: #202727;
   --border-medium: #2a3333;
   --border-hover: rgba(20, 184, 166, 0.35);
+  --border-soft: rgba(255, 255, 255, 0.08);
+
+  /* Soft fills (decorative surfaces on the canvas) */
+  --fill-soft: rgba(255, 255, 255, 0.05);
+  --fill-soft-2: rgba(255, 255, 255, 0.08);
+
+  /* Frosted glass tiers (backdrop-blur surfaces) */
+  --glass-strong: rgba(13, 17, 17, 0.9);
+  --glass-mid: rgba(13, 17, 17, 0.65);
+  --glass-soft: rgba(13, 17, 17, 0.5);
 
   /* Typography Palette */
   --text-main: #ffffff;
   --text-primary: #f4f7f7;
   --text-secondary: #8d9999;
-  --text-muted: #535d5d;
+  --text-muted: #5f6b6b;
+  --text-faint: #535d5d;
+  --text-label: #b6c2c2;
+  /* Text sitting on the teal accent (CTAs) — dark in BOTH themes. */
+  --text-on-accent: #071010;
 
   /* Primary Accent: Teal / Cyan */
   --accent-primary: #14b8a6;
@@ -35,12 +49,22 @@
   --accent-subtle: rgba(20, 184, 166, 0.12);
   --accent-glow: rgba(20, 184, 166, 0.25);
 
-  /* Secondary Accent & Status */
+  /* Secondary Accent & Status (readable variants flip per theme) */
   --accent-cyan: #22d3ee;
   --accent-teal: #14b8a6;
+  --accent-teal-bright: #2dd4bf;
   --accent-emerald: #10b981;
   --accent-amber: #f59e0b;
   --accent-rose: #ef4444;
+  --status-success-text: #34d399;
+  --status-error-text: #fca5a5;
+  --status-warn-text: #f6c878;
+
+  /* Component chrome */
+  --google-btn-bg: #f4f7f7;
+  --google-btn-fg: #111616;
+  --scrollbar-thumb: #232d2d;
+  --scrollbar-thumb-hover: #31403f;
 
   /* Legacy Accent Mappings for backward compatibility */
   --accent-gold-primary: #14b8a6;
@@ -58,6 +82,64 @@
   --shadow-glow: 0 0 24px rgba(20, 184, 166, 0.2);
 }
 
+/* ==========================================================================
+   Light theme — modern, minimal, high-contrast. Toggled via
+   <html data-theme="light">; every token above has a light counterpart.
+   ========================================================================== */
+[data-theme='light'] {
+  --bg-pure: #f6f8f8;
+  --bg-primary: #f6f8f8;
+  --bg-secondary: #eef2f2;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f5;
+  --bg-glass: rgba(255, 255, 255, 0.88);
+
+  --border-subtle: #e2e8e8;
+  --border-medium: #cfd9d9;
+  --border-hover: rgba(13, 148, 136, 0.45);
+  --border-soft: rgba(10, 30, 28, 0.1);
+
+  --fill-soft: rgba(10, 30, 28, 0.045);
+  --fill-soft-2: rgba(10, 30, 28, 0.08);
+
+  --glass-strong: rgba(255, 255, 255, 0.92);
+  --glass-mid: rgba(255, 255, 255, 0.75);
+  --glass-soft: rgba(255, 255, 255, 0.6);
+
+  --text-main: #0e1515;
+  --text-primary: #1c2626;
+  --text-secondary: #5c6b6b;
+  --text-muted: #7c8989;
+  --text-faint: #97a3a3;
+  --text-label: #3d4a4a;
+  --text-on-accent: #071010;
+
+  --accent-hover: #0e7490;
+  --accent-subtle: rgba(13, 148, 136, 0.1);
+  --accent-glow: rgba(13, 148, 136, 0.2);
+
+  --accent-cyan: #0e7490;
+  --accent-teal: #0d9488;
+  --accent-teal-bright: #0d9488;
+  --accent-emerald: #059669;
+  --status-success-text: #047857;
+  --status-error-text: #b91c1c;
+  --status-warn-text: #a16207;
+
+  --google-btn-bg: #ffffff;
+  --google-btn-fg: #1f2937;
+  --scrollbar-thumb: #c9d4d4;
+  --scrollbar-thumb-hover: #aebcbc;
+
+  --accent-gold-primary: #0d9488;
+  --accent-gold-hover: #0e7490;
+
+  --shadow-sm: 0 2px 8px rgba(15, 30, 30, 0.07);
+  --shadow-md: 0 8px 24px rgba(15, 30, 30, 0.09);
+  --shadow-lg: 0 16px 40px rgba(15, 30, 30, 0.12);
+  --shadow-glow: 0 0 24px rgba(13, 148, 136, 0.14);
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -72,6 +154,9 @@
 html {
   scroll-behavior: smooth;
   color-scheme: dark;
+}
+html[data-theme='light'] {
+  color-scheme: light;
 }
 
 body {
@@ -94,7 +179,7 @@ body {
    ========================================================================== */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2a3434 transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
@@ -104,19 +189,19 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: #232d2d;
+  background: var(--scrollbar-thumb);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: #31403f;
+  background: var(--scrollbar-thumb-hover);
   background-clip: content-box;
 }
 
 ::selection {
   background: rgba(20, 184, 166, 0.35);
-  color: #ffffff;
+  color: var(--text-main);
 }
 
 :focus-visible {
@@ -133,7 +218,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .text-gradient-teal {
-  background: linear-gradient(135deg, #ffffff 20%, #22d3ee 100%);
+  background: linear-gradient(135deg, var(--text-main) 20%, var(--accent-cyan) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -217,7 +302,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Skeleton shimmer for loading placeholders */
 .bx-skeleton {
-  background: linear-gradient(90deg, #161c1c 25%, #202a2a 50%, #161c1c 75%);
+  background: linear-gradient(90deg, var(--bg-card-hover) 25%, var(--border-subtle) 50%, var(--bg-card-hover) 75%);
   background-size: 200% 100%;
   animation: bx-shimmer 1.4s ease-in-out infinite;
   border-radius: 6px;
