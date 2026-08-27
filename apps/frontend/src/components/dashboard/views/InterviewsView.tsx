@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Interview, InterviewMetrics } from '../../../types';
 import { api } from '../../../services/api';
+import { CountUp } from '../../../motion/CountUp';
 
 interface InterviewsViewProps {
   studyId: string;
@@ -121,7 +122,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <span className="text-xs font-semibold uppercase tracking-wider">Total Interviews</span>
             <MessageSquare className="w-4 h-4 text-teal-400" />
           </div>
-          <div className="text-2xl font-black text-white">{metrics.total_interviews}</div>
+          <div className="text-2xl font-black text-white"><CountUp value={metrics.total_interviews} /></div>
           <p className="text-[11px] text-[var(--text-muted)]">Recorded research sessions</p>
         </div>
 
@@ -130,7 +131,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <span className="text-xs font-semibold uppercase tracking-wider">Active Sessions</span>
             <Activity className="w-4 h-4 text-cyan-400" />
           </div>
-          <div className="text-2xl font-black text-cyan-400">{metrics.active_interviews}</div>
+          <div className="text-2xl font-black text-cyan-400"><CountUp value={metrics.active_interviews} /></div>
           <p className="text-[11px] text-[var(--text-muted)]">Conversations in progress</p>
         </div>
 
@@ -139,7 +140,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <span className="text-xs font-semibold uppercase tracking-wider">Completed</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-2xl font-black text-emerald-400">{metrics.completed_interviews}</div>
+          <div className="text-2xl font-black text-emerald-400"><CountUp value={metrics.completed_interviews} /></div>
           <p className="text-[11px] text-[var(--text-muted)]">Synthesized sessions</p>
         </div>
 
@@ -149,7 +150,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <Award className="w-4 h-4 text-amber-400" />
           </div>
           <div className="text-2xl font-black text-amber-400">
-            {metrics.total_insights_generated}
+            <CountUp value={metrics.total_insights_generated} />
           </div>
           <p className="text-[11px] text-[var(--text-muted)]">Turn-provenance claims</p>
         </div>

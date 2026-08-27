@@ -15,3 +15,67 @@
 | Frontend | `cd apps/frontend && npm ci && npm run build && npm test -- --run` |
 
 CI runs Ubuntu (`python -m pytest apps/backend/tests -q`) — keep code and tests portable.
+# GSAP Animation Guidelines
+
+Use GSAP and the installed official GSAP Skills whenever implementing animation in this project.
+
+## Core principles
+
+* Use GSAP for complex UI animation, timelines, scroll-driven animation, transitions, parallax, and coordinated motion.
+* Do not introduce another animation library unless there is a strong technical reason.
+* Prefer subtle, purposeful motion over decorative animation.
+* Animations should feel cinematic, smooth, spatial, and physically believable.
+* Use transforms and opacity where possible for performance.
+* Avoid layout-triggering animations when unnecessary.
+* Respect `prefers-reduced-motion`.
+
+## React
+
+When working in React:
+
+* Prefer `useGSAP()` from `@gsap/react`.
+* Use refs to scope animations.
+* Properly clean up animations and ScrollTriggers.
+* Avoid uncontrolled global DOM selectors.
+* Make animations responsive.
+* Handle component mounting/unmounting correctly.
+
+## Motion direction
+
+The visual language should feel:
+
+* Apple-inspired
+* cinematic
+* spatial
+* premium
+* dark-first
+* subtly futuristic
+* restrained rather than flashy
+* smooth and tactile
+
+Use:
+
+* GSAP timelines for orchestrated sequences
+* ScrollTrigger for scroll-driven storytelling
+* staggered reveals for typography and cards
+* subtle Z-axis/depth movement
+* physically believable easing
+* inertia/momentum where appropriate
+* tactile hover and click feedback
+* smooth modal/drawer transitions
+* meaningful micro-interactions
+
+## Important
+
+Before adding animation:
+
+1. Inspect the existing component and surrounding UI.
+2. Determine what the animation communicates.
+3. Choose the simplest GSAP technique that achieves the desired result.
+4. Check responsiveness.
+5. Check accessibility and reduced-motion behavior.
+6. Avoid animation that makes the interface slower or distracting.
+
+Do not blindly animate every element.
+
+Motion should reinforce hierarchy, interaction, depth, feedback, and storytelling.

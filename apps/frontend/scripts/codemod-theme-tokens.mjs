@@ -55,8 +55,13 @@ const MAP = [
   [/rgba\(17,\s*22,\s*22,\s*0\.(8|9)\d*\)/g, 'var(--glass-strong)'],
   [/rgba\(19,\s*20,\s*21,\s*0\.(8|9)\d*\)/g, 'var(--glass-strong)'],
   [/rgba\(8,\s*10,\s*10,\s*0\.(8|9)\d*\)/g, 'var(--glass-strong)'],
+  [/rgba\(4,\s*6,\s*6,\s*0\.(8|9)\d*\)/g, 'var(--glass-strong)'],
+  [/rgba\(15,\s*23,\s*42,\s*0\.(8|9)\d*\)/g, 'var(--glass-strong)'],
   [/rgba\(13,\s*17,\s*17,\s*0\.(6|7)\d*\)/g, 'var(--glass-mid)'],
+  [/rgba\(15,\s*23,\s*42,\s*0\.(6|7)\d*\)/g, 'var(--glass-mid)'],
+  [/rgba\(30,\s*41,\s*59,\s*0\.(5|6|7)\d*\)/g, 'var(--glass-mid)'],
   [/rgba\(13,\s*17,\s*17,\s*0\.(4|5)\d*\)/g, 'var(--glass-soft)'],
+  [/rgba\(30,\s*41,\s*59,\s*0\.(2|3|4)\d*\)/g, 'var(--fill-soft-2)'],
   // backgrounds
   [/#080909\b/gi, 'var(--bg-pure)'],
   [/#080A0A\b/gi, 'var(--bg-pure)'],
@@ -131,6 +136,8 @@ const MAP = [
   [/#E2E8F0\b/gi, 'var(--text-primary)'],
   // dark text on teal CTAs must NOT flip with the page background token
   [/color:\s*'var\(--bg-pure\)'/g, "color: 'var(--text-on-accent)'"],
+  // #042F2E (teal-950) used as TEXT on teal buttons — the subtle-wash token is bg-only
+  [/color:\s*'var\(--accent-subtle\)'/g, "color: 'var(--text-on-accent)'"],
 ];
 
 const checkOnly = process.argv.includes('--check');

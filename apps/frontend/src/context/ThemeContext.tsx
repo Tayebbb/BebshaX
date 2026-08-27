@@ -36,7 +36,13 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [theme]);
 
-  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  const toggleTheme = () => {
+    // Brief global transition class so every surface cross-fades between themes.
+    const root = document.documentElement;
+    root.classList.add('theme-transition');
+    window.setTimeout(() => root.classList.remove('theme-transition'), 400);
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  };
 
   return <ThemeContext.Provider value={{ theme, toggleTheme }}>{children}</ThemeContext.Provider>;
 };

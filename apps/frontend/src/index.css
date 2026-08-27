@@ -140,6 +140,26 @@
   --shadow-glow: 0 0 24px rgba(13, 148, 136, 0.14);
 }
 
+/* Light-mode shim for Tailwind color utilities used by the console views —
+   pale-on-dark accent shades and white text flip to readable equivalents. */
+[data-theme='light'] .text-white { color: var(--text-main); }
+[data-theme='light'] .border-white\/5,
+[data-theme='light'] .border-white\/10 { border-color: var(--border-soft); }
+[data-theme='light'] .bg-white\/5 { background-color: var(--fill-soft); }
+[data-theme='light'] .bg-white\/10 { background-color: var(--fill-soft-2); }
+[data-theme='light'] .text-teal-400 { color: #0d9488; }
+[data-theme='light'] .text-teal-300 { color: #0f766e; }
+[data-theme='light'] .text-teal-300\/50 { color: rgba(15, 118, 110, 0.6); }
+[data-theme='light'] .text-cyan-400 { color: #0e7490; }
+[data-theme='light'] .text-emerald-400 { color: #047857; }
+[data-theme='light'] .text-emerald-400\/80 { color: rgba(4, 120, 87, 0.85); }
+[data-theme='light'] .text-amber-400 { color: #a16207; }
+[data-theme='light'] .text-rose-400 { color: #be123c; }
+[data-theme='light'] .text-rose-300 { color: #be123c; }
+[data-theme='light'] .text-red-400 { color: #b91c1c; }
+[data-theme='light'] .text-sky-400 { color: #0369a1; }
+[data-theme='light'] .text-violet-400 { color: #6d28d9; }
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -297,7 +317,53 @@ h1, h2, h3, h4, h5, h6 {
 .bx-lift:hover {
   transform: translateY(-3px);
   border-color: var(--border-hover) !important;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(20, 184, 166, 0.12);
+  box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-subtle);
+}
+
+/* ==========================================================================
+   Global motion layer — every page inherits the same physicality.
+   ========================================================================== */
+
+/* Buttons: shared spring feel without touching inline styles */
+button {
+  transition: transform 0.18s var(--bx-ease), box-shadow 0.25s var(--bx-ease),
+    filter 0.18s var(--bx-ease), opacity 0.18s var(--bx-ease),
+    background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+button:not(:disabled):hover {
+  filter: brightness(1.06);
+}
+button:not(:disabled):active {
+  transform: scale(0.975);
+  filter: brightness(0.97);
+}
+
+/* Inputs settle smoothly between states */
+input, textarea, select {
+  transition: border-color 0.2s ease, box-shadow 0.25s var(--bx-ease),
+    background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Theme switch cross-fade — .theme-transition is applied briefly on toggle */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color 0.35s ease, color 0.35s ease,
+    border-color 0.35s ease, fill 0.35s ease, box-shadow 0.35s ease !important;
+}
+
+/* Scroll reveal — elements with .bx-reveal rise in when they enter the viewport */
+.bx-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.6s var(--bx-ease), transform 0.6s var(--bx-ease);
+  transition-delay: var(--bx-reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+.bx-reveal.bx-in {
+  opacity: 1;
+  transform: none;
 }
 
 /* Skeleton shimmer for loading placeholders */
@@ -328,17 +394,39 @@ h1, h2, h3, h4, h5, h6 {
   to { opacity: 1; transform: none; }
 }
 
+/* Chat bubble entrance: weighty little settle, transform/opacity only */
+.bx-pop {
+  animation: bx-pop-in 0.3s var(--bx-ease) both;
+}
+@keyframes bx-pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bx-view,
   .bx-stagger,
   .bx-backdrop,
   .bx-modal,
+  .bx-pop,
   .bx-skeleton {
     animation: none;
   }
   .bx-lift,
   .bx-lift:hover {
     transition: none;
+    transform: none;
+  }
+  .bx-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  button,
+  input, textarea, select {
+    transition: none;
+  }
+  button:not(:disabled):active {
     transform: none;
   }
 }

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { BehavioralTest, BehavioralMetricsResponse, BehavioralTestType } from '../../../types';
 import { api } from '../../../services/api';
+import { CountUp } from '../../../motion/CountUp';
 import { CreateBehavioralTestModal } from '../modals/CreateBehavioralTestModal';
 
 interface BehavioralTestingViewProps {
@@ -139,7 +140,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             borderRadius: '10px',
             backgroundColor: '#14B8A6',
             border: 'none',
-            color: 'var(--accent-subtle)',
+            color: 'var(--text-on-accent)',
             fontSize: '0.9rem',
             fontWeight: 700,
             cursor: 'pointer',
@@ -165,7 +166,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           style={{
             padding: '20px',
             borderRadius: '14px',
-            backgroundColor: 'rgba(30, 41, 59, 0.5)',
+            backgroundColor: 'var(--glass-mid)',
             border: '1px solid var(--fill-soft-2)',
           }}
         >
@@ -174,7 +175,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <Sliders size={16} className="text-teal-400" />
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-main)' }}>
-            {metrics?.total_tests ?? tests.length}
+            <CountUp value={metrics?.total_tests ?? tests.length} />
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Active decision hypotheses</div>
         </div>
@@ -183,7 +184,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           style={{
             padding: '20px',
             borderRadius: '14px',
-            backgroundColor: 'rgba(30, 41, 59, 0.5)',
+            backgroundColor: 'var(--glass-mid)',
             border: '1px solid var(--fill-soft-2)',
           }}
         >
@@ -192,7 +193,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <CheckCircle2 size={16} className="text-emerald-400" />
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-main)' }}>
-            {metrics?.completed_runs ?? 0}
+            <CountUp value={metrics?.completed_runs ?? 0} />
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Across scenarios</div>
         </div>
@@ -201,7 +202,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           style={{
             padding: '20px',
             borderRadius: '14px',
-            backgroundColor: 'rgba(30, 41, 59, 0.5)',
+            backgroundColor: 'var(--glass-mid)',
             border: '1px solid var(--fill-soft-2)',
           }}
         >
@@ -210,7 +211,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <Users size={16} className="text-cyan-400" />
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-main)' }}>
-            {metrics?.total_personas_simulated ?? 0}
+            <CountUp value={metrics?.total_personas_simulated ?? 0} />
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Persona evaluations</div>
         </div>
@@ -219,7 +220,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           style={{
             padding: '20px',
             borderRadius: '14px',
-            backgroundColor: 'rgba(30, 41, 59, 0.5)',
+            backgroundColor: 'var(--glass-mid)',
             border: '1px solid var(--fill-soft-2)',
           }}
         >
@@ -228,7 +229,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <TrendingUp size={16} className="text-teal-400" />
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--accent-teal-bright)' }}>
-            {metrics?.average_buy_likelihood_percentage ?? 52}%
+            <CountUp value={metrics?.average_buy_likelihood_percentage ?? 52} format={(v) => `${Math.round(v)}%`} />
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Simulation aggregate signal</div>
         </div>
@@ -260,7 +261,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                 width: '100%',
                 padding: '10px 14px 10px 38px',
                 borderRadius: '10px',
-                backgroundColor: 'rgba(30, 41, 59, 0.6)',
+                backgroundColor: 'var(--glass-mid)',
                 border: '1px solid var(--border-soft)',
                 color: 'var(--text-primary)',
                 fontSize: '0.88rem',
@@ -278,7 +279,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             style={{
               padding: '10px 14px',
               borderRadius: '10px',
-              backgroundColor: 'rgba(30, 41, 59, 0.6)',
+              backgroundColor: 'var(--glass-mid)',
               border: '1px solid var(--border-soft)',
               color: 'var(--text-primary)',
               fontSize: '0.85rem',
@@ -303,7 +304,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             style={{
               padding: '10px 14px',
               borderRadius: '10px',
-              backgroundColor: 'rgba(30, 41, 59, 0.6)',
+              backgroundColor: 'var(--glass-mid)',
               border: '1px solid var(--border-soft)',
               color: 'var(--text-primary)',
               fontSize: '0.85rem',
@@ -322,7 +323,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             style={{
               padding: '10px',
               borderRadius: '10px',
-              backgroundColor: 'rgba(30, 41, 59, 0.6)',
+              backgroundColor: 'var(--glass-mid)',
               border: '1px solid var(--border-soft)',
               color: 'var(--text-secondary)',
               cursor: 'pointer',
@@ -345,7 +346,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
               style={{
                 height: '180px',
                 borderRadius: '14px',
-                backgroundColor: 'rgba(30, 41, 59, 0.3)',
+                backgroundColor: 'var(--fill-soft-2)',
                 border: '1px solid var(--fill-soft)',
                 animation: 'pulse 1.5s infinite',
               }}
@@ -357,7 +358,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           style={{
             padding: '60px 24px',
             textAlign: 'center',
-            backgroundColor: 'rgba(30, 41, 59, 0.3)',
+            backgroundColor: 'var(--fill-soft-2)',
             border: '1px dashed var(--border-soft)',
             borderRadius: '16px',
           }}
@@ -391,7 +392,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
               borderRadius: '10px',
               backgroundColor: '#14B8A6',
               border: 'none',
-              color: 'var(--accent-subtle)',
+              color: 'var(--text-on-accent)',
               fontSize: '0.9rem',
               fontWeight: 700,
               cursor: 'pointer',
@@ -418,7 +419,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                 style={{
                   padding: '22px',
                   borderRadius: '14px',
-                  backgroundColor: 'rgba(30, 41, 59, 0.5)',
+                  backgroundColor: 'var(--glass-mid)',
                   border: '1px solid var(--fill-soft-2)',
                   display: 'flex',
                   flexDirection: 'column',
@@ -436,7 +437,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                         style={{
                           padding: '6px',
                           borderRadius: '8px',
-                          backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                          backgroundColor: 'var(--glass-mid)',
                         }}
                       >
                         {getTypeIcon(test.test_type)}
@@ -492,7 +493,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                       style={{
                         padding: '12px',
                         borderRadius: '10px',
-                        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                        backgroundColor: 'var(--glass-mid)',
                         marginBottom: '14px',
                         display: 'flex',
                         alignItems: 'center',

@@ -84,7 +84,7 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
               style={{
                 height: '350px',
                 borderRadius: '14px',
-                backgroundColor: 'rgba(30, 41, 59, 0.3)',
+                backgroundColor: 'var(--fill-soft-2)',
                 animation: 'pulse 1.5s infinite',
               }}
             />
@@ -111,7 +111,7 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
                 style={{
                   padding: '24px',
                   borderRadius: '16px',
-                  backgroundColor: 'rgba(30, 41, 59, 0.5)',
+                  backgroundColor: 'var(--glass-mid)',
                   border: '1px solid var(--fill-soft-2)',
                   display: 'flex',
                   flexDirection: 'column',
@@ -132,7 +132,7 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
                 </div>
 
                 {/* Score */}
-                <div style={{ padding: '16px', backgroundColor: 'rgba(15, 23, 42, 0.7)', borderRadius: '12px', textAlign: 'center' }}>
+                <div style={{ padding: '16px', backgroundColor: 'var(--glass-mid)', borderRadius: '12px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Acceptance Likelihood</div>
                   <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--accent-teal-bright)' }}>
                     {metrics?.average_likelihood_percentage ?? Math.round((metrics?.average_likelihood || 0.5) * 100)}%

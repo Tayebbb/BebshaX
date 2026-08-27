@@ -25,6 +25,7 @@ import {
   StudyReport,
 } from '../../../types';
 import { api } from '../../../services/api';
+import { useViewMotion } from '../../../motion/useViewMotion';
 
 interface StudyWorkflowViewProps {
   studyId?: string;
@@ -58,6 +59,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   onStepChange,
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
+  const stepViewRef = useViewMotion<HTMLDivElement>([currentStep]);
   const [study, setStudy] = useState<Study | null>(null);
   const [promptInput, setPromptInput] = useState<string>(initialPrompt);
   const [questions, setQuestions] = useState<string[]>([
@@ -761,7 +763,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             STEP 1: CONTEXT & ASSUMPTION GATHERING
            ============================================================ */}
         {currentStep === 1 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div ref={stepViewRef} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
               <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 6px 0' }}>
                 Design your user interviews
@@ -802,6 +804,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               {copilotMessages.map((msg) => (
                 <div
                   key={msg.id}
+                  className="bx-pop"
                   style={{
                     alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
                     maxWidth: '80%',
@@ -967,13 +970,15 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       Discovering suggested roles for your study...
                     </div>
                   )}
-                  {suggestedRoles.map((role) => {
+                  {suggestedRoles.map((role, roleIdx) => {
                     const isSelected = !!role.selected && role.count > 0;
                     return (
                       <div
                         key={role.id}
                         onClick={() => handleToggleRole(role.id)}
+                        className="bx-stagger"
                         style={{
+                          ['--bx-i' as string]: Math.min(roleIdx, 12),
                           background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-secondary)',
                           border: isSelected ? '1px solid #14B8A6' : '1px solid var(--border-subtle)',
                           borderRadius: '12px',
@@ -1128,7 +1133,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             STEP 2: GROUNDED SYNTHETIC PERSONAS
            ============================================================ */}
         {currentStep === 2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div ref={stepViewRef} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {personaGenError && (
               <div
                 role="alert"
@@ -1416,7 +1421,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             STEP 3: INTERVIEW SCRIPT & QUESTIONS
            ============================================================ */}
         {currentStep === 3 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div ref={stepViewRef} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
@@ -1472,7 +1477,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               {questions.map((q, idx) => (
                 <div
                   key={idx}
+                  className="bx-stagger"
                   style={{
+                    ['--bx-i' as string]: Math.min(idx, 12),
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: '12px',
@@ -1567,7 +1574,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             STEP 4: SYNTHETIC INTERVIEWS & SIMULATION
            ============================================================ */}
         {currentStep === 4 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div ref={stepViewRef} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>
                 <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
@@ -1754,6 +1761,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 return (
                 <div
                   key={msg.id || idx}
+                  className="bx-pop"
                   role={isErrorTurn ? 'alert' : undefined}
                   style={{
                     alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
@@ -1834,7 +1842,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             STEP 5: COMPREHENSIVE FINAL REPORT
            ============================================================ */}
         {currentStep === 5 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+          <div ref={stepViewRef} style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
             {reportError && (
               <div
                 role="alert"

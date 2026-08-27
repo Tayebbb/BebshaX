@@ -338,8 +338,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           zIndex: 40,
         }}
       >
-        {/* Top Brand Header */}
-        <div>
+        {/* Top Brand Header — scrolls internally so the theme toggle and
+            user chip below always stay on-screen */}
+        <div style={{ minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
           <div
             style={{
               display: 'flex',

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { SyntheticPersona, MarketSegment, Study, PersonaGenerationRun } from '../../../types';
 import { api } from '../../../services/api';
+import { CountUp } from '../../../motion/CountUp';
 
 interface PersonaLibraryViewProps {
   studyId?: string;
@@ -329,42 +330,42 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           marginBottom: '28px',
         }}
       >
-        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div className="bx-stagger" style={{ ['--bx-i' as string]: 0, background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#14B8A6' }}>
             <User size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{metrics.total}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}><CountUp value={metrics.total} /></div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Total Synthetic Personas</div>
           </div>
         </div>
 
-        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div className="bx-stagger" style={{ ['--bx-i' as string]: 1, background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(34, 211, 238, 0.12)', border: '1px solid rgba(34, 211, 238, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-cyan)' }}>
             <Layers size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{metrics.repSegments}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}><CountUp value={metrics.repSegments} /></div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Represented Segments</div>
           </div>
         </div>
 
-        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div className="bx-stagger" style={{ ['--bx-i' as string]: 2, background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-emerald)' }}>
             <ShieldCheck size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--accent-emerald)', lineHeight: 1.1 }}>{metrics.avgScore}%</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--accent-emerald)', lineHeight: 1.1 }}><CountUp value={metrics.avgScore} format={(v) => `${Math.round(v)}%`} /></div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Avg. Grounding Score</div>
           </div>
         </div>
 
-        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div className="bx-stagger" style={{ ['--bx-i' as string]: 3, background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F59E0B' }}>
             <CheckCircle2 size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{metrics.readyCount} / {metrics.total}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}><CountUp value={metrics.readyCount} /> / <CountUp value={metrics.total} /></div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Verified & Ready</div>
           </div>
         </div>
@@ -614,7 +615,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             return (
               <div
                 key={persona.id}
-                className="bx-stagger"
+                className="bx-stagger bx-lift"
                 style={{
                   ['--bx-i' as string]: Math.min(cardIdx, 12),
                   background: 'var(--bg-secondary)',
@@ -896,7 +897,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(4, 6, 6, 0.85)',
+            background: 'var(--glass-strong)',
             backdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',
@@ -1556,7 +1557,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(4, 6, 6, 0.85)',
+            background: 'var(--glass-strong)',
             backdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',

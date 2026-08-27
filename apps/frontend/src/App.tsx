@@ -8,6 +8,7 @@ import { AuthModal } from './components/auth/AuthModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NavigationProvider, useNavigation } from './context/NavigationContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { initScrollReveal } from './utils/scrollReveal';
 
 const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -18,6 +19,10 @@ const AppContent: React.FC = () => {
 
   const { isAuthenticated, isLoading } = useAuth();
   const { currentPath, navigate } = useNavigation();
+
+  useEffect(() => {
+    initScrollReveal();
+  }, []);
 
   useEffect(() => {
     const fetchHealth = async () => {

@@ -180,7 +180,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
     return (
       <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
         <h3>Test not found</h3>
-        <button onClick={onBack} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: '8px', backgroundColor: '#14B8A6', color: 'var(--accent-subtle)', border: 'none', cursor: 'pointer' }}>
+        <button onClick={onBack} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: '8px', backgroundColor: '#14B8A6', color: 'var(--text-on-accent)', border: 'none', cursor: 'pointer' }}>
           Back to Tests
         </button>
       </div>
@@ -231,7 +231,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                 gap: '8px',
                 padding: '9px 16px',
                 borderRadius: '8px',
-                backgroundColor: 'rgba(30, 41, 59, 0.6)',
+                backgroundColor: 'var(--glass-mid)',
                 border: '1px solid var(--border-soft)',
                 color: 'var(--text-primary)',
                 fontSize: '0.85rem',
@@ -253,7 +253,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               borderRadius: '8px',
               backgroundColor: '#14B8A6',
               border: 'none',
-              color: 'var(--accent-subtle)',
+              color: 'var(--text-on-accent)',
               fontSize: '0.85rem',
               fontWeight: 700,
               cursor: isRunning ? 'not-allowed' : 'pointer',
@@ -271,10 +271,10 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
         style={{
           padding: '24px',
           borderRadius: '16px',
-          backgroundColor: 'rgba(30, 41, 59, 0.5)',
+          backgroundColor: 'var(--glass-mid)',
           border: '1px solid var(--fill-soft-2)',
           marginBottom: '24px',
-          background: 'linear-gradient(to right, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9))',
+          background: 'linear-gradient(to right, rgba(30, 41, 59, 0.8), var(--glass-strong))',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
@@ -322,7 +322,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               flexWrap: 'wrap',
               gap: '12px',
               padding: '12px 16px',
-              backgroundColor: 'rgba(15, 23, 42, 0.7)',
+              backgroundColor: 'var(--glass-mid)',
               borderRadius: '10px',
               fontSize: '0.82rem',
             }}
@@ -349,7 +349,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                 style={{
                   padding: '8px 16px',
                   borderRadius: '8px',
-                  backgroundColor: isSelected ? 'var(--accent-subtle)' : 'rgba(30, 41, 59, 0.4)',
+                  backgroundColor: isSelected ? 'var(--accent-subtle)' : 'var(--fill-soft-2)',
                   border: isSelected ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
                   color: isSelected ? 'var(--accent-teal-bright)' : 'var(--text-secondary)',
                   fontSize: '0.82rem',
@@ -417,7 +417,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               style={{
                 padding: '22px',
                 borderRadius: '14px',
-                backgroundColor: 'rgba(30, 41, 59, 0.5)',
+                backgroundColor: 'var(--glass-mid)',
                 border: '1px solid var(--fill-soft-2)',
               }}
             >
@@ -451,21 +451,21 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               style={{
                 padding: '22px',
                 borderRadius: '14px',
-                backgroundColor: 'rgba(30, 41, 59, 0.5)',
+                backgroundColor: 'var(--glass-mid)',
                 border: '1px solid var(--fill-soft-2)',
               }}
             >
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>Simulation Confidence Distribution</div>
               <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-                <div style={{ flex: 1, padding: '10px', backgroundColor: 'rgba(15, 23, 42, 0.6)', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ flex: 1, padding: '10px', backgroundColor: 'var(--glass-mid)', borderRadius: '8px', textAlign: 'center' }}>
                   <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--status-success-text)' }}>{metrics.confidence_breakdown?.high || 0}</div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>High Grounding</div>
                 </div>
-                <div style={{ flex: 1, padding: '10px', backgroundColor: 'rgba(15, 23, 42, 0.6)', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ flex: 1, padding: '10px', backgroundColor: 'var(--glass-mid)', borderRadius: '8px', textAlign: 'center' }}>
                   <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FBBF24' }}>{metrics.confidence_breakdown?.medium || 0}</div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Medium Grounding</div>
                 </div>
-                <div style={{ flex: 1, padding: '10px', backgroundColor: 'rgba(15, 23, 42, 0.6)', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ flex: 1, padding: '10px', backgroundColor: 'var(--glass-mid)', borderRadius: '8px', textAlign: 'center' }}>
                   <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{metrics.confidence_breakdown?.low || 0}</div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Low Grounding</div>
                 </div>
@@ -547,7 +547,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                       key={idx}
                       style={{
                         padding: '12px',
-                        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                        backgroundColor: 'var(--glass-mid)',
                         borderRadius: '8px',
                         borderLeft: `3px solid ${risk.severity === 'high' ? '#EF4444' : '#F59E0B'}`,
                       }}
@@ -591,7 +591,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                       key={idx}
                       style={{
                         padding: '12px',
-                        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                        backgroundColor: 'var(--glass-mid)',
                         borderRadius: '8px',
                         borderLeft: '3px solid #14B8A6',
                       }}
@@ -622,7 +622,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               style={{
                 padding: '22px',
                 borderRadius: '14px',
-                backgroundColor: 'rgba(30, 41, 59, 0.5)',
+                backgroundColor: 'var(--glass-mid)',
                 border: '1px solid var(--fill-soft-2)',
                 marginBottom: '28px',
               }}
@@ -672,7 +672,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
             style={{
               padding: '22px',
               borderRadius: '14px',
-              backgroundColor: 'rgba(30, 41, 59, 0.5)',
+              backgroundColor: 'var(--glass-mid)',
               border: '1px solid var(--fill-soft-2)',
             }}
           >
@@ -699,7 +699,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                     style={{
                       padding: '16px',
                       borderRadius: '12px',
-                      backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                      backgroundColor: 'var(--glass-mid)',
                       border: '1px solid var(--fill-soft-2)',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',

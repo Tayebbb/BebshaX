@@ -308,7 +308,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'linear-gradient(to right, rgba(15, 23, 42, 0.95), rgba(13, 148, 136, 0.15))',
+            background: 'linear-gradient(to right, var(--glass-strong), rgba(13, 148, 136, 0.15))',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -414,7 +414,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                       style={{
                         padding: '16px',
                         borderRadius: '12px',
-                        backgroundColor: isSelected ? 'var(--accent-subtle)' : 'rgba(30, 41, 59, 0.6)',
+                        backgroundColor: isSelected ? 'var(--accent-subtle)' : 'var(--glass-mid)',
                         border: isSelected ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
@@ -426,7 +426,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                             style={{
                               padding: '8px',
                               borderRadius: '8px',
-                              backgroundColor: 'rgba(15, 23, 42, 0.8)',
+                              backgroundColor: 'var(--glass-strong)',
                             }}
                           >
                             {opt.icon}
@@ -697,7 +697,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     gap: '12px',
                     padding: '14px 16px',
                     borderRadius: '10px',
-                    backgroundColor: populationType === 'all' ? 'var(--accent-subtle)' : 'rgba(30, 41, 59, 0.5)',
+                    backgroundColor: populationType === 'all' ? 'var(--accent-subtle)' : 'var(--glass-mid)',
                     border: populationType === 'all' ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
                     cursor: 'pointer',
                   }}
@@ -724,7 +724,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     gap: '12px',
                     padding: '14px 16px',
                     borderRadius: '10px',
-                    backgroundColor: populationType === 'segment' ? 'var(--accent-subtle)' : 'rgba(30, 41, 59, 0.5)',
+                    backgroundColor: populationType === 'segment' ? 'var(--accent-subtle)' : 'var(--glass-mid)',
                     border: populationType === 'segment' ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
                     cursor: 'pointer',
                   }}
@@ -778,7 +778,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     gap: '12px',
                     padding: '14px 16px',
                     borderRadius: '10px',
-                    backgroundColor: populationType === 'selected_personas' ? 'var(--accent-subtle)' : 'rgba(30, 41, 59, 0.5)',
+                    backgroundColor: populationType === 'selected_personas' ? 'var(--accent-subtle)' : 'var(--glass-mid)',
                     border: populationType === 'selected_personas' ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
                     cursor: 'pointer',
                   }}
@@ -851,7 +851,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               <div
                 style={{
                   padding: '16px',
-                  backgroundColor: 'rgba(30, 41, 59, 0.6)',
+                  backgroundColor: 'var(--glass-mid)',
                   borderRadius: '12px',
                   border: '1px solid var(--fill-soft-2)',
                 }}
@@ -955,7 +955,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            backgroundColor: 'var(--glass-strong)',
           }}
         >
           {step > 1 ? (
@@ -1033,7 +1033,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   borderRadius: '8px',
                   backgroundColor: '#14B8A6',
                   border: 'none',
-                  color: 'var(--accent-subtle)',
+                  color: 'var(--text-on-accent)',
                   fontSize: '0.88rem',
                   fontWeight: 700,
                   cursor: isSubmitting ? 'not-allowed' : 'pointer',
