@@ -237,4 +237,5 @@ export * from './evidence';
 export * from './segmentation';
 export * from './interview';
 export * from './behavioral';
+export * from './payment';
 

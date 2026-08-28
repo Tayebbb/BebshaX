@@ -4884,7 +4884,86 @@ export const api = {
     }
     return { job_id: jobId, study_id: studyId, status: 'completed', completed_count: 3, failed_count: 0, personas: {} };
   },
+
+  // ---------------------------------------------------------------------------
+  // Stripe Payments & Subscription
+  // ---------------------------------------------------------------------------
+
+  async createCheckoutSession(
+    plan: string = 'pro',
+    successUrl?: string,
+    cancelUrl?: string,
+  ): Promise<{ session_id: string; url: string; plan: string }> {
+    if (!this.isMockMode()) {
+      const res = await fetch(`${API_BASE}/payments/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify({ plan, success_url: successUrl, cancel_url: cancelUrl }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `Checkout creation failed (${res.status})` }));
+        throw new Error(err.detail || 'Failed to create checkout session');
+      }
+      return await res.json();
+    }
+    return {
+      session_id: `cs_mock_${Date.now()}`,
+      url: `/app?checkout=success&plan=${plan}`,
+      plan,
+    };
+  },
+
+  async getSubscription(): Promise<{
+    plan: string;
+    status: string;
+    is_paid: boolean;
+    expires_at?: string | null;
+    has_billing_account: boolean;
+  }> {
+    if (!this.isMockMode()) {
+      const res = await fetch(`${API_BASE}/payments/subscription`, {
+        headers: this.getAuthHeaders(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `Get subscription failed (${res.status})` }));
+        throw new Error(err.detail || 'Failed to fetch subscription status');
+      }
+      return await res.json();
+    }
+    return {
+      plan: 'free',
+      status: 'active',
+      is_paid: false,
+      has_billing_account: false,
+    };
+  },
+
+  async createPortalSession(returnUrl?: string): Promise<{ url: string }> {
+    if (!this.isMockMode()) {
+      const res = await fetch(`${API_BASE}/payments/create-portal-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify({ return_url: returnUrl }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `Portal session failed (${res.status})` }));
+        throw new Error(err.detail || 'Failed to open customer portal');
+      }
+      return await res.json();
+    }
+    return { url: '/app' };
+  },
 };
+
 
 
 

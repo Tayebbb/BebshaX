@@ -296,6 +296,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             Task Map
           </button>
           <button
+            onClick={() => scrollToSection('pricing')}
+            className="nav-link-btn"
+          >
+            Pricing
+          </button>
+          <button
             onClick={() => scrollToSection('faq')}
             className="nav-link-btn"
           >
@@ -547,6 +553,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             className="mobile-nav-btn"
           >
             Task Map
+          </button>
+          <button
+            onClick={() => scrollToSection('pricing')}
+            className="mobile-nav-btn"
+          >
+            Pricing
           </button>
           <button
             onClick={() => scrollToSection('faq')}

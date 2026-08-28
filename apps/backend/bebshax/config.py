@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     frontend_base_url: str = "http://localhost:5173"
     resend_api_key: str | None = None
     email_from_address: str = "noreply@bebshax.ai"
+    stripe_secret_key: str | None = None
+    stripe_publishable_key: str | None = None
+    stripe_webhook_secret: str | None = None
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -13,6 +13,7 @@ import { Comparison } from './Comparison';
 import { InteractiveDemo } from './InteractiveDemo';
 import { UseCases } from './UseCases';
 import { FAQ } from './FAQ';
+import { Pricing } from './Pricing';
 import { FinalCTA } from './FinalCTA';
 import { Footer } from './Footer';
 import { Reveal } from './Reveal';
@@ -60,6 +61,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenApp, onOpenAuth 
           <Reveal variant="rise"><InteractiveDemo onOpenApp={onOpenApp} /></Reveal>
           <Reveal variant="rise"><UseCases /></Reveal>
           <Reveal variant="rise"><FAQ /></Reveal>
+          <Reveal variant="rise"><Pricing onOpenAuth={onOpenAuth} /></Reveal>
           <Reveal variant="mask"><FinalCTA onOpenApp={onOpenApp} /></Reveal>
         </div>
       </main>

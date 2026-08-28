@@ -36,12 +36,25 @@ class Users(Base):
     auth_provider: Mapped[str] = mapped_column(
         String(32), default="email", nullable=False
     )
+    stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    subscription_plan: Mapped[str] = mapped_column(
+        String(32), default="free", nullable=False
+    )
+    subscription_status: Mapped[str] = mapped_column(
+        String(32), default="active", nullable=False
+    )
+    subscription_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utc_now, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utc_now, onupdate=_utc_now, nullable=False
     )
+
 
 
 from datetime import timedelta

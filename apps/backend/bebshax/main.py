@@ -285,11 +285,13 @@ def create_app() -> FastAPI:
     from bebshax.api.openrouter_health import router as openrouter_health_router
     from bebshax.api.evidence import router as evidence_router
     from bebshax.api.segmentation import router as segmentation_router
+    from bebshax.api.payments import router as payments_router
 
     app.include_router(openrouter_health_router, prefix="/api")
     app.include_router(datasets_router, prefix="/api")
     app.include_router(evidence_router, prefix="/api")
     app.include_router(segmentation_router, prefix="/api")
+    app.include_router(payments_router, prefix="/api")
     return app
 
 
