@@ -21,19 +21,19 @@ Two rules shape everything (RULES.md R1/R3): provider SDKs are imported **only**
 
 ## Backend packages (`apps/backend/bebshax/`)
 
-| Package | Role | Key classes |
-| --- | --- | --- |
-| `llm/` | Provider-agnostic LLM abstraction: task types, failure taxonomy, pools, routing, quota, provenance | `LLMService`, `PoolRouter`, `QuotaLedger`, `ProvenanceRecord` |
-| `llm/adapters/` | The single provider boundary: freellmpool, OpenRouter, Ollama, deterministic `FakeAdapter` for chaos tests, embeddings | `ProviderAdapter`, `RouteCandidate`, `HashEmbedding` |
-| `persona/` | Evidence-grounded persona pipeline: evidence retrieval → generation → provenance coercion → deterministic consistency rules → optional critic → store | `PersonaEngine`, `EvidenceStore` |
-| `personas/` | Study-scoped synthetic persona lifecycle with grounding scores and tenancy | `PersonaGenerationService` |
-| `memory/` | pgvector memory stream; retrieval = 0.6·cosine + 0.25·recency + 0.15·importance; reflection summarization | `MemoryService` |
-| `interview/` | Multi-turn interviews; identity card composed per turn, never regenerated; full history or explicit `ContextWindowExceeded` (R2) | `InterviewEngine`, `Conversations` |
-| `behavioral/` | Persona decision simulation (pricing/features/copy) with prompt-injection defense | `BehavioralSimulationEngine` |
-| `evaluation/` | Persona quality metrics + routing-strategy chaos/offline benchmarks | `PersonaEvaluator`, `RoutingChaosSimulator` |
-| `research/`, `segmentation/`, `datasets/` | Evidence & research engine (claims, 384-dim embeddings), market segmentation, dataset grounding services | `SegmentationEngineService` |
-| `db/` | Async SQLAlchemy engine, ORM models, provenance sink, cooldown persistence, demo seed | `ProvenanceSink`, `CooldownStore` |
-| `auth/`, `api/` | JWT auth + the mounted REST routers | — |
+| Package                                   | Role                                                                                                                                                  | Key classes                                                   |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `llm/`                                    | Provider-agnostic LLM abstraction: task types, failure taxonomy, pools, routing, quota, provenance                                                    | `LLMService`, `PoolRouter`, `QuotaLedger`, `ProvenanceRecord` |
+| `llm/adapters/`                           | The single provider boundary: freellmpool, OpenRouter, Ollama, deterministic `FakeAdapter` for chaos tests, embeddings                                | `ProviderAdapter`, `RouteCandidate`, `HashEmbedding`          |
+| `persona/`                                | Evidence-grounded persona pipeline: evidence retrieval → generation → provenance coercion → deterministic consistency rules → optional critic → store | `PersonaEngine`, `EvidenceStore`                              |
+| `personas/`                               | Study-scoped synthetic persona lifecycle with grounding scores and tenancy                                                                            | `PersonaGenerationService`                                    |
+| `memory/`                                 | pgvector memory stream; retrieval = 0.6·cosine + 0.25·recency + 0.15·importance; reflection summarization                                             | `MemoryService`                                               |
+| `interview/`                              | Multi-turn interviews; identity card composed per turn, never regenerated; full history or explicit `ContextWindowExceeded` (R2)                      | `InterviewEngine`, `Conversations`                            |
+| `behavioral/`                             | Persona decision simulation (pricing/features/copy) with prompt-injection defense                                                                     | `BehavioralSimulationEngine`                                  |
+| `evaluation/`                             | Persona quality metrics + routing-strategy chaos/offline benchmarks                                                                                   | `PersonaEvaluator`, `RoutingChaosSimulator`                   |
+| `research/`, `segmentation/`, `datasets/` | Evidence & research engine (claims, 384-dim embeddings), market segmentation, dataset grounding services                                              | `SegmentationEngineService`                                   |
+| `db/`                                     | Async SQLAlchemy engine, ORM models, provenance sink, cooldown persistence, demo seed                                                                 | `ProvenanceSink`, `CooldownStore`                             |
+| `auth/`, `api/`                           | JWT auth + the mounted REST routers                                                                                                                   | —                                                             |
 
 ## Startup (lifespan in `main.py`)
 

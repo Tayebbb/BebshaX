@@ -4,30 +4,30 @@ Companion to [research-integrity-baseline.md](research-integrity-baseline.md). P
 
 ## Scores
 
-| Area | Before | After | Notes |
-| --- | :-: | :-: | --- |
-| Architecture | 9 | 9 | Untouched by design — no new infra, boundaries intact (R1 test-enforced) |
-| Persona generation | 5 | 8 | Measured grounding, honest citations, BD-template guard; legacy engine was already solid |
-| Dataset analysis | 6 | 7 | Upload security hardened (SSRF), representativeness statement added; profiler depth unchanged |
-| Interview simulation | 8 | 8 | Per-turn identity composition verified; long-horizon drift eval remains a gap |
-| Memory | 8 | 8 | Kinds/scoping verified, no contamination path; no turn back-reference (gap) |
-| Evidence / trust | **3** | **8** | The core of this pass — see below |
-| Evaluation | 7 | 8 | Grounding conflation fixed (schema-validity ≠ grounding; INFERRED+string ≠ grounded) |
-| Routing | 9 | 9 | Verified against the Phase-14 acceptance matrix; no changes needed |
-| Reproducibility | 7 | 7 | Pinned datasets + runs + provenance verified; prompt-version ids still missing (documented) |
-| Security | 6 | 8 | SSRF redirect bypass closed, delimiter escape stripped; DNS-rebinding TOCTOU documented |
-| UX | 8 | 8 | Honest-state banner, honest percentages, provenance chips; no blockers in walkthrough |
-| Visual design | 9 | 9 | Untouched (established direction maintained) |
-| Showcase readiness | 6 | 8 | The product now shows its uncertainty instead of decorating it |
+| Area                 | Before | After | Notes                                                                                         |
+| -------------------- | :----: | :---: | --------------------------------------------------------------------------------------------- |
+| Architecture         |   9    |   9   | Untouched by design — no new infra, boundaries intact (R1 test-enforced)                      |
+| Persona generation   |   5    |   8   | Measured grounding, honest citations, BD-template guard; legacy engine was already solid      |
+| Dataset analysis     |   6    |   7   | Upload security hardened (SSRF), representativeness statement added; profiler depth unchanged |
+| Interview simulation |   8    |   8   | Per-turn identity composition verified; long-horizon drift eval remains a gap                 |
+| Memory               |   8    |   8   | Kinds/scoping verified, no contamination path; no turn back-reference (gap)                   |
+| Evidence / trust     | **3**  | **8** | The core of this pass — see below                                                             |
+| Evaluation           |   7    |   8   | Grounding conflation fixed (schema-validity ≠ grounding; INFERRED+string ≠ grounded)          |
+| Routing              |   9    |   9   | Verified against the Phase-14 acceptance matrix; no changes needed                            |
+| Reproducibility      |   7    |   7   | Pinned datasets + runs + provenance verified; prompt-version ids still missing (documented)   |
+| Security             |   6    |   8   | SSRF redirect bypass closed, delimiter escape stripped; DNS-rebinding TOCTOU documented       |
+| UX                   |   8    |   8   | Honest-state banner, honest percentages, provenance chips; no blockers in walkthrough         |
+| Visual design        |   9    |   9   | Untouched (established direction maintained)                                                  |
+| Showcase readiness   |   6    |   8   | The product now shows its uncertainty instead of decorating it                                |
 
 ## What the audits found (headline)
 
-Wave-1 verdict: *"The traceability chain doesn't break — it terminates in fiction."* Six critical fabrication paths existed between the honest legacy persona engine and the UI:
+Wave-1 verdict: _"The traceability chain doesn't break — it terminates in fiction."_ Six critical fabrication paths existed between the honest legacy persona engine and the UI:
 
 1. **C1** — the curated research corpus wore real publisher brands (The Daily Star, TechRadar, Product Hunt, Reddit, Facebook) with invented statistics and fake URLs.
 2. **C2** — study-path claim extraction stored model-cited evidence ids **unverified**; invalid statuses even defaulted to "supported".
 3. **C3** — the deterministic claim fallback fabricated domain-specific "supported" claims at 0.88 confidence on any LLM exception, silently.
-4. **C4** — the copilot prompt *instructed* the model to output `"provenance_class": "OBSERVED"` and self-scores (0.96/0.94), which were persisted verbatim with no evidence retrieval.
+4. **C4** — the copilot prompt _instructed_ the model to output `"provenance_class": "OBSERVED"` and self-scores (0.96/0.94), which were persisted verbatim with no evidence retrieval.
 5. **C5** — dataset-run personas shipped with constant `grounding_score=0.92, confidence=0.88`, `evidence_citations=[]`.
 6. **C6** — the template report asserted an "85% aggregate demand index" it never computed.
 

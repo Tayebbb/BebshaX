@@ -19,7 +19,7 @@ A synthetic-persona research platform operating on a ~zero LLM budget: business 
 **Backend runtime**: fastapi ≥0.115 (MIT), uvicorn[standard] ≥0.30 (BSD-3), pydantic ≥2.7 / pydantic-settings ≥2.3 (MIT), **freellmpool ≥0.11** (MIT — the free-tier aggregation library at the heart of the routing layer), sqlalchemy[asyncio] ≥2.0 (MIT), alembic ≥1.13 (MIT), asyncpg ≥0.30 (Apache-2.0), pgvector ≥0.3 (MIT), huggingface_hub ≥0.28,<1.0 (Apache-2.0), fastparquet ≥2026.5 (Apache-2.0), python-multipart ≥0.0.9 (Apache-2.0), slowapi ≥0.1.9 (MIT).
 **Backend dev**: pytest ≥8.2, pytest-asyncio ≥0.23, pytest-cov ≥5.0, httpx ≥0.27, aiosqlite ≥0.20, ruff ≥0.6.
 **Frontend runtime**: react/react-dom ^18.3 (MIT), lucide-react (ISC), gsap ^3.15 + @gsap/react ^2.1 (GreenSock standard license — free for all uses since the Webflow acquisition).
-**Frontend dev**: vite ^5.4 (MIT), typescript ^5.5 (Apache-2.0), vitest ^2.0 (MIT), @testing-library/* (MIT), tailwindcss ^3.4 (MIT, preflight disabled), postcss (MIT), autoprefixer (MIT), jsdom (MIT).
+**Frontend dev**: vite ^5.4 (MIT), typescript ^5.5 (Apache-2.0), vitest ^2.0 (MIT), @testing-library/\* (MIT), tailwindcss ^3.4 (MIT, preflight disabled), postcss (MIT), autoprefixer (MIT), jsdom (MIT).
 **Infra**: Postgres 16 (PostgreSQL License), pgvector extension (PostgreSQL License), Ollama (MIT) with llama3.2:3b / qwen3:4b (Llama 3.2 Community License / Apache-2.0). Every dependency passed an R8 review recorded in the implementation log.
 
 ## 3. Datasets (licenses & purpose)
@@ -56,11 +56,11 @@ Registry sync jobs feeding the ranker; real Google OAuth verification; shared ra
 
 ## 9. Final state
 
-| Phase | Scope | Status |
-| --- | --- | --- |
-| 1–7 | Foundation, LLM abstraction, freellmpool, Ollama, routing, database, datasets | ✅ 2026-08-22 |
-| 8–10 | Persona engine, memory, interviews | ✅ 2026-08-23 |
-| 11–12 | Evaluation, frontend | ✅ 2026-08-22 |
-| 13 | Integration + demo mode (flag-gated seed, cached labeling, offline drill) | ✅ 2026-08-28 |
-| 14 | Testing hardening (acceptance matrix mapped, 423 tests) | ✅ 2026-08-28 |
-| 15 | Documentation (this report + ARCHITECTURE/FAILOVER/MODEL_REGISTRY/SETUP, `scripts/setup.py`) | ✅ 2026-08-28 |
+| Phase | Scope                                                                                        | Status        |
+| ----- | -------------------------------------------------------------------------------------------- | ------------- |
+| 1–7   | Foundation, LLM abstraction, freellmpool, Ollama, routing, database, datasets                | ✅ 2026-08-22 |
+| 8–10  | Persona engine, memory, interviews                                                           | ✅ 2026-08-23 |
+| 11–12 | Evaluation, frontend                                                                         | ✅ 2026-08-22 |
+| 13    | Integration + demo mode (flag-gated seed, cached labeling, offline drill)                    | ✅ 2026-08-28 |
+| 14    | Testing hardening (acceptance matrix mapped, 423 tests)                                      | ✅ 2026-08-28 |
+| 15    | Documentation (this report + ARCHITECTURE/FAILOVER/MODEL_REGISTRY/SETUP, `scripts/setup.py`) | ✅ 2026-08-28 |

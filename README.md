@@ -2,7 +2,7 @@
 
 BebshaX is a synthetic-user / persona research system: it continuously generates realistic, evidence-grounded personas for a specific business or product and lets those personas participate in interviews and simulations — built on essentially zero API budget by aggregating **legitimate** free LLM capacity behind intelligent routing, failover, and context-aware model selection.
 
-> Renamed from *SignalLens* on 2026-08-22. No other historical relationship — the project is greenfield.
+> Renamed from _SignalLens_ on 2026-08-22. No other historical relationship — the project is greenfield.
 
 **Team members start here:** [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) (single source of truth) → [RULES.md](RULES.md) (binding engineering rules) → [docs/SETUP.md](docs/SETUP.md) (fresh-machine setup, or one-shot `python scripts/setup.py`) → [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md) (your track).
 
@@ -12,14 +12,14 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 
 ## Repository layout
 
-| Path | Purpose |
-|---|---|
-| `apps/backend/` | FastAPI backend (Python 3.12, async) — package `bebshax` |
-| `apps/frontend/` | React + Vite single-page app (added in Phase 12) |
-| `services` (inside backend) | `bebshax.llm` policy layer → adapters → freellmpool / Ollama |
-| `data/raw` · `data/processed` · `data/metadata` | Datasets (reproducible via `scripts/`, not committed) |
-| `scripts/` | Setup, dataset, and evaluation tooling |
-| `docs/` | [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [FAILOVER.md](docs/FAILOVER.md) · [SETUP.md](docs/SETUP.md) · [DEMO.md](docs/DEMO.md) · [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) |
+| Path                                            | Purpose                                                                                                                                                                                 |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/backend/`                                 | FastAPI backend (Python 3.12, async) — package `bebshax`                                                                                                                                |
+| `apps/frontend/`                                | React + Vite single-page app (added in Phase 12)                                                                                                                                        |
+| `services` (inside backend)                     | `bebshax.llm` policy layer → adapters → freellmpool / Ollama                                                                                                                            |
+| `data/raw` · `data/processed` · `data/metadata` | Datasets (reproducible via `scripts/`, not committed)                                                                                                                                   |
+| `scripts/`                                      | Setup, dataset, and evaluation tooling                                                                                                                                                  |
+| `docs/`                                         | [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [FAILOVER.md](docs/FAILOVER.md) · [SETUP.md](docs/SETUP.md) · [DEMO.md](docs/DEMO.md) · [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) |
 
 ## Quickstart (state: Phases 1–15 ✅ complete)
 
@@ -75,11 +75,11 @@ Everything below is enforced by [AGENTS.md](AGENTS.md), [RULES.md](RULES.md), te
 
 ## 2. Your lane (no overlap, no waiting on each other)
 
-| Who | Track | Completed Phases | Up Next | You own (nobody else touches) |
-|---|---|---|---|---|
-| **Tayeb** | A — LLM infra | 1, 2, 3, 4, 5, 8, 9, 10 ✅ | Audit: 8/8 done — joint contract session (B2, H4, H5, M10, L13) | `apps/backend/bebshax/llm/**`, `apps/backend/bebshax/api/**` (except evaluation), `docs/ROUTING.md` |
-| **Sazid** | B — Data layer & auth | 6, 7 ✅ | Audit: H3 piece 2 (blocked on Shehab UI), L14 | `apps/backend/bebshax/db/**`, `alembic/`, `apps/backend/bebshax/auth/**`, `api/auth.py`, `data/**`, dataset scripts |
-| **Shehab** | C — Frontend & Eval | 11, 12 ✅ | Audit: 16/16 done — Phase 13 `"cached"` labelling | `apps/frontend/**`, `apps/backend/bebshax/evaluation/**`, `docs/API_CONTRACT.md`, `docs/EVALUATION.md` |
+| Who        | Track                 | Completed Phases           | Up Next                                                         | You own (nobody else touches)                                                                                       |
+| ---------- | --------------------- | -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Tayeb**  | A — LLM infra         | 1, 2, 3, 4, 5, 8, 9, 10 ✅ | Audit: 8/8 done — joint contract session (B2, H4, H5, M10, L13) | `apps/backend/bebshax/llm/**`, `apps/backend/bebshax/api/**` (except evaluation), `docs/ROUTING.md`                 |
+| **Sazid**  | B — Data layer & auth | 6, 7 ✅                    | Audit: H3 piece 2 (blocked on Shehab UI), L14                   | `apps/backend/bebshax/db/**`, `alembic/`, `apps/backend/bebshax/auth/**`, `api/auth.py`, `data/**`, dataset scripts |
+| **Shehab** | C — Frontend & Eval   | 11, 12 ✅                  | Audit: 16/16 done — Phase 13 `"cached"` labelling               | `apps/frontend/**`, `apps/backend/bebshax/evaluation/**`, `docs/API_CONTRACT.md`, `docs/EVALUATION.md`              |
 
 Stay inside your paths. Need to change something outside them → PR + ping the owner. Full matrix and the convergence order for phases 8–15: [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md).
 
@@ -100,7 +100,7 @@ The agent will: check prerequisites + green tests → implement only within your
 3. status flipped in [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) **and** [docs/PHASES.md](docs/PHASES.md);
 4. no secrets in the diff.
 
-If the agent skipped a doc update, tell it: *"You violated AGENTS.md step 6 — update the docs."*
+If the agent skipped a doc update, tell it: _"You violated AGENTS.md step 6 — update the docs."_
 
 ## 4. Doc rules (how everything stays in sync)
 

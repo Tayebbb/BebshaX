@@ -6,28 +6,28 @@ The complete failure-handling contract: pools, the task map, the closed failure 
 
 Order inside a pool = preference order. Bold = local-first.
 
-| Pool | Adapter order | max_concurrency |
-| --- | --- | --- |
-| reasoning | openrouter → freellmpool → ollama | 2 |
-| conversation | **ollama** → freellmpool → openrouter | 5 |
-| long_context | openrouter → freellmpool → ollama | 2 |
-| structured | openrouter → freellmpool → ollama | 3 |
-| fast | **ollama** → freellmpool → openrouter | 5 |
-| local | ollama | 2 |
-| emergency | **ollama** → freellmpool | 2 |
+| Pool         | Adapter order                         | max_concurrency |
+| ------------ | ------------------------------------- | --------------- |
+| reasoning    | openrouter → freellmpool → ollama     | 2               |
+| conversation | **ollama** → freellmpool → openrouter | 5               |
+| long_context | openrouter → freellmpool → ollama     | 2               |
+| structured   | openrouter → freellmpool → ollama     | 3               |
+| fast         | **ollama** → freellmpool → openrouter | 5               |
+| local        | ollama                                | 2               |
+| emergency    | **ollama** → freellmpool              | 2               |
 
 `conversation` is local-first by measurement, not ideology: the 2026-08-26 gate scored `llama3.2:3b` 9.65/10 on interview quality at ~6 s/turn versus ~53 s on free cloud tiers.
 
 ## Task → pool map (18 task types)
 
-| Pool | Tasks |
-| --- | --- |
-| reasoning | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
-| conversation | PERSONA_INTERVIEW, PERSONA_RESPONSE |
-| structured | EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, STRUCTURED_OUTPUT, BROWSER_AGENT, TOOL_CALLING |
-| fast | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION |
-| long_context | REPORT_GENERATION |
-| emergency | EMERGENCY_FALLBACK |
+| Pool         | Tasks                                                                                                                             |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| reasoning    | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
+| conversation | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                                                               |
+| structured   | EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, STRUCTURED_OUTPUT, BROWSER_AGENT, TOOL_CALLING                                      |
+| fast         | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                                                            |
+| long_context | REPORT_GENERATION                                                                                                                 |
+| emergency    | EMERGENCY_FALLBACK                                                                                                                |
 
 Both tables are data, not branches — extending them means adding a row plus a test (`tests/llm/test_pools.py` enforces every task type is mapped).
 
@@ -35,21 +35,21 @@ Both tables are data, not branches — extending them means adding a row plus a 
 
 13 kinds. **Low answer quality is deliberately not a failure kind** — it belongs to the quality/eval layer, never to routing (owner rule, 2026-08-22). New kinds require enum + policy + tests in one commit (R6).
 
-| FailureKind | retry same once | try next | cooldown |
-| --- | :-: | :-: | :-: |
-| TIMEOUT | — | ✓ | — |
-| CONNECTION | ✓ | ✓ | — |
-| RATE_LIMITED | — | ✓ | ✓ |
-| QUOTA_EXHAUSTED | — | ✓ | ✓ |
-| SERVER_ERROR | — | ✓ | ✓ |
-| PROVIDER_UNAVAILABLE | — | ✓ | ✓ |
-| AUTH_INVALID | — | ✓ | ✓ |
-| MODEL_UNAVAILABLE | — | ✓ | ✓ |
-| CONTEXT_WINDOW_EXCEEDED | — | ✓ (larger-context candidates only) | — |
-| CAPABILITY_UNSUPPORTED | — | ✓ | — |
-| MALFORMED_RESPONSE | ✓ | ✓ | — |
-| CONTENT_REFUSAL | — | ✓ | — |
-| INTERNAL_ERROR | — | — | — (surfaces immediately) |
+| FailureKind             | retry same once |              try next              |         cooldown         |
+| ----------------------- | :-------------: | :--------------------------------: | :----------------------: |
+| TIMEOUT                 |        —        |                 ✓                  |            —             |
+| CONNECTION              |        ✓        |                 ✓                  |            —             |
+| RATE_LIMITED            |        —        |                 ✓                  |            ✓             |
+| QUOTA_EXHAUSTED         |        —        |                 ✓                  |            ✓             |
+| SERVER_ERROR            |        —        |                 ✓                  |            ✓             |
+| PROVIDER_UNAVAILABLE    |        —        |                 ✓                  |            ✓             |
+| AUTH_INVALID            |        —        |                 ✓                  |            ✓             |
+| MODEL_UNAVAILABLE       |        —        |                 ✓                  |            ✓             |
+| CONTEXT_WINDOW_EXCEEDED |        —        | ✓ (larger-context candidates only) |            —             |
+| CAPABILITY_UNSUPPORTED  |        —        |                 ✓                  |            —             |
+| MALFORMED_RESPONSE      |        ✓        |                 ✓                  |            —             |
+| CONTENT_REFUSAL         |        —        |                 ✓                  |            —             |
+| INTERNAL_ERROR          |        —        |                 —                  | — (surfaces immediately) |
 
 Exceptions: `AttemptFailed` (one attempt), `ContextWindowExceeded` (nothing fits — content is **never truncated**, R2), `AllCandidatesFailed` (chain exhausted; carries the full provenance trail).
 
@@ -61,7 +61,7 @@ For one `LLMRequest`:
 2. Build the candidate list from the pool's adapters (each adapter reports concrete `RouteCandidate`s; keyless adapters contribute none) and apply the ranker hook (`quota_aware_ranker` in production).
 3. Skip candidates whose context window can't fit the estimated tokens; skip candidates in cooldown (`"cooling down"` appears in `routing_path`).
 4. Attempt the candidate. On failure, consult the policy table: maybe retry the same route once, maybe start a cooldown, then advance.
-5. First success wins. Every attempt — kind, provider, model, latency — lands in the `ProvenanceRecord`, which is delivered to the sink on success *and* failure.
+5. First success wins. Every attempt — kind, provider, model, latency — lands in the `ProvenanceRecord`, which is delivered to the sink on success _and_ failure.
 
 ## Cooldowns
 

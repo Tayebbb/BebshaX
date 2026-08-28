@@ -15,6 +15,7 @@ Demo Mode provides a deterministic, self-contained environment for showcasing Be
 Demo Mode is controlled via the `BEBSHAX_DEMO_MODE` environment variable.
 
 ### In `.env` / Environment:
+
 ```bash
 # Enable demo mode
 BEBSHAX_DEMO_MODE=true
@@ -54,6 +55,7 @@ When `BEBSHAX_DEMO_MODE=true` and the database is unpopulated (or when `seed_dem
 ## 4. "Cached" vs. "Live" Data Transparency
 
 To maintain strict evaluation integrity and honesty:
+
 - **`data_source: "cached"`**: Represents responses served directly from pre-seeded baseline fixtures or deterministic local mock pools.
 - **`data_source: "live"`**: Represents live inference passes executed against routed LLM providers or local Ollama engines.
 

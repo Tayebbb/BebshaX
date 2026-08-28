@@ -4,12 +4,12 @@ An honest description of `model_registry`: what exists, what is actually used, a
 
 ## The table (`db/models.py::ModelRegistry`, migration `cb7c7deda755`)
 
-| Column group | Columns | Status |
-| --- | --- | --- |
-| Identity | `id`, `provider_name` + `model_name` (unique pair index), `enabled` | populated when rows are created |
+| Column group | Columns                                                                                   | Status                                              |
+| ------------ | ----------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Identity     | `id`, `provider_name` + `model_name` (unique pair index), `enabled`                       | populated when rows are created                     |
 | Capabilities | `context_window`, `supports_tools`, `supports_json`, `supports_vision`, `reasoning_level` | **schema only — nothing writes them in production** |
-| Scores | `quality_score`, `latency_score`, `health_score`, `last_checked` | **schema only — registry sync jobs are unowned** |
-| Operational | `cooldown_until` | **actively used** |
+| Scores       | `quality_score`, `latency_score`, `health_score`, `last_checked`                          | **schema only — registry sync jobs are unowned**    |
+| Operational  | `cooldown_until`                                                                          | **actively used**                                   |
 
 ## What is actually live
 

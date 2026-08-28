@@ -4,12 +4,12 @@ Everything needed to run BebshaX from a clean checkout. One-shot: `python script
 
 ## 0. Prerequisites
 
-| Tool | Version | Notes |
-| --- | --- | --- |
-| Python | 3.12+ | `python --version` |
-| Node.js | 20+ | `node --version` |
-| Docker Desktop | any recent | only needed for the local Postgres; a cloud Postgres URL works instead |
-| Ollama | optional | required only for the offline drill / local model tier (`ollama pull llama3.2:3b`) |
+| Tool           | Version    | Notes                                                                              |
+| -------------- | ---------- | ---------------------------------------------------------------------------------- |
+| Python         | 3.12+      | `python --version`                                                                 |
+| Node.js        | 20+        | `node --version`                                                                   |
+| Docker Desktop | any recent | only needed for the local Postgres; a cloud Postgres URL works instead             |
+| Ollama         | optional   | required only for the offline drill / local model tier (`ollama pull llama3.2:3b`) |
 
 **Zero API keys is a supported configuration** — freellmpool starts on keyless providers. Keys added to `.env` unlock more routes.
 

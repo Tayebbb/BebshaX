@@ -70,7 +70,6 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | 14 | Testing (full matrix + acceptance tests) | ✅ 2026-08-28 |
 | 15 | Documentation | ✅ 2026-08-28 |
 
-
 Detailed deliverables/exit criteria: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md). Environment/ecosystem audit: [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md).
 
 ## Key decisions record
