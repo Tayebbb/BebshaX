@@ -9,7 +9,7 @@ export const HeroDashboardSection: React.FC = () => {
         position: 'relative',
         padding: '100px 0 80px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -28,8 +28,8 @@ export const HeroDashboardSection: React.FC = () => {
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              color: '#F6C878',
+              background: 'rgba(var(--lp-fill-rgb), 0.05)',
+              color: 'var(--lp-gold)',
               fontSize: '0.75rem',
               fontWeight: 700,
               textTransform: 'uppercase',
@@ -46,7 +46,7 @@ export const HeroDashboardSection: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
             }}
           >
             Personas, interviews, memory{' '}
@@ -55,7 +55,7 @@ export const HeroDashboardSection: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
             Read a persona attribute by attribute, see the class behind each one, and follow the exact route the request took to a provider.
           </p>
         </div>

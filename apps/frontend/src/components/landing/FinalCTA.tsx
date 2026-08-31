@@ -25,7 +25,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
         position: 'relative',
         padding: '80px 0 100px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -40,7 +40,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
           className="clean-card"
           style={{
             borderRadius: '24px',
-            background: '#09090C',
+            background: 'var(--lp-surface)',
             border: 'none',
             outline: 'none',
             padding: '56px 48px',
@@ -57,7 +57,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
             <p
               style={{
                 fontSize: 'clamp(1.1rem, 2vw, 1.35rem)',
-                color: '#8E8E93',
+                color: 'var(--lp-text-muted)',
                 marginBottom: '8px',
                 fontWeight: 500,
               }}
@@ -69,7 +69,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
               style={{
                 fontSize: 'clamp(2.2rem, 4vw, 3.4rem)',
                 fontWeight: 800,
-                color: '#FFFFFF',
+                color: 'var(--lp-text)',
                 letterSpacing: '-0.035em',
                 lineHeight: 1.1,
                 marginBottom: '36px',
@@ -83,8 +83,8 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
               style={{
                 padding: '13px 28px',
                 borderRadius: '9999px',
-                background: '#FFFFFF',
-                color: '#000000',
+                background: 'var(--lp-contrast-bg)',
+                color: 'var(--lp-contrast-fg)',
                 border: 'none',
                 outline: 'none',
                 fontSize: '0.9rem',
@@ -96,15 +96,17 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
                 whiteSpace: 'nowrap',
                 transition: 'background 0.2s ease',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#E4E4E7')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--lp-contrast-bg-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--lp-contrast-bg)')}
             >
               <span>{isAuthenticated ? 'Launch Console' : 'Create your account'}</span>
-              <ArrowRight size={15} color="#000000" />
+              <ArrowRight size={15} color="var(--lp-contrast-fg)" />
             </button>
           </div>
 
-          {/* Right Column: Isometric Geometric Art with Emerald/Gold Backlight */}
+          {/* Right Column: Isometric Geometric Art with Emerald/Gold Backlight.
+              The monolith is fixed dark artwork — deliberately constant in both
+              themes, like a rendered product object on the page. */}
           <div
             style={{
               position: 'relative',

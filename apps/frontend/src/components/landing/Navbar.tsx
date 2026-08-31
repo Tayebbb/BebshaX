@@ -12,9 +12,12 @@ import {
   Zap,
   Layers,
   LogOut,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
+import { useTheme } from '../../context/ThemeContext';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 
 interface NavbarProps {
@@ -25,6 +28,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
   const { user, isAuthenticated, logout } = useAuth();
   const { navigate } = useNavigation();
+  const { theme, toggleTheme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [solutionsDropdownOpen, setSolutionsDropdownOpen] = useState(false);
@@ -74,7 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
         display: 'flex',
         alignItems: 'center',
         background: scrolled
-          ? 'rgba(8, 9, 9, 0.92)'
+          ? 'rgba(var(--lp-bg-rgb), 0.92)'
           : 'transparent',
         backdropFilter: scrolled ? 'blur(16px)' : 'none',
         WebkitBackdropFilter: scrolled ? 'blur(16px)' : 'none',
@@ -105,7 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             alignItems: 'center',
             gap: '8px',
             textDecoration: 'none',
-            color: '#FFFFFF',
+            color: 'var(--lp-text)',
             border: 'none',
           }}
         >
@@ -116,8 +120,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
               fontWeight: 700,
               padding: '2px 6px',
               borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.08)',
-              color: '#A1A1AA',
+              background: 'rgba(var(--lp-fill-rgb), 0.08)',
+              color: 'var(--lp-text-dim)',
               border: 'none',
               letterSpacing: '0.05em',
             }}
@@ -153,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
-                color: solutionsDropdownOpen ? '#FFFFFF' : 'var(--text-secondary)',
+                color: solutionsDropdownOpen ? 'var(--lp-text)' : 'var(--text-secondary)',
               }}
             >
               <span>Who It Is For</span>
@@ -175,11 +179,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   top: '40px',
                   left: '-120px',
                   width: '520px',
-                  background: '#0D0D11',
+                  background: 'var(--lp-elevated)',
                   border: 'none',
                   borderRadius: '16px',
                   padding: '20px',
-                  boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85)',
+                  boxShadow: 'var(--lp-shadow-lg)',
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
                   gap: '20px',
@@ -188,14 +192,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
               >
                 {/* Column 1: Industries */}
                 <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--lp-gold)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
                     AUDIENCES
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
-                      { title: 'Founders', desc: 'Interview a persona before you build', icon: <Briefcase size={14} color="#F6C878" /> },
-                      { title: 'Product & UX research', desc: 'Directional input with labelled attributes', icon: <Layers size={14} color="#F6C878" /> },
-                      { title: 'Researchers & students', desc: 'A testbed for multi-model routing', icon: <Building2 size={14} color="#F6C878" /> },
+                      { title: 'Founders', desc: 'Interview a persona before you build', icon: <Briefcase size={14} color="var(--lp-gold)" /> },
+                      { title: 'Product & UX research', desc: 'Directional input with labelled attributes', icon: <Layers size={14} color="var(--lp-gold)" /> },
+                      { title: 'Researchers & students', desc: 'A testbed for multi-model routing', icon: <Building2 size={14} color="var(--lp-gold)" /> },
                     ].map((item, i) => (
                       <div
                         key={i}
@@ -208,22 +212,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                           borderRadius: '8px',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          background: 'rgba(255, 255, 255, 0.03)',
+                          background: 'rgba(var(--lp-fill-rgb), 0.03)',
                           border: 'none',
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                          e.currentTarget.style.background = 'rgba(var(--lp-fill-rgb), 0.08)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                          e.currentTarget.style.background = 'rgba(var(--lp-fill-rgb), 0.03)';
                         }}
                       >
-                        <div style={{ padding: '6px', borderRadius: '6px', background: 'rgba(246, 200, 120, 0.12)', border: 'none' }}>
+                        <div style={{ padding: '6px', borderRadius: '6px', background: 'rgba(var(--lp-gold-rgb), 0.12)', border: 'none' }}>
                           {item.icon}
                         </div>
                         <div>
-                          <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#FFFFFF' }}>{item.title}</div>
-                          <div style={{ fontSize: '0.72rem', color: '#8E8E93' }}>{item.desc}</div>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--lp-text)' }}>{item.title}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--lp-text-muted)' }}>{item.desc}</div>
                         </div>
                       </div>
                     ))}
@@ -232,14 +236,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
 
                 {/* Column 2: Use Cases */}
                 <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--lp-gold)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
                     THE LOOP
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
-                      { title: 'Describe a business', desc: 'Name, industry, target market — no data connection', icon: <Search size={14} color="#3B82F6" /> },
-                      { title: 'Generate a persona', desc: 'Grounded, with a class on every attribute', icon: <Lightbulb size={14} color="#3B82F6" /> },
-                      { title: 'Interview it', desc: 'Multi-turn, same identity card every turn', icon: <Zap size={14} color="#3B82F6" /> },
+                      { title: 'Describe a business', desc: 'Name, industry, target market — no data connection', icon: <Search size={14} color="var(--lp-blue)" /> },
+                      { title: 'Generate a persona', desc: 'Grounded, with a class on every attribute', icon: <Lightbulb size={14} color="var(--lp-blue)" /> },
+                      { title: 'Interview it', desc: 'Multi-turn, same identity card every turn', icon: <Zap size={14} color="var(--lp-blue)" /> },
                     ].map((item, i) => (
                       <div
                         key={i}
@@ -252,22 +256,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                           borderRadius: '8px',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          background: 'rgba(255, 255, 255, 0.03)',
+                          background: 'rgba(var(--lp-fill-rgb), 0.03)',
                           border: 'none',
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                          e.currentTarget.style.background = 'rgba(var(--lp-fill-rgb), 0.08)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                          e.currentTarget.style.background = 'rgba(var(--lp-fill-rgb), 0.03)';
                         }}
                       >
-                        <div style={{ padding: '6px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)', border: 'none' }}>
+                        <div style={{ padding: '6px', borderRadius: '6px', background: 'rgba(var(--lp-blue-rgb), 0.12)', border: 'none' }}>
                           {item.icon}
                         </div>
                         <div>
-                          <div style={{ fontSize: '0.84rem', fontWeight: 600, color: '#FFFFFF' }}>{item.title}</div>
-                          <div style={{ fontSize: '0.72rem', color: '#8E8E93' }}>{item.desc}</div>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--lp-text)' }}>{item.title}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--lp-text-muted)' }}>{item.desc}</div>
                         </div>
                       </div>
                     ))}
@@ -318,6 +322,27 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             gap: '14px',
           }}
         >
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              padding: '6px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'color 0.2s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--lp-text)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+          >
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+
           {isAuthenticated && user ? (
             /* Logged-In User Profile Pill */
             <div style={{ position: 'relative' }} ref={userDropdownRef}>
@@ -329,10 +354,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   gap: '8px',
                   padding: '5px 12px 5px 6px',
                   borderRadius: '9999px',
-                  background: 'rgba(255, 255, 255, 0.08)',
+                  background: 'rgba(var(--lp-fill-rgb), 0.08)',
                   border: 'none',
                   cursor: 'pointer',
-                  color: '#FFFFFF',
+                  color: 'var(--lp-text)',
                   fontSize: '0.84rem',
                   fontWeight: 600,
                 }}
@@ -342,8 +367,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                     width: '24px',
                     height: '24px',
                     borderRadius: '50%',
-                    background: '#FFFFFF',
-                    color: '#000000',
+                    background: 'var(--lp-contrast-bg)',
+                    color: 'var(--lp-contrast-fg)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -355,7 +380,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   {user.full_name ? user.full_name.charAt(0).toUpperCase() : 'U'}
                 </div>
                 <span>{user.full_name.split(' ')[0]}</span>
-                <ChevronDown size={13} color="#8E8E93" />
+                <ChevronDown size={13} color="var(--lp-text-muted)" />
               </button>
 
               {/* User Dropdown */}
@@ -366,19 +391,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                     top: '40px',
                     right: 0,
                     width: '220px',
-                    background: '#0D0D11',
+                    background: 'var(--lp-elevated)',
                     borderRadius: '14px',
                     padding: '12px',
-                    boxShadow: '0 15px 40px rgba(0, 0, 0, 0.7)',
+                    boxShadow: 'var(--lp-shadow-md)',
                     zIndex: 70,
                     border: 'none',
                   }}
                 >
                   <div style={{ paddingBottom: '10px', marginBottom: '8px' }}>
-                    <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#FFFFFF' }}>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--lp-text)' }}>
                       {user.full_name}
                     </div>
-                    <div style={{ fontSize: '0.72rem', color: '#8E8E93', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--lp-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {user.email}
                     </div>
                   </div>
@@ -399,14 +424,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                       gap: '8px',
                       fontSize: '0.82rem',
                       fontWeight: 600,
-                      color: '#FFFFFF',
+                      color: 'var(--lp-text)',
                       cursor: 'pointer',
                       textAlign: 'left',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)')}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(var(--lp-fill-rgb), 0.06)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                   >
-                    <Activity size={14} color="#F6C878" />
+                    <Activity size={14} color="var(--lp-gold)" />
                     <span>Launch Console</span>
                   </button>
 
@@ -426,15 +451,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                       gap: '8px',
                       fontSize: '0.82rem',
                       fontWeight: 600,
-                      color: '#EF4444',
+                      color: 'var(--lp-red)',
                       cursor: 'pointer',
                       textAlign: 'left',
                       marginTop: '4px',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)')}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(var(--lp-red-rgb), 0.12)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                   >
-                    <LogOut size={14} color="#EF4444" />
+                    <LogOut size={14} color="var(--lp-red)" />
                     <span>Sign Out</span>
                   </button>
                 </div>
@@ -450,14 +475,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   border: 'none',
                   fontSize: '0.86rem',
                   fontWeight: 500,
-                  color: '#A1A1AA',
+                  color: 'var(--lp-text-dim)',
                   cursor: 'pointer',
                   padding: '6px 12px',
                   borderRadius: '6px',
                   transition: 'color 0.2s ease',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = '#FFFFFF')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = '#A1A1AA')}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--lp-text)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--lp-text-dim)')}
               >
                 Sign In
               </button>
@@ -473,16 +498,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   alignItems: 'center',
                   gap: '6px',
                   borderRadius: '9999px',
-                  background: '#FFFFFF',
-                  color: '#000000',
+                  background: 'var(--lp-contrast-bg)',
+                  color: 'var(--lp-contrast-fg)',
                   border: 'none',
                   transition: 'all 0.2s ease',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#E4E4E7')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = '#FFFFFF')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--lp-contrast-bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--lp-contrast-bg)')}
               >
                 <span>Try Free</span>
-                <ArrowRight size={14} color="#000000" />
+                <ArrowRight size={14} color="var(--lp-contrast-fg)" />
               </button>
             </>
           )}
@@ -495,14 +520,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
           style={{
             background: 'none',
             border: 'none',
-            color: '#FFFFFF',
+            color: 'var(--lp-text)',
             cursor: 'pointer',
             padding: '8px',
             display: 'none',
           }}
           aria-label="Toggle navigation"
         >
-          {mobileMenuOpen ? <X size={22} color="#FFFFFF" /> : <Menu size={22} color="#FFFFFF" />}
+          {mobileMenuOpen ? <X size={22} color="var(--lp-text)" /> : <Menu size={22} color="var(--lp-text)" />}
         </button>
       </div>
 
@@ -514,13 +539,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             top: '68px',
             left: 0,
             right: 0,
-            background: '#070709',
+            background: 'var(--lp-drawer)',
             border: 'none',
             padding: '24px 32px',
             display: 'flex',
             flexDirection: 'column',
             gap: '16px',
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.9)',
+            boxShadow: 'var(--lp-shadow-drawer)',
             zIndex: 60,
           }}
         >
@@ -567,7 +592,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             FAQ
           </button>
 
-          <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)', margin: '8px 0' }} />
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            className="mobile-nav-btn"
+            style={{ display: 'flex', alignItems: 'center', gap: '10px' }}
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            <span>{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span>
+          </button>
+
+          <div style={{ height: '1px', background: 'var(--lp-line)', margin: '8px 0' }} />
 
           {isAuthenticated && user ? (
             <>
@@ -588,7 +623,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   border: 'none',
                 }}
               >
-                <Activity size={16} color="#F6C878" />
+                <Activity size={16} color="var(--lp-gold)" />
                 <span>Launch Console</span>
               </button>
               <button
@@ -601,8 +636,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   fontWeight: 600,
                   border: 'none',
                   borderRadius: '9999px',
-                  background: 'rgba(239, 68, 68, 0.12)',
-                  color: '#EF4444',
+                  background: 'rgba(var(--lp-red-rgb), 0.12)',
+                  color: 'var(--lp-red)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -610,7 +645,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   gap: '8px',
                 }}
               >
-                <LogOut size={16} color="#EF4444" />
+                <LogOut size={16} color="var(--lp-red)" />
                 <span>Sign Out</span>
               </button>
             </>
@@ -647,8 +682,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   fontWeight: 700,
                   border: 'none',
                   borderRadius: '9999px',
-                  background: '#FFFFFF',
-                  color: '#000000',
+                  background: 'var(--lp-contrast-bg)',
+                  color: 'var(--lp-contrast-fg)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -657,7 +692,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                 }}
               >
                 <span>Try Free</span>
-                <ArrowRight size={16} color="#000000" />
+                <ArrowRight size={16} color="var(--lp-contrast-fg)" />
               </button>
             </>
           )}

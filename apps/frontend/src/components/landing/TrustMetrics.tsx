@@ -7,25 +7,25 @@ export const TrustMetrics: React.FC = () => {
       value: '7',
       label: 'Routing pools',
       description: 'Sixteen fixed task types map onto reasoning, conversation, long_context, structured, fast, local and emergency.',
-      icon: <Database size={20} color="#FFFFFF" />,
+      icon: <Database size={20} color="var(--lp-text)" />,
     },
     {
       value: '3',
       label: 'Provenance classes',
       description: 'Every persona attribute is OBSERVED, INFERRED or SYNTHETIC. Classes are enforced in code and only ever downgraded.',
-      icon: <Eye size={20} color="#FFFFFF" />,
+      icon: <Eye size={20} color="var(--lp-text)" />,
     },
     {
       value: '14',
       label: 'Failure kinds',
       description: 'A closed taxonomy. Each kind has one policy: retry the route once, advance to the next candidate, or cool the route.',
-      icon: <Zap size={20} color="#F6C878" />,
+      icon: <Zap size={20} color="var(--lp-gold)" />,
     },
     {
       value: '0',
       label: 'API keys to start',
       description: 'Keyless free provider tiers work out of the box, and every pool terminates at a local Ollama model.',
-      icon: <Clock size={20} color="#FFFFFF" />,
+      icon: <Clock size={20} color="var(--lp-text)" />,
     },
   ];
 
@@ -35,7 +35,7 @@ export const TrustMetrics: React.FC = () => {
         position: 'relative',
         padding: '60px 0 80px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -63,7 +63,7 @@ export const TrustMetrics: React.FC = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                background: '#09090C',
+                background: 'var(--lp-surface)',
                 border: 'none',
                 outline: 'none',
               }}
@@ -73,7 +73,7 @@ export const TrustMetrics: React.FC = () => {
                   width: '40px',
                   height: '40px',
                   borderRadius: '10px',
-                  background: 'rgba(255, 255, 255, 0.04)',
+                  background: 'rgba(var(--lp-fill-rgb), 0.04)',
                   border: 'none',
                   outline: 'none',
                   display: 'flex',
@@ -91,7 +91,7 @@ export const TrustMetrics: React.FC = () => {
                     fontSize: '2.2rem',
                     fontWeight: 800,
                     letterSpacing: '-0.03em',
-                    color: '#FFFFFF',
+                    color: 'var(--lp-text)',
                     marginBottom: '4px',
                   }}
                 >
@@ -101,7 +101,7 @@ export const TrustMetrics: React.FC = () => {
                   style={{
                     fontSize: '0.88rem',
                     fontWeight: 700,
-                    color: '#F6C878',
+                    color: 'var(--lp-gold)',
                     marginBottom: '6px',
                   }}
                 >
@@ -110,7 +110,7 @@ export const TrustMetrics: React.FC = () => {
                 <p
                   style={{
                     fontSize: '0.82rem',
-                    color: '#8E8E93',
+                    color: 'var(--lp-text-muted)',
                     lineHeight: '1.5',
                   }}
                 >

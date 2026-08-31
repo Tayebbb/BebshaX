@@ -15,9 +15,13 @@ import React, { useEffect, useRef } from 'react';
  * reduced-motion renders one static frame. Zero dependencies.
  */
 
-const GOLD = '246, 200, 120';
+const GOLD_DARK = '246, 200, 120';
+const GOLD_LIGHT = '138, 109, 31'; // ink-amber so the constellation survives a light page
 const LINK_DIST = 150;
 const FPS_INTERVAL = 1000 / 30;
+
+const themeGold = () =>
+  document.documentElement.dataset.theme === 'light' ? GOLD_LIGHT : GOLD_DARK;
 
 interface Node {
   x: number;
@@ -44,6 +48,8 @@ export const AnimatedBackground: React.FC = () => {
     if (!ctx) return;
 
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let gold = themeGold();
 
     let width = 0;
     let height = 0;
@@ -103,7 +109,7 @@ export const AnimatedBackground: React.FC = () => {
           const d2 = dx * dx + dy * dy;
           if (d2 < LINK_DIST * LINK_DIST) {
             const alpha = (1 - Math.sqrt(d2) / LINK_DIST) * 0.14;
-            ctx.strokeStyle = `rgba(${GOLD}, ${alpha})`;
+            ctx.strokeStyle = `rgba(${gold}, ${alpha})`;
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
@@ -136,12 +142,12 @@ export const AnimatedBackground: React.FC = () => {
         const pulse = n.grounded ? 0.5 + 0.5 * Math.sin(t / 900 + n.phase) : 0;
         const alpha = n.grounded ? 0.35 + pulse * 0.45 : 0.3;
         const radius = n.grounded ? n.r + pulse * 1.4 : n.r;
-        ctx.fillStyle = `rgba(${GOLD}, ${alpha})`;
+        ctx.fillStyle = `rgba(${gold}, ${alpha})`;
         ctx.beginPath();
         ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
         ctx.fill();
         if (n.grounded && pulse > 0.15) {
-          ctx.fillStyle = `rgba(${GOLD}, ${pulse * 0.08})`;
+          ctx.fillStyle = `rgba(${gold}, ${pulse * 0.08})`;
           ctx.beginPath();
           ctx.arc(n.x, n.y, radius * 4, 0, Math.PI * 2);
           ctx.fill();
@@ -196,6 +202,16 @@ export const AnimatedBackground: React.FC = () => {
     window.addEventListener('mousemove', onMouse, { passive: true });
     document.addEventListener('visibilitychange', onVisibility);
 
+    // repaint in the new palette when the app theme flips
+    const themeObserver = new MutationObserver(() => {
+      const next = themeGold();
+      if (next !== gold) {
+        gold = next;
+        if (reduced) draw(0);
+      }
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
     if (reduced) {
       draw(0); // one static constellation, no loop
     } else {
@@ -206,6 +222,7 @@ export const AnimatedBackground: React.FC = () => {
       stop();
       ro.disconnect();
       io.disconnect();
+      themeObserver.disconnect();
       window.removeEventListener('mousemove', onMouse);
       document.removeEventListener('visibilitychange', onVisibility);
     };
@@ -227,7 +244,7 @@ export const AnimatedBackground: React.FC = () => {
         pointerEvents: 'none',
         overflow: 'hidden',
         background:
-          'radial-gradient(1100px 600px at 50% -10%, rgba(246, 200, 120, 0.06), transparent 60%), #080909',
+          'radial-gradient(1100px 600px at 50% -10%, rgba(var(--lp-gold-rgb), 0.06), transparent 60%), var(--lp-bg)',
       }}
     >
       <canvas ref={canvasRef} style={{ display: 'block' }} />
@@ -241,7 +258,7 @@ export const AnimatedBackground: React.FC = () => {
           right: 0,
           height: '240px',
           background:
-            'linear-gradient(to bottom, rgba(8, 9, 9, 0) 0%, rgba(8, 9, 9, 0.7) 60%, #080909 100%)',
+            'linear-gradient(to bottom, rgba(var(--lp-bg-rgb), 0) 0%, rgba(var(--lp-bg-rgb), 0.7) 60%, var(--lp-bg) 100%)',
           pointerEvents: 'none',
         }}
       />

@@ -53,7 +53,7 @@ export const ProductShowcase: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -72,10 +72,10 @@ export const ProductShowcase: React.FC = () => {
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: 'rgba(var(--lp-fill-rgb), 0.05)',
               border: 'none',
               outline: 'none',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
               fontSize: '0.75rem',
               fontWeight: 700,
               textTransform: 'uppercase',
@@ -92,7 +92,7 @@ export const ProductShowcase: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
             }}
           >
             Four tabs.{' '}
@@ -101,7 +101,7 @@ export const ProductShowcase: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
             Generate personas, interview them, inspect what they remember, and read the routing behind every call.
           </p>
         </div>
@@ -121,7 +121,7 @@ export const ProductShowcase: React.FC = () => {
               gap: '6px',
               padding: '6px',
               borderRadius: '9999px',
-              background: '#09090C',
+              background: 'var(--lp-surface)',
               border: 'none',
               outline: 'none',
             }}
@@ -144,12 +144,12 @@ export const ProductShowcase: React.FC = () => {
                     fontWeight: 600,
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    background: isActive ? '#FFFFFF' : 'transparent',
-                    color: isActive ? '#000000' : '#8E8E93',
+                    background: isActive ? 'var(--lp-contrast-bg)' : 'transparent',
+                    color: isActive ? 'var(--lp-contrast-fg)' : 'var(--lp-text-muted)',
                   }}
                 >
                   {React.cloneElement(tab.icon, {
-                    color: isActive ? '#000000' : '#8E8E93',
+                    color: isActive ? 'var(--lp-contrast-fg)' : 'var(--lp-text-muted)',
                   })}
                   <span>{tab.label}</span>
                 </button>
@@ -163,7 +163,7 @@ export const ProductShowcase: React.FC = () => {
           className="clean-card"
           style={{
             borderRadius: '24px',
-            background: '#09090C',
+            background: 'var(--lp-surface)',
             border: 'none',
             outline: 'none',
             padding: '36px',
@@ -186,15 +186,15 @@ export const ProductShowcase: React.FC = () => {
                   gap: '6px',
                   padding: '4px 10px',
                   borderRadius: '6px',
-                  background: 'rgba(246, 200, 120, 0.1)',
-                  color: '#F6C878',
+                  background: 'rgba(var(--lp-gold-rgb), 0.1)',
+                  color: 'var(--lp-gold)',
                   fontSize: '0.72rem',
                   fontWeight: 700,
                   marginBottom: '14px',
                   border: 'none',
                 }}
               >
-                <Sparkles size={13} color="#F6C878" />
+                <Sparkles size={13} color="var(--lp-gold)" />
                 <span>CONSOLE TAB</span>
               </div>
 
@@ -203,7 +203,7 @@ export const ProductShowcase: React.FC = () => {
                   fontSize: '1.75rem',
                   fontWeight: 800,
                   letterSpacing: '-0.02em',
-                  color: '#FFFFFF',
+                  color: 'var(--lp-text)',
                   marginBottom: '14px',
                   lineHeight: 1.25,
                 }}
@@ -214,7 +214,7 @@ export const ProductShowcase: React.FC = () => {
               <p
                 style={{
                   fontSize: '0.95rem',
-                  color: '#8E8E93',
+                  color: 'var(--lp-text-muted)',
                   lineHeight: '1.6',
                   marginBottom: '24px',
                 }}
@@ -234,16 +234,16 @@ export const ProductShowcase: React.FC = () => {
                         width: '18px',
                         height: '18px',
                         borderRadius: '50%',
-                        background: 'rgba(255, 255, 255, 0.06)',
+                        background: 'rgba(var(--lp-fill-rgb), 0.06)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         border: 'none',
                       }}
                     >
-                      <CheckCircle size={12} color="#F6C878" />
+                      <CheckCircle size={12} color="var(--lp-gold)" />
                     </div>
-                    <span style={{ fontSize: '0.84rem', color: '#D4D4D8', fontWeight: 500 }}>{item}</span>
+                    <span style={{ fontSize: '0.84rem', color: 'var(--lp-text-hi)', fontWeight: 500 }}>{item}</span>
                   </div>
                 ))}
               </div>
@@ -265,12 +265,14 @@ export const ProductShowcase: React.FC = () => {
                   }}
                 >
                   <span>Try the routing map</span>
-                  <ArrowRight size={14} color="#000000" />
+                  <ArrowRight size={14} color="var(--lp-contrast-fg)" />
                 </a>
               </div>
             </div>
 
-            {/* Right Interactive Mock View (No outline) */}
+            {/* Right Interactive Mock View — a framed console screenshot.
+                Deliberately stays dark in BOTH themes (dark product shot on a
+                light page), so its inner colors are fixed literals. */}
             <div
               style={{
                 borderRadius: '16px',

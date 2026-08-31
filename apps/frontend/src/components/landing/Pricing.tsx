@@ -122,7 +122,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
         position: 'relative',
         padding: '110px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -140,12 +140,12 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
               alignItems: 'center',
               gap: '8px',
               padding: '6px 16px',
-              background: 'rgba(246, 200, 120, 0.06)',
-              border: '1px solid rgba(246, 200, 120, 0.2)',
+              background: 'rgba(var(--lp-gold-rgb), 0.06)',
+              border: '1px solid rgba(var(--lp-gold-rgb), 0.2)',
               borderRadius: '999px',
               fontSize: '0.8rem',
               fontWeight: 600,
-              color: '#F6C878',
+              color: 'var(--lp-gold)',
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
               marginBottom: '20px',
@@ -160,7 +160,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
               fontSize: 'clamp(2rem, 3.5vw, 2.75rem)',
               fontWeight: 700,
               letterSpacing: '-0.03em',
-              color: '#F3F4F6',
+              color: 'var(--lp-text-pale)',
               lineHeight: 1.15,
               marginBottom: '16px',
             }}
@@ -171,7 +171,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
           <p
             style={{
               fontSize: '1.05rem',
-              color: '#9CA3AF',
+              color: 'var(--lp-text-gray)',
               lineHeight: 1.6,
             }}
           >
@@ -183,10 +183,10 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
               style={{
                 marginTop: '20px',
                 padding: '12px 18px',
-                background: 'rgba(239, 68, 68, 0.12)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
+                background: 'rgba(var(--lp-red-rgb), 0.12)',
+                border: '1px solid rgba(var(--lp-red-rgb), 0.3)',
                 borderRadius: '8px',
-                color: '#FCA5A5',
+                color: 'var(--lp-red-faint)',
                 fontSize: '0.9rem',
               }}
             >
@@ -216,20 +216,21 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
                   display: 'flex',
                   flexDirection: 'column',
                   background: tier.popular
-                    ? 'linear-gradient(180deg, rgba(30, 26, 18, 0.85) 0%, rgba(17, 18, 20, 0.95) 100%)'
-                    : '#111214',
+                    ? 'var(--lp-pricing-popular-bg)'
+                    : 'var(--lp-card-solid)',
                   border: tier.popular
-                    ? '1.5px solid rgba(246, 200, 120, 0.45)'
-                    : '1px solid rgba(255, 255, 255, 0.08)',
+                    ? '1.5px solid rgba(var(--lp-gold-rgb), 0.45)'
+                    : '1px solid var(--lp-line)',
                   borderRadius: '16px',
                   padding: '36px 32px',
                   boxShadow: tier.popular
-                    ? '0 20px 50px -15px rgba(246, 200, 120, 0.15), 0 0 25px rgba(246, 200, 120, 0.05)'
-                    : '0 12px 30px -10px rgba(0, 0, 0, 0.5)',
+                    ? 'var(--lp-shadow-pricing-popular)'
+                    : 'var(--lp-shadow-card)',
                   transition: 'transform 0.25s ease, border-color 0.25s ease',
                 }}
               >
-                {/* Popular Badge */}
+                {/* Popular Badge — brand-gold chip with near-black text; readable
+                    on both themes, so it deliberately stays literal. */}
                 {tier.badge && (
                   <div
                     style={{
@@ -259,17 +260,17 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
                       width: '40px',
                       height: '40px',
                       borderRadius: '10px',
-                      background: tier.popular ? 'rgba(246, 200, 120, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+                      background: tier.popular ? 'rgba(var(--lp-gold-rgb), 0.12)' : 'rgba(var(--lp-fill-rgb), 0.05)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: tier.popular ? '#F6C878' : '#D1D5DB',
+                      color: tier.popular ? 'var(--lp-gold)' : 'var(--lp-text-hi2)',
                     }}
                   >
                     <Icon size={20} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#F3F4F6', margin: 0 }}>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--lp-text-pale)', margin: 0 }}>
                       {tier.name}
                     </h3>
                   </div>
@@ -278,7 +279,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
                 <p
                   style={{
                     fontSize: '0.88rem',
-                    color: '#9CA3AF',
+                    color: 'var(--lp-text-gray)',
                     lineHeight: 1.5,
                     minHeight: '42px',
                     marginBottom: '24px',
@@ -293,13 +294,13 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
                     style={{
                       fontSize: '2.75rem',
                       fontWeight: 800,
-                      color: '#FFFFFF',
+                      color: 'var(--lp-text)',
                       letterSpacing: '-0.03em',
                     }}
                   >
                     {tier.price}
                   </span>
-                  <span style={{ fontSize: '0.9rem', color: '#9CA3AF', fontWeight: 500 }}>
+                  <span style={{ fontSize: '0.9rem', color: 'var(--lp-text-gray)', fontWeight: 500 }}>
                     /{tier.period}
                   </span>
                 </div>
@@ -323,8 +324,8 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
                     border: 'none',
                     background: tier.popular
                       ? 'linear-gradient(90deg, #F6C878 0%, #E6AF56 100%)'
-                      : 'rgba(255, 255, 255, 0.08)',
-                    color: tier.popular ? '#080909' : '#FFFFFF',
+                      : 'rgba(var(--lp-fill-rgb), 0.08)',
+                    color: tier.popular ? '#080909' : 'var(--lp-text)',
                     boxShadow: tier.popular ? '0 6px 20px rgba(246, 200, 120, 0.25)' : 'none',
                     transition: 'all 0.2s ease',
                     marginBottom: '32px',
@@ -349,7 +350,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
                     style={{
                       fontSize: '0.78rem',
                       fontWeight: 700,
-                      color: '#9CA3AF',
+                      color: 'var(--lp-text-gray)',
                       letterSpacing: '0.05em',
                       textTransform: 'uppercase',
                       marginBottom: '16px',
@@ -366,14 +367,14 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
                           alignItems: 'flex-start',
                           gap: '10px',
                           fontSize: '0.88rem',
-                          color: '#D1D5DB',
+                          color: 'var(--lp-text-hi2)',
                           lineHeight: 1.45,
                         }}
                       >
                         <div
                           style={{
                             marginTop: '2px',
-                            color: tier.popular ? '#F6C878' : '#10B981',
+                            color: tier.popular ? 'var(--lp-gold)' : 'var(--lp-green)',
                             flexShrink: 0,
                           }}
                         >
@@ -398,11 +399,11 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            color: '#6B7280',
+            color: 'var(--lp-text-soft)',
             fontSize: '0.84rem',
           }}
         >
-          <Shield size={16} color="#9CA3AF" />
+          <Shield size={16} color="var(--lp-text-gray)" />
           <span>Payments securely processed by Stripe. All major credit cards accepted with 256-bit encryption.</span>
         </div>
       </div>

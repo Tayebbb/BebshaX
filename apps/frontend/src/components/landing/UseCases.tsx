@@ -62,7 +62,7 @@ export const UseCases: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -81,10 +81,10 @@ export const UseCases: React.FC = () => {
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: 'rgba(var(--lp-fill-rgb), 0.05)',
               border: 'none',
               outline: 'none',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
               fontSize: '0.75rem',
               fontWeight: 700,
               textTransform: 'uppercase',
@@ -101,7 +101,7 @@ export const UseCases: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
             }}
           >
             Built for people who need{' '}
@@ -110,7 +110,7 @@ export const UseCases: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
             Four ways the same loop — describe, generate, interview — gets used.
           </p>
         </div>
@@ -130,7 +130,7 @@ export const UseCases: React.FC = () => {
               gap: '6px',
               padding: '6px',
               borderRadius: '9999px',
-              background: '#09090C',
+              background: 'var(--lp-surface)',
               border: 'none',
               outline: 'none',
             }}
@@ -153,12 +153,12 @@ export const UseCases: React.FC = () => {
                     fontWeight: 600,
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    background: isActive ? '#FFFFFF' : 'transparent',
-                    color: isActive ? '#000000' : '#8E8E93',
+                    background: isActive ? 'var(--lp-contrast-bg)' : 'transparent',
+                    color: isActive ? 'var(--lp-contrast-fg)' : 'var(--lp-text-muted)',
                   }}
                 >
                   {React.cloneElement(r.icon, {
-                    color: isActive ? '#000000' : '#8E8E93',
+                    color: isActive ? 'var(--lp-contrast-fg)' : 'var(--lp-text-muted)',
                   })}
                   <span>{r.label}</span>
                 </button>
@@ -172,7 +172,7 @@ export const UseCases: React.FC = () => {
           className="clean-card"
           style={{
             borderRadius: '24px',
-            background: '#09090C',
+            background: 'var(--lp-surface)',
             border: 'none',
             outline: 'none',
             padding: '36px',
@@ -192,7 +192,7 @@ export const UseCases: React.FC = () => {
                   fontSize: '1.75rem',
                   fontWeight: 800,
                   letterSpacing: '-0.02em',
-                  color: '#FFFFFF',
+                  color: 'var(--lp-text)',
                   marginBottom: '18px',
                   lineHeight: 1.25,
                 }}
@@ -201,18 +201,18 @@ export const UseCases: React.FC = () => {
               </h3>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-                <div style={{ padding: '14px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.1)', border: 'none' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F87171', textTransform: 'uppercase', marginBottom: '2px' }}>
+                <div style={{ padding: '14px', borderRadius: '10px', background: 'rgba(var(--lp-red-rgb), 0.1)', border: 'none' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--lp-red-soft)', textTransform: 'uppercase', marginBottom: '2px' }}>
                     THE PROBLEM
                   </div>
-                  <div style={{ fontSize: '0.84rem', color: '#D4D4D8' }}>{current.pain}</div>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--lp-text-hi)' }}>{current.pain}</div>
                 </div>
 
-                <div style={{ padding: '14px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.04)', border: 'none' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', marginBottom: '2px' }}>
+                <div style={{ padding: '14px', borderRadius: '10px', background: 'rgba(var(--lp-fill-rgb), 0.04)', border: 'none' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--lp-gold)', textTransform: 'uppercase', marginBottom: '2px' }}>
                     WHAT BEBSHAX DOES
                   </div>
-                  <div style={{ fontSize: '0.84rem', color: '#D4D4D8' }}>{current.gain}</div>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--lp-text-hi)' }}>{current.gain}</div>
                 </div>
               </div>
 
@@ -226,14 +226,14 @@ export const UseCases: React.FC = () => {
                       gap: '6px',
                       padding: '5px 12px',
                       borderRadius: '9999px',
-                      background: 'rgba(255, 255, 255, 0.04)',
+                      background: 'rgba(var(--lp-fill-rgb), 0.04)',
                       border: 'none',
                       fontSize: '0.78rem',
-                      color: '#FFFFFF',
+                      color: 'var(--lp-text)',
                       fontWeight: 500,
                     }}
                   >
-                    <CheckCircle size={13} color="#F6C878" />
+                    <CheckCircle size={13} color="var(--lp-gold)" />
                     <span>{m}</span>
                   </div>
                 ))}
@@ -244,16 +244,16 @@ export const UseCases: React.FC = () => {
             <div
               style={{
                 borderRadius: '16px',
-                background: '#040406',
+                background: 'var(--lp-inset)',
                 border: 'none',
                 outline: 'none',
                 padding: '28px',
               }}
             >
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--lp-gold)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
                 HOW IT WORKS
               </div>
-              <div style={{ fontSize: '1.02rem', color: '#FFFFFF', lineHeight: '1.6' }}>
+              <div style={{ fontSize: '1.02rem', color: 'var(--lp-text)', lineHeight: '1.6' }}>
                 {current.detail}
               </div>
             </div>

@@ -54,7 +54,7 @@ const STATS: Array<{ value: number; label: React.ReactNode }> = [
     value: 16,
     label: (
       <>
-        Fixed task types, routed across <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>7 routing pools</strong>
+        Fixed task types, routed across <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>7 routing pools</strong>
       </>
     ),
   },
@@ -62,7 +62,7 @@ const STATS: Array<{ value: number; label: React.ReactNode }> = [
     value: 14,
     label: (
       <>
-        Failure kinds, each with an <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>explicit routing policy</strong>
+        Failure kinds, each with an <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>explicit routing policy</strong>
       </>
     ),
   },
@@ -70,7 +70,7 @@ const STATS: Array<{ value: number; label: React.ReactNode }> = [
     value: 0,
     label: (
       <>
-        API keys required — <strong style={{ color: '#FFFFFF', fontWeight: 600 }}>keyless providers plus local Ollama</strong>
+        API keys required — <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>keyless providers plus local Ollama</strong>
       </>
     ),
   },
@@ -134,19 +134,19 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
       <div className="lp-hero-layer lp-hero-layer--badges" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
         <div
           className="lp-soft"
-          style={{ ['--lp-i' as string]: 0, display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#8E8E93', letterSpacing: '0.04em' }}
+          style={{ ['--lp-i' as string]: 0, display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--lp-text-muted)', letterSpacing: '0.04em' }}
         >
-          <span style={{ color: '#F6C878', opacity: 0.6 }}>[</span>
-          <span><strong style={{ color: '#FFFFFF', fontWeight: 700 }}>Synthetic Persona Research</strong></span>
-          <span style={{ color: '#F6C878', opacity: 0.6 }}>]</span>
+          <span style={{ color: 'var(--lp-gold)', opacity: 0.6 }}>[</span>
+          <span><strong style={{ color: 'var(--lp-text)', fontWeight: 700 }}>Synthetic Persona Research</strong></span>
+          <span style={{ color: 'var(--lp-gold)', opacity: 0.6 }}>]</span>
         </div>
 
         <div
           className="lp-soft"
-          style={{ ['--lp-i' as string]: 1, display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 20px', borderRadius: '9999px', background: 'rgba(255, 255, 255, 0.04)', fontSize: '0.78rem', color: '#A1A1AA' }}
+          style={{ ['--lp-i' as string]: 1, display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 20px', borderRadius: '9999px', background: 'rgba(var(--lp-fill-rgb), 0.04)', fontSize: '0.78rem', color: 'var(--lp-text-dim)' }}
         >
           <span>Runs on free provider tiers — </span>
-          <span style={{ fontStyle: 'italic', color: '#F6C878' }}>zero API keys required to start</span>
+          <span style={{ fontStyle: 'italic', color: 'var(--lp-gold)' }}>zero API keys required to start</span>
         </div>
       </div>
 
@@ -157,7 +157,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
             <span>Evidence in.</span>
           </span>
           <span className="lp-line" style={{ ['--lp-i' as string]: 1 }}>
-            <span style={{ fontStyle: 'italic', color: '#F6C878' }}>Personas out.</span>
+            <span style={{ fontStyle: 'italic', color: 'var(--lp-gold)' }}>Personas out.</span>
           </span>
           <span className="lp-line" style={{ ['--lp-i' as string]: 2 }}>
             <span>Then interview them.</span>
@@ -166,7 +166,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
 
         <p
           className="lp-soft"
-          style={{ ['--lp-i' as string]: 4, fontSize: 'clamp(0.95rem, 1.5vw, 1.15rem)', color: '#A1A1AA', maxWidth: '680px', lineHeight: 1.6, marginBottom: '38px', fontWeight: 400 }}
+          style={{ ['--lp-i' as string]: 4, fontSize: 'clamp(0.95rem, 1.5vw, 1.15rem)', color: 'var(--lp-text-dim)', maxWidth: '680px', lineHeight: 1.6, marginBottom: '38px', fontWeight: 400 }}
         >
           Describe your business. BebshaX generates personas whose every attribute is labelled OBSERVED, INFERRED or SYNTHETIC against public research datasets — then you interview them in multi-turn conversations routed across free LLM providers, with a local model as the final fallback.
         </p>
@@ -190,10 +190,10 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
       >
         {STATS.map((s, i) => (
           <div key={i} className="lp-soft" style={{ ['--lp-i' as string]: 6 + i }}>
-            <div style={{ fontSize: 'clamp(2rem, 3.5vw, 2.8rem)', fontWeight: 800, color: '#F6C878', letterSpacing: '-0.03em', marginBottom: '6px' }}>
+            <div style={{ fontSize: 'clamp(2rem, 3.5vw, 2.8rem)', fontWeight: 800, color: 'var(--lp-gold)', letterSpacing: '-0.03em', marginBottom: '6px' }}>
               <CountUp to={s.value} />
             </div>
-            <div style={{ fontSize: '0.82rem', color: '#8E8E93', lineHeight: '1.4' }}>{s.label}</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--lp-text-muted)', lineHeight: '1.4' }}>{s.label}</div>
           </div>
         ))}
       </div>

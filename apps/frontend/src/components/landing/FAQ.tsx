@@ -42,7 +42,7 @@ export const FAQ: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -61,10 +61,10 @@ export const FAQ: React.FC = () => {
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: 'rgba(var(--lp-fill-rgb), 0.05)',
               border: 'none',
               outline: 'none',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
               fontSize: '0.75rem',
               fontWeight: 700,
               textTransform: 'uppercase',
@@ -81,7 +81,7 @@ export const FAQ: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
             }}
           >
             Everything you need to know.{' '}
@@ -90,7 +90,7 @@ export const FAQ: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
             What the system does, and what it deliberately does not do.
           </p>
         </div>
@@ -105,7 +105,7 @@ export const FAQ: React.FC = () => {
                 className="clean-card"
                 style={{
                   borderRadius: '16px',
-                  background: isOpen ? '#101017' : '#08080C',
+                  background: isOpen ? 'var(--lp-faq-open)' : 'var(--lp-faq)',
                   border: 'none',
                   outline: 'none',
                   overflow: 'hidden',
@@ -125,7 +125,7 @@ export const FAQ: React.FC = () => {
                     outline: 'none',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    color: '#FFFFFF',
+                    color: 'var(--lp-text)',
                     fontSize: '1rem',
                     fontWeight: 600,
                   }}
@@ -136,7 +136,7 @@ export const FAQ: React.FC = () => {
                       width: '26px',
                       height: '26px',
                       borderRadius: '50%',
-                      background: 'rgba(255, 255, 255, 0.05)',
+                      background: 'rgba(var(--lp-fill-rgb), 0.05)',
                       border: 'none',
                       display: 'flex',
                       alignItems: 'center',
@@ -146,7 +146,7 @@ export const FAQ: React.FC = () => {
                       transition: 'transform 0.2s ease',
                     }}
                   >
-                    <ChevronDown size={14} color="#A1A1AA" />
+                    <ChevronDown size={14} color="var(--lp-text-dim)" />
                   </div>
                 </button>
 
@@ -155,7 +155,7 @@ export const FAQ: React.FC = () => {
                     style={{
                       padding: '0 24px 20px 24px',
                       fontSize: '0.88rem',
-                      color: '#8E8E93',
+                      color: 'var(--lp-text-muted)',
                       lineHeight: '1.6',
                     }}
                   >

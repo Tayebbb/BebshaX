@@ -267,6 +267,25 @@ h1, h2, h3, h4, h5, h6 {
   -webkit-text-fill-color: transparent;
 }
 
+/* Landing heading gradients start from white — flip to ink-based ramps on
+   light so the gradient half of a headline never fades into the page. */
+[data-theme='light'] .text-gradient-blue {
+  background: linear-gradient(135deg, var(--text-main) 30%, #1d4ed8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+[data-theme='light'] .text-gradient-gold,
+[data-theme='light'] .text-gradient-indigo {
+  background: linear-gradient(135deg, var(--text-main) 20%, #0e7490 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+[data-theme='light'] .text-gradient-red {
+  background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 /* Minimalist Dark Cards without Outlines */
 .clean-card {
   background: var(--bg-card);
@@ -486,8 +505,8 @@ html.theme-transition *::after {
 
 /* Buttons */
 .primary-hero-btn {
-  background: #ffffff;
-  color: #000000;
+  background: var(--lp-contrast-bg, #ffffff);
+  color: var(--lp-contrast-fg, #000000);
   border: none !important;
   outline: none !important;
   border-radius: 9999px;
@@ -496,7 +515,7 @@ html.theme-transition *::after {
 }
 
 .primary-hero-btn:hover {
-  background: #e4e4e7;
+  background: var(--lp-contrast-bg-hover, #e4e4e7);
   transform: translateY(-1px);
 }
 
@@ -548,7 +567,7 @@ html.theme-transition *::after {
 }
 
 .secondary-btn {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--lp-fill-rgb, 255, 255, 255), 0.06);
   color: var(--text-main);
   border: none !important;
   outline: none !important;
@@ -557,7 +576,7 @@ html.theme-transition *::after {
 }
 
 .secondary-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--lp-fill-rgb, 255, 255, 255), 0.12);
 }
 
 /* Nav Link Button */
@@ -575,7 +594,7 @@ html.theme-transition *::after {
 }
 
 .nav-link-btn:hover {
-  color: #FFFFFF;
+  color: var(--text-main);
 }
 
 .mobile-nav-btn {

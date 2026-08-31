@@ -16,7 +16,7 @@ export const IntelligenceSection: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -35,10 +35,10 @@ export const IntelligenceSection: React.FC = () => {
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: 'rgba(var(--lp-fill-rgb), 0.05)',
               border: 'none',
               outline: 'none',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
               fontSize: '0.75rem',
               fontWeight: 700,
               textTransform: 'uppercase',
@@ -55,7 +55,7 @@ export const IntelligenceSection: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
             }}
           >
             Task → pool →{' '}
@@ -64,7 +64,7 @@ export const IntelligenceSection: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
             Every LLM call goes through one entry point with an explicit task type. No model classifies the task — the application always declares it.
           </p>
         </div>
@@ -84,7 +84,7 @@ export const IntelligenceSection: React.FC = () => {
             style={{
               padding: '32px 28px',
               borderRadius: '18px',
-              background: '#09090C',
+              background: 'var(--lp-surface)',
               border: 'none',
               outline: 'none',
             }}
@@ -96,8 +96,8 @@ export const IntelligenceSection: React.FC = () => {
                 gap: '6px',
                 padding: '4px 10px',
                 borderRadius: '6px',
-                background: 'rgba(59, 130, 246, 0.12)',
-                color: '#93C5FD',
+                background: 'rgba(var(--lp-blue-rgb), 0.12)',
+                color: 'var(--lp-blue-soft)',
                 border: 'none',
                 outline: 'none',
                 fontSize: '0.7rem',
@@ -111,19 +111,19 @@ export const IntelligenceSection: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', border: 'none' }}>
-                <TrendingDown size={18} color="#60A5FA" />
+              <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(var(--lp-blue-rgb), 0.1)', border: 'none' }}>
+                <TrendingDown size={18} color="var(--lp-blue-mid)" />
               </div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--lp-text)' }}>
                 16 task types, 7 pools
               </h3>
             </div>
 
-            <p style={{ fontSize: '0.85rem', color: '#8E8E93', lineHeight: '1.6', marginBottom: '20px' }}>
-              Each task type maps to one pool, and the ordering inside a pool is a <strong style={{ color: '#FFFFFF' }}>preference order</strong>. Every pool ends at the local adapter, so fallback terminates on-machine. The emergency pool is local-first.
+            <p style={{ fontSize: '0.85rem', color: 'var(--lp-text-muted)', lineHeight: '1.6', marginBottom: '20px' }}>
+              Each task type maps to one pool, and the ordering inside a pool is a <strong style={{ color: 'var(--lp-text)' }}>preference order</strong>. Every pool ends at the local adapter, so fallback terminates on-machine. The emergency pool is local-first.
             </p>
 
-            <div style={{ padding: '12px', borderRadius: '8px', background: '#040406', border: 'none', fontSize: '0.75rem', color: '#71717A' }}>
+            <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--lp-inset)', border: 'none', fontSize: '0.75rem', color: 'var(--lp-text-faint)' }}>
               Grounding sources: PersonaHub, Google Synthetic-Persona-Chat, EmpatheticDialogues, an Amazon Reviews slice, MMLU and GSM8K micro slices, RouterArena, xRouteBench
             </div>
           </div>
@@ -134,7 +134,7 @@ export const IntelligenceSection: React.FC = () => {
             style={{
               padding: '32px 28px',
               borderRadius: '18px',
-              background: '#09090C',
+              background: 'var(--lp-surface)',
               border: 'none',
               outline: 'none',
             }}
@@ -146,8 +146,8 @@ export const IntelligenceSection: React.FC = () => {
                 gap: '6px',
                 padding: '4px 10px',
                 borderRadius: '6px',
-                background: 'rgba(168, 85, 247, 0.12)',
-                color: '#D8B4FE',
+                background: 'rgba(var(--lp-purple-rgb), 0.12)',
+                color: 'var(--lp-purple-soft)',
                 border: 'none',
                 outline: 'none',
                 fontSize: '0.7rem',
@@ -161,19 +161,19 @@ export const IntelligenceSection: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', border: 'none' }}>
-                <Sparkles size={18} color="#60A5FA" />
+              <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(var(--lp-blue-rgb), 0.1)', border: 'none' }}>
+                <Sparkles size={18} color="var(--lp-blue-mid)" />
               </div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--lp-text)' }}>
                 14 failure kinds, one policy each
               </h3>
             </div>
 
-            <p style={{ fontSize: '0.85rem', color: '#8E8E93', lineHeight: '1.6', marginBottom: '20px' }}>
+            <p style={{ fontSize: '0.85rem', color: 'var(--lp-text-muted)', lineHeight: '1.6', marginBottom: '20px' }}>
               The failure is classified, then the policy applies: retry the same route once, advance to the next candidate, or put the route on cooldown. Low answer quality is never treated as an infrastructure failure — quality belongs to the evaluation layer.
             </p>
 
-            <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.08)', border: 'none', fontSize: '0.75rem', color: '#93C5FD', fontWeight: 500 }}>
+            <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(var(--lp-blue-rgb), 0.08)', border: 'none', fontSize: '0.75rem', color: 'var(--lp-blue-soft)', fontWeight: 500 }}>
               Cooldown: 60 seconds, in-memory, per provider and model. Cooling routes are skipped and return automatically.
             </div>
           </div>
@@ -184,7 +184,7 @@ export const IntelligenceSection: React.FC = () => {
             style={{
               padding: '32px 28px',
               borderRadius: '18px',
-              background: '#0D0D12',
+              background: 'var(--lp-surface-2)',
               border: 'none',
               outline: 'none',
             }}
@@ -196,8 +196,8 @@ export const IntelligenceSection: React.FC = () => {
                 gap: '6px',
                 padding: '4px 10px',
                 borderRadius: '6px',
-                background: 'rgba(246, 200, 120, 0.12)',
-                color: '#F6C878',
+                background: 'rgba(var(--lp-gold-rgb), 0.12)',
+                color: 'var(--lp-gold)',
                 border: 'none',
                 outline: 'none',
                 fontSize: '0.7rem',
@@ -211,15 +211,15 @@ export const IntelligenceSection: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div style={{ padding: '6px', borderRadius: '8px', background: '#F6C878', border: 'none' }}>
+              <div style={{ padding: '6px', borderRadius: '8px', background: 'var(--lp-gold-bg)', border: 'none' }}>
                 <Zap size={18} color="#000000" />
               </div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--lp-text)' }}>
                 ContextWindowExceeded
               </h3>
             </div>
 
-            <p style={{ fontSize: '0.85rem', color: '#8E8E93', lineHeight: '1.6', marginBottom: '20px' }}>
+            <p style={{ fontSize: '0.85rem', color: 'var(--lp-text-muted)', lineHeight: '1.6', marginBottom: '20px' }}>
               Context is never truncated to fit a smaller model. If nothing in the pool can hold the request, it fails explicitly instead of quietly dropping persona identity, memory, or evidence.
             </p>
 
@@ -241,7 +241,7 @@ export const IntelligenceSection: React.FC = () => {
               }}
             >
               <span>See the task-to-pool map</span>
-              <ArrowRight size={14} color="#000000" />
+              <ArrowRight size={14} color="var(--lp-contrast-fg)" />
             </a>
           </div>
         </div>

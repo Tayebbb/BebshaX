@@ -12,35 +12,35 @@ export const FeatureGrid: React.FC = () => {
     {
       title: 'Per-attribute provenance, enforced in code',
       description: 'Every attribute is OBSERVED, INFERRED or SYNTHETIC. Fabricated citations are stripped and the attribute is downgraded. A class can only ever move down, never up.',
-      icon: <ShieldAlert size={20} color="#F6C878" />,
+      icon: <ShieldAlert size={20} color="var(--lp-gold)" />,
       tag: 'Grounding',
       span: 'span 7',
     },
     {
       title: 'Never truncate context',
       description: 'Persona identity, memory and evidence are never compressed to fit a smaller model. If nothing in the pool can hold the request, it fails with ContextWindowExceeded.',
-      icon: <Cpu size={20} color="#FFFFFF" />,
+      icon: <Cpu size={20} color="var(--lp-text)" />,
       tag: 'Explicit failure',
       span: 'span 5',
     },
     {
       title: 'A closed failure taxonomy',
       description: 'Fourteen failure kinds, each with one policy: retry the route once, advance, or cool it for 60 seconds per provider and model.',
-      icon: <Gauge size={20} color="#F6C878" />,
+      icon: <Gauge size={20} color="var(--lp-gold)" />,
       tag: 'Routing',
       span: 'span 4',
     },
     {
       title: 'Fallback that ends on your machine',
       description: 'Every pool terminates at the local Ollama adapter, and the emergency pool is local-first.',
-      icon: <GitBranch size={20} color="#FFFFFF" />,
+      icon: <GitBranch size={20} color="var(--lp-text)" />,
       tag: 'Local',
       span: 'span 4',
     },
     {
       title: 'Stable identity across turns',
       description: 'The persona is never rebuilt mid-interview. The identity card is byte-identical on every turn, and a test enforces that.',
-      icon: <Layers size={20} color="#F6C878" />,
+      icon: <Layers size={20} color="var(--lp-gold)" />,
       tag: 'Interviews',
       span: 'span 4',
     },
@@ -53,7 +53,7 @@ export const FeatureGrid: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -72,10 +72,10 @@ export const FeatureGrid: React.FC = () => {
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: 'rgba(var(--lp-fill-rgb), 0.05)',
               border: 'none',
               outline: 'none',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
               fontSize: '0.75rem',
               fontWeight: 700,
               textTransform: 'uppercase',
@@ -92,7 +92,7 @@ export const FeatureGrid: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
             }}
           >
             Built so the failure modes are{' '}
@@ -101,7 +101,7 @@ export const FeatureGrid: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
             The guarantees below are enforced in code and covered by tests, not stated as intentions.
           </p>
         </div>
@@ -125,7 +125,7 @@ export const FeatureGrid: React.FC = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                background: '#09090C',
+                background: 'var(--lp-surface)',
                 border: 'none',
                 outline: 'none',
                 minHeight: '200px',
@@ -138,7 +138,7 @@ export const FeatureGrid: React.FC = () => {
                       width: '38px',
                       height: '38px',
                       borderRadius: '10px',
-                      background: 'rgba(255, 255, 255, 0.04)',
+                      background: 'rgba(var(--lp-fill-rgb), 0.04)',
                       border: 'none',
                       outline: 'none',
                       display: 'flex',
@@ -154,8 +154,8 @@ export const FeatureGrid: React.FC = () => {
                       fontWeight: 600,
                       padding: '4px 10px',
                       borderRadius: '9999px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      color: '#A1A1AA',
+                      background: 'rgba(var(--lp-fill-rgb), 0.05)',
+                      color: 'var(--lp-text-dim)',
                       border: 'none',
                       outline: 'none',
                     }}
@@ -164,12 +164,12 @@ export const FeatureGrid: React.FC = () => {
                   </span>
                 </div>
 
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF', marginBottom: '6px' }}>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--lp-text)', marginBottom: '6px' }}>
                   {f.title}
                 </h3>
               </div>
 
-              <p style={{ fontSize: '0.85rem', color: '#8E8E93', lineHeight: '1.6' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
                 {f.description}
               </p>
             </div>

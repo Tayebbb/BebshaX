@@ -23,7 +23,10 @@ const SCOPES = [
   'src/components/common',
 ];
 const SINGLE_FILES = ['src/App.tsx'];
-const EXCLUDE = new Set(['AuthModal.tsx']); // legacy white modal, deliberate design
+const EXCLUDE = new Set([
+  'AuthModal.tsx', // legacy white modal, deliberate design
+  'BebshaXLogo.tsx', // brand mark is theme-immune: literal golds by design
+]);
 
 const walk = (dir) => {
   const out = [];

@@ -68,7 +68,7 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -87,10 +87,10 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: 'rgba(var(--lp-fill-rgb), 0.05)',
               border: 'none',
               outline: 'none',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
               fontSize: '0.75rem',
               fontWeight: 700,
               textTransform: 'uppercase',
@@ -107,7 +107,7 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
             }}
           >
             Pick a task type and see{' '}
@@ -116,7 +116,7 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
             This is the real configuration: 16 fixed task types, 7 pools, preference-ordered candidates, and a local model at the end of every chain.
           </p>
         </div>
@@ -126,7 +126,7 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
           className="clean-card"
           style={{
             borderRadius: '24px',
-            background: '#09090C',
+            background: 'var(--lp-surface)',
             border: 'none',
             outline: 'none',
             padding: '40px',
@@ -143,8 +143,8 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
             {/* Left Task Type List */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
-                <Sliders size={18} color="#FFFFFF" />
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#FFFFFF' }}>
+                <Sliders size={18} color="var(--lp-text)" />
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--lp-text)' }}>
                   Task type
                 </h3>
               </div>
@@ -166,8 +166,8 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
                         fontWeight: 600,
                         fontFamily: 'var(--font-mono)',
                         transition: 'all 0.2s ease',
-                        background: isActive ? '#FFFFFF' : 'rgba(255, 255, 255, 0.04)',
-                        color: isActive ? '#000000' : '#8E8E93',
+                        background: isActive ? 'var(--lp-contrast-bg)' : 'rgba(var(--lp-fill-rgb), 0.04)',
+                        color: isActive ? 'var(--lp-contrast-fg)' : 'var(--lp-text-muted)',
                       }}
                     >
                       {t.task}
@@ -181,15 +181,15 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
             <div
               style={{
                 borderRadius: '18px',
-                background: '#040406',
+                background: 'var(--lp-inset)',
                 border: 'none',
                 outline: 'none',
                 padding: '28px',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
-                <Sparkles size={16} color="#F6C878" />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <Sparkles size={16} color="var(--lp-gold)" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--lp-gold)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Routes to
                 </span>
               </div>
@@ -199,25 +199,25 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
                   fontSize: 'clamp(2.2rem, 3.8vw, 3rem)',
                   fontWeight: 800,
                   letterSpacing: '-0.03em',
-                  color: '#FFFFFF',
+                  color: 'var(--lp-text)',
                   marginBottom: '10px',
                 }}
               >
                 {pool.pool}
               </div>
 
-              <p style={{ fontSize: '0.84rem', color: '#8E8E93', lineHeight: '1.5', marginBottom: '22px' }}>
+              <p style={{ fontSize: '0.84rem', color: 'var(--lp-text-muted)', lineHeight: '1.5', marginBottom: '22px' }}>
                 Ordering inside a pool is a preference order, and the chain ends at the local adapter so fallback always terminates on-machine.
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.03)', border: 'none' }}>
-                  <span style={{ fontSize: '0.8rem', color: '#8E8E93' }}>Concurrency limit:</span>
-                  <strong style={{ fontSize: '0.84rem', color: '#F6C878' }}>{pool.limit}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', borderRadius: '8px', background: 'rgba(var(--lp-fill-rgb), 0.03)', border: 'none' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--lp-text-muted)' }}>Concurrency limit:</span>
+                  <strong style={{ fontSize: '0.84rem', color: 'var(--lp-gold)' }}>{pool.limit}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.03)', border: 'none' }}>
-                  <span style={{ fontSize: '0.8rem', color: '#8E8E93' }}>Candidate order:</span>
-                  <strong style={{ fontSize: '0.78rem', color: '#FFFFFF', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{pool.candidates}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(var(--lp-fill-rgb), 0.03)', border: 'none' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--lp-text-muted)' }}>Candidate order:</span>
+                  <strong style={{ fontSize: '0.78rem', color: 'var(--lp-text)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{pool.candidates}</strong>
                 </div>
               </div>
 
@@ -240,7 +240,7 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
                 }}
               >
                 <span>{isAuthenticated ? 'Launch Console' : 'Generate your first persona'}</span>
-                <ArrowRight size={15} color="#000000" />
+                <ArrowRight size={15} color="var(--lp-contrast-fg)" />
               </button>
             </div>
           </div>

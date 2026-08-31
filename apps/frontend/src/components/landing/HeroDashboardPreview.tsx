@@ -45,7 +45,9 @@ export const HeroDashboardPreview: React.FC = () => {
         }}
       />
 
-      {/* Main Container Minimalist Console (No outer box outline) */}
+      {/* Main Container — a framed console screenshot. Deliberately stays
+          dark in BOTH themes (dark product shot on a light page); only the
+          frame shadow is theme-aware. */}
       <div
         style={{
           position: 'relative',
@@ -54,7 +56,7 @@ export const HeroDashboardPreview: React.FC = () => {
           border: 'none',
           outline: 'none',
           borderRadius: '20px',
-          boxShadow: '0 30px 80px rgba(0, 0, 0, 0.85)',
+          boxShadow: 'var(--lp-shadow-frame)',
           overflow: 'hidden',
           padding: '20px 24px 24px 24px',
         }}

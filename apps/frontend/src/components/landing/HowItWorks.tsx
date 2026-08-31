@@ -18,7 +18,7 @@ export const HowItWorks: React.FC = () => {
       subtitle: 'No data connection required',
       description:
         'Give BebshaX a name, a description, an industry, and a target market. Add an optional audience segment and optional generation hints. That is the entire input.',
-      icon: <Link2 size={22} color="#FFFFFF" />,
+      icon: <Link2 size={22} color="var(--lp-text)" />,
       features: ['Name, description, industry, target market', 'Optional audience segment', 'Optional generation hints'],
     },
     {
@@ -27,7 +27,7 @@ export const HowItWorks: React.FC = () => {
       subtitle: 'Evidence, provenance, then consistency rules',
       description:
         'Evidence retrieval runs over preprocessed public dataset records, the persona is generated, provenance is enforced in code, and deterministic consistency rules run before storage. One refinement attempt is allowed — after that, generation fails with the list of violations.',
-      icon: <BrainCircuit size={22} color="#F6C878" />,
+      icon: <BrainCircuit size={22} color="var(--lp-gold)" />,
       features: ['idf-weighted lexical evidence retrieval', 'OBSERVED, INFERRED or SYNTHETIC per attribute', 'One refinement attempt, then explicit failure'],
     },
     {
@@ -36,7 +36,7 @@ export const HowItWorks: React.FC = () => {
       subtitle: 'Multi-turn, with the same person every turn',
       description:
         'Each turn recomposes the immutable identity card, the business context, the interview objective, retrieved memories, evidence themes, and the full conversation history. Every exchange is written back as an episodic memory.',
-      icon: <Rocket size={22} color="#FFFFFF" />,
+      icon: <Rocket size={22} color="var(--lp-text)" />,
       features: ['Byte-identical identity card on every turn', 'Top 4 memories retrieved per turn', 'Context is never truncated to fit'],
     },
   ];
@@ -48,7 +48,7 @@ export const HowItWorks: React.FC = () => {
         position: 'relative',
         padding: '100px 0',
         zIndex: 1,
-        background: '#080909',
+        background: 'var(--lp-bg)',
       }}
     >
       <div
@@ -67,10 +67,10 @@ export const HowItWorks: React.FC = () => {
               gap: '6px',
               padding: '6px 16px',
               borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: 'rgba(var(--lp-fill-rgb), 0.05)',
               border: 'none',
               outline: 'none',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
               fontSize: '0.75rem',
               fontWeight: 700,
               textTransform: 'uppercase',
@@ -87,7 +87,7 @@ export const HowItWorks: React.FC = () => {
               fontWeight: 800,
               letterSpacing: '-0.03em',
               marginBottom: '16px',
-              color: '#FFFFFF',
+              color: 'var(--lp-text)',
             }}
           >
             From a business description to{' '}
@@ -96,7 +96,7 @@ export const HowItWorks: React.FC = () => {
             </span>
           </h2>
 
-          <p style={{ fontSize: '1.05rem', color: '#8E8E93', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
             Three steps, and no data connection at any point in them.
           </p>
         </div>
@@ -122,7 +122,7 @@ export const HowItWorks: React.FC = () => {
                   padding: '32px 28px',
                   borderRadius: '18px',
                   cursor: 'pointer',
-                  background: isActive ? '#121218' : '#09090C',
+                  background: isActive ? 'var(--lp-surface-active)' : 'var(--lp-surface)',
                   border: 'none',
                   outline: 'none',
                   position: 'relative',
@@ -137,7 +137,7 @@ export const HowItWorks: React.FC = () => {
                     right: '18px',
                     fontSize: '2.2rem',
                     fontWeight: 900,
-                    color: isActive ? 'rgba(246, 200, 120, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                    color: isActive ? 'rgba(var(--lp-gold-rgb), 0.15)' : 'rgba(var(--lp-fill-rgb), 0.03)',
                     userSelect: 'none',
                   }}
                 >
@@ -149,7 +149,7 @@ export const HowItWorks: React.FC = () => {
                     width: '42px',
                     height: '42px',
                     borderRadius: '10px',
-                    background: 'rgba(255, 255, 255, 0.04)',
+                    background: 'rgba(var(--lp-fill-rgb), 0.04)',
                     border: 'none',
                     outline: 'none',
                     display: 'flex',
@@ -161,20 +161,20 @@ export const HowItWorks: React.FC = () => {
                   {step.icon}
                 </div>
 
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FFFFFF', marginBottom: '4px' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--lp-text)', marginBottom: '4px' }}>
                   {step.title}
                 </h3>
-                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#F6C878', marginBottom: '14px' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--lp-gold)', marginBottom: '14px' }}>
                   {step.subtitle}
                 </div>
-                <p style={{ fontSize: '0.85rem', color: '#8E8E93', lineHeight: '1.6', marginBottom: '20px' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--lp-text-muted)', lineHeight: '1.6', marginBottom: '20px' }}>
                   {step.description}
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {step.features.map((f, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#D4D4D8', fontWeight: 500 }}>
-                      <CheckCircle2 size={14} color="#F6C878" />
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: 'var(--lp-text-hi)', fontWeight: 500 }}>
+                      <CheckCircle2 size={14} color="var(--lp-gold)" />
                       <span>{f}</span>
                     </div>
                   ))}
@@ -190,7 +190,7 @@ export const HowItWorks: React.FC = () => {
           style={{
             padding: '32px 36px',
             borderRadius: '20px',
-            background: '#09090C',
+            background: 'var(--lp-surface)',
             border: 'none',
             outline: 'none',
           }}
@@ -198,15 +198,15 @@ export const HowItWorks: React.FC = () => {
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '20px' }}>
             <div style={{ maxWidth: '620px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <Sparkles size={14} color="#F6C878" />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#F6C878', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <Sparkles size={14} color="var(--lp-gold)" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--lp-gold)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Step {steps[activeStep - 1].num} in Action
                 </span>
               </div>
-              <h4 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#FFFFFF', marginBottom: '8px' }}>
+              <h4 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--lp-text)', marginBottom: '8px' }}>
                 {steps[activeStep - 1].title}
               </h4>
-              <p style={{ fontSize: '0.88rem', color: '#8E8E93', lineHeight: '1.6' }}>
+              <p style={{ fontSize: '0.88rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
                 {steps[activeStep - 1].description}
               </p>
             </div>
@@ -228,7 +228,7 @@ export const HowItWorks: React.FC = () => {
                 }}
               >
                 <span>Next Step</span>
-                <ArrowRight size={15} color="#000000" />
+                <ArrowRight size={15} color="var(--lp-contrast-fg)" />
               </button>
             </div>
           </div>
