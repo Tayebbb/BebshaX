@@ -7,11 +7,14 @@ Behavior, and Complaints using LLMService with deterministic rule fallback.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Optional
 
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+
+logger = logging.getLogger(__name__)
 
 
 def generate_deterministic_queries(
@@ -88,6 +91,11 @@ async def generate_research_queries(
             if isinstance(parsed, list) and len(parsed) >= 3:
                 return [str(q).strip() for q in parsed if str(q).strip()]
     except Exception:
-        pass
+        # Deterministic queries are an acceptable stand-in, but the swap must
+        # be visible in logs, not silent.
+        logger.warning(
+            "LLM research-query generation failed — using deterministic rule queries",
+            exc_info=True,
+        )
 
     return generate_deterministic_queries(idea, target_audience, pricing_hypothesis)

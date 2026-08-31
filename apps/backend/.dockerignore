@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+bebshax.egg-info/
+tests/
+data/
+Dockerfile
+.dockerignore

@@ -53,8 +53,13 @@ class Settings(BaseSettings):
             return url.replace("+aiosqlite", "")
         return url
 
-    # Phase 9: memory embedding backend — "local" (deterministic hash, offline)
-    # or "freellmpool" (requires embedding_model pin; see docs/PERSONA_ENGINE.md)
+    # Phase 9: memory embedding backend — "local" (deterministic hash, offline),
+    # "auto" (probe Ollama on first use, semantic embeddings when the embed
+    # model is pulled, hash fallback otherwise), or "freellmpool" (requires
+    # embedding_model pin; see docs/PERSONA_ENGINE.md). Default stays "local",
+    # NOT "auto": auto can resolve to a different space across restarts
+    # (daemon up vs down), stranding earlier vectors behind the space filter —
+    # determinism beats semantics for the default. Opt into "auto" per deploy.
     embedding_backend: str = "local"
     embedding_model: str | None = None
 

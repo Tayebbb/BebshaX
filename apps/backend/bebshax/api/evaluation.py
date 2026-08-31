@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["evaluation"])
 
+# Newest-first bound on the Python-side llm_requests scan below — keeps the
+# metrics endpoint O(bounded) as provenance history grows.
+_METRICS_SCAN_LIMIT = 5000
+
 # Judged A/B gate reports (scripts/judge_local_interview.py). CWD-relative to
 # the repo root like evaluation/report_generator.py; overridable for tests
 # and deployments.
@@ -134,9 +138,11 @@ async def get_evaluation_metrics(request: Request) -> dict[str, Any]:
 
             # Request-level aggregates from provenance. Only the columns we
             # aggregate — attempts JSON is needed for fallback/malformed counts.
-            # TODO(perf): unbounded scan — move counts/latency to SQL GROUP BY
-            # (attempts-JSON inspection keeps this in Python for now) or add a
-            # created_at window once llm_requests grows beyond dev scale.
+            # TODO(perf): attempts-JSON inspection keeps this in Python; move
+            # counts/latency to SQL GROUP BY when that changes. Mitigated for
+            # now by bounding the scan to the newest _METRICS_SCAN_LIMIT rows
+            # (metrics are honest over that window; dev-scale DBs sit far
+            # below it, so numbers are unchanged there).
             rows = (
                 await session.execute(
                     select(
@@ -147,6 +153,8 @@ async def get_evaluation_metrics(request: Request) -> dict[str, Any]:
                         LLMRequests.attempts,
                         LLMRequests.served_by_provider,
                     )
+                    .order_by(LLMRequests.created_at.desc())
+                    .limit(_METRICS_SCAN_LIMIT)
                 )
             ).all()
 

@@ -93,6 +93,7 @@ class SegmentationEngineService:
                 "content_hash": ds.content_hash or "unversioned",
                 "row_count": ds.row_count,
                 "file_type": ds.file_type,
+                "is_sample": bool((ds.schema_metadata or {}).get("is_sample", False)),
             }
             for ds in datasets
         ]

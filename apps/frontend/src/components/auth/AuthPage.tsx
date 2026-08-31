@@ -15,6 +15,8 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
 import { useTheme } from '../../context/ThemeContext';
+import { api } from '../../services/api';
+import { neonAuth, isNeonAuthConfigured } from '../../services/neonAuth';
 import { OtpInput } from './OtpInput';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 import { LegalModal } from './LegalModal';
@@ -53,7 +55,7 @@ const inputStyle: React.CSSProperties = {
 };
 const passwordInputStyle: React.CSSProperties = { ...inputStyle, padding: '0 40px 0 12px' };
 const focusInput = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = '#14B8A6';
+  e.target.style.borderColor = 'var(--accent-teal)';
   e.target.style.boxShadow = '0 0 0 3px var(--accent-glow)';
 };
 const blurInput = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -396,23 +398,31 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     }
   };
 
+  // Federated sign-in is only offered when the Neon Auth endpoint is
+  // configured (mock/test builds keep the button for the mocked flow).
+  const googleSignInAvailable = api.isMockMode() || isNeonAuthConfigured();
+
   const handleGoogleAuth = async () => {
     resetMessages();
+    if (!googleSignInAvailable) {
+      setErrorMessage('Google sign-in requires Neon Auth configuration.');
+      return;
+    }
     try {
       setIsLoading(true);
-      const userEmail = email.trim() || 'saidul.islam@gmail.com';
-      const userName = fullName.trim() || userEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-      const avatarUrl = undefined;
-
-      await googleAuth({
-        email: userEmail,
-        name: userName,
-        avatar_url: avatarUrl,
-      });
-      navigate('/app');
+      if (api.isMockMode()) {
+        // Test/mock builds: clearly-mock local session (same gate as email signin).
+        await googleAuth({});
+        navigate('/app');
+        return;
+      }
+      // Real federated flow: Neon-hosted Google OAuth. This navigates away;
+      // on return, AuthContext exchanges the verified Neon session for a
+      // backend JWT via server-verified /auth/sync. No identity is ever
+      // fabricated client-side.
+      await neonAuth.signInWithGoogle(`${window.location.origin}/app`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Google authentication failed.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -434,7 +444,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         justifyContent: 'center',
         padding: '32px 16px',
         position: 'relative',
-        color: '#F4F4F5',
+        color: 'var(--text-main)',
       }}
     >
       {/* Back to Home Button at Top-Left */}
@@ -528,6 +538,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         {/* Error / Success Banners */}
         {errorMessage && (
           <div
+            role="alert"
             style={{
               padding: '12px 14px',
               borderRadius: '10px',
@@ -547,6 +558,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
         {successMessage && (
           <div
+            role="status"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -583,8 +595,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
             <button
               type="button"
               onClick={handleGoogleAuth}
-              disabled={isLoading}
-              style={googleButtonStyle}
+              disabled={isLoading || !googleSignInAvailable}
+              title={googleSignInAvailable ? undefined : 'Google sign-in requires Neon Auth configuration'}
+              style={{ ...googleButtonStyle, ...(googleSignInAvailable ? {} : { opacity: 0.5, cursor: 'not-allowed' }) }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24">
                 <path
@@ -626,10 +639,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
             {/* Form */}
             <form onSubmit={handleSignIn}>
               <div style={{ marginBottom: '16px' }}>
-                <label style={labelStyle}>
+                <label htmlFor="signin-email" style={labelStyle}>
                   Email
                 </label>
                 <input
+                  id="signin-email"
                   type="email"
                   name="email"
                   autoComplete="email"
@@ -653,6 +667,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   }}
                 >
                   <label
+                    htmlFor="signin-password"
                     style={{
                       fontSize: '0.8rem',
                       fontWeight: 600,
@@ -682,6 +697,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
                 <div style={{ position: 'relative' }}>
                   <input
+                    id="signin-password"
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     autoComplete="current-password"
@@ -751,8 +767,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
             <button
               type="button"
               onClick={handleGoogleAuth}
-              disabled={isLoading}
-              style={googleButtonStyle}
+              disabled={isLoading || !googleSignInAvailable}
+              title={googleSignInAvailable ? undefined : 'Google sign-in requires Neon Auth configuration'}
+              style={{ ...googleButtonStyle, ...(googleSignInAvailable ? {} : { opacity: 0.5, cursor: 'not-allowed' }) }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24">
                 <path
@@ -908,10 +925,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
             <form onSubmit={handleSignUp}>
               <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>
+                <label htmlFor="signup-name" style={labelStyle}>
                   Full name
                 </label>
                 <input
+                  id="signup-name"
                   type="text"
                   name="fullName"
                   autoComplete="name"
@@ -926,10 +944,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               </div>
 
               <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>
+                <label htmlFor="signup-email" style={labelStyle}>
                   Work email
                 </label>
                 <input
+                  id="signup-email"
                   type="email"
                   name="email"
                   autoComplete="email"
@@ -944,11 +963,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               </div>
 
               <div style={{ marginBottom: '22px' }}>
-                <label style={labelStyle}>
+                <label htmlFor="signup-password" style={labelStyle}>
                   Password
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
+                    id="signup-password"
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     autoComplete="new-password"
@@ -1104,10 +1124,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
             <form onSubmit={handleForgotPassword}>
               <div style={{ marginBottom: '20px' }}>
-                <label style={labelStyle}>
+                <label htmlFor="forgot-email" style={labelStyle}>
                   Email address
                 </label>
                 <input
+                  id="forgot-email"
                   type="email"
                   name="email"
                   autoComplete="email"
@@ -1175,18 +1196,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
             <form onSubmit={handleResetPasswordWithOtp}>
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ ...labelStyle, marginBottom: '4px', textAlign: 'center' }}>
+                <label id="reset-otp-label" style={{ ...labelStyle, marginBottom: '4px', textAlign: 'center' }}>
                   6-digit reset code
                 </label>
-                <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
+                <OtpInput value={otp} onChange={setOtp} disabled={isLoading} aria-labelledby="reset-otp-label" />
               </div>
 
               <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>
+                <label htmlFor="reset-password" style={labelStyle}>
                   New password
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
+                    id="reset-password"
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     autoComplete="new-password"
@@ -1201,6 +1223,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Hide new password' : 'Show new password'}
                     style={eyeButtonStyle}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1209,11 +1232,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               </div>
 
               <div style={{ marginBottom: '22px' }}>
-                <label style={labelStyle}>
+                <label htmlFor="reset-confirm-password" style={labelStyle}>
                   Confirm new password
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
+                    id="reset-confirm-password"
                     type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
                     autoComplete="new-password"
@@ -1228,6 +1252,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    aria-label={showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'}
                     style={eyeButtonStyle}
                   >
                     {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}

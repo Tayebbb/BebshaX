@@ -82,6 +82,8 @@ export interface DatasetVersionItem {
   content_hash: string;
   row_count: number;
   file_type: string;
+  /** True when the dataset came from the illustrative sample catalog. */
+  is_sample?: boolean;
 }
 
 export interface SegmentationRun {

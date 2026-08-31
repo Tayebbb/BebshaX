@@ -45,6 +45,8 @@ def normalize_url(raw_url: str) -> str:
         clean_query = "&".join(query_parts)
         return urlunparse((scheme, netloc, path, "", clean_query, ""))
     except Exception:
+        # Deliberate swallow: URL normalization is best-effort string hygiene;
+        # an unparseable URL is still a usable dedup key as-is.
         return raw_url.strip().lower()
 
 
@@ -76,6 +78,8 @@ def extract_publisher(url: str, default: str = "Web Source") -> str:
             return "Product Hunt Reviews"
         return netloc.split(".")[0].capitalize() or default
     except Exception:
+        # Deliberate swallow: publisher extraction is cosmetic labeling;
+        # a malformed URL simply gets the generic default label.
         return default
 
 

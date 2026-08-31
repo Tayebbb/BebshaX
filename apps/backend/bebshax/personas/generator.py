@@ -6,12 +6,12 @@ import json
 import logging
 import math
 import random
-import re
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
 from bebshax.llm.failures import AllCandidatesFailed, ContextWindowExceeded
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.personas.validator import validate_synthetic_persona
@@ -875,9 +875,7 @@ async def generate_personas_for_study(
                     if result.provenance.served_by_provider
                     else "llm/unknown"
                 )
-                cleaned = re.sub(r"^```(?:json)?\s*", "", result.text.strip())
-                cleaned = re.sub(r"\s*```$", "", cleaned)
-                parsed = json.loads(cleaned)
+                parsed = parse_llm_json(result.text)
                 batch_personas = parsed.get("personas", []) if isinstance(parsed, dict) else []
                 if batch_personas:
                     # pair each draft with ITS batch's serving model — pool

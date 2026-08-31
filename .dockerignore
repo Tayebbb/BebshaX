@@ -1,0 +1,12 @@
+# Build-context filter for images built from the repo root (deploy/web.Dockerfile).
+# Keeps the context small and keeps host installs/secrets out of images (R4).
+.git
+.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+data/
+.env
+.env.*
+!.env.demo

@@ -94,3 +94,12 @@ What keeps working with **no internet**:
 - **Without Ollama**, live generation fails **explicitly** (`AllCandidatesFailed` surfaced as an error turn in the chat UI) — never silently, and cached content is unaffected. Low quality or unavailability is reported, not masked (R2).
 
 Drill checklist: disable networking → restart `node scripts/dev.js` → walk steps 5–7 → attempt one live generation and confirm either an Ollama-served reply (daemon up) or an explicit, labeled failure (daemon down).
+
+**Automated gate:** run `.\.venv\Scripts\python scripts\demo_preflight.py --strict-offline` from the repo root — it verifies every precondition above (env → local db → migrations → seed → Ollama models → running backend) with ✓/✗ per check and exits non-zero if the machine is not demo-ready.
+
+## 7. Production profile (containerized deploy)
+
+A one-command containerized deployment — the `web` image builds the SPA (with `VITE_API_BASE=/api`) and serves it via nginx; the `app` image runs the backend:
+
+1. `docker compose --profile full up --build -d` → open `http://localhost:8080` (nginx proxies `/api` → the `app` container; the db healthcheck gates backend startup; host Ollama is reachable via `host.docker.internal`).
+2. Requires `BEBSHAX_JWT_SECRET` in `.env` (passed through via `env_file`); the database URL is overridden to the in-network `db:5432` automatically. Tear down with `docker compose --profile full down`.

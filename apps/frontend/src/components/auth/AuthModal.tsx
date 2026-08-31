@@ -12,6 +12,8 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
+import { neonAuth, isNeonAuthConfigured } from '../../services/neonAuth';
 import { OtpInput } from './OtpInput';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 import { LegalModal } from './LegalModal';
@@ -244,18 +246,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   const handleGoogleAuth = async () => {
+    if (!api.isMockMode() && !isNeonAuthConfigured()) {
+      setErrorMessage('Google sign-in requires Neon Auth configuration.');
+      return;
+    }
     try {
       setIsLoading(true);
-      await googleAuth({
-        email: email || 'saidul.founder@bebshax.io',
-        name: fullName || 'Saidul Islam',
-        avatar_url: undefined,
-      });
-      onSuccess?.();
-      onClose();
+      if (api.isMockMode()) {
+        // Test/mock builds: clearly-mock local session (same gate as email signin).
+        await googleAuth({});
+        onSuccess?.();
+        onClose();
+        return;
+      }
+      // Real federated flow: Neon-hosted Google OAuth (full-page redirect).
+      // On return, AuthContext exchanges the verified Neon session for a
+      // backend JWT via server-verified /auth/sync — no fabricated identity.
+      await neonAuth.signInWithGoogle(`${window.location.origin}/app`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Google sign in failed.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -1040,8 +1049,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     width: '48px',
                     height: '48px',
                     borderRadius: '12px',
-                    background: 'rgba(246, 200, 120, 0.15)',
-                    color: '#D4AF37',
+                    background: 'var(--accent-subtle)',
+                    color: 'var(--accent-teal)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1246,8 +1255,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     width: '48px',
                     height: '48px',
                     borderRadius: '12px',
-                    background: 'rgba(246, 200, 120, 0.15)',
-                    color: '#D4AF37',
+                    background: 'var(--accent-subtle)',
+                    color: 'var(--accent-teal)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

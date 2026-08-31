@@ -22,6 +22,13 @@ describe('AuthPage OTP Verification & Reset Flows', () => {
     );
   };
 
+  it('associates each visible label with its input via htmlFor/id on the sign-in form', () => {
+    renderAuthPage('signin');
+
+    expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email');
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+  });
+
   it('shows 6-digit OTP verification form after signing up with email', async () => {
     renderAuthPage('signup-email');
 
@@ -106,5 +113,26 @@ describe('AuthPage OTP Verification & Reset Flows', () => {
     const resetBtn = screen.getByRole('button', { name: /Reset Password & Sign In/i });
     expect(resetBtn).not.toBeDisabled();
     fireEvent.click(resetBtn);
+  });
+
+  it('associates the reset OTP group with its label and labels both eye toggles', async () => {
+    renderAuthPage('forgot-password');
+
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), {
+      target: { value: 'alex@bebshax.io' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Send reset code/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Set new password/i })).toBeInTheDocument();
+    });
+
+    // The OTP digit group is announced via its "6-digit reset code" label
+    const otpGroup = screen.getByRole('group', { name: /6-digit reset code/i });
+    expect(otpGroup).toContainElement(screen.getByLabelText('Digit 1'));
+
+    // Both password-visibility toggles have accessible names
+    expect(screen.getByRole('button', { name: /Show new password/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Show password confirmation/i })).toBeInTheDocument();
   });
 });

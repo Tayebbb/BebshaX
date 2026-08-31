@@ -1,3 +1,4 @@
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -12,8 +13,10 @@ from bebshax.auth.models import Users, EmailVerificationToken
 from bebshax.auth.email import send_verification_email
 from bebshax.auth.security import create_access_token, decode_access_token
 from bebshax.auth.service import authenticate_user, create_user, get_user_by_email, get_user_by_id
+from bebshax.api.limiter import limiter
 from bebshax.config import get_settings
 
+logger = logging.getLogger(__name__)
 
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -167,7 +170,13 @@ async def get_optional_current_user(
             if user and user.is_active:
                 return user
     except Exception:
-        pass
+        # Fail-open to anonymous by design (optional auth), but a DB outage
+        # here must never be invisible — it silently demotes valid tokens.
+        logger.warning(
+            "optional-auth user lookup failed for sub=%s — treating request as anonymous",
+            user_id,
+            exc_info=True,
+        )
     return None
 
 
@@ -212,12 +221,6 @@ async def signup(
         access_token=token,
         user=_serialize_user(user),
     )
-
-
-import logging
-from bebshax.api.limiter import limiter
-
-logger = logging.getLogger(__name__)
 
 
 def _is_dt_expired(expires_at: datetime) -> bool:

@@ -17,6 +17,7 @@ apps/frontend/dist/
 .env
 .env.*
 !.env.example
+!.env.demo
 
 # Datasets: raw/processed are reproducible via scripts; metadata is tracked
 data/raw/*

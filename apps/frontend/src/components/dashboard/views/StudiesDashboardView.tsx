@@ -49,7 +49,11 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   useEffect(() => {
     if (!activeMenuId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setActiveMenuId(null);
+      if (e.defaultPrevented) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setActiveMenuId(null);
+      }
     };
     const onPress = () => setActiveMenuId(null);
     document.addEventListener('keydown', onKey);

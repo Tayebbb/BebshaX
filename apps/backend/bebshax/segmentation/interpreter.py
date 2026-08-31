@@ -7,13 +7,16 @@ grounded descriptions, and evidence citations from deterministic cluster distrib
 from __future__ import annotations
 
 import json
-import re
+import logging
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.segmentation.clusterer import ClusterDistribution
+
+logger = logging.getLogger(__name__)
 
 
 class InterpretedSegment(BaseModel):
@@ -174,9 +177,7 @@ async def interpret_market_segments(
 
     try:
         result = await llm_service.complete(request)
-        cleaned = re.sub(r"^```(?:json)?\s*", "", result.text.strip())
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        parsed = json.loads(cleaned)
+        parsed = parse_llm_json(result.text)
         segments_data = parsed.get("segments", []) if isinstance(parsed, dict) else []
 
         interpreted: list[InterpretedSegment] = []
@@ -203,5 +204,10 @@ async def interpret_market_segments(
                 interpreted.append(_deterministic_interpret_cluster(c, study_context, claims))
         return interpreted
     except Exception:
-        # Graceful fallback to deterministic generator
+        # Graceful fallback to deterministic generator — loudly, so canned
+        # segment names are never mistaken for LLM synthesis in the logs.
+        logger.warning(
+            "LLM segment interpretation failed — using deterministic cluster labels",
+            exc_info=True,
+        )
         return [_deterministic_interpret_cluster(c, study_context, claims) for c in clusters]

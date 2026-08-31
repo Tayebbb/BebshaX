@@ -123,6 +123,7 @@ class PersonaGenerationService:
                 "name": d.name,
                 "content_hash": d.content_hash,
                 "row_count": d.row_count,
+                "is_sample": bool((d.schema_metadata or {}).get("is_sample", False)),
             }
             for d in datasets
         ]

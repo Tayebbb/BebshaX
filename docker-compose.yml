@@ -19,5 +19,40 @@ services:
       timeout: 3s
       retries: 10
 
+  # ── Production profile (docs/DEMO.md §7) ──────────────────────────────────
+  # docker compose --profile full up --build -d
+  # Plain `docker compose up -d db` / scripts/dev.js are unaffected.
+  app:
+    build: ./apps/backend
+    container_name: bebshax-app
+    profiles: ["full"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      # Passes BEBSHAX_* through from the repo-root .env (JWT secret etc.).
+      - path: .env
+        required: false
+    environment:
+      # Inside the compose network the db is db:5432, not localhost:5433.
+      # Compose-local dev credentials — not secrets (same values as `db` above).
+      BEBSHAX_DATABASE_URL: postgresql+asyncpg://bebshax:bebshax@db:5432/bebshax
+      BEBSHAX_DEMO_MODE: ${BEBSHAX_DEMO_MODE:-true}
+      # The local/emergency Ollama pools live on the host machine.
+      OLLAMA_API_BASE: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    container_name: bebshax-web
+    profiles: ["full"]
+    depends_on:
+      - app
+    ports:
+      - "8080:80"
+
 volumes:
   bebshax_pgdata:

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import uuid
 from collections import Counter, defaultdict
@@ -37,7 +38,10 @@ from bebshax.db.models import EvidenceClaims, MarketSegments, Personas, Studies
 from bebshax.interview.engine import build_identity_card
 from bebshax.interview.orm import InterviewInsights
 from bebshax.llm import ChatMessage, LLMRequest, LLMService, TaskType
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.memory.service import MemoryService
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -472,18 +476,22 @@ class BehavioralSimulationEngine:
     ) -> dict[str, Any]:
         """Robust parser with fallback for simulation responses."""
         try:
-            cleaned = text.strip()
-            if cleaned.startswith("```json"):
-                cleaned = cleaned[7:]
-            if cleaned.startswith("```"):
-                cleaned = cleaned[3:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            data = json.loads(cleaned.strip())
+            data = parse_llm_json(text)
             if isinstance(data, dict) and "decision" in data:
                 return data
+            logger.warning(
+                "simulation response for persona %s parsed but lacked a 'decision' field — "
+                "using deterministic budget heuristic",
+                persona.id,
+            )
         except Exception:
-            pass
+            # Same heuristic fallback as before — just no longer silent.
+            logger.warning(
+                "simulation response for persona %s was not parseable JSON — "
+                "using deterministic budget heuristic",
+                persona.id,
+                exc_info=True,
+            )
 
         # Fallback heuristic based on persona budget vs price if pricing test
         price_str = str(parameters.get("price", "299"))

@@ -359,6 +359,7 @@ class ResearchEngineService:
                 "selection_status": c.selection_status,
                 "selection_reason": c.selection_reason,
                 "evaluation_details": c.evaluation_details,
+                "is_sample": bool((c.evaluation_details or {}).get("is_sample", False)),
                 "imported_dataset_id": c.imported_dataset_id,
                 "created_at": c.created_at.isoformat() if c.created_at else None,
             }
@@ -407,11 +408,17 @@ class ResearchEngineService:
             source_url=candidate.url,
             file_path=file_path,
             file_type=candidate.format or "csv",
-            description=f"{candidate.description}\n\nSource: {candidate.source} ({candidate.publisher}) | License: {candidate.license}",
+            description=(
+                f"{candidate.description}"
+                "\n\nIllustrative sample catalog — modeled on public sources, not fetched live."
+                f"\n\nSource: {candidate.source} ({candidate.publisher}) | License: {candidate.license}"
+            ),
             status="ready",
             row_count=len(rows),
             column_count=len(columns),
-            schema_metadata=schema_metadata,
+            # The imported content is generated placeholder rows, never a live
+            # fetch — always mark it as a sample.
+            schema_metadata={**schema_metadata, "is_sample": True},
             statistics=stats,
             segments=segments,
             content_hash=content_hash,

@@ -83,7 +83,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
     try {
       setTimeout(() => {
         setResearchProgressStep(2);
-        setResearchStatusText('Discovering public datasets (BBS, World Bank, Kaggle)...');
+        setResearchStatusText('Discovering datasets (illustrative catalog modeled on BBS, World Bank, Kaggle)...');
       }, 800);
 
       setTimeout(() => {
@@ -212,7 +212,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
   const getSourceTypeBadge = (type: string) => {
     const colors: Record<string, { bg: string; text: string; border: string }> = {
       reddit: { bg: 'rgba(255, 69, 0, 0.12)', text: '#FF5722', border: 'rgba(255, 69, 0, 0.3)' },
-      report: { bg: 'rgba(99, 102, 241, 0.12)', text: '#818CF8', border: 'rgba(99, 102, 241, 0.3)' },
+      report: { bg: 'var(--accent-subtle)', text: 'var(--accent-cyan)', border: 'var(--accent-glow)' },
       review: { bg: 'rgba(245, 158, 11, 0.12)', text: '#FBBF24', border: 'rgba(245, 158, 11, 0.3)' },
       web: { bg: 'rgba(59, 130, 246, 0.12)', text: '#60A5FA', border: 'rgba(59, 130, 246, 0.3)' },
       curated_sample: { bg: 'rgba(156, 163, 175, 0.15)', text: 'var(--text-secondary)', border: 'rgba(156, 163, 175, 0.35)' },
@@ -350,7 +350,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           <div
             style={{
               background: 'var(--bg-secondary)',
-              border: '1px solid #14B8A6',
+              border: '1px solid var(--accent-teal)',
               borderRadius: '12px',
               padding: '20px 24px',
               marginBottom: '24px',
@@ -527,7 +527,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               style={{
                 background: 'transparent',
                 border: 'none',
-                borderBottom: activeTab === 'claims' ? '2px solid #6366F1' : '2px solid transparent',
+                borderBottom: activeTab === 'claims' ? '2px solid var(--accent-teal)' : '2px solid transparent',
                 color: activeTab === 'claims' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 padding: '12px 4px',
                 fontSize: '0.9rem',
@@ -547,7 +547,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               style={{
                 background: 'transparent',
                 border: 'none',
-                borderBottom: activeTab === 'sources' ? '2px solid #6366F1' : '2px solid transparent',
+                borderBottom: activeTab === 'sources' ? '2px solid var(--accent-teal)' : '2px solid transparent',
                 color: activeTab === 'sources' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 padding: '12px 4px',
                 fontSize: '0.9rem',
@@ -567,7 +567,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               style={{
                 background: 'transparent',
                 border: 'none',
-                borderBottom: activeTab === 'runs' ? '2px solid #6366F1' : '2px solid transparent',
+                borderBottom: activeTab === 'runs' ? '2px solid var(--accent-teal)' : '2px solid transparent',
                 color: activeTab === 'runs' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 padding: '12px 4px',
                 fontSize: '0.9rem',
@@ -621,9 +621,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                   key={pill.id}
                   onClick={() => setStatusFilter(pill.id)}
                   style={{
-                    background: statusFilter === pill.id ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-secondary)',
-                    color: statusFilter === pill.id ? '#818CF8' : 'var(--text-secondary)',
-                    border: statusFilter === pill.id ? '1px solid #6366F1' : '1px solid var(--bg-card-hover)',
+                    background: statusFilter === pill.id ? 'var(--accent-subtle)' : 'var(--bg-secondary)',
+                    color: statusFilter === pill.id ? 'var(--accent-teal)' : 'var(--text-secondary)',
+                    border: statusFilter === pill.id ? '1px solid var(--accent-teal)' : '1px solid var(--bg-card-hover)',
                     borderRadius: '20px',
                     padding: '5px 12px',
                     fontSize: '0.78rem',
@@ -719,9 +719,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                     <button
                       onClick={() => handleInspectClaim(claim.id)}
                       style={{
-                        background: 'rgba(99, 102, 241, 0.1)',
-                        border: '1px solid rgba(99, 102, 241, 0.3)',
-                        color: '#818CF8',
+                        background: 'var(--accent-subtle)',
+                        border: '1px solid var(--accent-glow)',
+                        color: 'var(--accent-teal)',
                         borderRadius: '6px',
                         padding: '6px 14px',
                         fontSize: '0.8rem',
@@ -758,7 +758,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                     style={{
                       background: 'var(--bg-card)',
                       border: '1px solid var(--bg-card-hover)',
-                      color: '#818CF8',
+                      color: 'var(--accent-teal)',
                       borderRadius: '6px',
                       padding: '6px 14px',
                       fontSize: '0.82rem',
@@ -789,9 +789,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                   key={pill.id}
                   onClick={() => setSourceTypeFilter(pill.id)}
                   style={{
-                    background: sourceTypeFilter === pill.id ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-secondary)',
-                    color: sourceTypeFilter === pill.id ? '#818CF8' : 'var(--text-secondary)',
-                    border: sourceTypeFilter === pill.id ? '1px solid #6366F1' : '1px solid var(--bg-card-hover)',
+                    background: sourceTypeFilter === pill.id ? 'var(--accent-subtle)' : 'var(--bg-secondary)',
+                    color: sourceTypeFilter === pill.id ? 'var(--accent-teal)' : 'var(--text-secondary)',
+                    border: sourceTypeFilter === pill.id ? '1px solid var(--accent-teal)' : '1px solid var(--bg-card-hover)',
                     borderRadius: '20px',
                     padding: '5px 12px',
                     fontSize: '0.78rem',
@@ -821,7 +821,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       {getSourceTypeBadge(src.source_type)}
-                      <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#818CF8' }}>
+                      <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
                         {src.publisher}
                       </span>
                     </div>
@@ -876,8 +876,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                     <span
                       style={{
-                        background: r.status === 'completed' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
-                        color: r.status === 'completed' ? 'var(--accent-emerald)' : '#818CF8',
+                        background: r.status === 'completed' ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent-subtle)',
+                        color: r.status === 'completed' ? 'var(--accent-emerald)' : 'var(--accent-cyan)',
                         padding: '2px 8px',
                         borderRadius: '4px',
                         fontSize: '0.74rem',
@@ -939,8 +939,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ShieldCheck size={18} color="#818CF8" />
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#818CF8', textTransform: 'uppercase' }}>
+                <ShieldCheck size={18} color="var(--accent-cyan)" />
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)', textTransform: 'uppercase' }}>
                   Empirical Provenance Inspection
                 </span>
               </div>
@@ -974,7 +974,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 marginBottom: '20px',
               }}
             >
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#818CF8', marginBottom: '6px' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-cyan)', marginBottom: '6px' }}>
                 Why does BebshaX evaluate this as {selectedClaimDetail.status.toUpperCase()}?
               </div>
               <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
@@ -1001,7 +1001,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#818CF8' }}>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
                         {src.publisher}
                       </span>
                       {src.url && (
@@ -1033,8 +1033,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               <button
                 onClick={() => setSelectedClaimDetail(null)}
                 style={{
-                  background: '#6366F1',
-                  color: 'var(--text-main)',
+                  background: 'var(--accent-teal)',
+                  color: 'var(--text-on-accent)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 18px',

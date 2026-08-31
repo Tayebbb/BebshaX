@@ -87,16 +87,18 @@ class DatasetEvaluator:
         score = 0.75
         reasons: list[str] = []
 
-        # 1. Source authority
+        # 1. Source authority (labels are honest "modeled on <source>" strings —
+        # the boost ranks by the rigor of the modeled-on methodology, not by
+        # claiming real publication)
         if "bureau of statistics" in candidate.publisher.lower() or "world bank" in candidate.publisher.lower() or "ministry" in candidate.publisher.lower():
             score += 0.12
-            reasons.append(f"Published by authoritative institution: {candidate.publisher}")
+            reasons.append(f"Modeled on an authoritative statistical source: {candidate.publisher}")
         elif "verified" in candidate.publisher.lower() or "consortium" in candidate.publisher.lower() or "academic" in candidate.publisher.lower():
             score += 0.08
-            reasons.append(f"Published by verified research source: {candidate.publisher}")
+            reasons.append(f"Modeled on a verified research source: {candidate.publisher}")
         else:
             score += 0.04
-            reasons.append("Public repository source with documented methodology")
+            reasons.append("Illustrative catalog entry with documented generation methodology")
 
         # 2. Sample size
         if candidate.sample_rows >= 5000:

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.studies import _user_owns_study, get_session
+from bebshax.api.deps import get_session, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.db.models import (
     DatasetSources,
@@ -76,12 +76,12 @@ def _serialize_segment(s: MarketSegments) -> dict[str, Any]:
 async def _verify_study_access(session: AsyncSession, study_id: str, current_user: Optional[Users]) -> Studies:
     """Verify study exists and caller has access. Return 404 for unowned studies.
 
-    Delegates to the canonical `_user_owns_study` rule — anonymous callers
+    Delegates to the canonical `user_owns_study` rule — anonymous callers
     only pass for demo / anonymous-tenant studies (never any owned study).
     """
     study_res = await session.execute(select(Studies).where(Studies.id == study_id))
     study = study_res.scalars().first()
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Study '{study_id}' not found.",

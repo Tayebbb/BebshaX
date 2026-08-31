@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import re
 import random
 import uuid
 from typing import Any, Literal, Optional
@@ -13,8 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.studies import _user_owns_study
+from bebshax.api.deps import user_owns_study
 from bebshax.auth.models import Users
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
 logger = logging.getLogger(__name__)
@@ -55,6 +54,9 @@ class CopilotResponse(BaseModel):
     research_goal_card: Optional[ResearchGoalCard] = None
     suggested_roles: list[PersonaRoleSuggestion] = Field(default_factory=list)
     served_by: str = "routed_llm"
+    # Set whenever the canned local engine answered instead of a routed LLM —
+    # canned content must never be mistaken for model output in provenance.
+    fallback_reason: Optional[str] = None
 
 
 class SuggestRolesRequest(BaseModel):
@@ -416,13 +418,7 @@ async def study_design_copilot(body: CopilotRequest, request: Request) -> Copilo
             )
             result = await llm_router.complete(llm_req)
 
-            # Parse LLM JSON — strip markdown fences if any
-            cleaned_text = result.text.strip()
-            if cleaned_text.startswith("```"):
-                cleaned_text = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned_text)
-                cleaned_text = re.sub(r"\n?```$", "", cleaned_text).strip()
-
-            parsed = json.loads(cleaned_text)
+            parsed = parse_llm_json(result.text)
             reply = parsed.get("reply", "")
             study_type = parsed.get("suggested_study_type", "interviews")
             ready = parsed.get("is_ready_for_approval", False)
@@ -459,11 +455,18 @@ async def study_design_copilot(body: CopilotRequest, request: Request) -> Copilo
                 suggested_roles=roles,
                 served_by=f"{result.provider}/{result.model}",
             )
-        except Exception:
-            # Safe fail-soft fallback (Rule R2, R3, R6)
-            pass
+        except Exception as exc:
+            # Same canned-engine fail-soft (R2, R3, R6) — but loud, and marked
+            # in the payload so canned content is never mistaken for a routed
+            # LLM reply.
+            logger.warning("copilot LLM turn failed — serving local fallback engine", exc_info=True)
+            fallback = _generate_fallback_response(body.messages)
+            fallback.fallback_reason = f"llm_error:{type(exc).__name__}"
+            return fallback
 
-    return _generate_fallback_response(body.messages)
+    fallback = _generate_fallback_response(body.messages)
+    fallback.fallback_reason = "llm_router_unavailable"
+    return fallback
 
 
 @router.post("/study/suggest-roles", response_model=list[PersonaRoleSuggestion])
@@ -487,11 +490,7 @@ async def suggest_persona_roles(body: SuggestRolesRequest, request: Request) -> 
                 temperature=0.6,
             )
             result = await llm_router.complete(llm_req)
-            cleaned = result.text.strip()
-            if cleaned.startswith("```"):
-                cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
-                cleaned = re.sub(r"\n?```$", "", cleaned).strip()
-            parsed = json.loads(cleaned)
+            parsed = parse_llm_json(result.text)
             if isinstance(parsed, list) and parsed:
                 return [
                     PersonaRoleSuggestion(
@@ -504,7 +503,12 @@ async def suggest_persona_roles(body: SuggestRolesRequest, request: Request) -> 
                     for i, r in enumerate(parsed)
                 ]
         except Exception:
-            pass
+            # Response schema is a bare list, so the log line IS the fallback
+            # record here (no payload field to mark).
+            logger.warning(
+                "suggest-roles LLM call failed — serving keyword-derived fallback roles",
+                exc_info=True,
+            )
 
     # Fallback: generate context-aware roles based on study prompt keywords
     fallback = _generate_fallback_response([CopilotMessage(role="user", content=body.study_prompt)])
@@ -562,11 +566,7 @@ async def _generate_persona_via_llm(
         max_output_tokens=4096,
     )
     result = await llm_router.complete(llm_req)
-    cleaned = result.text.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
-        cleaned = re.sub(r"\n?```$", "", cleaned).strip()
-    parsed = json.loads(cleaned)
+    parsed = parse_llm_json(result.text)
     if not isinstance(parsed, list):
         parsed = [parsed]
     # Tag each persona with generation metadata
@@ -597,7 +597,7 @@ async def generate_study_personas(
             from bebshax.db.models import Studies
             async with gate_sessionmaker() as gate_session:
                 study_row = await gate_session.get(Studies, body.study_id)
-            if study_row is not None and not _user_owns_study(study_row, current_user):
+            if study_row is not None and not user_owns_study(study_row, current_user):
                 raise HTTPException(status_code=404, detail="study not found")
 
     llm_router = getattr(request.app.state, "llm_router", None)

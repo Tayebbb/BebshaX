@@ -350,7 +350,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                   padding: '8px 16px',
                   borderRadius: '8px',
                   backgroundColor: isSelected ? 'var(--accent-subtle)' : 'var(--fill-soft-2)',
-                  border: isSelected ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
+                  border: isSelected ? '1px solid var(--accent-teal)' : '1px solid var(--fill-soft-2)',
                   color: isSelected ? 'var(--accent-teal-bright)' : 'var(--text-secondary)',
                   fontSize: '0.82rem',
                   fontWeight: isSelected ? 600 : 400,
@@ -593,7 +593,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                         padding: '12px',
                         backgroundColor: 'var(--glass-mid)',
                         borderRadius: '8px',
-                        borderLeft: '3px solid #14B8A6',
+                        borderLeft: '3px solid var(--accent-teal)',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>

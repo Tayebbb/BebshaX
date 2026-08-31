@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.studies import _owner_accessible, _user_owns_study, get_session
+from bebshax.api.deps import get_session, owner_accessible, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
 from bebshax.interview.engine import ConversationNotFound, InterviewFinished, PersonaNotFound
@@ -153,7 +153,7 @@ async def _get_study_and_verify_access(
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Study not found")
-    if not _user_owns_study(study, current_user):
+    if not user_owns_study(study, current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this study"
         )
@@ -542,7 +542,7 @@ async def _guard_legacy_persona(
     async with request.app.state.db_sessionmaker() as session:
         p_row = await session.get(Personas, persona_id)
     # Missing row falls through — the engine raises PersonaNotFound canonically.
-    if p_row is not None and not _owner_accessible(p_row.owner_id, current_user):
+    if p_row is not None and not owner_accessible(p_row.owner_id, current_user):
         raise HTTPException(status_code=404, detail="persona not found")
 
 
@@ -555,11 +555,11 @@ async def _guard_legacy_conversation(
         conv = await session.get(Conversations, conversation_id)
         if conv is None:
             return  # engine raises ConversationNotFound canonically
-        if conv.user_id and not _owner_accessible(conv.user_id, current_user):
+        if conv.user_id and not owner_accessible(conv.user_id, current_user):
             raise HTTPException(status_code=404, detail="conversation not found")
         if conv.persona_id:
             p_row = await session.get(Personas, conv.persona_id)
-            if p_row is not None and not _owner_accessible(p_row.owner_id, current_user):
+            if p_row is not None and not owner_accessible(p_row.owner_id, current_user):
                 raise HTTPException(status_code=404, detail="conversation not found")
 
 

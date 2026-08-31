@@ -1008,7 +1008,17 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                             className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg flex items-center justify-between text-[11px]"
                           >
                             <div>
-                              <span className="font-semibold text-[var(--text-primary)] block">{ds.name}</span>
+                              <span className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                                {ds.name}
+                                {ds.is_sample && (
+                                  <span
+                                    title="Illustrative sample catalog — modeled on public sources, not fetched live."
+                                    style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                                  >
+                                    SAMPLE
+                                  </span>
+                                )}
+                              </span>
                               <span className="text-[var(--text-secondary)] font-mono text-[10px]">
                                 Hash: {ds.content_hash}
                               </span>

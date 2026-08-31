@@ -83,6 +83,8 @@ export interface DatasetCandidate {
   relevance_score: number;
   diversity_tag?: string | null;
   status: CandidateStatus;
+  /** True when the candidate came from the illustrative sample catalog. */
+  is_sample?: boolean;
   imported_dataset_id?: string | null;
   created_at?: string;
   updated_at?: string;

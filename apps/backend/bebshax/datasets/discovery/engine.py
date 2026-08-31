@@ -106,7 +106,7 @@ class DatasetDiscoveryEngine:
                 quality_score=eval_res.quality_score,
                 selection_status=eval_res.selection_status,
                 selection_reason=eval_res.selection_reason,
-                evaluation_details=eval_res.evaluation_details,
+                evaluation_details={**eval_res.evaluation_details, "is_sample": cand.is_sample},
             )
 
             # Auto-import if selected
@@ -123,6 +123,11 @@ class DatasetDiscoveryEngine:
                     with open(file_path, "w", encoding="utf-8") as f:
                         json.dump(rows, f)
 
+                    sample_note = (
+                        "\n\nIllustrative sample catalog — modeled on public sources, not fetched live."
+                        if cand.is_sample
+                        else ""
+                    )
                     imported_ds = DatasetSources(
                         id=ds_id,
                         user_id=user_id,
@@ -132,11 +137,11 @@ class DatasetDiscoveryEngine:
                         source_url=cand.url,
                         file_path=file_path,
                         file_type=cand.format or "csv",
-                        description=f"{cand.description}\n\nSource: {cand.source} ({cand.publisher}) | License: {cand.license}",
+                        description=f"{cand.description}{sample_note}\n\nSource: {cand.source} ({cand.publisher}) | License: {cand.license}",
                         status="ready",
                         row_count=len(rows),
                         column_count=len(columns),
-                        schema_metadata=schema_metadata,
+                        schema_metadata={**schema_metadata, "is_sample": cand.is_sample},
                         statistics=stats,
                         segments=segments,
                         content_hash=content_hash,

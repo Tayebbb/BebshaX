@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.studies import _user_owns_study, get_session
+from bebshax.api.deps import get_session, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.behavioral.engine import BehavioralRunNotFound, BehavioralSimulationEngine, BehavioralTestNotFound
 from bebshax.behavioral.orm import (
@@ -188,7 +188,7 @@ async def _get_study_and_verify_access(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Study with id '{study_id}' not found.",
         )
-    if not _user_owns_study(study, user):
+    if not user_owns_study(study, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: You do not have access to this study's behavioral tests.",

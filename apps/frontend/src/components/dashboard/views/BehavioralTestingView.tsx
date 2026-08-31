@@ -116,7 +116,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#14B8A6',
+                color: 'var(--accent-teal)',
               }}
             >
               <Sliders size={20} />
@@ -373,7 +373,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#14B8A6',
+              color: 'var(--accent-teal)',
               margin: '0 auto 16px auto',
             }}
           >
@@ -533,7 +533,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       {test.run_count} {test.run_count === 1 ? 'run' : 'runs'} recorded
                     </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', color: '#14B8A6', fontWeight: 600 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', color: 'var(--accent-teal)', fontWeight: 600 }}>
                       <span>View Results</span>
                       <ArrowRight size={14} />
                     </div>

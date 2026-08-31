@@ -403,6 +403,22 @@ html.theme-transition *::after {
   to { opacity: 1; transform: none; }
 }
 
+/* Workflow stepper subtitle — plain-language hint under each step label.
+   Hidden on narrow widths where the pills would otherwise crowd/wrap. */
+.bx-step-sub {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+@media (max-width: 1280px) {
+  .bx-step-sub {
+    display: none;
+  }
+}
+
 /* Small screens: modals use the full width, app headers clear the mobile bar */
 @media (max-width: 720px) {
   .bx-backdrop {
@@ -486,30 +502,30 @@ html.theme-transition *::after {
 
 .indigo-btn {
   background: var(--accent-primary);
-  color: #ffffff;
+  color: var(--text-on-accent);
   border: none !important;
   outline: none !important;
   border-radius: 9999px;
   font-weight: 700;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 14px var(--accent-glow);
 }
 
 .indigo-btn:hover {
   background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+  box-shadow: 0 6px 20px var(--accent-glow);
 }
 
 .gold-btn {
   background: var(--accent-primary);
-  color: #ffffff;
+  color: var(--text-on-accent);
   border: none !important;
   outline: none !important;
   border-radius: 9999px;
   font-weight: 700;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 14px var(--accent-glow);
 }
 
 .gold-btn:hover {
@@ -598,20 +614,4 @@ html.theme-transition *::after {
   .mobile-toggle {
     display: block !important;
   }
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #080909;
-}
-::-webkit-scrollbar-thumb {
-  background: #232528;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #32353A;
 }

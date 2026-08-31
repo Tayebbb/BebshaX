@@ -165,7 +165,7 @@ export interface PersonaGenerationRun {
   generated_count: number;
   valid_count: number;
   warning_count: number;
-  dataset_versions: Array<{ dataset_id: string; name?: string; content_hash?: string; row_count?: number }>;
+  dataset_versions: Array<{ dataset_id: string; name?: string; content_hash?: string; row_count?: number; is_sample?: boolean }>;
   evidence_snapshot: { claim_count?: number; top_claims?: Array<{ id: string; claim_text: string }> };
   error_message?: string | null;
   started_at: string;

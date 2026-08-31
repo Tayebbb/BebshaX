@@ -53,7 +53,7 @@ const PROV_STYLES: Record<string, { fg: string; bg: string }> = {
   SYNTHETIC: { fg: 'var(--text-secondary)', bg: 'var(--fill-soft-2)' },
 };
 
-const ProvenanceChip: React.FC<{ label?: string }> = ({ label }) => {
+export const ProvenanceChip: React.FC<{ label?: string }> = ({ label }) => {
   if (!label || !PROV_STYLES[label]) return null;
   const s = PROV_STYLES[label];
   return (
@@ -65,7 +65,7 @@ const ProvenanceChip: React.FC<{ label?: string }> = ({ label }) => {
           ? 'Reasoned from business context or evidence — no direct citation'
           : 'Plausible assumption — no evidence grounding'
       }
-      style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.05em', color: s.fg, background: s.bg, padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}
+      style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', color: s.fg, background: s.bg, padding: '1px 6px', borderRadius: '4px', marginLeft: '6px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}
     >
       {label}
     </span>
@@ -302,7 +302,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             <h1 style={{ fontSize: '1.85rem', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
               Persona Library
             </h1>
-            <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: 'var(--accent-subtle)', color: '#14B8A6', border: '1px solid var(--accent-glow)' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: 'var(--accent-subtle)', color: 'var(--accent-teal)', border: '1px solid var(--accent-glow)' }}>
               Synthetic Agents
             </span>
           </div>
@@ -376,7 +376,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         }}
       >
         <div className="bx-stagger" style={{ ['--bx-i' as string]: 0, background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#14B8A6' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-teal)' }}>
             <User size={20} />
           </div>
           <div>
@@ -590,7 +590,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         </div>
       ) : filteredPersonas.length === 0 ? (
         <div style={{ background: 'var(--bg-secondary)', border: '1px dashed var(--border-subtle)', borderRadius: '18px', padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#14B8A6' }}>
+          <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--accent-teal)' }}>
             <Sparkles size={26} />
           </div>
           <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px 0' }}>
@@ -713,17 +713,17 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             {persona.name}
                           </h3>
                           {persona.version > 1 && (
-                            <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '1px 5px', borderRadius: '4px' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '1px 5px', borderRadius: '4px' }}>
                               v{persona.version}
                             </span>
                           )}
-                          <span style={{ fontSize: '0.68rem', color: '#14B8A6', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--accent-teal)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
                             {persona.country_code || 'BD'}
                           </span>
                           {persona.data_source === 'cached' && (
                             <span
                               title="Served from seeded/cached data — not generated live for this study"
-                              style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '1px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                              style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '1px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
                             >
                               CACHED
                             </span>
@@ -778,7 +778,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   {persona.personality && (
                     <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '8px 10px', marginBottom: '12px' }}>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Brain size={11} color="#14B8A6" /> Big Five Traits
+                        <Brain size={11} color="var(--accent-teal)" /> Big Five Traits
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px', textAlign: 'center' }}>
                         {[
@@ -789,11 +789,11 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           { label: 'N', name: 'Neuroticism', val: persona.personality.neuroticism, color: '#EC4899' },
                         ].map((trait) => (
                           <div key={trait.label} title={`${trait.name}: ${trait.val}/100`}>
-                            <div style={{ fontSize: '0.68rem', fontWeight: 600, color: trait.color }}>{trait.val}</div>
+                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: trait.color }}>{trait.val}</div>
                             <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden', margin: '2px 0' }}>
                               <div style={{ width: `${trait.val}%`, height: '100%', background: trait.color }} />
                             </div>
-                            <div style={{ fontSize: '0.62rem', color: 'var(--text-secondary)' }}>{trait.label}</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{trait.label}</div>
                           </div>
                         ))}
                       </div>
@@ -809,7 +809,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
                     {persona.goals?.[0] && (
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <Target size={12} color="#14B8A6" style={{ flexShrink: 0 }} />
+                        <Target size={12} color="var(--accent-teal)" style={{ flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{persona.goals[0]}</span>
                       </div>
                     )}
@@ -832,7 +832,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                 <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      <CreditCard size={13} color="#14B8A6" />
+                      <CreditCard size={13} color="var(--accent-teal)" />
                       <span>{persona.commercial_profile?.monthly_budget_bdt ? `৳${persona.commercial_profile.monthly_budget_bdt}/mo` : '৳350/mo'}</span>
                     </div>
 
@@ -841,7 +841,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       <div style={{ width: '48px', height: '5px', borderRadius: '3px', background: 'var(--border-subtle)', overflow: 'hidden' }}>
                         <div style={{ width: `${groundingPct}%`, height: '100%', background: groundingPct >= 90 ? 'var(--accent-emerald)' : '#14B8A6' }} />
                       </div>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: groundingPct >= 90 ? 'var(--accent-emerald)' : '#14B8A6' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: groundingPct >= 90 ? 'var(--accent-emerald)' : 'var(--accent-teal)' }}>
                         {groundingPct}%
                       </span>
                     </div>
@@ -873,7 +873,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = 'var(--accent-subtle)';
                         e.currentTarget.style.borderColor = 'var(--border-hover)';
-                        e.currentTarget.style.color = '#14B8A6';
+                        e.currentTarget.style.color = 'var(--accent-teal)';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = 'var(--bg-card-hover)';
@@ -915,7 +915,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           border: '1px solid var(--accent-glow)',
                           borderRadius: '8px',
                           padding: '7px 10px',
-                          color: '#14B8A6',
+                          color: 'var(--accent-teal)',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
@@ -1057,11 +1057,11 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     style={{
                       background: 'none',
                       border: 'none',
-                      borderBottom: isActive ? '2px solid #14B8A6' : '2px solid transparent',
+                      borderBottom: isActive ? '2px solid var(--accent-teal)' : '2px solid transparent',
                       padding: '12px 16px',
                       fontSize: '0.84rem',
                       fontWeight: isActive ? 600 : 500,
-                      color: isActive ? '#14B8A6' : 'var(--text-secondary)',
+                      color: isActive ? 'var(--accent-teal)' : 'var(--text-secondary)',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -1098,7 +1098,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             CACHED
                           </span>
                         )}
-                        <span style={{ fontSize: '0.78rem', color: '#14B8A6', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--accent-teal)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
                           {inspectingPersona.country_code || 'BD'} • {inspectingPersona.origin_country || 'Bangladesh'}
                         </span>
                       </div>
@@ -1107,7 +1107,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
                   {/* Bio & Quote */}
                   <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#14B8A6', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-teal)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
                       <Quote size={14} /> Consumer Bio & Direct Perspective
                     </div>
                     <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.55, margin: '0 0 10px 0' }}>
@@ -1179,13 +1179,13 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                       <div>
                         <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Brain size={18} color="#14B8A6" /> Big Five Trait Spectrum
+                          <Brain size={18} color="var(--accent-teal)" /> Big Five Trait Spectrum
                         </h4>
                         <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
                           Quantified psychometric scale (0–100) governing simulation conversational tone, risk tolerance, and decision pace.
                         </p>
                       </div>
-                      <span style={{ fontSize: '0.75rem', background: 'var(--accent-subtle)', color: '#14B8A6', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                      <span style={{ fontSize: '0.75rem', background: 'var(--accent-subtle)', color: 'var(--accent-teal)', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>
                         OCEAN Psychometrics
                       </span>
                     </div>
@@ -1410,7 +1410,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
                     <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Estimated Monthly Budget</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#14B8A6' }}>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-teal)' }}>
                         ৳{inspectingPersona.commercial_profile?.monthly_budget_bdt || 350} / mo
                       </div>
                     </div>
@@ -1457,7 +1457,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>Frequently Used Platforms</div>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {inspectingPersona.technology_profile?.platforms?.map((p, idx) => (
-                        <span key={idx} style={{ background: 'var(--border-subtle)', color: '#14B8A6', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid var(--accent-glow)' }}>
+                        <span key={idx} style={{ background: 'var(--border-subtle)', color: 'var(--accent-teal)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid var(--accent-glow)' }}>
                           {p}
                         </span>
                       ))}
@@ -1478,7 +1478,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     inspectingPersona.evidence_citations.map((c, idx) => (
                       <div key={idx} style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#14B8A6', textTransform: 'uppercase' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-teal)', textTransform: 'uppercase' }}>
                             {c.category || 'General Finding'}
                           </span>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1504,7 +1504,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         alignSelf: 'flex-start',
                         background: 'none',
                         border: 'none',
-                        color: '#14B8A6',
+                        color: 'var(--accent-teal)',
                         fontSize: '0.82rem',
                         fontWeight: 600,
                         display: 'flex',
@@ -1534,7 +1534,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       {inspectingPersona.dataset_refs?.map((ref, idx) => (
                         <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)', fontSize: '0.82rem' }}>
                           <span style={{ color: 'var(--text-secondary)' }}>{ref.variable}</span>
-                          <span style={{ color: '#14B8A6', fontWeight: 600 }}>{String(ref.value)}</span>
+                          <span style={{ color: 'var(--accent-teal)', fontWeight: 600 }}>{String(ref.value)}</span>
                         </div>
                       ))}
                     </div>
@@ -1546,7 +1546,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             {/* Modal Footer */}
             <div style={{ padding: '16px 28px', borderTop: '1px solid var(--border-subtle)', background: '#090C0C', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                Persona ID: <code style={{ color: '#14B8A6' }}>{inspectingPersona.id}</code>
+                Persona ID: <code style={{ color: 'var(--accent-teal)' }}>{inspectingPersona.id}</code>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 {onStartInterviewWithPersona && (
@@ -1680,14 +1680,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       onClick={() => setDistributionStrategy('population_weighted')}
                       style={{
                         background: distributionStrategy === 'population_weighted' ? 'var(--accent-subtle)' : 'var(--bg-card-hover)',
-                        border: `1px solid ${distributionStrategy === 'population_weighted' ? '#14B8A6' : 'var(--border-subtle)'}`,
+                        border: `1px solid ${distributionStrategy === 'population_weighted' ? 'var(--accent-teal)' : 'var(--border-subtle)'}`,
                         borderRadius: '10px',
                         padding: '12px',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'population_weighted' ? '#14B8A6' : 'var(--text-primary)', marginBottom: '2px' }}>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'population_weighted' ? 'var(--accent-teal)' : 'var(--text-primary)', marginBottom: '2px' }}>
                         Population-Weighted
                       </div>
                       <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
@@ -1699,14 +1699,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       onClick={() => setDistributionStrategy('equal')}
                       style={{
                         background: distributionStrategy === 'equal' ? 'var(--accent-subtle)' : 'var(--bg-card-hover)',
-                        border: `1px solid ${distributionStrategy === 'equal' ? '#14B8A6' : 'var(--border-subtle)'}`,
+                        border: `1px solid ${distributionStrategy === 'equal' ? 'var(--accent-teal)' : 'var(--border-subtle)'}`,
                         borderRadius: '10px',
                         padding: '12px',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'equal' ? '#14B8A6' : 'var(--text-primary)', marginBottom: '2px' }}>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'equal' ? 'var(--accent-teal)' : 'var(--text-primary)', marginBottom: '2px' }}>
                         Equal Distribution
                       </div>
                       <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
@@ -1774,8 +1774,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             fontSize: '0.75rem',
                             fontWeight: 700,
                             background: isDone ? 'var(--accent-emerald)' : isCurrent ? 'var(--accent-glow)' : 'var(--bg-card-hover)',
-                            color: isDone ? 'var(--bg-pure)' : isCurrent ? '#14B8A6' : 'var(--text-secondary)',
-                            border: `1px solid ${isDone ? 'var(--accent-emerald)' : isCurrent ? '#14B8A6' : 'var(--border-subtle)'}`,
+                            color: isDone ? 'var(--bg-pure)' : isCurrent ? 'var(--accent-teal)' : 'var(--text-secondary)',
+                            border: `1px solid ${isDone ? 'var(--accent-emerald)' : isCurrent ? 'var(--accent-teal)' : 'var(--border-subtle)'}`,
                           }}
                         >
                           {isDone ? <CheckCircle2 size={14} /> : s.step}

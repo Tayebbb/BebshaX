@@ -13,7 +13,9 @@ console.log('\x1b[36m%s\x1b[0m', '═══════════════�
 // 1. Attempt to start Docker Database Container (db on port 5433)
 console.log('\x1b[33m%s\x1b[0m', '🐳 Checking Docker Database Container (db on port 5433)...');
 try {
-  const dockerResult = execSync('docker compose up -d db', {
+  // --wait blocks until the pg_isready healthcheck passes — without it the
+  // backend races a cold-booting Postgres and fails its first connections.
+  const dockerResult = execSync('docker compose up -d --wait db', {
     cwd: rootDir,
     stdio: 'pipe',
     encoding: 'utf-8',

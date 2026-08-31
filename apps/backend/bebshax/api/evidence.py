@@ -11,7 +11,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.studies import _user_owns_study, get_session
+from bebshax.api.deps import get_session, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.db.models import (
     DatasetCandidates,
@@ -28,10 +28,15 @@ from bebshax.research.vector_search import VectorSearchEngine
 
 router = APIRouter(prefix="/studies", tags=["evidence"])
 
+# Semantic retrieval breadth: 6 chunks ≈ one screen of ranked evidence; the
+# ceiling keeps a single request from scanning/serializing whole corpora.
+DEFAULT_SEMANTIC_TOP_K = 6
+MAX_SEMANTIC_TOP_K = 50
+
 
 class SemanticSearchRequest(BaseModel):
     query: str = Field(..., min_length=1)
-    top_k: int = 6
+    top_k: int = Field(default=DEFAULT_SEMANTIC_TOP_K, ge=1, le=MAX_SEMANTIC_TOP_K)
 
 
 def _serialize_run(r: ResearchRuns) -> dict[str, Any]:
@@ -107,7 +112,7 @@ async def start_study_research(
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not _user_owns_study(study, current_user):
+    if not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     llm_service = getattr(request.app.state, "llm_service", None)
@@ -126,7 +131,7 @@ async def list_study_research_runs(
 ) -> list[dict[str, Any]]:
     """List research runs executed for a study."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     stmt = select(ResearchRuns).where(ResearchRuns.study_id == study_id).order_by(ResearchRuns.created_at.desc())
@@ -143,7 +148,7 @@ async def get_study_research_plan(
 ) -> dict[str, Any]:
     """Get the latest structured research plan generated for a study."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     service = ResearchEngineService()
@@ -162,7 +167,7 @@ async def get_study_research_run(
 ) -> dict[str, Any]:
     """Get the current progress status and details of a research run."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     run = await session.get(ResearchRuns, run_id)
@@ -181,7 +186,7 @@ async def get_study_evidence_summary(
 ) -> dict[str, Any]:
     """Get high-level evidence metrics (coverage, supported %, inferred %, unverified %, counts)."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     service = ResearchEngineService()
@@ -198,7 +203,7 @@ async def list_study_evidence_sources(
 ) -> list[dict[str, Any]]:
     """List research sources collected for a study with optional type and text filters."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     stmt = select(EvidenceSources).where(EvidenceSources.study_id == study_id)
@@ -235,7 +240,7 @@ async def get_study_evidence_source_detail(
 ) -> dict[str, Any]:
     """Get full details of a specific source including its chunks."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     source = await session.get(EvidenceSources, source_id)
@@ -265,7 +270,7 @@ async def list_study_evidence_claims(
 ) -> list[dict[str, Any]]:
     """List structured empirical claims extracted for a study."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     stmt = select(EvidenceClaims).where(EvidenceClaims.study_id == study_id)
@@ -294,7 +299,7 @@ async def get_study_evidence_claim_detail(
 ) -> dict[str, Any]:
     """Get full provenance for a claim including supporting sources, excerpts, and similarity scores."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     claim = await session.get(EvidenceClaims, claim_id)
@@ -342,7 +347,7 @@ async def semantic_search_evidence(
 ) -> list[dict[str, Any]]:
     """Perform semantic vector retrieval against a study's evidence chunks."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     engine = VectorSearchEngine()

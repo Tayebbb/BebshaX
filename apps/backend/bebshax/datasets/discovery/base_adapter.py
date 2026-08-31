@@ -27,6 +27,10 @@ class DatasetCandidateData(BaseModel):
     population_coverage: str = Field("National Population", description="Target population group covered")
     relevant_variables: list[str] = Field(default_factory=list, description="Variables matching the research requirements")
     category: str = Field("general", description="Primary dataset category")
+    is_sample: bool = Field(
+        False,
+        description="True when the candidate comes from the BebshaX illustrative sample catalog rather than a live source fetch",
+    )
     raw_data_content: Optional[str] = Field(None, description="Structured CSV content string for automated import")
 
 

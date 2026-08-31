@@ -65,6 +65,8 @@ export interface DatasetSource {
     duplicate_rows?: number;
     missing_values_percentage?: number;
     warnings?: string[];
+    /** True when the dataset came from the illustrative sample catalog. */
+    is_sample?: boolean;
   };
   statistics: {
     numeric: Record<string, NumericColumnStats>;
@@ -73,6 +75,8 @@ export interface DatasetSource {
   };
   segments: DatasetSegment[];
   content_hash?: string | null;
+  /** True when the dataset came from the illustrative sample catalog. */
+  is_sample?: boolean;
   persona_count_generated: number;
   processing_error?: string | null;
   created_at: string;

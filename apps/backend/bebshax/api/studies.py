@@ -1,5 +1,6 @@
 """FastAPI routes for research studies and persona library audience persistence."""
 
+import logging
 from datetime import datetime, timezone
 import uuid
 from typing import Any, Optional
@@ -11,17 +12,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
 from bebshax.api.auth import get_optional_current_user
+from bebshax.api.deps import get_session, owner_accessible, user_owns_study
 from bebshax.api.jobs import get_job, start_job
 from bebshax.db.models import Studies, SavedAudiences, StudyReports
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.tenancy import PUBLIC_OWNER_IDS as _PUBLIC_OWNER_IDS
-from bebshax.tenancy import STUDY_ANON_OWNER_IDS as _STUDY_ANON_OWNER_IDS
-from bebshax.tenancy import owner_accessible as _tenancy_owner_accessible
 from bebshax.utils.title_generator import generate_deterministic_study_title
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.research.report_service import StudyReportService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["studies"])
+
+# Back-compat aliases: api/payments.py (frozen path) and any straggler still
+# import the old underscore-private names from this module. New code should
+# import the public names from bebshax.api.deps instead.
+_user_owns_study = user_owns_study
+_owner_accessible = owner_accessible
 
 
 class StudyCreateRequest(BaseModel):
@@ -165,34 +174,6 @@ class GenerateReportRequest(BaseModel):
 class GenerateScriptRequest(BaseModel):
     prompt: Optional[str] = None
     question_count: int = Field(default=5, ge=3, le=10)
-
-
-def _user_owns_study(study: Studies, current_user: Optional[Users]) -> bool:
-    """Return True if the current user owns the study, or it is a public demo / default study."""
-    if study.is_demo:
-        return True
-    if current_user and study.user_id == current_user.id:
-        return True
-    if current_user is None and (not study.user_id or study.user_id in _STUDY_ANON_OWNER_IDS):
-        return True
-    return False
-
-
-def _owner_accessible(owner_id: Optional[str], current_user: Optional[Users]) -> bool:
-    """Row-level access rule for owner-stamped rows (audiences, businesses,
-    personas, conversations): shared/system rows are readable by every caller;
-    owned rows require the owner's token. NOTE the deliberate delta from
-    `_user_owns_study`: studies use the `is_demo` flag and do not grant
-    authenticated users the anonymous tenant — see bebshax/tenancy.py."""
-    return _tenancy_owner_accessible(owner_id, current_user.id if current_user else None)
-
-
-async def get_session(request: Request) -> AsyncSession:
-    sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
-    if not sessionmaker:
-        raise HTTPException(status_code=500, detail="Database not configured")
-    async with sessionmaker() as session:
-        yield session
 
 
 # ============================================================================
@@ -495,6 +476,7 @@ async def generate_script_questions(
     llm_service = getattr(request.app.state, "llm_service", None) if request else None
 
     generated_questions = []
+    fallback_reason: Optional[str] = None if llm_service else "llm_service_unavailable"
     if llm_service:
         try:
             sys_prompt = (
@@ -520,18 +502,22 @@ async def generate_script_questions(
                 temperature=0.4,
             )
             res = await llm_service.complete(req)
-            import json, re
-            cleaned = res.text.strip()
-            if cleaned.startswith("```"):
-                cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
-                cleaned = re.sub(r"\n?```$", "", cleaned).strip()
-            parsed = json.loads(cleaned)
+            parsed = parse_llm_json(res.text)
             if isinstance(parsed, list) and len(parsed) >= 2:
                 generated_questions = [str(q).strip() for q in parsed if str(q).strip()]
             elif isinstance(parsed, dict) and "questions" in parsed and isinstance(parsed["questions"], list):
                 generated_questions = [str(q).strip() for q in parsed["questions"] if str(q).strip()]
-        except Exception:
-            pass
+            if not generated_questions:
+                fallback_reason = "llm_unusable_response"
+        except Exception as exc:
+            # Same fail-soft to template questions, but loud and marked in the
+            # payload so canned questions never impersonate LLM output.
+            logger.warning(
+                "script-question LLM generation failed for study %s — serving static template questions",
+                study_id,
+                exc_info=True,
+            )
+            fallback_reason = f"llm_error:{type(exc).__name__}"
 
     if not generated_questions:
         generated_questions = [
@@ -550,6 +536,8 @@ async def generate_script_questions(
         "study_id": study_id,
         "questions": generated_questions,
         "count": len(generated_questions),
+        "source": "fallback_static" if fallback_reason else "llm",
+        "fallback_reason": fallback_reason,
     }
 
 

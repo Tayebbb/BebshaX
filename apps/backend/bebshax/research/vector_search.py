@@ -5,6 +5,7 @@ Generates 384-dimensional normalized embeddings and performs cosine similarity s
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Optional
 
@@ -17,6 +18,8 @@ from bebshax.llm.adapters.embeddings import (
     EmbeddingBackend,
     HashEmbedding,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
@@ -56,13 +59,18 @@ class VectorSearchEngine:
         bind = session.bind or session.get_bind()
         dialect_name = bind.dialect.name if bind else "postgresql"
 
-        # On PostgreSQL with pgvector, use native vector cosine distance
+        # On PostgreSQL with pgvector, use native vector cosine distance.
+        # Both branches filter to the query's embedding space — cosine
+        # similarity across spaces is meaningless (see adapters/embeddings.py).
         if dialect_name == "postgresql":
             try:
                 distance_col = EvidenceChunks.embedding.cosine_distance(query_vec)
                 stmt = (
                     select(EvidenceChunks, distance_col.label("distance"))
-                    .where(EvidenceChunks.study_id == study_id)
+                    .where(
+                        EvidenceChunks.study_id == study_id,
+                        EvidenceChunks.embedding_space == self.backend.space,
+                    )
                     .order_by(distance_col)
                     .limit(top_k)
                 )
@@ -70,10 +78,18 @@ class VectorSearchEngine:
                 rows = result.all()
                 return [(chunk, round(max(0.0, 1.0 - float(dist)), 3)) for chunk, dist in rows]
             except Exception:
-                pass  # Fallback to Python-side scoring if pgvector function isn't bound
+                # Fallback to Python-side scoring if pgvector function isn't bound
+                logger.warning(
+                    "pgvector cosine search failed for study %s — falling back to Python-side scoring",
+                    study_id,
+                    exc_info=True,
+                )
 
         # Python-side fallback (used during in-memory SQLite unit tests)
-        stmt = select(EvidenceChunks).where(EvidenceChunks.study_id == study_id)
+        stmt = select(EvidenceChunks).where(
+            EvidenceChunks.study_id == study_id,
+            EvidenceChunks.embedding_space == self.backend.space,
+        )
         result = await session.execute(stmt)
         all_chunks = list(result.scalars().all())
 

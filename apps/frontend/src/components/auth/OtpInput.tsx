@@ -6,6 +6,8 @@ interface OtpInputProps {
   length?: number;
   disabled?: boolean;
   autoFocus?: boolean;
+  /** Associates the digit group with an external label element. */
+  'aria-labelledby'?: string;
 }
 
 export const OtpInput: React.FC<OtpInputProps> = ({
@@ -14,6 +16,7 @@ export const OtpInput: React.FC<OtpInputProps> = ({
   length = 6,
   disabled = false,
   autoFocus = true,
+  'aria-labelledby': ariaLabelledBy,
 }) => {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -93,6 +96,8 @@ export const OtpInput: React.FC<OtpInputProps> = ({
 
   return (
     <div
+      role="group"
+      aria-labelledby={ariaLabelledBy}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -121,7 +126,7 @@ export const OtpInput: React.FC<OtpInputProps> = ({
             height: '52px',
             borderRadius: '10px',
             border: digits[index]
-              ? '2px solid #14B8A6'
+              ? '2px solid var(--accent-teal)'
               : '1px solid var(--border-subtle)',
             background: 'var(--bg-secondary)',
             color: 'var(--text-main)',
@@ -133,7 +138,7 @@ export const OtpInput: React.FC<OtpInputProps> = ({
             boxShadow: digits[index] ? '0 0 0 3px var(--accent-subtle)' : 'none',
           }}
           onFocus={(e) => {
-            e.target.style.borderColor = '#14B8A6';
+            e.target.style.borderColor = 'var(--accent-teal)';
             e.target.style.boxShadow = '0 0 0 3px var(--accent-glow)';
           }}
           onBlur={(e) => {

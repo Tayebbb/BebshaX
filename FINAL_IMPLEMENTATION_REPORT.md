@@ -45,7 +45,7 @@ JWT secrets are env-only, ≥32 chars, burned-default rejected at startup, with 
 
 - `model_registry` capability/score columns are schema-only; live discovery + quota ranking made sync jobs unnecessary at this scale ([docs/MODEL_REGISTRY.md](docs/MODEL_REGISTRY.md)).
 - Free-tier latency is real: 30–190 s for cloud persona generation; the product communicates progress rather than hiding it (skeletons, provenance, local tier).
-- Google sign-in is a frontend-only demo fallback (`POST /api/auth/google` 404s by design in this build); email+password is the real path.
+- Google sign-in goes through Neon-hosted OAuth and server-verified `/api/auth/sync`; when Neon Auth is not configured the button is disabled — there is no client-side fallback identity. In mock/test builds a clearly-mock session is minted under the same gate as the mocked email flow.
 - CAPABILITY_FIRST/QUOTA_AWARE scored 0 % on xRouteBench replay for lack of capability metadata in that dataset — flagged in [docs/EVALUATION.md](docs/EVALUATION.md).
 - Response caching lives inside freellmpool (surfaced via provenance notes), not as a first-party layer.
 - Single-worker deployment assumptions (in-memory rate-limit storage) until `rate_limit_storage_uri` is pointed at a shared backend.

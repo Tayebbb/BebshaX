@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -34,6 +33,7 @@ from bebshax.db.models import (
     _utcnow,
 )
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
@@ -371,11 +371,7 @@ class StudyReportService:
                     max_output_tokens=8000,
                 )
                 result = await self.llm_service.complete(llm_req)
-                cleaned = result.text.strip()
-                if cleaned.startswith("```"):
-                    cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
-                    cleaned = re.sub(r"\n?```$", "", cleaned).strip()
-                parsed = json.loads(cleaned)
+                parsed = parse_llm_json(result.text)
                 if isinstance(parsed, dict) and "executive_summary" in parsed:
                     return parsed
             except Exception:

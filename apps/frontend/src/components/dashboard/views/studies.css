@@ -81,7 +81,7 @@
 
 .sd-kicker {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.34em;
   text-transform: uppercase;
@@ -162,7 +162,7 @@
 .sd-metric-label {
   margin-top: 8px;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -282,7 +282,7 @@
 }
 .sd-demo-badge {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.16em;
   padding: 3px 9px;
@@ -308,7 +308,7 @@
 
 .sd-label {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.64rem;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.26em;
   text-transform: uppercase;
@@ -370,7 +370,7 @@
   align-items: center;
   gap: 7px;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.14em;
 }
@@ -391,7 +391,7 @@
 
 .sd-row-type {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--sd-text-dim);
@@ -469,7 +469,7 @@
 }
 .sd-empty-kicker {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.3em;
   text-transform: uppercase;

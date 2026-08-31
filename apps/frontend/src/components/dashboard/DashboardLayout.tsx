@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Menu,
   PenSquare,
@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Sun,
   Moon,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
@@ -179,6 +180,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [initialWorkflowType, setInitialWorkflowType] = useState<StudyType>('interviews');
   const [initialWorkflowPrompt, setInitialWorkflowPrompt] = useState<string | undefined>(undefined);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuAreaRef = useRef<HTMLDivElement | null>(null);
+  const userChipRef = useRef<HTMLButtonElement | null>(null);
+  const mobileNavTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [showTourHint, setShowTourHint] = useState<boolean>(
+    () => localStorage.getItem('bebshax_tour_dismissed') !== '1'
+  );
 
   // Interview & Behavioral Modal State
   const [modalPersona, setModalPersona] = useState<SyntheticPersona | null>(null);
@@ -246,6 +253,65 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, []);
+
+  // Escape closes the user popover, clicking anywhere outside it closes it too;
+  // focus returns to the chip so keyboard users are not stranded. Capture phase
+  // + preventDefault: the popover outranks the drawer (topmost surface wins),
+  // and one Escape press never closes more than one surface.
+  useEffect(() => {
+    if (!showUserMenu) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowUserMenu(false);
+        userChipRef.current?.focus();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const items = Array.from(
+          userMenuAreaRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+        );
+        if (items.length === 0) return;
+        e.preventDefault();
+        const idx = items.indexOf(document.activeElement as HTMLElement);
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        items[(idx + step + items.length) % items.length].focus();
+      }
+    };
+    const onPointerDown = (e: MouseEvent) => {
+      if (userMenuAreaRef.current && !userMenuAreaRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [showUserMenu]);
+
+  // Escape closes the mobile nav drawer (backdrop click already does). Bubble
+  // phase + defaultPrevented check: the drawer is the lowest-priority surface.
+  useEffect(() => {
+    if (!isMobileNavOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setIsMobileNavOpen(false);
+        mobileNavTriggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isMobileNavOpen]);
+
+  const dismissTourHint = () => {
+    localStorage.setItem('bebshax_tour_dismissed', '1');
+    setShowTourHint(false);
+  };
 
   const handleTabClick = (tab: DashboardTab) => {
     setIsMobileNavOpen(false);
@@ -465,7 +531,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     }
                   }}
                 >
-                  <span style={{ color: isActive ? '#14B8A6' : 'var(--text-secondary)' }}>{item.icon}</span>
+                  <span style={{ color: isActive ? 'var(--accent-teal)' : 'var(--text-secondary)' }}>{item.icon}</span>
                   {!isSidebarCollapsed && <span>{item.label}</span>}
                 </button>
               );
@@ -475,12 +541,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           {/* Recent Studies Accordion Section */}
           {!isSidebarCollapsed && (
             <div>
-              <div
+              <button
+                type="button"
                 onClick={() => setIsRecentStudiesOpen(!isRecentStudiesOpen)}
+                aria-expanded={isRecentStudiesOpen}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  width: '100%',
+                  background: 'none',
+                  border: 'none',
+                  fontFamily: 'inherit',
+                  textAlign: 'left',
                   padding: '4px 12px',
                   fontSize: '0.72rem',
                   fontWeight: 700,
@@ -493,7 +566,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               >
                 <span>Recent Studies</span>
                 {isRecentStudiesOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              </div>
+              </button>
 
               {isRecentStudiesOpen && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '4px' }}>
@@ -506,12 +579,23 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   ) : recentStudies.length === 0 ? (
                     <div style={{ padding: '8px 10px', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
                       No studies yet.<br />
-                      <span
+                      <button
+                        type="button"
                         onClick={() => handleTabClick('new-study')}
-                        style={{ color: '#14B8A6', cursor: 'pointer', fontWeight: 600 }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          fontFamily: 'inherit',
+                          fontSize: 'inherit',
+                          color: 'var(--accent-teal)',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          textAlign: 'left',
+                        }}
                       >
                         Start your first research study
-                      </span>
+                      </button>
                     </div>
                   ) : (
                     <>
@@ -529,13 +613,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                             : 'Message Hook Testing';
 
                         return (
-                          <div
+                          <button
+                            type="button"
                             key={st.id}
                             onClick={() => handleOpenStudy(st.id)}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
                               gap: '8px',
+                              width: '100%',
+                              background: 'transparent',
+                              border: 'none',
+                              fontFamily: 'inherit',
+                              textAlign: 'left',
                               padding: '7px 8px',
                               borderRadius: '8px',
                               fontSize: '0.8rem',
@@ -568,13 +658,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                               />
                             )}
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayTitle}</span>
-                          </div>
+                          </button>
                         );
                       })}
 
-                      <div
+                      <button
+                        type="button"
                         onClick={() => handleTabClick('dashboard')}
                         style={{
+                          width: '100%',
+                          background: 'none',
+                          border: 'none',
+                          fontFamily: 'inherit',
+                          textAlign: 'left',
                           fontSize: '0.78rem',
                           color: 'var(--accent-cyan)',
                           fontWeight: 600,
@@ -583,7 +679,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                         }}
                       >
                         See more
-                      </div>
+                      </button>
                     </>
                   )}
                 </div>
@@ -593,7 +689,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         </div>
 
         {/* Bottom User Profile Section */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} ref={userMenuAreaRef}>
           <button
             type="button"
             onClick={toggleTheme}
@@ -628,13 +724,20 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
             {!isSidebarCollapsed && <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
           </button>
-          <div
+          <button
+            type="button"
+            ref={userChipRef}
             onClick={() => setShowUserMenu(!showUserMenu)}
+            aria-haspopup="menu"
+            aria-expanded={showUserMenu}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
               justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
+              width: '100%',
+              fontFamily: 'inherit',
+              textAlign: 'left',
               padding: isSidebarCollapsed ? '8px 0' : '8px 12px',
               borderRadius: '12px',
               background: showUserMenu ? 'var(--fill-soft-2)' : 'var(--fill-soft)',
@@ -670,8 +773,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     width: '30px',
                     height: '30px',
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
-                    color: 'var(--text-main)',
+                    background: 'linear-gradient(135deg, var(--accent-teal) 0%, var(--accent-cyan) 100%)',
+                    color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '0.8rem',
                     display: 'flex',
@@ -703,6 +806,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
             {!isSidebarCollapsed && (
               <span
+                title="Study credits left on the free plan — each new research study uses one credit"
                 style={{
                   fontSize: '0.7rem',
                   fontWeight: 600,
@@ -717,23 +821,25 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 1 left
               </span>
             )}
-          </div>
+          </button>
 
           {/* User Popover Menu */}
           {showUserMenu && (
             <div
+              role="menu"
+              aria-label="User menu"
               style={{
                 position: 'absolute',
                 bottom: '100%',
                 left: 0,
                 marginBottom: '8px',
                 width: isSidebarCollapsed ? '220px' : '100%',
-                background: '#141619',
-                border: 'none',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
                 outline: 'none',
                 borderRadius: '14px',
                 padding: '8px',
-                boxShadow: '0 16px 40px rgba(0, 0, 0, 0.85)',
+                boxShadow: 'var(--shadow-lg)',
                 zIndex: 50,
               }}
             >
@@ -772,7 +878,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                       width: '32px',
                       height: '32px',
                       borderRadius: '50%',
-                      background: 'linear-gradient(135deg, var(--status-warn-text) 0%, #D4AF37 100%)',
+                      background: 'linear-gradient(135deg, var(--accent-teal) 0%, var(--accent-cyan) 100%)',
                       color: 'var(--text-on-accent)',
                       fontWeight: 700,
                       fontSize: '0.82rem',
@@ -815,6 +921,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               {onOpenLandingPage && (
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setShowUserMenu(false);
                     onOpenLandingPage();
@@ -843,6 +950,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               )}
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setShowUserMenu(false);
                   logout();
@@ -904,6 +1012,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           >
             <button
               type="button"
+              ref={mobileNavTriggerRef}
               aria-label="Open navigation"
               onClick={() => setIsMobileNavOpen(true)}
               style={{
@@ -947,6 +1056,44 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               {getGreeting()}, {displayName}
             </div>
           </header>
+        )}
+
+        {/* First-visit golden-path hint — dismissible, remembered in localStorage */}
+        {(activeTab === 'new-study' || activeTab === 'dashboard') && showTourHint && (
+          <div
+            style={{
+              margin: '14px clamp(16px, 4vw, 40px) 0',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: '14px',
+              background: 'var(--accent-subtle)',
+              border: '1px solid var(--accent-glow)',
+              borderRadius: '12px',
+              padding: '12px 16px',
+            }}
+          >
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)', lineHeight: 1.55 }}>
+              <strong style={{ color: 'var(--accent-teal-bright)' }}>New here? The 3-minute tour:</strong>{' '}
+              1. Describe your idea → 2. Approve the research goal → 3. Generate personas → 4. Interview one → 5. Generate the report.
+            </div>
+            <button
+              type="button"
+              onClick={dismissTourHint}
+              aria-label="Dismiss tour hint"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                padding: '2px',
+                flexShrink: 0,
+                display: 'flex',
+              }}
+            >
+              <X size={15} />
+            </button>
+          </div>
         )}
 
         {/* Tab View Switcher — keyed so each view replays its entrance */}

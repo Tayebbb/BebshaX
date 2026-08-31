@@ -12,12 +12,6 @@ import {
   Study,
   StudyType,
   StudyReport,
-  EvidenceSource,
-  EvidenceClaim,
-  EvidenceSummary,
-  ResearchRun,
-  ClaimDetail,
-  SourceDetail,
   SyntheticPersona,
   StudyPersonasResponse,
   GeneratePersonasPayload,
@@ -41,58 +35,53 @@ import {
   OpenRouterHealth,
 } from '../types/dataset';
 import {
-  mockBusinesses,
-  mockConversations,
-  mockDatasets,
   mockEvaluationMetrics,
   mockHealth,
-  mockMemories,
-  mockPersonas,
-  mockProvenanceRecords,
   mockRoutesStatus,
-  mockStudies,
-  mockEvidenceSources,
-  mockEvidenceClaims,
 } from '../mocks/fixtures';
+import {
+  mockCopilotReply,
+  mockGeneratedPersonas,
+  mockStore,
+  mockSuggestedRoles,
+} from './mockStore';
 import { neonAuth } from './neonAuth';
+import { createResearchApi } from './researchApi';
 
 const API_BASE = import.meta.env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 
-// In-memory state store for client modifications during mock/fallback mode
-class MockStore {
-  businesses: Business[] = [];
-  personas: Record<string, Persona> = {};
-  memories: Record<string, MemoryItem[]> = {};
-  conversations: Record<string, Conversation> = {};
-  provenance: ProvenanceRecord[] = [];
-  studies: Study[] = [];
-  datasets: DatasetSource[] = [];
-  sources: EvidenceSource[] = [];
-  claims: EvidenceClaim[] = [];
-  researchRuns: ResearchRun[] = [];
-
-  constructor() {
-    this.reset();
-  }
-
-  reset() {
-    this.businesses = JSON.parse(JSON.stringify(mockBusinesses));
-    this.personas = JSON.parse(JSON.stringify(mockPersonas));
-    this.memories = JSON.parse(JSON.stringify(mockMemories));
-    this.conversations = JSON.parse(JSON.stringify(mockConversations));
-    this.provenance = JSON.parse(JSON.stringify(mockProvenanceRecords));
-    this.studies = JSON.parse(JSON.stringify(mockStudies));
-    this.datasets = JSON.parse(JSON.stringify(mockDatasets));
-    this.sources = JSON.parse(JSON.stringify(mockEvidenceSources));
-    this.claims = JSON.parse(JSON.stringify(mockEvidenceClaims));
-    this.researchRuns = [];
-  }
-}
-
-const mockStore = new MockStore();
+/** Timeout budgets (ms). Endpoints that transit the LLM path regularly measure
+ * 30-120s+ on free-tier providers — aborting earlier silently killed real
+ * replies. Pure CRUD stays snappy so failures surface fast. */
+const TIMEOUT_MS = {
+  /** Liveness probe — keeps the backendDown banner responsive. */
+  HEALTH: 3000,
+  /** DB-backed reads and writes with no LLM in the path. */
+  CRUD: 15000,
+  /** Heavy CRUD: whole-workflow restores or large JSON payloads on a busy backend. */
+  CRUD_HEAVY: 30000,
+  /** A single poll of an async job. */
+  POLL: 15000,
+  /** Anything that triggers LLM work: persona generation, copilot turns,
+   * interview chat, report synthesis, research runs, provider test calls. */
+  LLM: 300000,
+} as const;
 
 let forceMockMode: boolean | null = null;
 let lastKnownLive = false;
+
+/** Research/evidence domain slice — lives in researchApi.ts, merged into `api`
+ * below via spread. Deps are lazy closures over `api` and module state, so
+ * setMockMode()/auth headers/liveness all stay authoritative here. */
+const researchApi = createResearchApi({
+  apiBase: API_BASE,
+  llmTimeoutMs: TIMEOUT_MS.LLM,
+  isMockMode: () => api.isMockMode(),
+  getAuthHeaders: (customHeaders?: Record<string, string>) => api.getAuthHeaders(customHeaders),
+  setLastKnownLive: (live: boolean) => {
+    lastKnownLive = live;
+  },
+});
 
 export const api = {
   resetMockStore() {
@@ -128,17 +117,18 @@ export const api = {
     try {
       const res = await fetch(`${API_BASE}/health`, {
         headers: this.getAuthHeaders(),
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(TIMEOUT_MS.HEALTH),
       });
       if (res.ok) {
         lastKnownLive = true;
         return await res.json();
       }
       lastKnownLive = false;
-    } catch {
+      throw new Error(`Backend health check failed (HTTP ${res.status})`);
+    } catch (err) {
       lastKnownLive = false;
+      throw err;
     }
-    return mockHealth;
   },
 
   // 2. Routes & Provider Status
@@ -147,15 +137,17 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/routes/status`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
         lastKnownLive = false;
-      } catch {
+        throw new Error(`Failed to fetch routes status (HTTP ${res.status})`);
+      } catch (err) {
         lastKnownLive = false;
+        throw err;
       }
     }
     return mockRoutesStatus;
@@ -167,7 +159,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/provenance?limit=${limit}`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           const data = await res.json();
@@ -177,8 +169,10 @@ export const api = {
           }
         }
         lastKnownLive = false;
-      } catch {
+        throw new Error(`Failed to fetch provenance (HTTP ${res.status})`);
+      } catch (err) {
         lastKnownLive = false;
+        throw err;
       }
     }
     return {
@@ -193,7 +187,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/businesses`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           const data = await res.json();
@@ -203,8 +197,10 @@ export const api = {
           }
         }
         lastKnownLive = false;
-      } catch {
+        throw new Error(`Failed to fetch businesses (HTTP ${res.status})`);
+      } catch (err) {
         lastKnownLive = false;
+        throw err;
       }
     }
     return mockStore.businesses;
@@ -217,7 +213,7 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(data),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -252,7 +248,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/personas`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           const data = await res.json();
@@ -276,7 +272,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/personas/${id}`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -307,7 +303,7 @@ export const api = {
             generation_hints: hints,
             hints: hints.join(', '),
           }),
-          signal: AbortSignal.timeout(120000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -441,7 +437,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/personas/${personaId}/memories`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           const data = await res.json();
@@ -475,7 +471,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/conversations/${id}`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           const data = await res.json();
@@ -511,7 +507,8 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ persona_id: personaId, objective }),
-          signal: AbortSignal.timeout(120000),
+          // DB-only create — the first LLM call happens on message send.
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           const data = await res.json();
@@ -559,8 +556,8 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ content: message, message }),
-          // Free-tier LLM turns regularly take 60-190s; 120s aborted real replies.
-          signal: AbortSignal.timeout(300000),
+          // Free-tier LLM turns regularly take 60-190s; shorter timeouts aborted real replies.
+          signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -635,15 +632,17 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/evaluation/metrics`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
         lastKnownLive = false;
-      } catch {
+        throw new Error(`Failed to fetch evaluation metrics (HTTP ${res.status})`);
+      } catch (err) {
         lastKnownLive = false;
+        throw err;
       }
     }
     return mockEvaluationMetrics;
@@ -735,7 +734,7 @@ export const api = {
         const res = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
@@ -758,7 +757,7 @@ export const api = {
     try {
       const res = await fetch(`${API_BASE}/auth/users`, {
         headers: this.getAuthHeaders(),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
       });
       if (res.ok) {
         lastKnownLive = true;
@@ -784,7 +783,7 @@ export const api = {
           neon_token: data.neon_token,
           auth_provider: data.auth_provider || 'neon',
         }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
       });
       if (res.ok) {
         const result: AuthResponse = await res.json();
@@ -807,7 +806,7 @@ export const api = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
@@ -878,7 +877,7 @@ export const api = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
@@ -951,70 +950,39 @@ export const api = {
   },
 
   async googleAuth(data: GoogleAuthData): Promise<AuthResponse> {
-    let email = data.email;
-    let name = data.name;
-    let avatarUrl = data.avatar_url;
-
-    if (data.credential && (!avatarUrl || !name || !email)) {
-      try {
-        const parts = data.credential.split('.');
-        if (parts.length >= 2) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-          if (payload.picture && !avatarUrl) avatarUrl = payload.picture;
-          if (payload.name && !name) name = payload.name;
-          if (payload.email && !email) email = payload.email;
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    email = email || 'user@bebshax.io';
-    name = name || email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    avatarUrl = avatarUrl || undefined;
-
-    const requestPayload = {
-      email,
-      name,
-      avatar_url: avatarUrl,
-      credential: data.credential,
-    };
-
     if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/auth/google`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestPayload),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (res.ok) {
-          const result: AuthResponse = await res.json();
-          this.setAuthToken(result.access_token);
-          this.setStoredUser(result.user);
-          lastKnownLive = true;
-          return result;
-        }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
+      // No POST /api/auth/google exists, and a session is never fabricated
+      // client-side. The real federated path is neonAuth.signInWithGoogle()
+      // → Neon-hosted OAuth → server-verified /api/auth/sync.
+      throw new Error(
+        'Google sign-in requires the Neon Auth flow — no local fallback session exists. Use "Continue with Google" (Neon OAuth) or email sign-in.'
+      );
     }
+
+    // Mock/test builds only: mint a clearly-mock local session (mirrors how
+    // email signin is mocked under the same gate).
+    const email = data.email || 'user@bebshax.io';
+    const name =
+      data.name ||
+      email
+        .split('@')[0]
+        .replace(/[._]/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
 
     const mockUser: User = {
       id: `usr_g_${Date.now().toString(36)}`,
-      email: email,
+      email,
       full_name: name,
-      avatar_url: avatarUrl,
+      avatar_url: data.avatar_url || undefined,
       is_active: true,
       is_verified: true,
       auth_provider: 'google',
       created_at: new Date().toISOString(),
     };
     const mockRes: AuthResponse = {
-      access_token: `jwt_g_${Date.now()}`,
+      access_token: `mock_jwt_g_${Date.now()}`,
       token_type: 'bearer',
-      expires_in_days: 365,
+      expires_in_days: 7,
       user: mockUser,
     };
     this.setAuthToken(mockRes.access_token);
@@ -1046,7 +1014,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/auth/me`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -1169,7 +1137,7 @@ export const api = {
           headers: this.getAuthHeaders(),
           // DB read, but a busy backend (LLM calls in flight) can exceed 5s —
           // aborting here silently empties the dashboard.
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           const data = await res.json();
@@ -1195,7 +1163,7 @@ export const api = {
         const res = await fetch(`${API_BASE}/studies/${id}`, {
           headers: this.getAuthHeaders(),
           // Restores the whole workflow state — aborting early loses chat/personas in the UI.
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -1230,7 +1198,8 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(120000),
+          // Deterministic title generation — no LLM in this path.
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -1279,7 +1248,8 @@ export const api = {
           method: 'PATCH',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(updates),
-          signal: AbortSignal.timeout(120000),
+          // Large JSON payloads (personas_data, chat history) but pure DB write.
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -1325,15 +1295,17 @@ export const api = {
         const res = await fetch(`${API_BASE}/studies/${id}`, {
           method: 'DELETE',
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
-        if (res.ok) {
-          lastKnownLive = true;
-        } else {
+        if (!res.ok && res.status !== 404) {
           lastKnownLive = false;
+          throw new Error(`Failed to delete study (HTTP ${res.status})`);
         }
-      } catch {
+        lastKnownLive = true;
+      } catch (err) {
+        // A locally-hidden study that still exists server-side is a lie.
         lastKnownLive = false;
+        throw err;
       }
     }
     const current = this.getStoredUserStudies();
@@ -1361,7 +1333,7 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -1385,7 +1357,7 @@ export const api = {
         const url = user?.id ? `${API_BASE}/audiences?user_id=${encodeURIComponent(user.id)}` : `${API_BASE}/audiences`;
         const res = await fetch(url, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           const data = await res.json();
@@ -1432,158 +1404,24 @@ export const api = {
             study_type: studyType,
             study_id: studyId,
           }),
-          signal: AbortSignal.timeout(120000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
         });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
         lastKnownLive = false;
-      } catch {
+        const err = await res.json().catch(() => ({ detail: 'Copilot turn failed' }));
+        throw new Error(err.detail || `Copilot turn failed (HTTP ${res.status})`);
+      } catch (err) {
+        // Live mode never falls back to the local canned engine — a fabricated
+        // "LLM reply" is worse than a visible failure.
         lastKnownLive = false;
+        throw err;
       }
     }
 
-    const userTurns = messages.filter((m) => m.role === 'user');
-    const turnCount = userTurns.length;
-    const firstText = userTurns[0]?.content || '';
-    const lastText = userTurns[userTurns.length - 1]?.content || '';
-    const combinedText = (firstText + ' ' + lastText).toLowerCase();
-
-    const hasPricing = /price|cost|month|subscription|plan|\$|taka|bdt|€|£|free/.test(combinedText);
-    const hasStudents = /student|school|college|university|study planner|academic|exam/.test(combinedText);
-    const hasPriceTracker = /price tracker|price-tracker|tracker|price track|deal alert|price drop|deal hunter/.test(combinedText);
-    const hasFood = /food|restaurant|delivery|meal|eat|chef|recipe|cuisine/.test(combinedText);
-    const hasHealth = /health|fitness|gym|workout|diet|wellness|doctor|medical/.test(combinedText);
-    const hasFintech = /payment|bank|finance|loan|invest|money|wallet|crypto/.test(combinedText);
-    const hasEcommerce = /shop|sell|buy|store|marketplace|fashion/.test(combinedText);
-    const hasB2B = /saas|enterprise|team|office|workflow|productivity|b2b|business tool/.test(combinedText);
-
-    let productType = 'product or service';
-    let audienceQ = 'Who is your primary target user — what\'s their age range, lifestyle, or professional context? And what geography are you launching in first?';
-    let followupQ = 'What\'s the core problem you\'re solving for them, and what\'s the price point or business model you\'re validating?';
-    let roles: PersonaRoleSuggestion[] = [];
-
-    if (hasStudents) {
-      productType = 'education or student-focused product';
-      audienceQ = 'What level of students — K-12, university, or professional learners? And what geography?';
-      followupQ = 'Is this B2C for students directly, or B2B (schools/universities)? And what\'s the price point?';
-      roles = [
-        { id: 'role_uni_student', role: 'UNIVERSITY STUDENT', description: 'Core target user — validates product-market fit and willingness to pay.', count: 3, selected: true },
-        { id: 'role_college_applicant', role: 'COLLEGE APPLICANT', description: 'High-stakes test-taker — validates premium tier and urgency.', count: 3, selected: true },
-        { id: 'role_high_schooler', role: 'BUSY HIGH SCHOOLER', description: 'Time-pressed student — tests core value delivery.', count: 3, selected: true },
-        { id: 'role_parental_buyer', role: 'PARENTAL BUYER', description: 'Parent paying for child\'s tools — validates pricing framing and trust.', count: 0, selected: false },
-        { id: 'role_budget_student', role: 'BUDGET-CONSCIOUS STUDENT', description: 'Price-sensitive student — tests pricing floor and free tier.', count: 0, selected: false },
-      ];
-    } else if (hasPriceTracker) {
-      productType = 'price tracker & deal intelligence website';
-      audienceQ = 'Who are your primary users — online deal hunters, budget planners, or frequent gadget/apparel shoppers? And what retail platforms will you track first?';
-      followupQ = 'What specific alert channels (SMS, email, push) and historical price analytics will prove the 100 taka/month value proposition?';
-      roles = [
-        { id: 'role_bargain_hunter', role: 'SMART BARGAIN HUNTER', description: 'Active online shopper monitoring sales and deals — tests willingness to pay 100 taka/month for instant alerts.', count: 3, selected: true },
-        { id: 'role_tech_shopper', role: 'TECH-SAVVY CONSUMER', description: 'Frequent e-commerce buyer tracking price drops across multiple marketplaces.', count: 3, selected: true },
-        { id: 'role_budget_planner', role: 'BUDGET-CONSCIOUS BUYER', description: 'Price-sensitive household planner validating monthly subscription ROI.', count: 3, selected: true },
-        { id: 'role_deal_skeptic', role: 'DEAL SKEPTIC', description: 'Consumer comparing free price trackers vs paid premium alert features.', count: 0, selected: false },
-        { id: 'role_impulse_shopper', role: 'IMPULSE BUYER', description: 'Occasional shopper testing if historical price charts influence purchase timing.', count: 0, selected: false },
-      ];
-    } else if (hasFood) {
-      productType = 'food or restaurant service';
-      audienceQ = 'Who are the primary customers — home cooks, busy professionals, or families? And what region or city are you targeting first?';
-      followupQ = 'What\'s the main value proposition — convenience, cost savings, or quality? And what price point are you considering?';
-      roles = [
-        { id: 'role_busy_professional', role: 'BUSY PROFESSIONAL', description: 'Time-pressed professional who values convenience over price — core paying customer.', count: 3, selected: true },
-        { id: 'role_home_cook', role: 'HOME COOK', description: 'Cooking enthusiast who compares against cooking at home — key value benchmark.', count: 3, selected: true },
-        { id: 'role_family_planner', role: 'FAMILY MEAL PLANNER', description: 'Parent managing family nutrition and budget — represents group/family subscription potential.', count: 3, selected: true },
-        { id: 'role_health_conscious', role: 'HEALTH-CONSCIOUS EATER', description: 'Health-focused user with dietary needs — tests premium tier demands.', count: 0, selected: false },
-        { id: 'role_deal_hunter', role: 'DEAL HUNTER', description: 'Value-maximizer who compares cost per meal — tests pricing floor.', count: 0, selected: false },
-      ];
-    } else if (hasHealth) {
-      productType = 'health & wellness product';
-      audienceQ = 'Who is your primary user — fitness enthusiasts, people with health conditions, or a broader wellness audience?';
-      followupQ = 'Is this B2C or B2B (gyms, clinics)? And what\'s the rough price point?';
-      roles = [
-        { id: 'role_fitness_enthusiast', role: 'FITNESS ENTHUSIAST', description: 'Regular gym-goer — primary power user who validates core features.', count: 3, selected: true },
-        { id: 'role_wellness_beginner', role: 'WELLNESS BEGINNER', description: 'Person starting their health journey — tests onboarding and motivational hooks.', count: 3, selected: true },
-        { id: 'role_chronic_user', role: 'CHRONIC CONDITION USER', description: 'Person managing a health condition — tests specialized depth and accuracy.', count: 3, selected: true },
-        { id: 'role_time_poor', role: 'TIME-POOR PROFESSIONAL', description: 'High-income, low-time user — validates premium tier.', count: 0, selected: false },
-        { id: 'role_skeptic', role: 'HEALTH APP SKEPTIC', description: 'Person who tried and failed at health apps — reveals key churn drivers.', count: 0, selected: false },
-      ];
-    } else if (hasFintech) {
-      productType = 'fintech product';
-      audienceQ = 'Who is your primary user — individuals, small businesses, or enterprises? And what geography are you targeting?';
-      followupQ = 'What financial problem are you solving — payments, savings, credit, or investments?';
-      roles = [
-        { id: 'role_early_adopter', role: 'EARLY ADOPTER PRO', description: 'Tech-savvy individual comfortable with financial apps — validates core assumptions.', count: 3, selected: true },
-        { id: 'role_small_biz', role: 'SMALL BUSINESS OWNER', description: 'SMB operator managing cash flow — high-value B2B2C segment.', count: 3, selected: true },
-        { id: 'role_underbanked', role: 'UNDERBANKED USER', description: 'Person with limited banking access — tests financial inclusion positioning.', count: 3, selected: true },
-        { id: 'role_security_skeptic', role: 'SECURITY SKEPTIC', description: 'Privacy-first user — reveals trust barriers.', count: 0, selected: false },
-        { id: 'role_high_net', role: 'HIGH NET WORTH USER', description: 'Affluent user with complex needs — tests premium ceiling.', count: 0, selected: false },
-      ];
-    } else if (hasEcommerce) {
-      productType = 'e-commerce or marketplace';
-      audienceQ = 'Who are your primary buyers — consumers or businesses? And what product category are you focused on?';
-      followupQ = 'Are you a marketplace or direct retailer? And what\'s the target geography and price range?';
-      roles = [
-        { id: 'role_impulse_buyer', role: 'IMPULSE BUYER', description: 'Discovery-driven shopper — tests conversion and merchandising.', count: 3, selected: true },
-        { id: 'role_research_first', role: 'RESEARCH-FIRST BUYER', description: 'Methodical shopper — tests trust signals and pricing clarity.', count: 3, selected: true },
-        { id: 'role_loyal_repeater', role: 'LOYAL REPEATER', description: 'Returning customer — tests retention and loyalty programs.', count: 3, selected: true },
-        { id: 'role_deal_hunter', role: 'DEAL HUNTER', description: 'Discount-motivated buyer — tests pricing floor.', count: 0, selected: false },
-        { id: 'role_premium_seeker', role: 'PREMIUM SEEKER', description: 'Quality-over-price buyer — tests premium positioning.', count: 0, selected: false },
-      ];
-    } else if (hasB2B) {
-      productType = 'B2B SaaS or business tool';
-      audienceQ = 'What size companies are you targeting — SMBs, mid-market, or enterprise? And what industry does this serve?';
-      followupQ = 'What is the primary workflow or problem being solved? And what\'s your pricing model?';
-      roles = [
-        { id: 'role_decision_maker', role: 'BUDGET DECISION MAKER', description: 'Manager who approves tool purchases — validates ROI narrative.', count: 3, selected: true },
-        { id: 'role_power_user', role: 'DAILY POWER USER', description: 'Individual contributor using the tool most — validates UX depth.', count: 3, selected: true },
-        { id: 'role_it_eval', role: 'IT SECURITY EVALUATOR', description: 'Tech gatekeeping role — tests compliance and integration.', count: 3, selected: true },
-        { id: 'role_champion', role: 'INTERNAL CHAMPION', description: 'Early adopter who advocates internally — tests viral mechanics.', count: 0, selected: false },
-        { id: 'role_resistant', role: 'CHANGE-RESISTANT USER', description: 'Employee reluctant to adopt — reveals adoption barriers.', count: 0, selected: false },
-      ];
-    } else {
-      roles = [
-        { id: 'role_primary', role: 'PRIMARY USER', description: 'Core target user — validates product-market fit and core value proposition.', count: 3, selected: true },
-        { id: 'role_early_adopter', role: 'EARLY ADOPTER', description: 'Tech-forward user open to new solutions — validates initial demand.', count: 3, selected: true },
-        { id: 'role_price_conscious', role: 'PRICE-CONSCIOUS USER', description: 'Budget-sensitive potential customer — validates pricing model.', count: 3, selected: true },
-        { id: 'role_skeptic', role: 'SKEPTICAL NON-USER', description: 'Person using a competitor — reveals switching barriers.', count: 0, selected: false },
-        { id: 'role_power_user', role: 'POWER USER', description: 'Heavy user who needs advanced features — validates depth.', count: 0, selected: false },
-      ];
-    }
-
-    if (turnCount === 1) {
-      return {
-        reply: `Got it — you're exploring an ${productType}${hasPricing ? ' with a target pricing model' : ''}. User Interviews are ideal here to uncover mental models, key objections, and real willingness to pay.\n\n${audienceQ}`,
-        suggested_study_type: 'interviews',
-        is_ready_for_approval: false,
-        research_goal_card: null,
-        suggested_roles: roles,
-        served_by: 'bebshax/copilot-engine',
-      };
-    } else if (turnCount === 2) {
-      return {
-        reply: followupQ,
-        suggested_study_type: 'interviews',
-        is_ready_for_approval: false,
-        research_goal_card: null,
-        suggested_roles: roles,
-        served_by: 'bebshax/copilot-engine',
-      };
-    } else {
-      return {
-        reply: "I've synthesized your inputs into a focused research goal proposal below:",
-        suggested_study_type: 'interviews',
-        is_ready_for_approval: true,
-        research_goal_card: {
-          title: 'RESEARCH GOAL',
-          summary: `Validate whether your ${productType} solves a genuine need for target users and determine demand${hasPricing ? ' at your target price point' : ''}. Does this capture what you're looking for?`,
-          target_audience: `Target users of the ${productType}`,
-          core_hypothesis: `Demand and product-market fit for the ${productType}`,
-        },
-        suggested_roles: roles,
-        served_by: 'bebshax/copilot-engine',
-      };
-    }
+    return mockCopilotReply(messages);
   },
 
   async getSuggestedPersonaRoles(studyPrompt: string): Promise<PersonaRoleSuggestion[]> {
@@ -1593,79 +1431,22 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ study_prompt: studyPrompt }),
-          signal: AbortSignal.timeout(120000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
         });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
         lastKnownLive = false;
-      } catch {
+        const err = await res.json().catch(() => ({ detail: 'Role suggestion failed' }));
+        throw new Error(err.detail || `Role suggestion failed (HTTP ${res.status})`);
+      } catch (err) {
         lastKnownLive = false;
+        throw err;
       }
     }
     // Context-aware fallback: derive roles from the study prompt
-    const promptLower = studyPrompt.toLowerCase();
-    if (/tracker|track|price|deal|discount|compare|monitoring|shopping|ecommerce|taka/.test(promptLower)) {
-      return [
-        { id: 'role_bargain_hunter', role: 'SMART BARGAIN HUNTER', description: 'Active online shopper monitoring sales and deals — validates 100 taka/mo pricing.', count: 3, selected: true },
-        { id: 'role_tech_shopper', role: 'TECH-SAVVY CONSUMER', description: 'Frequent buyer tracking price drops across marketplaces.', count: 3, selected: true },
-        { id: 'role_budget_planner', role: 'BUDGET-CONSCIOUS BUYER', description: 'Price-sensitive household planner validating monthly subscription ROI.', count: 3, selected: true },
-        { id: 'role_deal_skeptic', role: 'DEAL SKEPTIC', description: 'Consumer comparing free price trackers vs paid premium alert features.', count: 0, selected: false },
-        { id: 'role_impulse_shopper', role: 'IMPULSE BUYER', description: 'Occasional shopper testing if historical price charts influence purchase timing.', count: 0, selected: false },
-      ];
-    } else if (/food|restaurant|delivery|meal|eat/.test(promptLower)) {
-      return [
-        { id: 'role_busy_professional', role: 'BUSY PROFESSIONAL', description: 'Time-pressed professional — core convenience-driven paying customer.', count: 3, selected: true },
-        { id: 'role_home_cook', role: 'HOME COOK', description: 'Cooking enthusiast — key value-vs-cooking-at-home benchmark.', count: 3, selected: true },
-        { id: 'role_family_planner', role: 'FAMILY MEAL PLANNER', description: 'Parent managing family nutrition — represents group/family segment.', count: 3, selected: true },
-        { id: 'role_health_conscious', role: 'HEALTH-CONSCIOUS EATER', description: 'Dietary-needs user — tests premium tier.', count: 0, selected: false },
-        { id: 'role_deal_hunter', role: 'DEAL HUNTER', description: 'Value-seeker — tests pricing floor.', count: 0, selected: false },
-      ];
-    } else if (/health|fitness|gym|wellness|doctor/.test(promptLower)) {
-      return [
-        { id: 'role_fitness_enthusiast', role: 'FITNESS ENTHUSIAST', description: 'Regular exerciser — validates core features.', count: 3, selected: true },
-        { id: 'role_wellness_beginner', role: 'WELLNESS BEGINNER', description: 'Person starting health journey — tests onboarding.', count: 3, selected: true },
-        { id: 'role_chronic_user', role: 'CHRONIC CONDITION USER', description: 'Managing health condition — tests specialized depth.', count: 3, selected: true },
-        { id: 'role_skeptic', role: 'HEALTH APP SKEPTIC', description: 'Failed at health apps before — reveals churn drivers.', count: 0, selected: false },
-      ];
-    } else if (/payment|bank|finance|loan|invest|wallet|crypto/.test(promptLower)) {
-      return [
-        { id: 'role_early_adopter', role: 'EARLY ADOPTER PRO', description: 'Tech-savvy financial app user — validates core assumptions.', count: 3, selected: true },
-        { id: 'role_small_biz', role: 'SMALL BUSINESS OWNER', description: 'SMB managing cash flow — high-value segment.', count: 3, selected: true },
-        { id: 'role_underbanked', role: 'UNDERBANKED USER', description: 'Limited banking access — tests inclusion positioning.', count: 3, selected: true },
-        { id: 'role_security_skeptic', role: 'SECURITY SKEPTIC', description: 'Privacy-first user — reveals trust barriers.', count: 0, selected: false },
-      ];
-    } else if (/shop|sell|buy|store|marketplace|ecommerce|fashion/.test(promptLower)) {
-      return [
-        { id: 'role_impulse_buyer', role: 'IMPULSE BUYER', description: 'Discovery-driven shopper — tests conversion.', count: 3, selected: true },
-        { id: 'role_research_first', role: 'RESEARCH-FIRST BUYER', description: 'Methodical shopper — tests trust and clarity.', count: 3, selected: true },
-        { id: 'role_loyal_repeater', role: 'LOYAL REPEATER', description: 'Returning customer — tests retention.', count: 3, selected: true },
-        { id: 'role_premium_seeker', role: 'PREMIUM SEEKER', description: 'Quality-over-price buyer — tests premium positioning.', count: 0, selected: false },
-      ];
-    } else if (/saas|enterprise|team|workflow|b2b|productivity/.test(promptLower)) {
-      return [
-        { id: 'role_decision_maker', role: 'BUDGET DECISION MAKER', description: 'Manager who approves purchases — validates ROI.', count: 3, selected: true },
-        { id: 'role_power_user', role: 'DAILY POWER USER', description: 'Heavy user — validates UX depth.', count: 3, selected: true },
-        { id: 'role_it_eval', role: 'IT SECURITY EVALUATOR', description: 'Tech gatekeeping — tests compliance.', count: 3, selected: true },
-        { id: 'role_resistant', role: 'CHANGE-RESISTANT USER', description: 'Reluctant adopter — reveals barriers.', count: 0, selected: false },
-      ];
-    } else if (/student|school|college|university|study/.test(promptLower)) {
-      return [
-        { id: 'role_uni_student', role: 'UNIVERSITY STUDENT', description: 'Core user — validates product-market fit.', count: 3, selected: true },
-        { id: 'role_college_applicant', role: 'COLLEGE APPLICANT', description: 'High-stakes test-taker — validates premium tier.', count: 3, selected: true },
-        { id: 'role_high_schooler', role: 'BUSY HIGH SCHOOLER', description: 'Time-pressed student — tests core value delivery.', count: 3, selected: true },
-        { id: 'role_parental_buyer', role: 'PARENTAL BUYER', description: 'Parent paying for child — validates pricing framing.', count: 0, selected: false },
-      ];
-    }
-    // Generic fallback
-    return [
-      { id: 'role_primary', role: 'PRIMARY USER', description: 'Core target user — validates product-market fit.', count: 3, selected: true },
-      { id: 'role_early_adopter', role: 'EARLY ADOPTER', description: 'Forward-thinking user — validates initial demand.', count: 3, selected: true },
-      { id: 'role_price_conscious', role: 'PRICE-CONSCIOUS USER', description: 'Budget-sensitive — validates pricing strategy.', count: 3, selected: true },
-      { id: 'role_skeptic', role: 'SKEPTICAL USER', description: 'Using a competitor — reveals switching barriers.', count: 0, selected: false },
-      { id: 'role_power_user', role: 'POWER USER', description: 'Heavy user — validates feature depth.', count: 0, selected: false },
-    ];
+    return mockSuggestedRoles(studyPrompt);
   },
 
   async generateStudyPersonas(
@@ -1686,7 +1467,7 @@ export const api = {
           study_title: title,
           roles: roles || [],
         }),
-        signal: AbortSignal.timeout(300000),
+        signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
       });
       if (!res.ok) {
         lastKnownLive = false;
@@ -1704,671 +1485,7 @@ export const api = {
       return data;
     }
 
-    const promptLower = (prompt || title || '').toLowerCase();
-    const isStudent = /student|school|college|university|study planner|academic|exam/.test(promptLower);
-    const isPriceTracker = !isStudent && /price tracker|price-tracker|tracker|price track|deal alert|price drop|deal hunter|bargain|shopping|ecommerce/.test(promptLower);
-
-    if (isPriceTracker) {
-      const priceTrackerPersonas: Persona[] = [
-        {
-          id: 'per_samiul_alam',
-          business_id: 'biz_default',
-          name: 'Samiul Alam',
-          initials: 'SA',
-          country_code: 'BD',
-          country_name: 'Bangladesh',
-          role_id: 'role_bargain_hunter',
-          role_title: 'Smart Bargain Hunter',
-          archetype: 'Smart Bargain Hunter',
-          tagline: 'The Strategic Deal Optimizer',
-          demographics: {
-            age: 26,
-            gender: 'Male',
-            occupation: 'Junior Software Engineer',
-            income_bracket: '45,000 BDT/month',
-            location: 'Dhaka (Mirpur), Bangladesh',
-            education: 'B.Sc. in Computer Science',
-          },
-          description:
-            'He frequently purchases electronics, accessories, and apparel online across Daraz, Pickaboo, and Facebook commerce. He actively waits for flash sales and wants historical price charts to avoid fake discount promotions.',
-          badges: [
-            { label: 'HOBBIES', value: 'tech gadgets, price comparison, gaming, cycling' },
-            { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-            { label: 'MONTHLY E-COMMERCE SPEND', value: '4,000 - 8,000 BDT across gadget accessories & clothes' },
-            { label: 'WILLINGNESS TO PAY', value: 'Finds 100 BDT/month fair if it saves at least 300 BDT per month in real discounts' },
-            { label: 'PRIMARY ALERT CHANNEL', value: 'Telegram & WhatsApp instant notification' },
-          ],
-          attributes: [
-            {
-              category: 'Goals',
-              title: 'Never Overpay on Online Gadgets',
-              description: 'Track price history over 90 days to verify if sale discounts are authentic.',
-              provenance_class: 'OBSERVED',
-              evidence: null,
-            },
-            {
-              category: 'Pain Points',
-              title: 'Fake Markdown Prices & Lack of Alerts',
-              description: 'Sellers artificially increase prices before sale campaigns. Manual checking wastes hours.',
-              provenance_class: 'OBSERVED',
-              evidence: null,
-            },
-          ],
-          consistency_score: 0.99,
-          grounding_ratio: 0.97,
-          critic_notes: 'High consistency with young urban professional e-commerce consumer profile.',
-          generation_model: 'bebshax/dataset-grounded-v2',
-          created_at: new Date().toISOString(),
-          status: 'active',
-          version: 1,
-        },
-        {
-          id: 'per_nabila_khan',
-          business_id: 'biz_default',
-          name: 'Nabila Khan',
-          initials: 'NK',
-          country_code: 'BD',
-          country_name: 'Bangladesh',
-          role_id: 'role_budget_planner',
-          role_title: 'Budget-Conscious Buyer',
-          archetype: 'Budget-Conscious Buyer',
-          tagline: 'The Practical Household Economist',
-          demographics: {
-            age: 31,
-            gender: 'Female',
-            occupation: 'Digital Content Lead & Homemaker',
-            income_bracket: '55,000 BDT/month household',
-            location: 'Dhaka (Uttara), Bangladesh',
-            education: 'BBA in Marketing',
-          },
-          description:
-            'She manages household replenishment (skincare, pantry staples, baby products) and tracks price fluctuations across Chaldal, Daraz, and Shajgoj. She wants a single dashboard to alert her when favorite products hit their lowest price.',
-          badges: [
-            { label: 'HOBBIES', value: 'home organization, baking, lifestyle blogging' },
-            { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-            { label: 'PURCHASE FREQUENCY', value: '3-4 online orders per week' },
-            { label: 'PRICE TRACKING NEED', value: 'Bulk pantry staples, baby diapers, and imported cosmetic brands' },
-            { label: 'PRICE TOLERANCE', value: 'Considers 100 BDT/month a no-brainer if it covers multiple e-commerce stores' },
-          ],
-          attributes: [
-            {
-              category: 'Goals',
-              title: 'Streamlined Family Essentials Budget',
-              description: 'Stock up on monthly staples at genuine price dips.',
-              provenance_class: 'OBSERVED',
-              evidence: null,
-            },
-            {
-              category: 'Pain Points',
-              title: 'Scattered Store Checking',
-              description: 'Having to open 4 different apps to check who has the cheapest price.',
-              provenance_class: 'OBSERVED',
-              evidence: null,
-            },
-          ],
-          consistency_score: 0.98,
-          grounding_ratio: 0.96,
-          critic_notes: 'Accurate model of urban household digital shoppers in Bangladesh.',
-          generation_model: 'bebshax/dataset-grounded-v2',
-          created_at: new Date().toISOString(),
-          status: 'active',
-          version: 1,
-        },
-        {
-          id: 'per_tanvir_hasan',
-          business_id: 'biz_default',
-          name: 'Tanvir Hasan',
-          initials: 'TH',
-          country_code: 'BD',
-          country_name: 'Bangladesh',
-          role_id: 'role_tech_shopper',
-          role_title: 'Tech-Savvy Consumer',
-          archetype: 'Tech-Savvy Consumer',
-          tagline: 'The Analytical Deal Scout',
-          demographics: {
-            age: 23,
-            gender: 'Male',
-            occupation: '4th-year University Student & Freelancer',
-            income_bracket: '18,000 BDT/month',
-            location: 'Chattogram, Bangladesh',
-            education: 'B.Sc. in Electrical Engineering',
-          },
-          description:
-            'He freelances as a UI designer and is careful with discretionary spending. He bookmarks PC components and headphones, waiting for authentic price dips before buying.',
-          badges: [
-            { label: 'HOBBIES', value: 'PC building, graphic design, watching tech reviews' },
-            { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-            { label: 'PAYMENT METHOD', value: 'bKash / Nagad mobile banking' },
-            { label: 'SUBSCRIPTION VIEW', value: 'Prefers bKash recurring or micro-payment of 100 BDT rather than credit card requirement' },
-          ],
-          attributes: [
-            {
-              category: 'Goals',
-              title: 'Automated Price Drop Threshold Alerts',
-              description: 'Set custom price alerts (e.g. notify when price drops below 2,500 BDT).',
-              provenance_class: 'OBSERVED',
-              evidence: null,
-            },
-          ],
-          consistency_score: 0.97,
-          grounding_ratio: 0.95,
-          critic_notes: 'Young freelance tech buyer archetype verified.',
-          generation_model: 'bebshax/dataset-grounded-v2',
-          created_at: new Date().toISOString(),
-          status: 'active',
-          version: 1,
-        },
-      ];
-      priceTrackerPersonas.forEach((p) => {
-        mockStore.personas[p.id] = p;
-      });
-      return priceTrackerPersonas;
-    }
-
-    // Grounded mock personas matching datasets
-    const defaultPersonas: Persona[] = [
-      {
-        id: 'per_nusrat_jahan',
-        business_id: 'biz_default',
-        name: 'Nusrat Jahan',
-        initials: 'NJ',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_uni_student',
-        role_title: 'University Student',
-        archetype: 'University Student',
-        tagline: 'The Frugal Striver',
-        demographics: {
-          age: 20,
-          gender: 'Female',
-          occupation: '2nd-year University Student',
-          income_bracket: '7,500 BDT/mo Allowance',
-          location: 'Rajshahi, Bangladesh',
-          education: 'Undergraduate (Economics)',
-        },
-        description:
-          'She is a second-year university student in Rajshahi who tries to stay organized without adding extra costs to her month. She takes her studies seriously and seeks affordable, practical digital tools.',
-        badges: [
-          { label: 'HOBBIES', value: 'reading Bangla fiction, watching study vlogs, casual badminton' },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          {
-            label: 'CLASS SCHEDULE',
-            value: 'Five days a week with mostly morning and midday classes, plus lab sessions',
-          },
-          { label: 'MONTHLY ALLOWANCE', value: '7,500 BDT' },
-          {
-            label: 'EDUCATION APP USAGE',
-            value: 'mostly uses free video lessons and quiz apps; occasionally pays for a high-value tool',
-          },
-          { label: 'DEVICE ACCESS', value: 'mid-range Android smartphone and shared family laptop' },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'Coursework and Exam Organization',
-            description:
-              'Keep daily assignment deadlines, exam revision milestones, and club meetings synchronized.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-          {
-            category: 'Pain Points',
-            title: 'Overpriced Global Subscriptions',
-            description:
-              'Foreign SaaS tools require international credit cards and charge $10+/month which exceeds monthly allowance.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.98,
-        grounding_ratio: 0.96,
-        critic_notes: 'Highly consistent with Tier-2 university student budget profiles in Bangladesh.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-      {
-        id: 'per_farzana_rahman',
-        business_id: 'biz_default',
-        name: 'Farzana Rahman',
-        initials: 'FR',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_parental_planner',
-        role_title: 'Parental Planner',
-        archetype: 'Parental Planner',
-        tagline: 'The Cost-Conscious Academic Guide',
-        demographics: {
-          age: 38,
-          gender: 'Female',
-          occupation: 'Homemaker & Study Supervisor',
-          income_bracket: 'Middle Class Household',
-          location: 'Rajshahi, Bangladesh',
-          education: 'Masters in Social Sciences',
-        },
-        description:
-          "She lives in Rajshahi with her family and takes an active role in keeping her children's school routine on track. She believes education is the safest long-term investment.",
-        badges: [
-          { label: 'HOBBIES', value: 'reading Bangla newspapers, balcony gardening, watching educational programs' },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          { label: 'CHILD SCHOOL LEVEL', value: 'Secondary school (classes 8-10)' },
-          {
-            label: 'EDUCATION APP USAGE',
-            value: 'mostly uses free video lessons and quiz apps; occasionally pays for a high-value tool',
-          },
-          { label: 'MONTHLY STUDY BUDGET', value: '1,500 - 2,500 BDT for supplemental materials' },
-          {
-            label: 'DECISION FACTOR',
-            value: 'Clear weekly progress tracking and direct alignment with NCTB board curriculum',
-          },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'Consistent Child Study Tracking',
-            description: 'Help children build self-directed study habits without creating home tension.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.97,
-        grounding_ratio: 0.95,
-        critic_notes: 'Accurate representation of educated urban-adjacent parents in Bangladesh.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-      {
-        id: 'per_tanjila_akter',
-        business_id: 'biz_default',
-        name: 'Tanjila Akter',
-        initials: 'TA',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_college_applicant',
-        role_title: 'College Applicant',
-        archetype: 'College Applicant',
-        tagline: 'The Structured Striver',
-        demographics: {
-          age: 18,
-          gender: 'Female',
-          occupation: 'HSC 2nd-Year & Admission Aspirant',
-          income_bracket: '4,000 BDT/mo Allowance',
-          location: 'Rajshahi, Bangladesh',
-          education: 'Higher Secondary (Science)',
-        },
-        description:
-          'She is an HSC student in Rajshahi preparing seriously for university admission exams and treats study time as a long-term investment in social mobility.',
-        badges: [
-          { label: 'HOBBIES', value: 'solving math problems, watching short educational videos, journaling' },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          { label: 'CLASS LEVEL', value: 'HSC 2nd year (Science Track)' },
-          {
-            label: 'LEARNING TOOL USE',
-            value: 'uses YouTube lessons, Facebook study groups, PDF notes, and mobile apps',
-          },
-          { label: 'MONTHLY ALLOWANCE', value: '4,000 BDT' },
-          { label: 'ADMISSION TARGET', value: 'Public engineering and medical varsity admission seats' },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'Master High-Yield Admission Syllabus',
-            description:
-              'Systematically complete question banks and practice exams ahead of competitive admission deadlines.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.99,
-        grounding_ratio: 0.97,
-        critic_notes: 'Grounded in HSC science applicant behavioral datasets.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-      {
-        id: 'per_mim_chowdhury',
-        business_id: 'biz_default',
-        name: 'Mim Chowdhury',
-        initials: 'MC',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_budget_learner',
-        role_title: 'Budget-Conscious Learner',
-        archetype: 'Budget-Conscious Learner',
-        tagline: 'The Resourceful Pragmatist',
-        demographics: {
-          age: 20,
-          gender: 'Female',
-          occupation: '2nd-year Degree Student',
-          income_bracket: '3,000 BDT/mo Budget',
-          location: 'Rangpur, Bangladesh',
-          education: 'Undergraduate (National University)',
-        },
-        description:
-          'She is a second-year student living in Rangpur while supporting family responsibilities and studying largely on her own schedule. She is careful with every taka.',
-        badges: [
-          { label: 'HOBBIES', value: 'reading Bengali novels, helping younger siblings with schoolwork, sketching' },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          {
-            label: 'INTERNET ACCESS',
-            value: 'mostly mobile data with uneven speed; relies heavily on offline features',
-          },
-          {
-            label: 'LEARNING TOOL USE',
-            value: 'searches for free study templates, lecture summaries, and Telegram study groups',
-          },
-          { label: 'MONTHLY BUDGET', value: '200-300 BDT maximum for digital tools' },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'Maximize Exam Preparation on Low Budget',
-            description: 'Obtain high exam marks without spending on expensive private tuitions.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.98,
-        grounding_ratio: 0.96,
-        critic_notes: 'Accurate reflection of divisional students with price sensitivity.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-      {
-        id: 'per_sadia_sultana',
-        business_id: 'biz_default',
-        name: 'Sadia Sultana',
-        initials: 'SS',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_high_schooler',
-        role_title: 'Busy High Schooler',
-        archetype: 'Busy High Schooler',
-        tagline: 'The Structured Pragmatist',
-        demographics: {
-          age: 17,
-          gender: 'Female',
-          occupation: 'HSC 1st-Year Student',
-          income_bracket: 'Dependent',
-          location: 'Chattogram, Bangladesh',
-          education: 'College (Class 11)',
-        },
-        description:
-          'She is a 17-year-old higher secondary student in Chattogram balancing coursework, coaching, and extracurriculars while aiming for strong board exam GPA.',
-        badges: [
-          { label: 'HOBBIES', value: 'creative writing, watching science explainers, table tennis' },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          { label: 'COACHING HOURS', value: '12 hours per week across science subjects' },
-          {
-            label: 'DEVICE ACCESS',
-            value: 'owns a mid-range Android phone and shares a family laptop when needed',
-          },
-          { label: 'DAILY SCHEDULE', value: 'tight routine from 7 AM to 10 PM with coaching and school' },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'Balance Coaching and Self-Study',
-            description: 'Sync heavy coaching center homework with daily self-study sessions.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.98,
-        grounding_ratio: 0.96,
-        critic_notes: 'High school science workload model verified.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-      {
-        id: 'per_tasnia_islam',
-        business_id: 'biz_default',
-        name: 'Tasnia Islam',
-        initials: 'TI',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_private_tutor_student',
-        role_title: 'Private Tutor Student',
-        archetype: 'Private Tutor Student',
-        tagline: 'The Pragmatic Striver',
-        demographics: {
-          age: 20,
-          gender: 'Female',
-          occupation: '2nd-year BBA Student',
-          income_bracket: '8,000 BDT/mo Allowance',
-          location: 'Dhaka, Bangladesh',
-          education: 'Undergraduate (BBA)',
-        },
-        description:
-          'She is a second-year university student in Dhaka balancing coursework, family expectations, and a tight monthly budget. She likes organized routines.',
-        badges: [
-          { label: 'HOBBIES', value: 'reading class notes with friends, watching Bangla and Korean dramas' },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          {
-            label: 'LEARNING ROUTINE',
-            value: 'studies most evenings, reviews lecture notes before quizzes, and intensifies before finals',
-          },
-          { label: 'LIVING SETUP', value: 'lives with family and commutes to campus via rickshaw and bus' },
-          { label: 'TUTORING SUPPORT', value: 'receives weekly private tutoring in mathematics and statistics' },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'Track Private Tutoring Assignments',
-            description: 'Organize weekly tasks assigned by private tutors and university professors in one place.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.97,
-        grounding_ratio: 0.95,
-        critic_notes: 'Dhaka commuter and private tutoring user profile verified.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-      {
-        id: 'per_rafia_karim',
-        business_id: 'biz_default',
-        name: 'Rafia Karim',
-        initials: 'RK',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_scholarship_aspirant',
-        role_title: 'Scholarship Aspirant',
-        archetype: 'Scholarship Aspirant',
-        tagline: 'The Structured Climber',
-        demographics: {
-          age: 19,
-          gender: 'Female',
-          occupation: 'Admission Candidate',
-          income_bracket: 'Dependent',
-          location: 'Chattogram, Bangladesh',
-          education: 'HSC Graduate (Science)',
-        },
-        description:
-          'She is a scholarship-focused student from Chattogram who treats study time as a long-term investment and prefers structure over guesswork. She is ambitious and disciplined.',
-        badges: [
-          { label: 'HOBBIES', value: 'solving math puzzles, journaling, debate club, watching educational YouTube' },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          { label: 'COACHING FORMAT', value: 'hybrid coaching center plus self-study with online supplements' },
-          { label: 'EXAM STAGE', value: 'university admission preparation with scholarship focus' },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'High-Percentile Exam Benchmarking',
-            description: 'Track mock test accuracy rates and time management across every question chapter.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.99,
-        grounding_ratio: 0.97,
-        critic_notes: 'High ambition scholarship seeker profile verified.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-      {
-        id: 'per_mahin_hossain',
-        business_id: 'biz_default',
-        name: 'Mahin Hossain',
-        initials: 'MH',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_group_organizer',
-        role_title: 'Study Group Organizer',
-        archetype: 'Study Group Organizer',
-        tagline: 'The Quiet Systems Builder',
-        demographics: {
-          age: 21,
-          gender: 'Male',
-          occupation: '3rd-year CSE Student',
-          income_bracket: '6,000 BDT/mo Allowance + Tuitions',
-          location: 'Rajshahi, Bangladesh',
-          education: 'Undergraduate (Computer Science)',
-        },
-        description:
-          'He is a third-year university student in Rajshahi who quietly became the person classmates rely on to keep group study on track. He prefers structured routines, low fuss.',
-        badges: [
-          {
-            label: 'HOBBIES',
-            value: 'badminton, football highlights, nonfiction reading, tidy note-making, and casual coding',
-          },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          {
-            label: 'DIGITAL STUDY TOOLS',
-            value: 'WhatsApp, Google Calendar, Google Drive, Facebook Messenger, and a study app',
-          },
-          { label: 'GROUP SIZE', value: '6 students in his core study circle' },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'Coordinate Group Project Schedules',
-            description: 'Coordinate group study sessions, lab project sprints, and exam question distributions.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.98,
-        grounding_ratio: 0.96,
-        critic_notes: 'Group leader persona verified against campus cohort behavioral datasets.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-      {
-        id: 'per_samia_tabassum',
-        business_id: 'biz_default',
-        name: 'Samia Tabassum',
-        initials: 'ST',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_test_prep',
-        role_title: 'Test Prep Seeker',
-        archetype: 'Test Prep Seeker',
-        tagline: 'The Disciplined Value-Seeker',
-        demographics: {
-          age: 17,
-          gender: 'Female',
-          occupation: 'Class 11 Science Student',
-          income_bracket: 'Dependent',
-          location: 'Chattogram, Bangladesh',
-          education: 'College (HSC 1st year)',
-        },
-        description:
-          'She is a Class 11 science student in Chattogram who attends several private tutoring sessions each week and relies on careful routines to stay on top of exams.',
-        badges: [
-          { label: 'HOBBIES', value: 'mobile photography, watching cricket highlights, solving puzzle apps, and walking' },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          {
-            label: 'DIGITAL TOOL USE',
-            value: 'uses YouTube lectures, Facebook study groups, shared PDF notes, and occasional practice apps',
-          },
-          { label: 'MONTHLY STUDY BUDGET', value: '300-500 taka/month for optional study aids beyond tutor fees' },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'Consistent Chapter Revision Cycles',
-            description: 'Build repeated spaced repetition cycles before monthly college exams.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.98,
-        grounding_ratio: 0.96,
-        critic_notes: 'Class 11 test prep discipline model verified.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-      {
-        id: 'per_iffat_ara',
-        business_id: 'biz_default',
-        name: 'Iffat Ara',
-        initials: 'IA',
-        country_code: 'BD',
-        country_name: 'Bangladesh',
-        role_id: 'role_remote_student',
-        role_title: 'Remote Student',
-        archetype: 'Remote Student',
-        tagline: 'The Resourceful Skeptic',
-        demographics: {
-          age: 18,
-          gender: 'Female',
-          occupation: 'Science-track College Applicant',
-          income_bracket: 'Dependent',
-          location: 'Rajshahi, Bangladesh',
-          education: 'HSC (Science)',
-        },
-        description:
-          'She is an 18-year-old science-track college applicant in Rajshahi aiming for a public university seat. Careful with money and sensitive to academic pressure, she already uses free tools.',
-        badges: [
-          { label: 'HOBBIES', value: 'solving math problems, watching cricket highlights, reading Bengali short stories' },
-          { label: 'ORIGIN COUNTRY', value: 'Bangladesh' },
-          { label: 'COACHING STATUS', value: 'enrolled in a local offline coaching center with online test series' },
-          { label: 'DEVICE ACCESS', value: 'own Android smartphone with mobile data connectivity' },
-        ],
-        attributes: [
-          {
-            category: 'Goals',
-            title: 'Reliable Offline Study Planning',
-            description: 'Access revision schedules and practice notes even during poor internet connectivity.',
-            provenance_class: 'OBSERVED',
-            evidence: null,
-          },
-        ],
-        consistency_score: 0.97,
-        grounding_ratio: 0.95,
-        critic_notes: 'Remote connectivity and price skepticism persona verified.',
-        generation_model: 'bebshax/dataset-grounded-v2',
-        created_at: '2026-08-24T22:00:00Z',
-        status: 'active',
-        version: 1,
-      },
-    ];
-
-    defaultPersonas.forEach((p) => {
-      mockStore.personas[p.id] = p;
-    });
-
-    return defaultPersonas;
+    return mockGeneratedPersonas(prompt, title);
   },
 
   // =========================================================================
@@ -2380,15 +1497,17 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/health/openrouter`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
         lastKnownLive = false;
-      } catch {
+        throw new Error(`OpenRouter health check failed (HTTP ${res.status})`);
+      } catch (err) {
         lastKnownLive = false;
+        throw err;
       }
     }
     return {
@@ -2409,7 +1528,8 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ model }),
-          signal: AbortSignal.timeout(35000),
+          // Sends a real test completion — free-tier latency applies.
+          signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -2448,402 +1568,10 @@ export const api = {
   },
 
   // -------------------------------------------------------------
-  // Evidence & Research Engine API Methods
+  // Evidence & Research Engine API Methods — extracted to researchApi.ts
+  // (startResearch … rejectDatasetCandidate, plus triggerStudyResearch)
   // -------------------------------------------------------------
-  async startResearch(studyId: string): Promise<ResearchRun> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/research`, {
-          method: 'POST',
-          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-
-    const mockRun: ResearchRun = {
-      id: `run_${Date.now()}`,
-      study_id: studyId,
-      status: 'completed',
-      query_count: 5,
-      source_count: mockStore.sources.length,
-      claim_count: mockStore.claims.length,
-      queries: [
-        'student study planner pain points Bangladesh',
-        'monthly subscription affordability Dhaka students',
-        'AI study tools competitor retention complaints',
-        'exam preparation coaching habits bKash payments',
-      ],
-      started_at: new Date(Date.now() - 4000).toISOString(),
-      completed_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-    };
-    mockStore.researchRuns.unshift(mockRun);
-    return mockRun;
-  },
-
-  async getResearchRuns(studyId: string): Promise<ResearchRun[]> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/research`, {
-          headers: this.getAuthHeaders(),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    return mockStore.researchRuns.filter((r) => r.study_id === studyId || r.study_id === 'study_default');
-  },
-
-  async getResearchRun(studyId: string, runId: string): Promise<ResearchRun> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/research/${runId}`, {
-          headers: this.getAuthHeaders(),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    const found = mockStore.researchRuns.find((r) => r.id === runId);
-    if (found) return found;
-    return {
-      id: runId,
-      study_id: studyId,
-      status: 'completed',
-      query_count: 5,
-      source_count: 4,
-      claim_count: 5,
-      queries: ['student study planner pain points', 'bKash payment willingess'],
-      started_at: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-    };
-  },
-
-  async getEvidenceSummary(studyId: string): Promise<EvidenceSummary> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/summary`, {
-          headers: this.getAuthHeaders(),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-
-    const claims = mockStore.claims;
-    const supported = claims.filter((c) => c.status === 'supported').length;
-    const inferred = claims.filter((c) => c.status === 'inference').length;
-    const unsupported = claims.filter((c) => c.status === 'unsupported').length;
-    const total = claims.length || 1;
-
-    return {
-      study_id: studyId,
-      research_status: 'completed',
-      evidence_coverage: Math.round((supported / total) * 100),
-      supported_pct: Math.round((supported / total) * 100),
-      inferred_pct: Math.round((inferred / total) * 100),
-      unsupported_pct: Math.round((unsupported / total) * 100),
-      supported_count: supported,
-      inferred_count: inferred,
-      unsupported_count: unsupported,
-      total_claims: claims.length,
-      total_sources: mockStore.sources.length,
-      latest_run: {
-        id: 'run_latest',
-        status: 'completed',
-        query_count: 5,
-        source_count: mockStore.sources.length,
-        claim_count: claims.length,
-        started_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-      },
-    };
-  },
-
-  async getEvidenceSources(
-    studyId: string,
-    params?: { source_type?: string; search?: string }
-  ): Promise<EvidenceSource[]> {
-    if (!this.isMockMode()) {
-      try {
-        const queryParams = new URLSearchParams();
-        if (params?.source_type) queryParams.set('source_type', params.source_type);
-        if (params?.search) queryParams.set('search', params.search);
-        const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
-
-        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/sources${qs}`, {
-          headers: this.getAuthHeaders(),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-
-    let results = [...mockStore.sources];
-    if (params?.source_type && params.source_type !== 'all') {
-      results = results.filter((s) => s.source_type === params.source_type);
-    }
-    if (params?.search) {
-      const q = params.search.toLowerCase();
-      results = results.filter(
-        (s) => s.title.toLowerCase().includes(q) || s.content.toLowerCase().includes(q) || s.publisher.toLowerCase().includes(q)
-      );
-    }
-    return results;
-  },
-
-  async getEvidenceSourceDetail(studyId: string, sourceId: string): Promise<SourceDetail> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/sources/${sourceId}`, {
-          headers: this.getAuthHeaders(),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-
-    const source = mockStore.sources.find((s) => s.id === sourceId) || mockStore.sources[0];
-    return {
-      ...source,
-      chunks: [
-        {
-          id: `chk_${source.id}_0`,
-          chunk_index: 0,
-          content: source.content,
-          created_at: new Date().toISOString(),
-        },
-      ],
-    };
-  },
-
-  async getEvidenceClaims(
-    studyId: string,
-    params?: { status?: string; category?: string; search?: string }
-  ): Promise<EvidenceClaim[]> {
-    if (!this.isMockMode()) {
-      try {
-        const queryParams = new URLSearchParams();
-        if (params?.status) queryParams.set('status', params.status);
-        if (params?.category) queryParams.set('category', params.category);
-        if (params?.search) queryParams.set('search', params.search);
-        const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
-
-        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/claims${qs}`, {
-          headers: this.getAuthHeaders(),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-
-    let results = [...mockStore.claims];
-    if (params?.status && params.status !== 'all') {
-      results = results.filter((c) => c.status === params.status);
-    }
-    if (params?.category && params.category !== 'all') {
-      results = results.filter((c) => c.category === params.category);
-    }
-    if (params?.search) {
-      const q = params.search.toLowerCase();
-      results = results.filter(
-        (c) => c.claim_text.toLowerCase().includes(q) || (c.rationale && c.rationale.toLowerCase().includes(q))
-      );
-    }
-    return results;
-  },
-
-  async getEvidenceClaimDetail(studyId: string, claimId: string): Promise<ClaimDetail> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/claims/${claimId}`, {
-          headers: this.getAuthHeaders(),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-
-    const claim = mockStore.claims.find((c) => c.id === claimId) || mockStore.claims[0];
-    const supporting = mockStore.sources.filter((s) => claim.supporting_source_ids.includes(s.id));
-    const contradicting = mockStore.sources.filter((s) => claim.contradicting_source_ids.includes(s.id));
-    const chunks = supporting.map((s, idx) => ({
-      id: `chk_${s.id}_${idx}`,
-      source_id: s.id,
-      chunk_index: idx,
-      content: s.content.slice(0, 300) + '...',
-    }));
-
-    return {
-      ...claim,
-      supporting_sources: supporting,
-      supporting_chunks: chunks,
-      contradicting_sources: contradicting,
-    };
-  },
-
-  async semanticSearchEvidence(
-    studyId: string,
-    query: string,
-    topK: number = 6
-  ): Promise<{ chunk_id: string; source_id: string; content: string; similarity_score: number; metadata: any }[]> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/evidence/search`, {
-          method: 'POST',
-          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ query, top_k: topK }),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-
-    return mockStore.sources.slice(0, topK).map((s, idx) => ({
-      chunk_id: `chk_${s.id}_${idx}`,
-      source_id: s.id,
-      content: s.content,
-      similarity_score: 0.88 - idx * 0.05,
-      metadata: { publisher: s.publisher, title: s.title },
-    }));
-  },
-
-  // ============================================================================
-  // Autonomous Research — Plan & Dataset Candidates
-  // ============================================================================
-
-  async getResearchPlan(studyId: string): Promise<import('../types').ResearchPlan | null> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/research/plan`, {
-          headers: this.getAuthHeaders(),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        if (res.status === 404) return null;
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    return null;
-  },
-
-  async listDatasetCandidates(studyId: string): Promise<import('../types').DatasetCandidate[]> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/datasets/candidates`, {
-          headers: this.getAuthHeaders(),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    // No mock fabrication per product requirement — return empty list
-    return [];
-  },
-
-  async getDatasetCandidates(studyId: string): Promise<import('../types').DatasetCandidate[]> {
-    return this.listDatasetCandidates(studyId);
-  },
-
-  async importDatasetCandidate(
-    studyId: string,
-    candidateId: string
-  ): Promise<{ success: boolean; imported_dataset_id: string; dataset_name: string; row_count: number | null }> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(
-          `${API_BASE}/studies/${studyId}/datasets/candidates/${candidateId}/import`,
-          {
-            method: 'POST',
-            headers: this.getAuthHeaders(),
-          }
-        );
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as any).detail || 'Import failed');
-      } catch (e) {
-        lastKnownLive = false;
-        throw e;
-      }
-    }
-    throw new Error('Not available in mock mode');
-  },
-
-  async rejectDatasetCandidate(
-    studyId: string,
-    candidateId: string
-  ): Promise<{ success: boolean }> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(
-          `${API_BASE}/studies/${studyId}/datasets/candidates/${candidateId}/reject`,
-          {
-            method: 'POST',
-            headers: this.getAuthHeaders(),
-          }
-        );
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    return { success: true };
-  },
+  ...researchApi,
 
   // ============================================================================
   // Dataset Sources & Data Lab
@@ -2858,8 +1586,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to fetch datasets (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return studyId
@@ -2895,8 +1626,9 @@ export const api = {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || 'Failed to ingest dataset URL');
       } catch (e: any) {
-        if (e.message && !e.message.includes('Failed to fetch')) throw e;
+        // Live mode: connectivity loss surfaces — no fabricated dataset rows.
         lastKnownLive = false;
+        throw e;
       }
     }
 
@@ -2960,8 +1692,9 @@ export const api = {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || 'Failed to upload dataset');
       } catch (e: any) {
-        if (e.message && !e.message.includes('Failed to fetch')) throw e;
+        // Live mode: connectivity loss surfaces — no fabricated dataset rows.
         lastKnownLive = false;
+        throw e;
       }
     }
 
@@ -3021,8 +1754,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to fetch dataset (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     const found = mockStore.datasets.find((d) => d.id === datasetId);
@@ -3046,8 +1782,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to fetch dataset preview (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -3080,8 +1819,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to refresh dataset (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -3103,10 +1845,14 @@ export const api = {
         });
         if (res.ok) {
           lastKnownLive = true;
+          mockStore.datasets = mockStore.datasets.filter((d) => d.id !== datasetId);
           return;
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to delete dataset (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     mockStore.datasets = mockStore.datasets.filter((d) => d.id !== datasetId);
@@ -3132,8 +1878,12 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Dataset persona generation failed' }));
+        throw new Error(err.detail || `Dataset persona generation failed (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -3161,8 +1911,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`OpenRouter health check failed (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return {
@@ -3192,8 +1945,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`OpenRouter model test failed (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return {
@@ -3214,8 +1970,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to fetch segmentation readiness (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return {
@@ -3275,8 +2034,13 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Segmentation run failed' }));
+        throw new Error(err.detail || `Segmentation run failed (HTTP ${res.status})`);
+      } catch (err) {
+        // Fabricated "data_backed" segments would poison the research — fail visibly.
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -3469,8 +2233,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Segment comparison failed (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
     return {
@@ -3505,8 +2272,11 @@ export const api = {
           lastKnownLive = true;
           return;
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to delete segmentation run (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
   },
@@ -3543,8 +2313,12 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to fetch study personas (HTTP ${res.status})`);
+      } catch (err) {
+        // Never substitute fabricated personas for a failed live read.
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -3958,8 +2732,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to fetch persona detail (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -3982,7 +2759,7 @@ export const api = {
       try {
         const res = await fetch(pollUrl, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.POLL),
         });
         if (res.status === 404) {
           const err = await res.json().catch(() => ({ detail: 'job not found' }));
@@ -4056,12 +2833,18 @@ export const api = {
             lastKnownLive = true;
             return await res.json();
           }
+          lastKnownLive = false;
+          const err = await res.json().catch(() => ({ detail: 'Persona generation failed' }));
+          throw new Error(err.detail || `Persona generation failed (HTTP ${res.status})`);
         }
-      } catch (e) {
-        // Honest backend-reported job failures propagate to the user; only
-        // genuine connectivity loss degrades to the mock fallback below.
-        if ((e as { isJobFailure?: boolean })?.isJobFailure) throw e;
         lastKnownLive = false;
+        const jobErr = await jobRes.json().catch(() => ({ detail: 'Persona generation failed' }));
+        throw new Error(jobErr.detail || `Persona generation failed (HTTP ${jobRes.status})`);
+      } catch (e) {
+        // Live mode never degrades into a fabricated "completed" run —
+        // honest job failures and connectivity loss both surface.
+        if (!(e as { isJobFailure?: boolean })?.isJobFailure) lastKnownLive = false;
+        throw e;
       }
     }
 
@@ -4101,8 +2884,12 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Persona regeneration failed' }));
+        throw new Error(err.detail || `Persona regeneration failed (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -4125,8 +2912,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to fetch persona runs (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
 
@@ -4166,8 +2956,11 @@ export const api = {
           lastKnownLive = true;
           return;
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to delete persona run (HTTP ${res.status})`);
+      } catch (err) {
+        lastKnownLive = false;
+        throw err;
       }
     }
   },
@@ -4261,8 +3054,12 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to fetch interview metrics (HTTP ${res.status})`);
+      } catch (err) {
+        // Fabricated zero-metrics would misreport real work — fail visibly.
+        lastKnownLive = false;
+        throw err;
       }
     }
     return {
@@ -4496,8 +3293,12 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        throw new Error(`Failed to fetch behavioral metrics (HTTP ${res.status})`);
+      } catch (err) {
+        // The 52% buy-likelihood below is a mock fixture — never serve it live.
+        lastKnownLive = false;
+        throw err;
       }
     }
     return {
@@ -4685,7 +3486,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/reports`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -4704,7 +3505,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/reports/latest`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -4723,7 +3524,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/reports/${reportId}`, {
           headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -4765,7 +3566,7 @@ export const api = {
             body: JSON.stringify({ title }),
             // Report synthesis reads every interview + runs LLM synthesis;
             // 120s aborted real runs mid-generation.
-            signal: AbortSignal.timeout(300000),
+            signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
           });
           if (res.ok) {
             lastKnownLive = true;
@@ -4797,14 +3598,19 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ prompt, question_count: count }),
-          signal: AbortSignal.timeout(120000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
         });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
         lastKnownLive = false;
+        const err = await res.json().catch(() => ({ detail: 'Script generation failed' }));
+        throw new Error(err.detail || `Script generation failed (HTTP ${res.status})`);
+      } catch (err) {
+        // Canned questions must never impersonate LLM output in live mode.
+        lastKnownLive = false;
+        throw err;
       }
     }
     return {
@@ -4820,25 +3626,6 @@ export const api = {
     };
   },
 
-  async triggerStudyResearch(studyId: string): Promise<any> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/studies/${studyId}/research/run`, {
-          method: 'POST',
-          headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(120000),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
-        lastKnownLive = false;
-      }
-    }
-    return { study_id: studyId, status: 'completed' };
-  },
-
   async runBatchStudyInterviews(
     studyId: string,
     personaIds?: string[],
@@ -4851,7 +3638,7 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ persona_ids: personaIds, questions }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -4871,7 +3658,7 @@ export const api = {
     if (!this.isMockMode()) {
       const res = await fetch(`${API_BASE}/studies/${studyId}/interviews/batch-run/${jobId}`, {
         headers: this.getAuthHeaders(),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(TIMEOUT_MS.POLL),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: `Batch status failed (${res.status})` }));

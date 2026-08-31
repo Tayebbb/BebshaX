@@ -80,7 +80,7 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
       type: 'interviews',
       icon: <Users size={19} />,
       iconBg: 'var(--accent-subtle)',
-      iconColor: '#14B8A6',
+      iconColor: 'var(--accent-teal)',
       title: 'User Interviews',
       description: 'Simulate in-depth discovery interviews with grounded personas to reveal daily workflows and unarticulated pain points.',
     },

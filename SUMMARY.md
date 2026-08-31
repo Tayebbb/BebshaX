@@ -10,10 +10,11 @@
 
 ## The 60-second version (memorize this)
 
-- **What it is:** an app where you type your business idea, and AI builds a panel of realistic fake customers, interviews them, tests prices on them, and writes you a market-research report.
-- **Why it's hard:** we have **zero money for AI**. So we built a smart "traffic controller" that spreads work across ~20 free AI services, retries when they fail, and falls back to an AI running on our own laptop GPU. To the user it feels like one reliable AI.
+- **What we proved (lead with this):** we made ~20 unreliable free AI services behave like **one reliable paid API** — a live interview survived **4 different AI providers failing and swapping mid-conversation**, and the synthetic customer never broke character. The provenance log shows every failover. That's the research thesis, demonstrated.
+- **What it powers:** an app where you type your business idea, and AI builds a panel of realistic synthetic customers, interviews them, tests prices on them, and writes you a market-research report — the demanding workload that stresses the routing engine.
+- **Why it's hard:** we have **zero money for AI**. The "traffic controller" spreads work across free tiers, retries on failure, and falls back to an AI running on our own laptop GPU — without ever silently degrading quality.
 - **Why it's trustworthy:** the system never lies about where information came from. Every customer claim is tagged as _observed in real evidence_, _reasonably inferred_, or _made up to complete the picture_ — and the tagging is checked by code, not by trusting the AI.
-- **What we proved:** an interview kept working while 4 different AI providers failed and swapped mid-conversation — and the fake customer never broke character. That's the research thesis, demonstrated.
+- **What it's for:** letting a zero-budget founder **rehearse and de-risk** their research before spending a single taka on real users — a complement to real customers, never a replacement.
 
 ---
 
@@ -21,7 +22,7 @@
 
 ## 1.1 One-sentence pitch
 
-**BebshaX is an AI market-research platform that lets a founder validate a business idea in minutes instead of months — by generating evidence-grounded synthetic customers ("personas") and running realistic user interviews, behavioral tests, and market research against them, all running on $0 of AI budget.**
+**BebshaX is an AI market-research platform that lets a founder pressure-test and de-risk a business idea in minutes instead of months — by generating evidence-grounded synthetic customers ("personas") and running realistic user interviews, behavioral tests, and market research against them, all running on $0 of AI budget — as a rigorous rehearsal before (never a replacement for) talking to real customers.**
 
 ## 1.2 The problem
 
@@ -106,6 +107,35 @@ For offline demos, a flag (`BEBSHAX_DEMO_MODE`) seeds a complete sample study. A
 
 ---
 
+## 1.8 Sustainable Development Goals (SDG) alignment
+
+BebshaX advances four SDGs — each mapped to a shipped capability, not an aspiration:
+
+| SDG                                               | Target                                                            | How BebshaX contributes (with evidence in this repo)                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SDG 8 — Decent Work & Economic Growth**         | 8.3: support entrepreneurship and the growth of micro-enterprises | Removes the two barriers that make early-stage founders skip user research entirely — weeks of recruiting and thousands of dollars in agency fees (§1.2). A student founder runs a full research cycle (evidence → personas → interviews → behavioral tests → report) in one afternoon at $0, so ideas get tested _before_ savings are spent building the wrong thing. |
+| **SDG 9 — Industry, Innovation & Infrastructure** | 9.b: support domestic technology development and innovation       | The core contribution is _infrastructure_: a routing layer that aggregates ~20 free LLM endpoints plus a local GPU model into one reliable substrate (§2.3), built and documented so any zero-budget team can replicate the approach. Research is grounded in public open data (Bangladesh Bureau of Statistics, World Bank Open Data catalogs — §2.7.1).              |
+| **SDG 10 — Reduced Inequalities**                 | 10.2: promote economic inclusion irrespective of economic status  | The entire architecture exists so that access to AI-powered research does **not** depend on money: $0 API budget as a hard constraint (§1.4), BDT-first commercial profiles, bKash/Nagad payment context, and local-market grounding as data rather than hardcoding (§3.3). A founder in Dhaka gets the tool a funded Silicon Valley startup pays for.                 |
+| **SDG 4 — Quality Education** (co-benefit)        | 4.4: increase skills for employment and entrepreneurship          | The provenance-labeled workflow _teaches_ evidence-based validation: users see which claims are observed, inferred, or synthetic, and every report ends with a limitations section and a push toward real-customer validation — research literacy by construction. Claimed as a co-benefit, not a design goal.                                                         |
+
+**Honesty note (say it before judges ask):** measured impact is prospective — the platform is pre-pilot. What is _not_ prospective is the access barrier it removes, which is priced and documented, and the anti-fabrication layer, which is enforced in code (§3.2).
+
+## 1.9 Why this is a Complex Engineering Problem (CEP)
+
+Mapped against the Washington Accord complex-problem attributes (WP1–WP7):
+
+| Attribute                                        | How BebshaX satisfies it                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **WP1 — Depth of knowledge required**            | Spans distributed-systems engineering (routing, failover, per-pool concurrency, circuit cooldowns), applied NLP (persona generation, retrieval, pgvector/HNSW memory scored by relevance+recency+importance), and evaluation methodology (GSM8K/MMLU micro-slices, RouterArena replays, LLM-judge gates) — §2.3, §2.5, §2.15.                                                                                                                          |
+| **WP2 — Wide-ranging conflicting requirements**  | Zero budget vs. "quality is never silently degraded" (R2); persona fidelity demands full untruncated context vs. small free-tier context windows; legitimate quota use (R5) vs. throughput targets; reliable demos vs. honesty (demo content carries a stored `CACHED` label). Every conflict is resolved by explicit written policy, not ad-hoc code.                                                                                                 |
+| **WP3 — No obvious solution; depth of analysis** | Decisions were made by recorded experiments, not intuition: the local 3B model won the conversation-pool slot via a quality gate (9.65/10 at ~6s vs 53s cloud — [data/metadata/local_3b_gate_20260826_235633.json](data/metadata/local_3b_gate_20260826_235633.json)); the capacity study fixed the ~100 personas/day target; and the non-obvious ruling that _low answer quality is not an infrastructure failure_ shapes the whole failure taxonomy. |
+| **WP4 — Infrequently encountered issues**        | Mid-conversation cross-provider failover with persona identity intact (proved live across 4 providers); free embedding APIs silently swapping models and corrupting a vector space (solved with `embedding_space` tagging — §3.4.2). Neither has established prior art to copy.                                                                                                                                                                        |
+| **WP5 — Beyond standards and codes**             | No standard exists for provenance-labeled synthetic research, so the team authored its own binding normative code: RULES.md R1–R12, a closed failure taxonomy (R6), and a test-enforced adapter boundary (R1) — the rules are enforced by the test suite, not by convention.                                                                                                                                                                           |
+| **WP6 — Diverse stakeholder involvement**        | Founders needing trustworthy output; LLM providers whose terms must be respected (R5: no account multiplication, no limit evasion); open-data publishers with licenses to honor (R9); the real populations whose statistics ground personas; and downstream customers affected by decisions made on synthetic evidence — with directly conflicting needs (provider limits vs. user throughput).                                                        |
+| **WP7 — High-level interdependence**             | Fifteen phased subsystems where provenance depends on router attempts, grounding scores on citation verification, interviews on memory + eligibility + context budgeting: a change in any layer propagates through the stack (PROJECT_CONTEXT.md roadmap; §2.2 architecture).                                                                                                                                                                          |
+
+---
+
 # PART 2 — THE TECHNOLOGY (Technical Deep Dive)
 
 ## 2.1 Stack at a glance
@@ -120,7 +150,7 @@ For offline demos, a flag (`BEBSHAX_DEMO_MODE`) seeds a complete sample study. A
 | Rate limiting       | slowapi (per-endpoint limits)                                                                                                                   | [apps/backend/bebshax/api/limiter.py](apps/backend/bebshax/api/limiter.py)   |
 | Payments (scaffold) | Stripe checkout/portal/webhook endpoints                                                                                                        | [apps/backend/bebshax/api/payments.py](apps/backend/bebshax/api/payments.py) |
 
-**Scale of the codebase:** ~110 backend Python modules, 94 backend test files (~428 tests), 17 frontend test files (~79 tests), 15 delivered implementation phases, CI on GitHub Actions (Ubuntu).
+**Scale of the codebase:** ~110 backend Python modules, 97 backend test files (~474 passing tests), 17 frontend test files (89 tests), 15 delivered implementation phases, CI on GitHub Actions (Ubuntu).
 
 ## 2.2 Architecture overview
 
@@ -391,7 +421,7 @@ Results persist as `segmentation_runs` + `market_segments`; segments then ground
 
 Conventions that matter: a naming convention on `Base` (deterministic index/constraint names — required for reversible Alembic migrations), `native_enum=False` (VARCHAR + CHECK so enum growth never needs `ALTER TYPE`), timezone-aware timestamps with Python-side defaults (SQLite/Postgres parity in tests), JSON columns with JSONB variant on Postgres. Schema evolution is Alembic-only; startup only auto-creates schema on a **completely empty** database and otherwise **fail-fast refuses to serve if the DB is not at migration head** (one clear error instead of cryptic 500s).
 
-## 2.12 API surface (~85 endpoints, all under `/api`)
+## 2.12 API surface (~117 endpoints, all under `/api`)
 
 | Area              | Representative endpoints                                                                                                                                                                                                         |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -433,7 +463,7 @@ Conventions that matter: a naming convention on `Base` (deterministic index/cons
 
 - **Four surfaces:** a full **marketing landing page** (~20 sections in [components/landing](apps/frontend/src/components/landing/LandingPage.tsx): hero with animated dashboard preview, problem/how-it-works/comparison/pricing/FAQ, an interactive demo, and a custom scroll-choreography engine in [scrollEngine.ts](apps/frontend/src/components/landing/scrollEngine.ts)); the **auth flow** (sign-in, sign-up, OTP email verification, forgot/reset password — 6 views sharing one styled component); the **dashboard shell** with path-based tab routing; and a dedicated **InterviewWorkspace** ([components/interview](apps/frontend/src/components/interview/InterviewWorkspace.tsx)) for live one-on-one persona interviews.
 - **Single-page React app**, path-based tab routing inside [DashboardLayout.tsx](apps/frontend/src/components/dashboard/DashboardLayout.tsx) (New Study, Dashboard, Persona Library, Interviews, Behavioral Testing, Evidence Lab, Segmentation, Model Router, Study Workflow).
-- **One API client** ([services/api.ts](apps/frontend/src/services/api.ts), ~4,700 lines): typed methods for all ~85 endpoints, per-call `AbortSignal.timeout` budgets sized to measured backend latencies (e.g., 300s for persona generation — free-tier LLMs are slow; early 5s timeouts caused "silent mock" bugs that were audited out), a **mock-data fallback layer** so the UI runs without a backend (used for demos and frontend tests), JWT storage with expiry pre-check, and a generic `pollGenerationJob` helper for the 202+poll pattern.
+- **One API client** ([services/api.ts](apps/frontend/src/services/api.ts), ~3,750 lines, with the research/evidence slice in [services/researchApi.ts](apps/frontend/src/services/researchApi.ts) and mock fixtures isolated in [services/mockStore.ts](apps/frontend/src/services/mockStore.ts)): typed methods for all ~117 endpoints, per-call `AbortSignal.timeout` budgets from a named `TIMEOUT_MS` map sized to measured backend latencies (300s for LLM-path calls — free-tier LLMs are slow; early 5s timeouts caused "silent mock" bugs that were audited out), a **mock-data layer strictly gated to mock/test mode** (live network failures surface errors — never fixtures), JWT storage with expiry pre-check, and a generic `pollGenerationJob` helper for the 202+poll pattern.
 - **Theme system:** semantic CSS design tokens (`--glass-*`, `--text-on-accent`, `--status-*`) with `[data-theme='light']` overrides; dark stayed pixel-identical because dark token values _are_ the original literals. A checked-in codemod + `npm run theme:check` drift gate keeps hex literals from creeping back in.
 - **Motion:** GSAP + @gsap/react — central config module, step-transition staggers, count-up stats, scroll reveals — all gated behind `prefers-reduced-motion` (and disabled under tests).
 - **Responsive:** desktop sidebar becomes a mobile drawer at ≤900px; inline-style-safe techniques (`clamp()` gutters, `minmax(min(320px,100%),1fr)` grids) verified at 390/768/1440px with zero horizontal overflow.
@@ -443,9 +473,9 @@ Conventions that matter: a naming convention on `Base` (deterministic index/cons
 
 > **In plain words:** ~500 automated tests run on every change. The trick for testing an AI system without paying for AI: all the _routing_ logic is tested against a fake provider we can script to fail in every possible way ("return a 429 now", "time out now") and we assert the system reacts exactly per policy. The _quality_ of AI output is measured separately, by evaluation runs with saved report cards.
 
-- **~428 backend tests** (94 files): unit + API + chaos. All LLM failover paths are tested against `FakeAdapter` with injected failures — never a real provider. Integration tests (live DB) are opt-in via a pytest marker. Warnings are errors (`filterwarnings = error`) — deprecations can't rot silently.
+- **~474 backend tests** (97 files): unit + API + chaos. All LLM failover paths are tested against `FakeAdapter` with injected failures — never a real provider. Integration tests (live DB) are opt-in via a pytest marker. Warnings are errors (`filterwarnings = error`) — deprecations can't rot silently.
 - **Boundary tests as architecture enforcement:** R1 (no provider imports outside adapters), task→pool total coverage, quality-not-a-failure-kind, provenance completeness.
-- **~79 frontend tests** (Vitest) over views and the API client's fallback behavior.
+- **89 frontend tests** (Vitest) over views and the API client's mock-mode behavior.
 - **Phase 14 acceptance matrix** mapped 13 acceptance criteria to concrete tests (e.g., _model unavailable → next candidate + route cooldown_, _cached reply noted in provenance_, _20 concurrent generations all succeed with distinct ids_).
 - **Evaluation layer** ([bebshax/evaluation](apps/backend/bebshax/evaluation/__init__.py)): `PersonaEvaluator` (schema/grounding/consistency metrics), `RoutingChaosSimulator` + `StrategyRankerFactory` (compare routing strategies under injected provider failures), `OfflineEvaluator` replaying RouterArena/xRouteBench datasets (zero-cost evaluation — replayed executions, no live calls), and a report generator writing artifacts to [data/metadata](data/metadata).
 - **CI:** GitHub Actions, Ubuntu, full backend suite on every push/PR (dev machine is Windows — the suite is deliberately portable).
@@ -540,6 +570,7 @@ It's the thesis made visible. End users never pick model #73 ("one AI system" pr
 5. **Scaling ceilings are known and documented:** in-memory job registry and rate-limit storage are single-process (config knob exists for shared storage); quota ledger is per-process (but DB-seeded); ~100 personas/day on free tiers per the capacity study. Each has a written upgrade path that was deliberately not built yet (R10).
 6. **Payments are scaffolding** — real Stripe endpoints, webhook signature verification, and subscription rows exist, but no live keys and no feature gating; it demonstrates the monetization architecture.
 7. **No admin role** — see §1.5; `GET /auth/users` currently requires only a valid login and would need a privilege tier before production.
+8. **Dataset auto-discovery has one live source; the rest is illustrative.** The World Bank adapter fetches real Bangladesh indicator series live from the free, keyless `api.worldbank.org` API (labeled "World Bank Open Data (live)", `is_sample=false`) and falls back to the clearly-labeled illustrative catalog when offline. The Kaggle and BBS adapters remain illustrative ("BebshaX Illustrative Catalog", modeled on real public sources). The discovery/import/profiling/segmentation pipeline is fully real either way, and imported illustrative datasets carry a SAMPLE badge in the UI.
 
 ## 3.5 Rapid-fire Q&A cheat sheet
 
@@ -552,7 +583,7 @@ It's the thesis made visible. End users never pick model #73 ("one AI system" pr
 | "How do personas stay consistent over long interviews?"     | Immutable identity card (byte-identical every turn, test-enforced) + full untruncated history + vector memory retrieval + deterministic numeric-consistency guards + explicit failure if context can't fit.                        |
 | "Why not GPT-4 + one API key?"                              | No budget — but also no story. The research question is whether routing can _replace_ the paid tier. A paid key would delete the thesis.                                                                                           |
 | "Biggest engineering challenge?"                            | Making failure honest: designing the closed failure taxonomy and keeping quality out of it, then proving via chaos tests that every failure path does exactly what its policy says.                                                |
-| "How do you test something built on nondeterministic LLMs?" | Boundary contracts: deterministic FakeAdapter chaos tests for all routing logic (428 tests, no live calls in CI), schema validation + downgrade rules for LLM output, and separate live gates/eval reports for quality.            |
+| "How do you test something built on nondeterministic LLMs?" | Boundary contracts: deterministic FakeAdapter chaos tests for all routing logic (474 tests, no live calls in CI), schema validation + downgrade rules for LLM output, and separate live gates/eval reports for quality.            |
 | "Multi-user? Security?"                                     | JWT auth, server-side federated identity verification, per-row tenancy with 404-not-403 scoping, rate limiting, SSRF-guarded ingestion, prompt-injection isolation, secret hygiene enforced at boot.                               |
 | "What would you build next?"                                | Live search provider, pinned semantic embeddings, semantic entailment for OBSERVED claims, longitudinal drift evals (20+ turn), and the admin/privilege tier.                                                                      |
 

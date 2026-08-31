@@ -322,7 +322,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#14B8A6',
+                color: 'var(--accent-teal)',
               }}
             >
               <Sliders size={20} />
@@ -415,7 +415,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                         padding: '16px',
                         borderRadius: '12px',
                         backgroundColor: isSelected ? 'var(--accent-subtle)' : 'var(--glass-mid)',
-                        border: isSelected ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
+                        border: isSelected ? '1px solid var(--accent-teal)' : '1px solid var(--fill-soft-2)',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
                       }}
@@ -698,7 +698,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     padding: '14px 16px',
                     borderRadius: '10px',
                     backgroundColor: populationType === 'all' ? 'var(--accent-subtle)' : 'var(--glass-mid)',
-                    border: populationType === 'all' ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
+                    border: populationType === 'all' ? '1px solid var(--accent-teal)' : '1px solid var(--fill-soft-2)',
                     cursor: 'pointer',
                   }}
                 >
@@ -725,7 +725,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     padding: '14px 16px',
                     borderRadius: '10px',
                     backgroundColor: populationType === 'segment' ? 'var(--accent-subtle)' : 'var(--glass-mid)',
-                    border: populationType === 'segment' ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
+                    border: populationType === 'segment' ? '1px solid var(--accent-teal)' : '1px solid var(--fill-soft-2)',
                     cursor: 'pointer',
                   }}
                 >
@@ -779,7 +779,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     padding: '14px 16px',
                     borderRadius: '10px',
                     backgroundColor: populationType === 'selected_personas' ? 'var(--accent-subtle)' : 'var(--glass-mid)',
-                    border: populationType === 'selected_personas' ? '1px solid #14B8A6' : '1px solid var(--fill-soft-2)',
+                    border: populationType === 'selected_personas' ? '1px solid var(--accent-teal)' : '1px solid var(--fill-soft-2)',
                     cursor: 'pointer',
                   }}
                 >

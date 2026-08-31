@@ -26,6 +26,7 @@ import {
 } from '../../../types';
 import { api } from '../../../services/api';
 import { useViewMotion } from '../../../motion/useViewMotion';
+import { ProvenanceChip } from './PersonaLibraryView';
 
 interface StudyWorkflowViewProps {
   studyId?: string;
@@ -105,6 +106,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const roleSelectionRef = useRef<HTMLDivElement | null>(null);
   const copilotChatRef = useRef<HTMLDivElement | null>(null);
   const interviewChatRef = useRef<HTMLDivElement | null>(null);
+  const step1InputRef = useRef<HTMLInputElement | null>(null);
+  const personaModalTriggerRef = useRef<HTMLElement | null>(null);
+  const personaModalRef = useRef<HTMLDivElement | null>(null);
 
   // Chats must stay pinned to the newest message — both containers scroll internally.
   useEffect(() => {
@@ -152,15 +156,17 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     };
   }, [studyId, activeInterviewPersonaId]);
 
-  const handleStepChange = (newStep: number) => {
+  const handleStepChange = (newStep: number, opts?: { reportReady?: boolean }) => {
     const clamped = Math.max(1, Math.min(newStep, 5));
     setCurrentStep(clamped);
     onStepChange?.(clamped);
     if (studyId) {
+      // 'completed' is earned by a generated report — never by visiting step 5.
+      const reportExists = opts?.reportReady || report !== null || availableReports.length > 0;
       api
         .updateStudy(studyId, {
           step: clamped,
-          status: clamped === 5 ? 'completed' : 'in_progress',
+          status: reportExists ? 'completed' : 'in_progress',
           prompt: promptInput || study?.prompt,
           copilot_messages: copilotMessagesRef.current as any,
           suggested_roles: suggestedRoles,
@@ -283,15 +289,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   };
 
   const handleSendCopilotMessage = (text?: string) => {
-    const inputEl = document.querySelector('input[placeholder*="Type here"]') as HTMLInputElement | null;
+    const inputValue = step1InputRef.current?.value || '';
     const messageToSend = (
-      typeof text === 'string' && text.trim() ? text : step1Prompt || promptInput || inputEl?.value || ''
+      typeof text === 'string' && text.trim() ? text : step1Prompt || promptInput || inputValue
     ).trim();
     if (!messageToSend) return;
 
     setStep1Prompt('');
     setPromptInput('');
-    if (inputEl) inputEl.value = '';
 
     const userMsg: CopilotMessage = {
       id: `msg_u_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -595,7 +600,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       const rep = await api.generateStudyReport(studyId);
       setReport(rep);
       setAvailableReports((prev) => [rep, ...prev.filter((r) => r.id !== rep.id)]);
-      handleStepChange(5);
+      // The freshly-generated report is what earns 'completed' status.
+      handleStepChange(5, { reportReady: true });
     } catch (err: any) {
       // Honest failure: navigate to the report step and show the error there
       // instead of leaving the user staring at an unchanged page.
@@ -648,12 +654,105 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   }, [initialPrompt]);
 
   const stepLabels = [
-    { num: 1, label: 'Context' },
-    { num: 2, label: 'Personas' },
-    { num: 3, label: 'Script' },
-    { num: 4, label: 'Interviews' },
-    { num: 5, label: 'Report' },
+    { num: 1, label: 'Context', sub: 'Describe your idea' },
+    { num: 2, label: 'Personas', sub: 'Meet your synthetic customers' },
+    { num: 3, label: 'Script', sub: 'Plan the questions' },
+    { num: 4, label: 'Interviews', sub: 'Run the interviews' },
+    { num: 5, label: 'Report', sub: 'Get your report' },
   ];
+
+  // Forward stepper navigation unlocks only when the prior step produced its
+  // artifact; going backward (or staying) is always free.
+  const goalApproved = showRoleSelection || personas.length > 0;
+  const hasInterviewActivity =
+    chatMessages.length > 0 ||
+    conversationId !== null ||
+    Object.values(interviewStatusMap).some((s) => s === 'completed' || s === 'in_progress');
+  const hasReportArtifact = report !== null || availableReports.length > 0;
+  const isStepUnlocked = (stepNum: number): boolean => {
+    if (stepNum <= currentStep) return true;
+    if (stepNum <= 3) return goalApproved;
+    if (stepNum === 4) return personas.length > 0;
+    return hasReportArtifact || hasInterviewActivity || personas.length > 0;
+  };
+  const stepLockReason = (stepNum: number): string =>
+    stepNum <= 3
+      ? 'Approve a research goal in Context first'
+      : stepNum === 4
+        ? 'Generate personas first'
+        : 'Generate personas or run an interview first';
+
+  // Least-grounded claims across the persona panel — surfaced in the report as
+  // "assumptions to verify with real customers". SYNTHETIC (no grounding at
+  // all) ranks ahead of INFERRED. Purely presentational, from existing state.
+  const verificationAssumptions: { value: string; provenance: string; personaName: string }[] = (() => {
+    const out: { value: string; provenance: string; personaName: string }[] = [];
+    for (const p of personas) {
+      const prov = p.detailed_attributes?.claim_provenance as
+        | Record<string, { value?: string; provenance?: string }[]>
+        | undefined;
+      if (!prov) continue;
+      for (const group of Object.values(prov)) {
+        if (!Array.isArray(group)) continue;
+        for (const entry of group) {
+          if (entry?.value && (entry.provenance === 'SYNTHETIC' || entry.provenance === 'INFERRED')) {
+            out.push({ value: entry.value, provenance: entry.provenance, personaName: p.name });
+          }
+        }
+      }
+    }
+    out.sort((a, b) => (a.provenance === b.provenance ? 0 : a.provenance === 'SYNTHETIC' ? -1 : 1));
+    return out.slice(0, 3);
+  })();
+
+  // Close the persona detail modal and hand focus back to the card button
+  // that opened it, so keyboard users are not dropped at the page top.
+  const closePersonaModal = () => {
+    setViewingPersona(null);
+    personaModalTriggerRef.current?.focus();
+    personaModalTriggerRef.current = null;
+  };
+
+  useEffect(() => {
+    if (!viewingPersona) return;
+    const focusables = () =>
+      Array.from(
+        personaModalRef.current?.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      ).filter((el) => !el.hasAttribute('disabled'));
+    // Move focus into the dialog on open (aria-modal without a trap strands AT users).
+    focusables()[0]?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Topmost-surface-wins: consume the key so popover/drawer handlers skip it.
+      if (e.defaultPrevented) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closePersonaModal();
+        return;
+      }
+      if (e.key === 'Tab') {
+        // Minimal focus trap: Tab / Shift+Tab loop inside the dialog while open.
+        const els = focusables();
+        if (els.length === 0) return;
+        const first = els[0];
+        const last = els[els.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        const inside = !!active && !!personaModalRef.current?.contains(active);
+        if (e.shiftKey && (!inside || active === first)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (!inside || active === last)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    // Capture phase: the modal beats bubble-phase Escape listeners (popover/drawer).
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingPersona]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-pure)', color: 'var(--text-main)' }}>
@@ -714,24 +813,31 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           {stepLabels.map((s, idx) => {
             const isDone = s.num < currentStep;
             const isCurrent = s.num === currentStep;
+            const unlocked = isStepUnlocked(s.num);
             return (
               <React.Fragment key={s.num}>
-                {idx > 0 && <div style={{ width: '16px', height: '1px', background: isDone ? '#14B8A6' : 'var(--border-subtle)' }} />}
+                {idx > 0 && <div style={{ width: '16px', height: '1px', background: isDone ? 'var(--accent-teal)' : 'var(--border-subtle)' }} />}
                 <button
                   type="button"
-                  onClick={() => handleStepChange(s.num)}
+                  onClick={() => {
+                    if (unlocked) handleStepChange(s.num);
+                  }}
+                  aria-disabled={!unlocked}
+                  aria-current={isCurrent ? 'step' : undefined}
+                  title={unlocked ? s.sub : stepLockReason(s.num)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
                     padding: '6px 12px',
                     borderRadius: '8px',
-                    border: isCurrent ? '1px solid #14B8A6' : '1px solid transparent',
+                    border: isCurrent ? '1px solid var(--accent-teal)' : '1px solid transparent',
                     background: isCurrent ? 'var(--accent-subtle)' : isDone ? 'var(--fill-soft)' : 'transparent',
-                    color: isCurrent ? 'var(--accent-cyan)' : isDone ? '#14B8A6' : 'var(--text-secondary)',
+                    color: isCurrent ? 'var(--accent-cyan)' : isDone ? 'var(--accent-teal)' : 'var(--text-secondary)',
                     fontSize: '0.8rem',
                     fontWeight: isCurrent || isDone ? 600 : 400,
-                    cursor: 'pointer',
+                    cursor: unlocked ? 'pointer' : 'not-allowed',
+                    opacity: unlocked ? 1 : 0.45,
                   }}
                 >
                   <div
@@ -739,18 +845,22 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       width: '18px',
                       height: '18px',
                       borderRadius: '50%',
-                      background: isDone ? '#14B8A6' : isCurrent ? 'var(--accent-cyan)' : 'var(--border-subtle)',
+                      background: isDone ? 'var(--accent-teal)' : isCurrent ? 'var(--accent-cyan)' : 'var(--border-subtle)',
                       color: isDone || isCurrent ? 'var(--bg-pure)' : 'var(--text-secondary)',
                       fontSize: '0.7rem',
                       fontWeight: 700,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      flexShrink: 0,
                     }}
                   >
                     {isDone ? <Check size={11} strokeWidth={3} /> : s.num}
                   </div>
-                  <span>{s.label}</span>
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.25 }}>
+                    <span>{s.label}</span>
+                    <span className="bx-step-sub">{s.sub}</span>
+                  </span>
                 </button>
               </React.Fragment>
             );
@@ -854,7 +964,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                           background: showRoleSelection
                             ? 'var(--accent-subtle)'
                             : 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-                          border: showRoleSelection ? '1px solid #14B8A6' : 'none',
+                          border: showRoleSelection ? '1px solid var(--accent-teal)' : 'none',
                           borderRadius: '8px',
                           padding: '10px 16px',
                           color: showRoleSelection ? 'var(--accent-teal-bright)' : 'var(--bg-pure)',
@@ -892,6 +1002,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               style={{ display: 'flex', gap: '10px' }}
             >
               <input
+                ref={step1InputRef}
                 type="text"
                 value={step1Prompt}
                 onChange={(e) => setStep1Prompt(e.target.value)}
@@ -932,10 +1043,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
-                      SUGGESTED ROLES FOR YOUR STUDY
+                      Suggested roles for your study
                     </h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.8rem', color: '#14B8A6', fontWeight: 600 }}>Persona Panel Configured</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--accent-teal)', fontWeight: 600 }}>Persona Panel Configured</span>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>• Grounded in empirical evidence and dataset distributions</span>
                     </div>
                   </div>
@@ -981,7 +1092,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                         style={{
                           ['--bx-i' as string]: Math.min(roleIdx, 12),
                           background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-secondary)',
-                          border: isSelected ? '1px solid #14B8A6' : '1px solid var(--border-subtle)',
+                          border: isSelected ? '1px solid var(--accent-teal)' : '1px solid var(--border-subtle)',
                           borderRadius: '12px',
                           padding: '14px 18px',
                           cursor: 'pointer',
@@ -1000,7 +1111,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                               width: '22px',
                               height: '22px',
                               borderRadius: '6px',
-                              border: isSelected ? '1px solid #14B8A6' : '1px solid var(--border-medium)',
+                              border: isSelected ? '1px solid var(--accent-teal)' : '1px solid var(--border-medium)',
                               background: isSelected ? '#14B8A6' : 'var(--bg-card-hover)',
                               display: 'flex',
                               alignItems: 'center',
@@ -1307,7 +1418,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>{p.name}</div>
-                          <span style={{ fontSize: '0.65rem', color: '#14B8A6', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--accent-teal)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
                             {p.country_code || 'BD'}
                           </span>
                         </div>
@@ -1325,7 +1436,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   </div>
 
                   {p.personality && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', background: 'var(--bg-secondary)', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+                    <div title="Big Five (OCEAN) personality traits" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', background: 'var(--bg-secondary)', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
                       {[
                         { l: 'O', v: p.personality.openness, c: '#38BDF8' },
                         { l: 'C', v: p.personality.conscientiousness, c: 'var(--accent-emerald)' },
@@ -1333,7 +1444,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                         { l: 'A', v: p.personality.agreeableness, c: '#A855F7' },
                         { l: 'N', v: p.personality.neuroticism, c: '#EC4899' },
                       ].map((t) => (
-                        <div key={t.l} style={{ fontSize: '0.65rem' }}>
+                        <div key={t.l} style={{ fontSize: '0.75rem' }}>
                           <span style={{ color: t.c, fontWeight: 700 }}>{t.v}</span>
                           <span style={{ color: 'var(--text-secondary)', marginLeft: '2px' }}>{t.l}</span>
                         </div>
@@ -1348,11 +1459,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px' }}>
                     <button
                       type="button"
-                      onClick={() => setViewingPersona(p)}
+                      onClick={(e) => {
+                        personaModalTriggerRef.current = e.currentTarget;
+                        setViewingPersona(p);
+                      }}
                       style={{
                         background: 'transparent',
                         border: 'none',
-                        color: '#14B8A6',
+                        color: 'var(--accent-teal)',
                         fontSize: '0.8rem',
                         fontWeight: 600,
                         cursor: 'pointer',
@@ -1490,7 +1604,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     gap: '14px',
                   }}
                 >
-                  <span style={{ color: '#14B8A6', fontWeight: 700, fontSize: '0.88rem' }}>
+                  <span style={{ color: 'var(--accent-teal)', fontWeight: 700, fontSize: '0.88rem' }}>
                     Q{idx + 1}
                   </span>
                   <input
@@ -1615,7 +1729,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   disabled={isGeneratingReport}
                   style={{
                     background: 'var(--bg-card)',
-                    border: '1px solid #14B8A6',
+                    border: '1px solid var(--accent-teal)',
                     color: 'var(--accent-cyan)',
                     borderRadius: '8px',
                     padding: '10px 20px',
@@ -1688,7 +1802,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     }}
                     style={{
                       background: isActive ? 'var(--accent-subtle)' : 'var(--bg-card)',
-                      border: isActive ? '1px solid #14B8A6' : '1px solid var(--border-subtle)',
+                      border: isActive ? '1px solid var(--accent-teal)' : '1px solid var(--border-subtle)',
                       color: isActive ? 'var(--accent-cyan)' : 'var(--text-secondary)',
                       padding: '8px 14px',
                       borderRadius: '8px',
@@ -1703,7 +1817,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     <span>{p.name}</span>
                     <span
                       style={{
-                        fontSize: '0.68rem',
+                        fontSize: '0.72rem',
                         fontWeight: 700,
                         padding: '2px 6px',
                         borderRadius: '4px',
@@ -1883,7 +1997,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   {report?.title || study?.title || 'Market Research & Validation Report'}
                 </h1>
                 <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  Synthesized from {personas.length} grounded synthetic personas and empirical research claims.
+                  {report
+                    ? `Synthesized from ${personas.length} grounded synthetic personas and empirical research claims.`
+                    : `Will be synthesized from your study data — ${personas.length} grounded synthetic personas and collected research claims.`}
                 </p>
               </div>
 
@@ -1891,6 +2007,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 <button
                   type="button"
                   onClick={copyReportMarkdown}
+                  disabled={!report}
+                  title={report ? undefined : 'No report to copy yet — generate the report first'}
                   style={{
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border-subtle)',
@@ -1899,7 +2017,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     padding: '8px 14px',
                     fontSize: '0.82rem',
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: report ? 'pointer' : 'not-allowed',
+                    opacity: report ? 1 : 0.55,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
@@ -1910,6 +2029,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 <button
                   type="button"
                   onClick={exportReportMarkdown}
+                  disabled={!report}
+                  title={report ? undefined : 'No report to export yet — generate the report first'}
                   style={{
                     background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                     border: 'none',
@@ -1918,7 +2039,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     padding: '8px 16px',
                     fontSize: '0.82rem',
                     fontWeight: 700,
-                    cursor: 'pointer',
+                    cursor: report ? 'pointer' : 'not-allowed',
+                    opacity: report ? 1 : 0.55,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
@@ -1945,7 +2067,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               </div>
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Confidence Score</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#14B8A6', marginTop: '4px' }}>
+                <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent-teal)', marginTop: '4px' }}>
                   {report?.metrics?.confidence_score != null
                     ? `${Math.round(report.metrics.confidence_score * 100)}%`
                     : '—'}
@@ -1953,54 +2075,124 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               </div>
             </div>
 
-            {/* Executive Summary */}
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-cyan)', margin: '0 0 12px 0' }}>
-                Executive Summary
+            {report ? (
+              <>
+                {/* Executive Summary */}
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
+                  <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-cyan)', margin: '0 0 12px 0' }}>
+                    Executive Summary
+                  </h2>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-line' }}>
+                    {report.executive_summary}
+                  </p>
+                </div>
+
+                {/* Key Findings */}
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
+                  <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 14px 0' }}>
+                    Key Findings
+                  </h2>
+                  <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {(report.key_findings || []).map((kf, i) => (
+                      <li key={i} style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                        {kf}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Recommendations */}
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
+                  <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-emerald)', margin: '0 0 14px 0' }}>
+                    Strategic Recommendations
+                  </h2>
+                  <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {(report.recommendations || []).map((rec, i) => (
+                      <li key={i} style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                        {rec}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            ) : (
+              /* Honest empty state — placeholder findings must never render. */
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '12px',
+                  textAlign: 'center',
+                  padding: '64px 24px',
+                  border: '1px dashed var(--border-subtle)',
+                  borderRadius: '16px',
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                <FileText size={28} className="text-teal-400" />
+                <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>No report yet</div>
+                <div style={{ fontSize: '0.85rem', maxWidth: '440px' }}>
+                  Generate it from your study data — your personas, interviews, and collected research claims feed the synthesis.
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGenerateFinalReport}
+                  disabled={isGeneratingReport}
+                  style={{
+                    marginTop: '6px',
+                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    color: 'var(--text-on-accent)',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    cursor: isGeneratingReport ? 'not-allowed' : 'pointer',
+                    opacity: isGeneratingReport ? 0.6 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <FileText size={15} />
+                  {isGeneratingReport ? 'Synthesizing Report...' : 'Generate Decision Report'}
+                </button>
+              </div>
+            )}
+
+            {/* Active honesty safeguard — synthetic findings hand off to real customers */}
+            <div
+              style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--accent-glow)',
+                borderRadius: '16px',
+                padding: '24px',
+                boxShadow: 'var(--shadow-glow)',
+              }}
+            >
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-teal-bright)', margin: '0 0 8px 0' }}>
+                Validate with real customers next
               </h2>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-line' }}>
-                {report?.executive_summary ||
-                  `Research validation report for "${study?.prompt || 'business concept'}". Personas indicate high adoption willingness driven by convenience, speed, and transparent pricing.`}
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.6, margin: 0 }}>
+                Synthetic research de-risks your questions — it never replaces real customers.
               </p>
-            </div>
-
-            {/* Key Findings */}
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 14px 0' }}>
-                Key Findings
-              </h2>
-              <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {(
-                  report?.key_findings || [
-                    'Strong baseline demand exists across target users when framed on immediate workflow time savings.',
-                    'Transparent, predictable pricing tiers are a non-negotiable trust prerequisite.',
-                    'Clear onboarding and visible evidence of quality prevent early drop-off.',
-                  ]
-                ).map((kf, i) => (
-                  <li key={i} style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                    {kf}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Recommendations */}
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-emerald)', margin: '0 0 14px 0' }}>
-                Strategic Recommendations
-              </h2>
-              <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {(
-                  report?.recommendations || [
-                    'Launch MVP with focused core features directly resolving primary friction.',
-                    'Emphasize speed and reliability in all messaging and product tutorials.',
-                  ]
-                ).map((rec, i) => (
-                  <li key={i} style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                    {rec}
-                  </li>
-                ))}
-              </ul>
+              {verificationAssumptions.length > 0 && (
+                <div style={{ marginTop: '16px' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                    Assumptions to verify in real interviews
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {verificationAssumptions.map((a, i) => (
+                      <li key={i} style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                        {a.value}
+                        <ProvenanceChip label={a.provenance} />
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}> — {a.personaName}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             {/* Methodology & Limitations Disclaimer */}
@@ -2026,10 +2218,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             justifyContent: 'center',
             padding: '24px',
           }}
-          onClick={() => setViewingPersona(null)}
+          onClick={closePersonaModal}
         >
           <div
+            ref={personaModalRef}
             className="bx-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${viewingPersona.name} — full persona profile`}
             style={{
               background: 'var(--bg-card)',
               border: '1px solid var(--border-subtle)',
@@ -2069,7 +2265,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     {viewingPersona.data_source === 'cached' && (
                       <span
                         title="Served from seeded/cached data — not generated live for this study"
-                        style={{ fontSize: '0.62rem', fontWeight: 400, color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                        style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
                       >
                         CACHED
                       </span>
@@ -2080,7 +2276,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setViewingPersona(null)}
+                onClick={closePersonaModal}
+                aria-label="Close persona profile"
                 style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
               >
                 <X size={18} />
@@ -2092,29 +2289,36 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: '10px', background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-              <div>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Age: </span>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{viewingPersona.demographics?.age || '28'}</span>
-              </div>
-              <div>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Occupation: </span>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{viewingPersona.demographics?.occupation || viewingPersona.archetype || 'Professional'}</span>
-              </div>
-              <div>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Location: </span>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-main)' }}>{viewingPersona.demographics?.location || 'Dhaka, Bangladesh'}</span>
-              </div>
-              <div>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Country: </span>
-                <span style={{ fontSize: '0.82rem', color: '#14B8A6', fontWeight: 600 }}>{viewingPersona.origin_country || viewingPersona.country_code || 'BD'}</span>
-              </div>
+              {/* Honest demographics: a missing value renders "Not available" — never invented. */}
+              {(
+                [
+                  { label: 'Age', value: viewingPersona.demographics?.age },
+                  { label: 'Occupation', value: viewingPersona.demographics?.occupation },
+                  { label: 'Location', value: viewingPersona.demographics?.location },
+                  { label: 'Country', value: viewingPersona.origin_country || viewingPersona.country_code },
+                ] as { label: string; value?: string | number }[]
+              ).map((d) => (
+                <div key={d.label}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{d.label}: </span>
+                  {d.value ? (
+                    <span style={{ fontSize: '0.82rem', color: d.label === 'Country' ? 'var(--accent-teal)' : 'var(--text-main)', fontWeight: d.label === 'Country' ? 600 : undefined }}>
+                      {d.value}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-faint)' }}>Not available</span>
+                  )}
+                </div>
+              ))}
             </div>
 
             {/* Big Five Personality */}
             {viewingPersona.personality && (
               <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#14B8A6', letterSpacing: '0.06em', marginBottom: '8px' }}>
-                  BIG FIVE PERSONALITY PROFILE
+                <div
+                  title="Big Five (OCEAN) trait model — openness, conscientiousness, extroversion, agreeableness, neuroticism"
+                  style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-teal)', letterSpacing: '0.04em', marginBottom: '8px' }}
+                >
+                  Personality profile (Big Five)
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', textAlign: 'center' }}>
                   {[
@@ -2125,11 +2329,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     { label: 'Neuroticism', val: viewingPersona.personality.neuroticism, color: '#EC4899' },
                   ].map((t) => (
                     <div key={t.label}>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: t.color }}>{t.val}</div>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: t.color }}>{t.val}</div>
                       <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden', margin: '3px 0' }}>
                         <div style={{ width: `${t.val}%`, height: '100%', background: t.color }} />
                       </div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{t.label}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t.label}</div>
                     </div>
                   ))}
                 </div>
@@ -2139,8 +2343,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             {/* Key Lifestyle Attributes */}
             {viewingPersona.detailed_attributes && Object.keys(viewingPersona.detailed_attributes).length > 0 && (
               <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.06em', marginBottom: '8px' }}>
-                  LIFESTYLE & ROUTINE SNAPSHOT
+                <div
+                  title="Lifestyle & routine snapshot"
+                  style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.04em', marginBottom: '8px' }}
+                >
+                  How they live day to day
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(160px, 100%), 1fr))', gap: '8px', fontSize: '0.78rem' }}>
                   {viewingPersona.detailed_attributes.commute_mode && (
@@ -2167,20 +2374,27 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
             {/* Grounded Claims & Provenance */}
             <div>
-              <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.06em', marginBottom: '8px' }}>
-                GROUNDED BEHAVIORAL CLAIMS & PROVENANCE
+              <div
+                title="Grounded behavioral claims & provenance — each claim is labeled by how it was derived"
+                style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.04em', marginBottom: '8px' }}
+              >
+                What this persona claims — and how we know
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {(viewingPersona.attributes || [
-                  { category: 'Goals', title: 'Streamline daily tasks', description: 'Wants to minimize overhead' },
-                  { category: 'Pain Points', title: 'High recurring cost', description: 'Sensitivity to expensive software' },
-                ]).map((attr: any, idx: number) => (
-                  <div key={idx} style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>{attr.title}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{attr.description}</div>
-                  </div>
-                ))}
-              </div>
+              {viewingPersona.attributes && viewingPersona.attributes.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {viewingPersona.attributes.map((attr: any, idx: number) => (
+                    <div key={idx} style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>{attr.title}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{attr.description}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* Honest empty state — never fabricate claims. */
+                <div style={{ background: 'var(--bg-secondary)', border: '1px dashed var(--border-subtle)', borderRadius: '8px', padding: '14px', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                  No verified claims recorded for this persona yet.
+                </div>
+              )}
             </div>
           </div>
         </div>

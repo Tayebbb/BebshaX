@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.studies import _user_owns_study
+from bebshax.api.deps import user_owns_study
 from bebshax.auth.models import Users
 from bebshax.datasets.service import DatasetService
 from bebshax.db.models import DatasetSources, Studies
@@ -78,6 +78,7 @@ def _serialize_dataset(ds: DatasetSources) -> dict[str, Any]:
         "statistics": ds.statistics,
         "segments": ds.segments,
         "content_hash": ds.content_hash,
+        "is_sample": bool((ds.schema_metadata or {}).get("is_sample", False)),
         "persona_count_generated": ds.persona_count_generated,
         "processing_error": ds.processing_error,
         "created_at": ds.created_at.isoformat() if ds.created_at else None,
@@ -91,10 +92,10 @@ async def _verify_study_access(
     current_user: Optional[Users],
     session: AsyncSession,
 ) -> Studies:
-    """Canonical study gate (`_user_owns_study`) — anonymous callers only
+    """Canonical study gate (`user_owns_study`) — anonymous callers only
     pass for demo / anonymous-tenant studies, never any owned study."""
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Study '{study_id}' not found")
     return study
 

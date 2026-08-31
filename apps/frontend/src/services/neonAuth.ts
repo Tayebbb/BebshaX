@@ -1,8 +1,16 @@
 import { User } from '../types/auth';
 
+// `??` (not `||`): explicitly setting VITE_NEON_AUTH_URL='' disables federated
+// sign-in instead of silently falling back to the project default.
 export const NEON_AUTH_URL =
-  import.meta.env?.VITE_NEON_AUTH_URL ||
+  import.meta.env?.VITE_NEON_AUTH_URL ??
   'https://ep-cold-star-azazjakq.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth';
+
+/** True when a Neon Auth endpoint is configured. Gates the Google button:
+ * without it there is no server-verified federated flow — and no fake one. */
+export function isNeonAuthConfigured(): boolean {
+  return Boolean(NEON_AUTH_URL);
+}
 
 export interface NeonAuthUser {
   id: string;

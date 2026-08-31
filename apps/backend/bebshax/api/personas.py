@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.jobs import get_job, start_job
-from bebshax.api.studies import _owner_accessible, _user_owns_study, get_session
+from bebshax.api.deps import get_session, owner_accessible, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
 from bebshax.db.models import DATA_SOURCE_LIVE
@@ -134,7 +134,7 @@ def _serialize_persona_run(r: PersonaGenerationRuns) -> dict[str, Any]:
 
 async def _verify_study_access(study_id: str, current_user: Optional[Users], session: AsyncSession) -> Studies:
     study = await session.get(Studies, study_id)
-    if not study or not _user_owns_study(study, current_user):
+    if not study or not user_owns_study(study, current_user):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Study '{study_id}' not found.",
@@ -528,8 +528,8 @@ async def generate_persona_endpoint(
             raise HTTPException(status_code=404, detail="business not found")
         # Owner gate (strict auth upstream): callers may only generate under
         # their own or shared/system businesses — never another tenant's
-        # (B6 stage 3; _owner_accessible also covers anon-tenant stamps).
-        if not _owner_accessible(business.owner_id, current_user):
+        # (B6 stage 3; owner_accessible also covers anon-tenant stamps).
+        if not owner_accessible(business.owner_id, current_user):
             raise HTTPException(status_code=404, detail="business not found")
 
     engine = request.app.state.persona_engine
@@ -595,13 +595,13 @@ async def get_persona_endpoint(
         profile = await load_persona(session, persona_id)
         if profile is not None:
             p_row = await session.get(Personas, persona_id)
-            if p_row and not _owner_accessible(p_row.owner_id, current_user):
+            if p_row and not owner_accessible(p_row.owner_id, current_user):
                 raise HTTPException(status_code=404, detail="persona not found")
             return profile.model_dump(mode="json")
         # Otherwise fallback to study-scoped persona row
         p_row = await session.get(Personas, persona_id)
         if p_row is not None:
-            if not _owner_accessible(p_row.owner_id, current_user):
+            if not owner_accessible(p_row.owner_id, current_user):
                 raise HTTPException(status_code=404, detail="persona not found")
             return _serialize_persona(p_row)
     raise HTTPException(status_code=404, detail="persona not found")
@@ -629,7 +629,7 @@ async def get_persona_memories_endpoint(
         if p_row is None:
             raise HTTPException(status_code=404, detail="persona not found")
         # Memories are persona-private — same owner gate as the persona itself.
-        if not _owner_accessible(p_row.owner_id, current_user):
+        if not owner_accessible(p_row.owner_id, current_user):
             raise HTTPException(status_code=404, detail="persona not found")
 
     memories = await memory_service.list_for_persona(persona_id, kind=kind, limit=limit)

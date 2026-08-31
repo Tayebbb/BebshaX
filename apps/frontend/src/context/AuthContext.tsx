@@ -60,7 +60,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
 
-        // 2. Query live Neon Auth session & backend /auth/me
+        // 2. OAuth return: after Neon-hosted Google sign-in redirects back,
+        // there is no app token yet — only Neon's session cookie. Exchange it
+        // through server-verified /auth/sync (backend re-verifies the Neon
+        // token; identity never comes from client claims).
+        if (!api.isMockMode() && !api.getAuthToken()) {
+          const neonSession = await neonAuth.getSession(null);
+          if (neonSession?.token) {
+            await api.syncUser({ neon_token: neonSession.token });
+          }
+        }
+
+        // 3. Query live Neon Auth session & backend /auth/me
         if (!api.isMockMode()) {
           const profile = await api.getMe();
           if (profile && isMounted) {
