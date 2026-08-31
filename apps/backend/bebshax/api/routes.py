@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select, func, desc, or_
@@ -11,6 +12,8 @@ from bebshax.auth.models import Users
 from bebshax.db.models import LLMRequests, Personas
 from bebshax.llm.pools import POOLS
 from bebshax.tenancy import PUBLIC_OWNER_IDS
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["routing"])
 
@@ -40,6 +43,11 @@ async def get_routes_status(request: Request) -> dict[str, Any]:
         try:
             candidates = await adapter.candidates()
         except Exception:
+            logger.warning(
+                "adapter %r candidates() failed — reporting it as degraded with 0 models",
+                name,
+                exc_info=True,
+            )
             candidates = []
         adapter_candidates_map[name] = candidates
 

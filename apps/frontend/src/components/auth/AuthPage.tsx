@@ -113,7 +113,7 @@ const eyeButtonStyle: React.CSSProperties = {
 };
 const dividerLineStyle: React.CSSProperties = { flex: 1, height: '1px', background: 'var(--border-subtle)' };
 const dividerTextStyle: React.CSSProperties = {
-  fontSize: '0.66rem',
+  fontSize: '0.72rem',
   fontWeight: 700,
   color: 'var(--text-muted)',
   letterSpacing: '0.08em',
@@ -207,6 +207,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   const [isResending, setIsResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // One-shot flag set by AuthContext when the OAuth-return /auth/sync
+  // exchange fails — read once, cleared, shown in the standard error banner.
+  useEffect(() => {
+    if (window.sessionStorage.getItem('bebshax_oauth_error')) {
+      window.sessionStorage.removeItem('bebshax_oauth_error');
+      setErrorMessage("Google sign-in couldn't complete — try again or sign in with email.");
+    }
+  }, []);
 
   const resetMessages = () => {
     setErrorMessage(null);

@@ -119,6 +119,7 @@ BebshaX advances four SDGs — each mapped to a shipped capability, not an aspir
 | **SDG 4 — Quality Education** (co-benefit)        | 4.4: increase skills for employment and entrepreneurship          | The provenance-labeled workflow _teaches_ evidence-based validation: users see which claims are observed, inferred, or synthetic, and every report ends with a limitations section and a push toward real-customer validation — research literacy by construction. Claimed as a co-benefit, not a design goal.                                                         |
 
 **Honesty note (say it before judges ask):** measured impact is prospective — the platform is pre-pilot. What is _not_ prospective is the access barrier it removes, which is priced and documented, and the anti-fabrication layer, which is enforced in code (§3.2).
+**Compute-footprint note:** the architecture is deliberately frugal — no model training ever (R9), reuse of already-provisioned free-tier capacity, and a 3B-parameter local model on a 4 GB laptop GPU that a recorded quality gate scored 9.65/10 for conversation (versus defaulting to 70B-class cloud models). We claim this as engineering thrift with a favorable energy profile, not as a measured carbon reduction.
 
 ## 1.9 Why this is a Complex Engineering Problem (CEP)
 

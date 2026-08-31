@@ -13,6 +13,7 @@ import os
 from typing import Optional
 
 from bebshax.llm.adapters.openrouter_adapter import OpenRouterAdapter
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
 
@@ -82,19 +83,8 @@ class OpenRouterService:
             )
 
         completion = await self._adapter.complete(target_candidate, req)
-        import json
-
-        text = completion.text.strip()
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.lower().startswith("json"):
-                text = text[4:].strip()
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end > start:
-            text = text[start : end + 1]
         return {
-            "data": json.loads(text),
+            "data": parse_llm_json(completion.text),
             "model_used": completion.model,
             "usage": {
                 "input_tokens": completion.usage.input_tokens,

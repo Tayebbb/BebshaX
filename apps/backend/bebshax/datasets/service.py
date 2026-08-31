@@ -21,6 +21,7 @@ from bebshax.datasets.profiler import profile_dataset
 from bebshax.datasets.security import safe_fetch_dataset_bytes
 from bebshax.datasets.segmenter import calculate_segment_persona_distribution, discover_segments
 from bebshax.datasets.validator import validate_persona_against_constraints
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
@@ -30,15 +31,10 @@ UPLOAD_DIR = Path("data/uploads")
 
 
 def _parse_json_object(text: str) -> dict:
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        if cleaned.lower().startswith("json"):
-            cleaned = cleaned[4:]
-    start, end = cleaned.find("{"), cleaned.rfind("}")
-    if start == -1 or end <= start:
+    parsed = parse_llm_json(text)
+    if not isinstance(parsed, dict):
         raise ValueError("no JSON object found in reply")
-    return json.loads(cleaned[start : end + 1])
+    return parsed
 
 
 class DatasetService:

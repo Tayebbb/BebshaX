@@ -40,6 +40,9 @@ OPTIONAL_OLLAMA_MODELS = ("qwen3:4b", "nomic-embed-text")
 DEMO_SEED_EMAIL = "founder@bebshax.ai"
 # Matches names like BEBSHAX_STRIPE_SECRET_KEY / FOO_API_KEY / X_ACCESS_KEY / *_API_TOKEN.
 CLOUD_KEY_NAME_RE = re.compile(r"(API_KEY|SECRET_KEY|ACCESS_KEY|API_TOKEN)$")
+# Endpoint-style names whose host should be local for an offline demo.
+URL_NAME_RE = re.compile(r"_URL$")
+JWT_MIN_LEN = 32
 
 _failures: list[str] = []
 
@@ -125,6 +128,23 @@ def check_env_file(dotenv: dict[str, str]) -> str | None:
             "set BEBSHAX_DEMO_MODE=true in .env so the demo seed and cached labels work",
         )
     return db_url
+
+
+def check_jwt_secret(dotenv: dict[str, str]) -> None:
+    """Validate BEBSHAX_JWT_SECRET without ever printing its value."""
+    hint = (
+        "set a strong value in .env — generate one: "
+        '.venv\\Scripts\\python -c "import secrets; print(secrets.token_urlsafe(48))"'
+    )
+    secret = effective("BEBSHAX_JWT_SECRET", dotenv)
+    if not secret:
+        fail("BEBSHAX_JWT_SECRET is missing (backend will refuse to start)", hint)
+    elif "CHANGE-ME" in secret.upper():
+        fail("BEBSHAX_JWT_SECRET is a CHANGE-ME placeholder", hint)
+    elif len(secret) < JWT_MIN_LEN:
+        fail(f"BEBSHAX_JWT_SECRET too short ({len(secret)} chars, need ≥{JWT_MIN_LEN})", hint)
+    else:
+        ok("BEBSHAX_JWT_SECRET set", f"{len(secret)} chars")
 
 
 # ── 4. Docker container health ──────────────────────────────────────────────
@@ -329,6 +349,26 @@ def check_strict_offline(dotenv: dict[str, str]) -> None:
     else:
         ok("no cloud-style *_API_KEY variables set")
 
+    # *_URL / *_BASE_URL / *_AUTH_URL vars pointing at non-local hosts imply
+    # cloud reliance. Print name + host only — never full values or secrets.
+    remote: list[str] = []
+    for name in sorted(candidates):
+        if not URL_NAME_RE.search(name):
+            continue
+        value = effective(name, dotenv)
+        if not value:
+            continue
+        host = (urlparse(value).hostname or "").lower()
+        if host and host not in LOCAL_DB_HOSTS:
+            remote.append(f"{name} → {host}")
+    if remote:
+        warn(
+            "endpoint vars point at non-local hosts (name + host only)",
+            "; ".join(remote) + " — these will fail offline at the venue",
+        )
+    else:
+        ok("all *_URL endpoint vars are local or unset")
+
 
 def main() -> int:
     try:  # classic conhost may be cp1252; the check marks need utf-8
@@ -351,6 +391,7 @@ def main() -> int:
 
     print("[env]")
     db_url = check_env_file(dotenv)
+    check_jwt_secret(dotenv)
 
     print("\n[database]")
     check_docker_db()

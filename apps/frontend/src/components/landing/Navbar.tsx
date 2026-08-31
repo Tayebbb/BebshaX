@@ -116,7 +116,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
           <BebshaXLogo size={28} textSize="1.22rem" />
           <span
             style={{
-              fontSize: '0.62rem',
+              fontSize: '0.72rem',
               fontWeight: 700,
               padding: '2px 6px',
               borderRadius: '9999px',

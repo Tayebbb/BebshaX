@@ -86,7 +86,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
   });
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in text-[#E0EBEB]">
+    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in text-[var(--text-primary)]">
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

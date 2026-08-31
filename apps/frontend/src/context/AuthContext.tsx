@@ -67,7 +67,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!api.isMockMode() && !api.getAuthToken()) {
           const neonSession = await neonAuth.getSession(null);
           if (neonSession?.token) {
-            await api.syncUser({ neon_token: neonSession.token });
+            const synced = await api.syncUser({ neon_token: neonSession.token });
+            if (!synced) {
+              // One-shot flag AuthPage reads to explain the failed Google
+              // return; boot itself stays resilient (no throw).
+              window.sessionStorage.setItem('bebshax_oauth_error', '1');
+            }
           }
         }
 

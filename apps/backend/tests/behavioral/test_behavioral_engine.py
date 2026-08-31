@@ -222,6 +222,60 @@ async def test_compute_aggregate_synthesis(session_maker: sessionmaker[AsyncSess
 
 
 @pytest.mark.asyncio
+async def test_insight_confidence_is_observed_share(session_maker: sessionmaker[AsyncSession]):
+    """Insight confidence is derived from the data, never an invented constant.
+
+    Documented formula: confidence = share of simulated participants whose
+    decisions underpin the insight — negatives/total for risks, positives/total
+    for opportunities, and (top segment + bottom segment)/total coverage for
+    segment-difference insights. Rounded to 2 decimals; within 0-1 by construction.
+    """
+    engine = BehavioralSimulationEngine(FakeBehavioralLLM(), session_maker)
+
+    def _row(pid: str, decision: str, probability: float, segment_id: str | None) -> dict:
+        return {
+            "persona_id": pid,
+            "decision": decision,
+            "probability": probability,
+            "confidence": "high",
+            "segment_id": segment_id,
+            "motivators": ["Speed"] if probability > 0.5 else [],
+            "objections": [] if probability > 0.5 else ["Too costly"],
+            "key_factors": [],
+        }
+
+    def _results(neg: int, pos: int, neutral_unassigned: int = 0) -> list[dict]:
+        rows = [_row(f"n{i}", "unlikely_to_buy", 0.2, "seg_a") for i in range(neg)]
+        rows += [_row(f"p{i}", "likely_to_buy", 0.8, "seg_b") for i in range(pos)]
+        rows += [_row(f"u{i}", "neutral", 0.5, None) for i in range(neutral_unassigned)]
+        return rows
+
+    # Run A: 3 of 5 negative, 2 of 5 positive.
+    *_, insights_a = engine.compute_aggregate_synthesis(_results(3, 2), {}, "pricing_test")
+    risk_a = next(i for i in insights_a if i["type"] == "risk")
+    opp_a = next(i for i in insights_a if i["type"] == "opportunity")
+    seg_a = next(i for i in insights_a if i["type"] == "segment_difference")
+    assert risk_a["confidence"] == round(3 / 5, 2)
+    assert opp_a["confidence"] == round(2 / 5, 2)
+    assert seg_a["confidence"] == round((3 + 2) / 5, 2)  # both segments cover everyone
+
+    # Run B: different data → different values (proves it is measured, not constant).
+    *_, insights_b = engine.compute_aggregate_synthesis(_results(2, 2, 1), {}, "pricing_test")
+    risk_b = next(i for i in insights_b if i["type"] == "risk")
+    opp_b = next(i for i in insights_b if i["type"] == "opportunity")
+    seg_b = next(i for i in insights_b if i["type"] == "segment_difference")
+    assert risk_b["confidence"] == round(2 / 5, 2)
+    assert opp_b["confidence"] == round(2 / 5, 2)
+    assert seg_b["confidence"] == round((2 + 2) / 5, 2)  # unassigned persona not in compared segments
+    assert risk_b["confidence"] != risk_a["confidence"]
+    assert seg_b["confidence"] != seg_a["confidence"]
+
+    # No insight anywhere carries an unexplained constant.
+    for ins in insights_a + insights_b:
+        assert 0.0 <= ins["confidence"] <= 1.0
+
+
+@pytest.mark.asyncio
 async def test_full_test_run_execution(session_maker: sessionmaker[AsyncSession]):
     fake_llm = FakeBehavioralLLM()
     engine = BehavioralSimulationEngine(fake_llm, session_maker)

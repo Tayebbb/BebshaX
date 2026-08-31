@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { StudyWorkflowView } from '../src/components/dashboard/views/StudyWorkflowView';
 import { api } from '../src/services/api';
@@ -532,5 +532,66 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     // Focus moved into the dialog on open (focus trap entry point)
     const dialog = screen.getByRole('dialog');
     expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it('renders the real-customer validation safeguard card with SYNTHETIC claims first, even when no report exists', async () => {
+    type GeneratedPersonas = Awaited<ReturnType<typeof api.generateStudyPersonas>>;
+    vi.spyOn(api, 'generateStudyPersonas').mockResolvedValue([
+      {
+        id: 'per_prov_1',
+        name: 'Provenance Persona',
+        initials: 'PP',
+        role_title: 'Primary User',
+        description: 'A generated persona with mixed claim provenance.',
+        detailed_attributes: {
+          claim_provenance: {
+            goals: [
+              // INFERRED deliberately listed first: the card must re-rank SYNTHETIC ahead.
+              { value: 'Wants offline sync for commutes', provenance: 'INFERRED' },
+              { value: 'Pays 300 BDT monthly for study tools', provenance: 'SYNTHETIC' },
+            ],
+          },
+        },
+      } as unknown as GeneratedPersonas[number],
+    ]);
+
+    render(
+      <StudyWorkflowView
+        studyId="study_safeguard_card"
+        initialStep={2}
+        initialType="interviews"
+        initialPrompt=""
+        onExit={vi.fn()}
+        onStepChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Generate Personas$/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Provenance Persona')).toBeInTheDocument();
+    });
+
+    // Personas exist → the Report step is unlocked; navigate there via the stepper
+    fireEvent.click(screen.getByRole('button', { name: /Report/i }));
+
+    // No report was ever generated (report === null → honest empty state),
+    // yet the safeguard card still renders with the least-grounded claims.
+    await waitFor(() => {
+      expect(screen.getByText('Validate with real customers next')).toBeInTheDocument();
+    });
+    expect(screen.getByText('No report yet')).toBeInTheDocument();
+    expect(screen.getByText('Assumptions to verify in real interviews')).toBeInTheDocument();
+
+    // Both claims listed, each with its provenance chip
+    const syntheticItem = screen.getByText(/Pays 300 BDT monthly for study tools/).closest('li') as HTMLElement;
+    const inferredItem = screen.getByText(/Wants offline sync for commutes/).closest('li') as HTMLElement;
+    expect(syntheticItem).not.toBeNull();
+    expect(inferredItem).not.toBeNull();
+    expect(within(syntheticItem).getByText('SYNTHETIC')).toBeInTheDocument();
+    expect(within(inferredItem).getByText('INFERRED')).toBeInTheDocument();
+
+    // SYNTHETIC (no grounding at all) ranks ahead of INFERRED
+    const items = Array.from(syntheticItem.parentElement!.children);
+    expect(items.indexOf(syntheticItem)).toBeLessThan(items.indexOf(inferredItem));
   });
 });

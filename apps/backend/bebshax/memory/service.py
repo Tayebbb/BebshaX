@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -14,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 
 from bebshax.llm import ChatMessage, LLMRequest, LLMService, TaskType
 from bebshax.llm.adapters.embeddings import EmbeddingBackend
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.memory.orm import MemoryItems
 from bebshax.memory.scoring import (
     W_IMPORTANCE,
@@ -180,10 +180,9 @@ class MemoryService:
         )
         result = await self._llm.complete(request)
         try:
-            cleaned = result.text.strip().strip("`")
-            start, end = cleaned.find("{"), cleaned.rfind("}")
-            insights = json.loads(cleaned[start : end + 1]).get("insights", [])
-        except (ValueError, json.JSONDecodeError):
+            parsed = parse_llm_json(result.text)
+            insights = parsed.get("insights", []) if isinstance(parsed, dict) else []
+        except ValueError:
             logger.warning("reflection output unparseable for persona %s — skipped", persona_id)
             return []
 

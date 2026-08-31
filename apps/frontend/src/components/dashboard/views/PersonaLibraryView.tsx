@@ -1038,7 +1038,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             </div>
 
             {/* Modal Tabs Bar */}
-            <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', padding: '0 28px', background: '#090C0C', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', padding: '0 28px', background: 'var(--bg-pure)', overflowX: 'auto' }}>
               {[
                 { id: 'profile', label: 'Persona Profile', icon: <User size={14} /> },
                 { id: 'personality', label: 'Personality (Big Five)', icon: <Brain size={14} /> },
@@ -1544,7 +1544,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div style={{ padding: '16px 28px', borderTop: '1px solid var(--border-subtle)', background: '#090C0C', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ padding: '16px 28px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-pure)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                 Persona ID: <code style={{ color: 'var(--accent-teal)' }}>{inspectingPersona.id}</code>
               </div>

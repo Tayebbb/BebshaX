@@ -32,6 +32,10 @@ import {
   mockStudies,
 } from '../mocks/fixtures';
 
+// Re-exported so api.ts has a single lazy entry point into the mock layer —
+// it must never import ../mocks/fixtures statically (prod-bundle eviction).
+export { mockEvaluationMetrics, mockHealth, mockRoutesStatus } from '../mocks/fixtures';
+
 // In-memory state store for client modifications during mock/fallback mode
 export class MockStore {
   businesses: Business[] = [];

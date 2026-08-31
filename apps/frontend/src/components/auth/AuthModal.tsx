@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Mail,
@@ -68,6 +68,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     verifyEmailOtp,
     resetPasswordWithOtp,
   } = useAuth();
+
+  // Escape closes the top surface only: the legal modal first when stacked,
+  // then the auth dialog. Capture phase + defaultPrevented + preventDefault
+  // follow the repo Escape-stacking protocol (one surface per press).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      if (legalModal) {
+        setLegalModal(null);
+        return;
+      }
+      onClose();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [isOpen, legalModal, onClose]);
 
   if (!isOpen) return null;
 
@@ -271,6 +290,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Sign in or create your BebshaX account"
       style={{
         position: 'fixed',
         inset: 0,
@@ -456,7 +478,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
                 <span
                   style={{
-                    fontSize: '0.66rem',
+                    fontSize: '0.72rem',
                     fontWeight: 700,
                     color: '#9CA3AF',
                     letterSpacing: '0.08em',
@@ -686,7 +708,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }} />
                 <span
                   style={{
-                    fontSize: '0.66rem',
+                    fontSize: '0.72rem',
                     fontWeight: 700,
                     color: '#9CA3AF',
                     letterSpacing: '0.08em',

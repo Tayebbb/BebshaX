@@ -652,7 +652,9 @@ class BehavioralSimulationEngine:
             "top_decision_factors": top_decision_factors,
         }
 
-        # Risks & Opportunities
+        # Risks & Opportunities. Insight confidence is measured, never invented:
+        # it is the observed share of simulated participants whose decisions
+        # underpin the insight (always within 0-1 by construction).
         risks: list[dict[str, Any]] = []
         opportunities: list[dict[str, Any]] = []
         insights_to_create: list[dict[str, Any]] = []
@@ -670,7 +672,8 @@ class BehavioralSimulationEngine:
                 "type": "risk",
                 "title": risk_item["title"],
                 "description": risk_item["description"],
-                "confidence": 0.88,
+                # share of participants exhibiting the resistance pattern
+                "confidence": round(neg_count / total, 2),
             })
 
         if pos_pct >= 40.0:
@@ -686,7 +689,8 @@ class BehavioralSimulationEngine:
                 "type": "opportunity",
                 "title": opp_item["title"],
                 "description": opp_item["description"],
-                "confidence": 0.88,
+                # share of participants exhibiting the positive-response pattern
+                "confidence": round(pos_count / total, 2),
             })
 
         # Add segment difference insight if variance is high
@@ -694,6 +698,8 @@ class BehavioralSimulationEngine:
             sorted_segs = sorted(segment_analysis, key=lambda x: x["average_likelihood"], reverse=True)
             diff = sorted_segs[0]["average_likelihood"] - sorted_segs[-1]["average_likelihood"]
             if diff >= 0.25:
+                # share of participants in the two segments being compared
+                seg_coverage = sorted_segs[0]["persona_count"] + sorted_segs[-1]["persona_count"]
                 seg_diff_item = {
                     "type": "segment_difference",
                     "title": f"Segment Divergence: {sorted_segs[0]['segment_name']} vs {sorted_segs[-1]['segment_name']}",
@@ -701,7 +707,7 @@ class BehavioralSimulationEngine:
                         f"{sorted_segs[0]['segment_name']} shows {int(sorted_segs[0]['average_likelihood']*100)}% likelihood "
                         f"compared to {int(sorted_segs[-1]['average_likelihood']*100)}% for {sorted_segs[-1]['segment_name']}."
                     ),
-                    "confidence": 0.85,
+                    "confidence": round(seg_coverage / total, 2),
                 }
                 insights_to_create.append(seg_diff_item)
 
@@ -903,7 +909,7 @@ class BehavioralSimulationEngine:
                     title=ins["title"],
                     description=ins["description"],
                     supporting_persona_ids=[r["persona_id"] for r in valid_results[:4]],
-                    confidence=ins.get("confidence", 0.85),
+                    confidence=ins["confidence"],
                     is_synthetic=True,
                 )
                 session.add(db_ins)

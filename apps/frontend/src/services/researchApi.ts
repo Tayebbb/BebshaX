@@ -17,7 +17,13 @@ import {
   ResearchRun,
   SourceDetail,
 } from '../types';
-import { mockStore } from './mockStore';
+
+/** Lazily-loaded mock layer — mirrors api.ts. Static imports of mockStore
+ * shipped the fixture tree in the production bundle; the memoized dynamic
+ * import shares the same lazy chunk as api.ts's loader. */
+type MockModule = typeof import('./mockStore');
+let _mocks: Promise<MockModule> | null = null;
+const loadMocks = (): Promise<MockModule> => (_mocks ??= import('./mockStore'));
 
 export interface ResearchApiDeps {
   /** Base URL of the backend API (module-scope `API_BASE` in api.ts). */
@@ -35,27 +41,57 @@ export interface ResearchApiDeps {
 export function createResearchApi(deps: ResearchApiDeps) {
   const { apiBase, llmTimeoutMs, isMockMode, getAuthHeaders, setLastKnownLive } = deps;
 
+  /**
+   * Shared network path for every method below: fetch → `res.ok` gate →
+   * `lastKnownLive` bookkeeping → parsed JSON. Behavior-identical to the
+   * per-method copies it replaced: `error` supplies the per-method message
+   * (a string template gaining ` (HTTP n)`, or a builder that may read the
+   * body's `detail`), and `nullStatuses` lets an optional read (the 404
+   * plan) resolve `null` BEFORE the liveness flag flips — a 404 there is a
+   * healthy backend saying "none yet", not downtime.
+   */
+  const fetchJson = async <T>(
+    url: string,
+    init: RequestInit,
+    error: string | ((res: Response) => Promise<Error>),
+    opts?: { timeoutMs?: number; nullStatuses?: number[] },
+  ): Promise<T> => {
+    try {
+      const res = await fetch(
+        url,
+        opts?.timeoutMs ? { ...init, signal: AbortSignal.timeout(opts.timeoutMs) } : init,
+      );
+      if (res.ok) {
+        setLastKnownLive(true);
+        return (await res.json()) as T;
+      }
+      if (opts?.nullStatuses?.includes(res.status)) {
+        return null as unknown as T;
+      }
+      setLastKnownLive(false);
+      throw typeof error === 'string'
+        ? new Error(`${error} (HTTP ${res.status})`)
+        : await error(res);
+    } catch (err) {
+      setLastKnownLive(false);
+      throw err;
+    }
+  };
+
   const research = {
     async startResearch(studyId: string): Promise<ResearchRun> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/research`, {
-            method: 'POST',
-            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          const err = await res.json().catch(() => ({ detail: 'Research run failed' }));
-          throw new Error(err.detail || `Research run failed (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+        return fetchJson<ResearchRun>(
+          `${apiBase}/studies/${studyId}/research`,
+          { method: 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }) },
+          async (res) => {
+            const err = await res.json().catch(() => ({ detail: 'Research run failed' }));
+            return new Error(err.detail || `Research run failed (HTTP ${res.status})`);
+          },
+        );
       }
 
+      const { mockStore } = await loadMocks();
       const mockRun: ResearchRun = {
         id: `run_${Date.now()}`,
         study_id: studyId,
@@ -79,41 +115,25 @@ export function createResearchApi(deps: ResearchApiDeps) {
 
     async getResearchRuns(studyId: string): Promise<ResearchRun[]> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/research`, {
-            headers: getAuthHeaders(),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          throw new Error(`Failed to fetch research runs (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+        return fetchJson<ResearchRun[]>(
+          `${apiBase}/studies/${studyId}/research`,
+          { headers: getAuthHeaders() },
+          'Failed to fetch research runs',
+        );
       }
+      const { mockStore } = await loadMocks();
       return mockStore.researchRuns.filter((r) => r.study_id === studyId || r.study_id === 'study_default');
     },
 
     async getResearchRun(studyId: string, runId: string): Promise<ResearchRun> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/research/${runId}`, {
-            headers: getAuthHeaders(),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          throw new Error(`Failed to fetch research run (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+        return fetchJson<ResearchRun>(
+          `${apiBase}/studies/${studyId}/research/${runId}`,
+          { headers: getAuthHeaders() },
+          'Failed to fetch research run',
+        );
       }
+      const { mockStore } = await loadMocks();
       const found = mockStore.researchRuns.find((r) => r.id === runId);
       if (found) return found;
       return {
@@ -132,22 +152,14 @@ export function createResearchApi(deps: ResearchApiDeps) {
 
     async getEvidenceSummary(studyId: string): Promise<EvidenceSummary> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/evidence/summary`, {
-            headers: getAuthHeaders(),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          throw new Error(`Failed to fetch evidence summary (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+        return fetchJson<EvidenceSummary>(
+          `${apiBase}/studies/${studyId}/evidence/summary`,
+          { headers: getAuthHeaders() },
+          'Failed to fetch evidence summary',
+        );
       }
 
+      const { mockStore } = await loadMocks();
       const claims = mockStore.claims;
       const supported = claims.filter((c) => c.status === 'supported').length;
       const inferred = claims.filter((c) => c.status === 'inference').length;
@@ -183,27 +195,19 @@ export function createResearchApi(deps: ResearchApiDeps) {
       params?: { source_type?: string; search?: string }
     ): Promise<EvidenceSource[]> {
       if (!isMockMode()) {
-        try {
-          const queryParams = new URLSearchParams();
-          if (params?.source_type) queryParams.set('source_type', params.source_type);
-          if (params?.search) queryParams.set('search', params.search);
-          const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
+        const queryParams = new URLSearchParams();
+        if (params?.source_type) queryParams.set('source_type', params.source_type);
+        if (params?.search) queryParams.set('search', params.search);
+        const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
 
-          const res = await fetch(`${apiBase}/studies/${studyId}/evidence/sources${qs}`, {
-            headers: getAuthHeaders(),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          throw new Error(`Failed to fetch evidence sources (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+        return fetchJson<EvidenceSource[]>(
+          `${apiBase}/studies/${studyId}/evidence/sources${qs}`,
+          { headers: getAuthHeaders() },
+          'Failed to fetch evidence sources',
+        );
       }
 
+      const { mockStore } = await loadMocks();
       let results = [...mockStore.sources];
       if (params?.source_type && params.source_type !== 'all') {
         results = results.filter((s) => s.source_type === params.source_type);
@@ -219,22 +223,14 @@ export function createResearchApi(deps: ResearchApiDeps) {
 
     async getEvidenceSourceDetail(studyId: string, sourceId: string): Promise<SourceDetail> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/evidence/sources/${sourceId}`, {
-            headers: getAuthHeaders(),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          throw new Error(`Failed to fetch source detail (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+        return fetchJson<SourceDetail>(
+          `${apiBase}/studies/${studyId}/evidence/sources/${sourceId}`,
+          { headers: getAuthHeaders() },
+          'Failed to fetch source detail',
+        );
       }
 
+      const { mockStore } = await loadMocks();
       const source = mockStore.sources.find((s) => s.id === sourceId) || mockStore.sources[0];
       return {
         ...source,
@@ -254,28 +250,20 @@ export function createResearchApi(deps: ResearchApiDeps) {
       params?: { status?: string; category?: string; search?: string }
     ): Promise<EvidenceClaim[]> {
       if (!isMockMode()) {
-        try {
-          const queryParams = new URLSearchParams();
-          if (params?.status) queryParams.set('status', params.status);
-          if (params?.category) queryParams.set('category', params.category);
-          if (params?.search) queryParams.set('search', params.search);
-          const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
+        const queryParams = new URLSearchParams();
+        if (params?.status) queryParams.set('status', params.status);
+        if (params?.category) queryParams.set('category', params.category);
+        if (params?.search) queryParams.set('search', params.search);
+        const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
 
-          const res = await fetch(`${apiBase}/studies/${studyId}/evidence/claims${qs}`, {
-            headers: getAuthHeaders(),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          throw new Error(`Failed to fetch evidence claims (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+        return fetchJson<EvidenceClaim[]>(
+          `${apiBase}/studies/${studyId}/evidence/claims${qs}`,
+          { headers: getAuthHeaders() },
+          'Failed to fetch evidence claims',
+        );
       }
 
+      const { mockStore } = await loadMocks();
       let results = [...mockStore.claims];
       if (params?.status && params.status !== 'all') {
         results = results.filter((c) => c.status === params.status);
@@ -294,22 +282,14 @@ export function createResearchApi(deps: ResearchApiDeps) {
 
     async getEvidenceClaimDetail(studyId: string, claimId: string): Promise<ClaimDetail> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/evidence/claims/${claimId}`, {
-            headers: getAuthHeaders(),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          throw new Error(`Failed to fetch claim detail (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+        return fetchJson<ClaimDetail>(
+          `${apiBase}/studies/${studyId}/evidence/claims/${claimId}`,
+          { headers: getAuthHeaders() },
+          'Failed to fetch claim detail',
+        );
       }
 
+      const { mockStore } = await loadMocks();
       const claim = mockStore.claims.find((c) => c.id === claimId) || mockStore.claims[0];
       const supporting = mockStore.sources.filter((s) => claim.supporting_source_ids.includes(s.id));
       const contradicting = mockStore.sources.filter((s) => claim.contradicting_source_ids.includes(s.id));
@@ -334,24 +314,18 @@ export function createResearchApi(deps: ResearchApiDeps) {
       topK: number = 6
     ): Promise<{ chunk_id: string; source_id: string; content: string; similarity_score: number; metadata: any }[]> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/evidence/search`, {
+        return fetchJson(
+          `${apiBase}/studies/${studyId}/evidence/search`,
+          {
             method: 'POST',
             headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ query, top_k: topK }),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          throw new Error(`Evidence search failed (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+          },
+          'Evidence search failed',
+        );
       }
 
+      const { mockStore } = await loadMocks();
       return mockStore.sources.slice(0, topK).map((s, idx) => ({
         chunk_id: `chk_${s.id}_${idx}`,
         source_id: s.id,
@@ -368,17 +342,14 @@ export function createResearchApi(deps: ResearchApiDeps) {
     async getResearchPlan(studyId: string): Promise<ResearchPlan | null> {
       if (!isMockMode()) {
         try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/research/plan`, {
-            headers: getAuthHeaders(),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          if (res.status === 404) return null;
-          setLastKnownLive(false);
+          return await fetchJson<ResearchPlan | null>(
+            `${apiBase}/studies/${studyId}/research/plan`,
+            { headers: getAuthHeaders() },
+            'Failed to fetch research plan',
+            { nullStatuses: [404] },
+          );
         } catch {
-          setLastKnownLive(false);
+          // Optional read — any failure resolves to null (as before).
         }
       }
       return null;
@@ -387,16 +358,13 @@ export function createResearchApi(deps: ResearchApiDeps) {
     async listDatasetCandidates(studyId: string): Promise<DatasetCandidate[]> {
       if (!isMockMode()) {
         try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/datasets/candidates`, {
-            headers: getAuthHeaders(),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
+          return await fetchJson<DatasetCandidate[]>(
+            `${apiBase}/studies/${studyId}/datasets/candidates`,
+            { headers: getAuthHeaders() },
+            'Failed to fetch dataset candidates',
+          );
         } catch {
-          setLastKnownLive(false);
+          // Optional read — any failure resolves to the empty list (as before).
         }
       }
       // No mock fabrication per product requirement — return empty list
@@ -412,24 +380,14 @@ export function createResearchApi(deps: ResearchApiDeps) {
       candidateId: string
     ): Promise<{ success: boolean; imported_dataset_id: string; dataset_name: string; row_count: number | null }> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(
-            `${apiBase}/studies/${studyId}/datasets/candidates/${candidateId}/import`,
-            {
-              method: 'POST',
-              headers: getAuthHeaders(),
-            }
-          );
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as any).detail || 'Import failed');
-        } catch (e) {
-          setLastKnownLive(false);
-          throw e;
-        }
+        return fetchJson(
+          `${apiBase}/studies/${studyId}/datasets/candidates/${candidateId}/import`,
+          { method: 'POST', headers: getAuthHeaders() },
+          async (res) => {
+            const err = await res.json().catch(() => ({}));
+            return new Error((err as any).detail || 'Import failed');
+          },
+        );
       }
       throw new Error('Not available in mock mode');
     },
@@ -439,48 +397,28 @@ export function createResearchApi(deps: ResearchApiDeps) {
       candidateId: string
     ): Promise<{ success: boolean }> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(
-            `${apiBase}/studies/${studyId}/datasets/candidates/${candidateId}/reject`,
-            {
-              method: 'POST',
-              headers: getAuthHeaders(),
-            }
-          );
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          throw new Error(`Failed to reject candidate (HTTP ${res.status})`);
-        } catch (err) {
-          setLastKnownLive(false);
-          throw err;
-        }
+        return fetchJson(
+          `${apiBase}/studies/${studyId}/datasets/candidates/${candidateId}/reject`,
+          { method: 'POST', headers: getAuthHeaders() },
+          'Failed to reject candidate',
+        );
       }
       return { success: true };
     },
 
     async triggerStudyResearch(studyId: string): Promise<any> {
       if (!isMockMode()) {
-        try {
-          const res = await fetch(`${apiBase}/studies/${studyId}/research/run`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            signal: AbortSignal.timeout(llmTimeoutMs),
-          });
-          if (res.ok) {
-            setLastKnownLive(true);
-            return await res.json();
-          }
-          setLastKnownLive(false);
-          const err = await res.json().catch(() => ({ detail: 'Research trigger failed' }));
-          throw new Error(err.detail || `Research trigger failed (HTTP ${res.status})`);
-        } catch (err) {
-          // A fake 'completed' status would hide that research never ran.
-          setLastKnownLive(false);
-          throw err;
-        }
+        // A fake 'completed' status would hide that research never ran —
+        // failures propagate to the caller.
+        return fetchJson<any>(
+          `${apiBase}/studies/${studyId}/research/run`,
+          { method: 'POST', headers: getAuthHeaders() },
+          async (res) => {
+            const err = await res.json().catch(() => ({ detail: 'Research trigger failed' }));
+            return new Error(err.detail || `Research trigger failed (HTTP ${res.status})`);
+          },
+          { timeoutMs: llmTimeoutMs },
+        );
       }
       return { study_id: studyId, status: 'completed' };
     },

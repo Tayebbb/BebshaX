@@ -15,6 +15,7 @@ from bebshax.api.deps import user_owns_study
 from bebshax.auth.models import Users
 from bebshax.datasets.service import DatasetService
 from bebshax.db.models import DatasetSources, Studies
+from bebshax.research.service import ResearchEngineService
 
 router = APIRouter(tags=["datasets"])
 
@@ -387,7 +388,6 @@ async def list_study_dataset_candidates(
 ) -> list[dict[str, Any]]:
     """List public dataset candidates discovered for a study."""
     await _verify_study_access(study_id, current_user, session)
-    from bebshax.research.service import ResearchEngineService
     service = ResearchEngineService()
     return await service.list_dataset_candidates(session, study_id)
 
@@ -401,7 +401,6 @@ async def import_study_dataset_candidate(
 ) -> dict[str, Any]:
     """Manually import a discovered dataset candidate into the study's dataset sources."""
     await _verify_study_access(study_id, current_user, session)
-    from bebshax.research.service import ResearchEngineService
     service = ResearchEngineService()
     effective_user_id = current_user.id if current_user else "usr_default"
     try:
@@ -426,7 +425,6 @@ async def reject_study_dataset_candidate(
 ) -> dict[str, Any]:
     """Reject a discovered dataset candidate so it is excluded from auto-selection."""
     await _verify_study_access(study_id, current_user, session)
-    from bebshax.research.service import ResearchEngineService
     service = ResearchEngineService()
     try:
         await service.reject_candidate_dataset(session, study_id, candidate_id)

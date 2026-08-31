@@ -19,7 +19,7 @@ from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import get_session, owner_accessible, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
-from bebshax.interview.engine import ConversationNotFound, InterviewFinished, PersonaNotFound
+from bebshax.interview.engine import ConversationNotFound, InterviewEngine, InterviewFinished, PersonaNotFound
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 
@@ -767,7 +767,6 @@ async def batch_run_study_interviews(
         ]
 
     if getattr(request.app.state, "interview_engine", None) is None:
-        from bebshax.interview.engine import InterviewEngine
         llm_router = getattr(request.app.state, "llm_router", None)
         session_maker = getattr(request.app.state, "db_sessionmaker", None)
         memory = getattr(request.app.state, "memory_service", None)

@@ -34,8 +34,8 @@ describe('Shehab Track Audit Findings (B5, M7, H1, L7, L8, L9, L10)', () => {
     expect(mockHeaders['X-BebshaX-Mock']).toBe('1');
   });
 
-  it('L9: resetMockStore resets modified mock state to fresh initial state', () => {
-    api.resetMockStore();
+  it('L9: resetMockStore resets modified mock state to fresh initial state', async () => {
+    await api.resetMockStore();
     expect(api.getStoredUserStudies().length).toBeGreaterThan(0);
   });
 

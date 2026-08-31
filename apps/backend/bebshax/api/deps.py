@@ -9,6 +9,7 @@ frozen path.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Optional
 
 from fastapi import HTTPException, Request
@@ -40,7 +41,7 @@ def owner_accessible(owner_id: Optional[str], current_user: Optional[Users]) -> 
     return _tenancy_owner_accessible(owner_id, current_user.id if current_user else None)
 
 
-async def get_session(request: Request) -> AsyncSession:
+async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
     if not sessionmaker:
         raise HTTPException(status_code=500, detail="Database not configured")

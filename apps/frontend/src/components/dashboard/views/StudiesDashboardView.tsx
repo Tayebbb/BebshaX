@@ -32,6 +32,8 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'completed' | 'in_progress'>('all');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // Only one kebab menu is open at a time, so a single ref tracks it.
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadStudies = async () => {
@@ -45,7 +47,9 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
     loadStudies();
   }, []);
 
-  // An open kebab menu closes on Escape or any outside pointer press.
+  // An open kebab menu closes on Escape or any outside pointer press;
+  // ArrowUp/ArrowDown cycle focus through its items (mirrors the user
+  // popover in DashboardLayout).
   useEffect(() => {
     if (!activeMenuId) return;
     const onKey = (e: KeyboardEvent) => {
@@ -53,6 +57,17 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
       if (e.key === 'Escape') {
         e.preventDefault();
         setActiveMenuId(null);
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const items = Array.from(
+          menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+        );
+        if (items.length === 0) return;
+        e.preventDefault();
+        const idx = items.indexOf(document.activeElement as HTMLElement);
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        items[(idx + step + items.length) % items.length].focus();
       }
     };
     const onPress = () => setActiveMenuId(null);
@@ -280,9 +295,10 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                       </button>
 
                       {isMenuOpen && (
-                        <div className="sd-menu" aria-label="Study options">
+                        <div className="sd-menu" role="menu" aria-label="Study options" ref={menuRef}>
                           <button
                             type="button"
+                            role="menuitem"
                             className="sd-menu-item"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -293,6 +309,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                           </button>
                           <button
                             type="button"
+                            role="menuitem"
                             className="sd-menu-item sd-menu-item--danger"
                             onClick={(e) => handleDelete(e, study.id)}
                           >

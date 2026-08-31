@@ -16,6 +16,7 @@ import uuid
 from pydantic import ValidationError
 
 from bebshax.llm import ChatMessage, LLMRequest, LLMService, TaskType
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.persona.consistency import ConsistencyViolation, check_consistency
 from bebshax.persona.evidence import EvidenceStore
 from bebshax.persona.schema import (
@@ -61,15 +62,10 @@ identity, name, or occupation; use it to avoid generating a generic/stereotypica
 
 
 def _extract_json(text: str) -> dict:
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        if cleaned.lower().startswith("json"):
-            cleaned = cleaned[4:]
-    start, end = cleaned.find("{"), cleaned.rfind("}")
-    if start == -1 or end <= start:
+    parsed = parse_llm_json(text)
+    if not isinstance(parsed, dict):
         raise ValueError("no JSON object found in reply")
-    return json.loads(cleaned[start : end + 1])
+    return parsed
 
 
 class PersonaEngine:

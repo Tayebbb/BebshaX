@@ -99,9 +99,9 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in bx-backdrop">
-      <div className="bg-[#121818] border border-[var(--border-medium)] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] bx-modal">
+      <div className="bg-[var(--bg-card)] border border-[var(--border-medium)] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] bx-modal">
         {/* Modal Header */}
-        <div className="p-6 border-b border-[var(--border-medium)] flex items-center justify-between bg-[#0E1313]">
+        <div className="p-6 border-b border-[var(--border-medium)] flex items-center justify-between bg-[var(--bg-secondary)]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 font-bold text-lg">
               {persona.avatar_url ? (
@@ -132,7 +132,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-[var(--text-secondary)] hover:text-white p-2 rounded-lg hover:bg-[#1A2323] transition-colors"
+            className="text-[var(--text-secondary)] hover:text-[var(--text-main)] p-2 rounded-lg hover:bg-[var(--bg-card-hover)] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -143,7 +143,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
           {/* Grounding Context Alert */}
           <div className="bg-[var(--bg-card-hover)] border border-teal-500/20 rounded-xl p-4 flex items-start gap-3">
             <Sparkles className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
-            <div className="text-xs leading-relaxed text-[#B2CCCC]">
+            <div className="text-xs leading-relaxed text-[var(--text-label)]">
               <span className="font-semibold text-white">Adaptive Anti-Sycophantic Agent: </span>
               This persona is grounded in empirical research and will realistically push back on
               expensive pricing or irrelevant solutions. Answers represent synthetic simulation
@@ -176,14 +176,14 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
                     className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
                       isSelected
                         ? 'bg-teal-500/10 border-teal-500 text-white'
-                        : 'bg-[var(--bg-card-hover)] border-[var(--border-medium)] hover:border-[#334646] text-[#A0AEAE]'
+                        : 'bg-[var(--bg-card-hover)] border-[var(--border-medium)] hover:border-[var(--border-hover)] text-[var(--text-label)]'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-sm">{obj.title}</span>
                       {isSelected && <CheckCircle2 className="w-4 h-4 text-teal-400" />}
                     </div>
-                    <p className="text-xs text-[#7F9090] mt-1">{obj.description}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">{obj.description}</p>
                   </div>
                 );
               })}
@@ -196,7 +196,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
                   onChange={(e) => setCustomObjectiveText(e.target.value)}
                   placeholder="e.g. Ask about how they manage weekly budgeting and whether a ৳150 weekly fee works..."
                   rows={3}
-                  className="w-full bg-[var(--bg-card-hover)] border border-[#263737] rounded-xl p-3 text-white text-xs placeholder-[#5E7070] focus:outline-none focus:border-teal-500"
+                  className="w-full bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-xl p-3 text-white text-xs placeholder-[var(--text-muted)] focus:outline-none focus:border-teal-500"
                 />
               </div>
             )}
@@ -236,12 +236,12 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
                     className={`p-3 rounded-xl border text-center cursor-pointer transition-all ${
                       isSelected
                         ? 'bg-teal-500/10 border-teal-500 text-white'
-                        : 'bg-[var(--bg-card-hover)] border-[var(--border-medium)] hover:border-[#334646] text-[#A0AEAE]'
+                        : 'bg-[var(--bg-card-hover)] border-[var(--border-medium)] hover:border-[var(--border-hover)] text-[var(--text-label)]'
                     }`}
                   >
                     <div className="font-semibold text-xs text-white">{tier.label}</div>
                     <div className="text-teal-400 font-bold text-xs mt-0.5">{tier.turns}</div>
-                    <div className="text-[10px] text-[#718484] mt-1">{tier.desc}</div>
+                    <div className="text-[0.72rem] text-[var(--text-secondary)] mt-1">{tier.desc}</div>
                   </div>
                 );
               })}
@@ -250,10 +250,10 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-5 border-t border-[var(--border-medium)] bg-[#0E1313] flex items-center justify-between">
+        <div className="p-5 border-t border-[var(--border-medium)] bg-[var(--bg-secondary)] flex items-center justify-between">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-[#253535] text-[var(--text-secondary)] hover:text-white hover:bg-[#1A2323] text-xs font-medium transition-colors"
+            className="px-4 py-2.5 rounded-xl border border-[var(--border-medium)] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-card-hover)] text-xs font-medium transition-colors"
           >
             Cancel
           </button>

@@ -2,8 +2,8 @@
 
 Free-tier models routinely wrap JSON in markdown fences or surround it with
 prose even under ``json_mode``. This module is the single home for the
-fence-strip + parse logic that was previously duplicated (with two divergent
-regex variants) across seven call sites in five modules.
+fence-strip + parse logic — every call site that consumes LLM JSON goes
+through :func:`parse_llm_json` instead of rolling its own fence stripper.
 
 Contract: :func:`parse_llm_json` raises ``ValueError`` (``json.JSONDecodeError``
 is a subclass) when no JSON payload can be recovered. Call sites keep their own

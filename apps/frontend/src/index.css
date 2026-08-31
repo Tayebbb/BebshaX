@@ -229,6 +229,11 @@ body {
   outline-offset: 2px;
   border-radius: 6px;
 }
+/* The pale teal ring above is ~1.7:1 on the light canvas; solid teal-600 is ≥3:1. */
+[data-theme='light'] :focus-visible {
+  outline: 2px solid #0d9488 !important;
+  outline-offset: 2px;
+}
 
 /* Typography Utility Classes */
 h1, h2, h3, h4, h5, h6 {

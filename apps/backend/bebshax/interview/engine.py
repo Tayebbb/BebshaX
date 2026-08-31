@@ -12,7 +12,6 @@ Principles (R2, R3, R6, Part 6):
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import uuid
@@ -31,6 +30,7 @@ from bebshax.db.models import Businesses, MarketSegments, Personas, Studies
 from bebshax.interview.normalization import normalize_reply
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm import ChatMessage, LLMError, LLMRequest, LLMResult, LLMService, TaskType
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.memory.service import MemoryService
 from bebshax.persona.schema import PersonaProfile
 from bebshax.persona.store import load_persona
@@ -941,14 +941,7 @@ Output valid JSON adhering strictly to this schema:
                     conversation_id=conversation_id,
                 )
             )
-            raw = res.text.strip()
-            # Clean possible markdown wrapping
-            if "```json" in raw:
-                raw = raw.split("```json", 1)[1].split("```", 1)[0].strip()
-            elif "```" in raw:
-                raw = raw.split("```", 1)[1].split("```", 1)[0].strip()
-
-            parsed = json.loads(raw)
+            parsed = parse_llm_json(res.text)
             summary = parsed.get("summary", "Interview analysis completed.")
             key_findings = parsed.get("key_findings", [])
             insights_raw = parsed.get("insights", [])

@@ -88,7 +88,7 @@
 
 /* Header */
 .ns-kicker {
-  font: 600 0.66rem var(--font-mono);
+  font: 600 0.72rem var(--font-mono);
   letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--ns-text-faint);
@@ -170,7 +170,7 @@
   border-top: 1px solid var(--ns-line-soft);
 }
 .ns-hint {
-  font: 500 0.66rem var(--font-mono);
+  font: 500 0.72rem var(--font-mono);
   color: var(--ns-text-faint);
   display: flex;
   align-items: center;
@@ -181,7 +181,7 @@
   border-radius: 5px;
   border: 1px solid var(--ns-line);
   background: var(--fill-soft);
-  font: 600 0.62rem var(--font-mono);
+  font: 600 0.72rem var(--font-mono);
   color: var(--ns-text-dim);
 }
 .ns-send {
@@ -238,7 +238,7 @@
 /* Study-type selector */
 .ns-section-label {
   align-self: flex-start;
-  font: 600 0.64rem var(--font-mono);
+  font: 600 0.72rem var(--font-mono);
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--ns-text-faint);

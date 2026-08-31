@@ -7,20 +7,32 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select, or_
+from sqlalchemy import delete, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import get_session, owner_accessible, user_owns_study
 from bebshax.api.jobs import get_job, start_job
-from bebshax.db.models import Studies, SavedAudiences, StudyReports
+from bebshax.db.models import (
+    DatasetCandidates,
+    DatasetSources,
+    EvidenceChunks,
+    EvidenceClaims,
+    EvidenceSources,
+    ResearchPlans,
+    ResearchRuns,
+    SavedAudiences,
+    Studies,
+    StudyReports,
+)
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.tenancy import PUBLIC_OWNER_IDS as _PUBLIC_OWNER_IDS
 from bebshax.utils.title_generator import generate_deterministic_study_title
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.research.report_service import StudyReportService
+from bebshax.research.service import ResearchEngineService
 
 logger = logging.getLogger(__name__)
 
@@ -361,9 +373,6 @@ async def delete_study(
             detail="Not authorized to delete this study",
         )
     # Cascade cleanup of dependent study records
-    from sqlalchemy import delete
-    from bebshax.db.models import DatasetCandidates, DatasetSources, EvidenceClaims, EvidenceChunks, EvidenceSources, ResearchPlans, ResearchRuns
-
     await session.execute(delete(ResearchPlans).where(ResearchPlans.study_id == study_id))
     await session.execute(delete(DatasetCandidates).where(DatasetCandidates.study_id == study_id))
     await session.execute(delete(EvidenceClaims).where(EvidenceClaims.study_id == study_id))
@@ -562,7 +571,6 @@ async def trigger_study_research(
     research_engine = getattr(request.app.state, "research_engine", None) if request else None
     if not research_engine:
         # Fallback inline engine if not registered
-        from bebshax.research.service import ResearchEngineService
         llm_service = getattr(request.app.state, "llm_service", None) if request else None
         vector_engine = getattr(request.app.state, "vector_engine", None) if request else None
         research_engine = ResearchEngineService(llm_service=llm_service, vector_engine=vector_engine)

@@ -34,17 +34,6 @@ import {
   DatasetPersonaRun,
   OpenRouterHealth,
 } from '../types/dataset';
-import {
-  mockEvaluationMetrics,
-  mockHealth,
-  mockRoutesStatus,
-} from '../mocks/fixtures';
-import {
-  mockCopilotReply,
-  mockGeneratedPersonas,
-  mockStore,
-  mockSuggestedRoles,
-} from './mockStore';
 import { neonAuth } from './neonAuth';
 import { createResearchApi } from './researchApi';
 
@@ -70,6 +59,21 @@ const TIMEOUT_MS = {
 let forceMockMode: boolean | null = null;
 let lastKnownLive = false;
 
+/** Lazily-loaded mock layer (MockStore + fixtures, ~1.8k lines). A static
+ * import shipped it all in the production bundle; the dynamic import keeps it
+ * in a separate chunk only mock-mode paths ever request. `_mocksSync` mirrors
+ * the resolved module for the two synchronous readers — every async mock
+ * branch awaits loadMocks() first, so it is populated before any mock-mode
+ * sync read. */
+type MockModule = typeof import('./mockStore');
+let _mocks: Promise<MockModule> | null = null;
+let _mocksSync: MockModule | null = null;
+const loadMocks = (): Promise<MockModule> =>
+  (_mocks ??= import('./mockStore').then((m) => {
+    _mocksSync = m;
+    return m;
+  }));
+
 /** Research/evidence domain slice — lives in researchApi.ts, merged into `api`
  * below via spread. Deps are lazy closures over `api` and module state, so
  * setMockMode()/auth headers/liveness all stay authoritative here. */
@@ -85,7 +89,12 @@ const researchApi = createResearchApi({
 
 export const api = {
   resetMockStore() {
-    mockStore.reset();
+    // The store lives in the lazy mock chunk; the reset lands before any
+    // subsequent api call touches it (continuations run in registration
+    // order). Returns the promise so tests can await deterministic state.
+    const reset = loadMocks().then(({ mockStore }) => {
+      mockStore.reset();
+    });
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.clear();
@@ -93,6 +102,7 @@ export const api = {
     } catch {
       // ignore
     }
+    return reset;
   },
 
   setMockMode(enabled: boolean) {
@@ -112,6 +122,7 @@ export const api = {
   async getHealth(): Promise<HealthResponse> {
     if (this.isMockMode()) {
       lastKnownLive = false;
+      const { mockHealth } = await loadMocks();
       return mockHealth;
     }
     try {
@@ -150,6 +161,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockRoutesStatus } = await loadMocks();
     return mockRoutesStatus;
   },
 
@@ -175,6 +187,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockStore } = await loadMocks();
     return {
       items: mockStore.provenance.slice(0, limit),
       total: mockStore.provenance.length,
@@ -203,6 +216,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockStore } = await loadMocks();
     return mockStore.businesses;
   },
 
@@ -218,6 +232,7 @@ export const api = {
         if (res.ok) {
           lastKnownLive = true;
           const created = await res.json();
+          const { mockStore } = await loadMocks();
           mockStore.businesses.unshift(created);
           return created;
         }
@@ -238,6 +253,7 @@ export const api = {
       persona_count: 0,
       created_at: new Date().toISOString(),
     };
+    const { mockStore } = await loadMocks();
     mockStore.businesses.unshift(newBiz);
     return newBiz;
   },
@@ -264,6 +280,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockStore } = await loadMocks();
     return Object.values(mockStore.personas);
   },
 
@@ -285,6 +302,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockStore } = await loadMocks();
     return mockStore.personas[id] || null;
   },
 
@@ -328,6 +346,7 @@ export const api = {
             success: true,
           };
 
+          const { mockStore } = await loadMocks();
           mockStore.personas[persona.id] = persona;
           return { persona, provenance: prov };
         }
@@ -426,6 +445,7 @@ export const api = {
       success: true,
     };
 
+    const { mockStore } = await loadMocks();
     mockStore.personas[id] = newPersona;
     mockStore.provenance.unshift(newProvenance);
     return { persona: newPersona, provenance: newProvenance };
@@ -462,6 +482,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockStore } = await loadMocks();
     return mockStore.memories[personaId] || [];
   },
 
@@ -497,6 +518,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockStore } = await loadMocks();
     return mockStore.conversations[id] || null;
   },
 
@@ -521,6 +543,7 @@ export const api = {
             turns: [],
             created_at: data.created_at || new Date().toISOString(),
           };
+          const { mockStore } = await loadMocks();
           mockStore.conversations[conv.id] = conv;
           return conv;
         }
@@ -542,6 +565,7 @@ export const api = {
       turns: [],
       created_at: new Date().toISOString(),
     };
+    const { mockStore } = await loadMocks();
     mockStore.conversations[id] = conv;
     return conv;
   },
@@ -579,6 +603,7 @@ export const api = {
             served_by: data.persona_reply?.served_by ?? data.served_by ?? undefined,
             retrieved_memories: data.persona_reply?.retrieved_memories ?? [],
           };
+          const { mockStore } = await loadMocks();
           const conv = mockStore.conversations[conversationId];
           if (conv) {
             conv.turns.push(userTurn, assistantTurn);
@@ -594,6 +619,7 @@ export const api = {
       }
     }
 
+    const { mockStore } = await loadMocks();
     const conv = mockStore.conversations[conversationId];
     const persona = conv ? mockStore.personas[conv.persona_id] : null;
 
@@ -645,6 +671,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockEvaluationMetrics } = await loadMocks();
     return mockEvaluationMetrics;
   },
 
@@ -792,8 +819,11 @@ export const api = {
         lastKnownLive = true;
         return result;
       }
-    } catch {
-      // ignore
+      // Surfaced (not thrown): callers treat null as "no session", but a
+      // silent null after an OAuth return looks like a mystery logout.
+      console.warn(`Auth sync failed: HTTP ${res.status}`);
+    } catch (err) {
+      console.warn('Auth sync failed:', err);
     }
     return null;
   },
@@ -1116,7 +1146,11 @@ export const api = {
     } catch {
       // ignore
     }
-    return [...mockStore.studies];
+    // Sync helper: mock-mode callers await loadMocks() before reaching this
+    // fallback, so the cache is populated. Before any mock load (live mode,
+    // cold cache) there are no seed studies to serve — return the empty list
+    // instead of leaking fixtures into the live localStorage cache.
+    return _mocksSync ? [..._mocksSync.mockStore.studies] : [];
   },
 
   saveStoredUserStudies(studies: Study[]) {
@@ -1154,6 +1188,8 @@ export const api = {
         throw err;
       }
     }
+    // Populate the sync cache before the localStorage-fallback read below.
+    await loadMocks();
     return this.getStoredUserStudies();
   },
 
@@ -1176,6 +1212,7 @@ export const api = {
         throw err;
       }
     }
+    await loadMocks();
     const studies = this.getStoredUserStudies();
     const study = studies.find((s) => s.id === id);
     return study ? { ...study } : null;
@@ -1235,6 +1272,7 @@ export const api = {
       step: studyData.step || 1,
       ...studyData,
     };
+    await loadMocks();
     const current = this.getStoredUserStudies();
     const next = [newStudy, ...current.filter((s) => s.id !== newStudy.id)];
     this.saveStoredUserStudies(next);
@@ -1273,6 +1311,7 @@ export const api = {
       }
     }
 
+    await loadMocks();
     const current = this.getStoredUserStudies();
     const index = current.findIndex((s) => s.id === id);
     if (index === -1) {
@@ -1308,6 +1347,8 @@ export const api = {
         throw err;
       }
     }
+    // Shared tail: mock mode needs the seed studies behind the sync fallback.
+    if (this.isMockMode()) await loadMocks();
     const current = this.getStoredUserStudies();
     const next = current.filter((s) => s.id !== id);
     this.saveStoredUserStudies(next);
@@ -1421,6 +1462,7 @@ export const api = {
       }
     }
 
+    const { mockCopilotReply } = await loadMocks();
     return mockCopilotReply(messages);
   },
 
@@ -1446,6 +1488,7 @@ export const api = {
       }
     }
     // Context-aware fallback: derive roles from the study prompt
+    const { mockSuggestedRoles } = await loadMocks();
     return mockSuggestedRoles(studyPrompt);
   },
 
@@ -1479,12 +1522,14 @@ export const api = {
       if (!Array.isArray(data) || data.length === 0) {
         throw new Error('Persona generation returned no personas');
       }
+      const { mockStore } = await loadMocks();
       data.forEach((p) => {
         mockStore.personas[p.id] = p;
       });
       return data;
     }
 
+    const { mockGeneratedPersonas } = await loadMocks();
     return mockGeneratedPersonas(prompt, title);
   },
 
@@ -1593,6 +1638,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockStore } = await loadMocks();
     return studyId
       ? mockStore.datasets.filter((d) => !d.study_id || d.study_id === studyId)
       : [...mockStore.datasets];
@@ -1670,6 +1716,7 @@ export const api = {
       updated_at: new Date().toISOString(),
       last_processed_at: new Date().toISOString(),
     };
+    const { mockStore } = await loadMocks();
     mockStore.datasets.unshift(created);
     return created;
   },
@@ -1739,6 +1786,7 @@ export const api = {
       updated_at: new Date().toISOString(),
       last_processed_at: new Date().toISOString(),
     };
+    const { mockStore } = await loadMocks();
     mockStore.datasets.unshift(created);
     return created;
   },
@@ -1761,6 +1809,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockStore } = await loadMocks();
     const found = mockStore.datasets.find((d) => d.id === datasetId);
     if (found) return found;
     return mockStore.datasets[0];
@@ -1827,6 +1876,7 @@ export const api = {
       }
     }
 
+    const { mockStore } = await loadMocks();
     const ds = mockStore.datasets.find((d) => d.id === datasetId) || mockStore.datasets[0];
     const updated = { ...ds, last_processed_at: new Date().toISOString() };
     mockStore.datasets = mockStore.datasets.map((d) => (d.id === datasetId ? updated : d));
@@ -1845,6 +1895,7 @@ export const api = {
         });
         if (res.ok) {
           lastKnownLive = true;
+          const { mockStore } = await loadMocks();
           mockStore.datasets = mockStore.datasets.filter((d) => d.id !== datasetId);
           return;
         }
@@ -1855,6 +1906,7 @@ export const api = {
         throw err;
       }
     }
+    const { mockStore } = await loadMocks();
     mockStore.datasets = mockStore.datasets.filter((d) => d.id !== datasetId);
   },
 

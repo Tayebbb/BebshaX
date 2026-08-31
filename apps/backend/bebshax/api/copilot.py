@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import user_owns_study
 from bebshax.auth.models import Users
+from bebshax.db.models import Personas, Studies
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
@@ -594,7 +595,6 @@ async def generate_study_personas(
     if body.study_id:
         gate_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
         if gate_sessionmaker:
-            from bebshax.db.models import Studies
             async with gate_sessionmaker() as gate_session:
                 study_row = await gate_session.get(Studies, body.study_id)
             if study_row is not None and not user_owns_study(study_row, current_user):
@@ -633,7 +633,6 @@ async def generate_study_personas(
     if db_sessionmaker and body.study_id and all_personas:
         try:
             async with db_sessionmaker() as db_session:
-                from bebshax.db.models import Personas, Studies
                 study = await db_session.get(Studies, body.study_id)
                 for p in all_personas:
                     # SERVER owns persona identity. LLM-suggested ids like

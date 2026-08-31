@@ -29,6 +29,48 @@ try {
   console.log('\x1b[33m%s\x1b[0m', '   Using configured cloud database from .env / Neon Postgres.');
 }
 
+// Warn-only demo-readiness hint — never blocks or exits (daily-dev tool).
+// Mirrors backend env precedence: real environment beats .env. Prints host:port
+// only, never credentials or full URLs.
+try {
+  const dotenv = {};
+  const envPath = path.join(rootDir, '.env');
+  if (fs.existsSync(envPath)) {
+    for (const raw of fs.readFileSync(envPath, 'utf-8').split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#') || !line.includes('=')) continue;
+      const idx = line.indexOf('=');
+      dotenv[line.slice(0, idx).trim()] = line.slice(idx + 1).trim().replace(/^['"]|['"]$/g, '');
+    }
+  }
+  const envVal = (name) => process.env[name] ?? dotenv[name] ?? '';
+  // Default mirrors bebshax/config.py Settings.database_url
+  const dbUrl = envVal('BEBSHAX_DATABASE_URL') || 'postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax';
+  let dbHost = '?';
+  let dbPort = '?';
+  try {
+    const parsed = new URL(dbUrl.replace(/^postgresql\+[a-z0-9]+:/i, 'postgresql:'));
+    dbHost = parsed.hostname || '?';
+    dbPort = parsed.port || '5432';
+  } catch {}
+  const dbLocal = (dbHost === 'localhost' || dbHost === '127.0.0.1') && dbPort === '5433';
+  const demoOn = ['true', '1', 'yes', 'on'].includes(envVal('BEBSHAX_DEMO_MODE').toLowerCase());
+  if (!dbLocal || !demoOn) {
+    const reasons = [];
+    if (!dbLocal) reasons.push(`database is ${dbHost}:${dbPort} (offline demo needs localhost:5433)`);
+    if (!demoOn) reasons.push('BEBSHAX_DEMO_MODE is not true');
+    console.log('\x1b[33m%s\x1b[0m', '┌────────────────────────────────────────────────────────────');
+    console.log('\x1b[33m%s\x1b[0m', '│ ⚠ NOT demo-ready (fine for daily dev):');
+    for (const reason of reasons) {
+      console.log('\x1b[33m%s\x1b[0m', `│   • ${reason}`);
+    }
+    console.log('\x1b[33m%s\x1b[0m', '│   run: .venv\\Scripts\\python scripts\\demo_preflight.py');
+    console.log('\x1b[33m%s\x1b[0m', '└────────────────────────────────────────────────────────────');
+  }
+} catch {
+  // hint is best-effort only — never interfere with startup
+}
+
 // 2. Locate Python executable in virtual environment
 let pythonCmd = 'python';
 const venvWin = path.join(rootDir, '.venv', 'Scripts', 'python.exe');

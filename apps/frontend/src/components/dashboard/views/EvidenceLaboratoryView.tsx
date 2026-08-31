@@ -242,9 +242,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
         display: 'flex',
         flexDirection: 'column',
         minHeight: '100vh',
-        background: '#08090B',
+        background: 'var(--bg-primary)',
         color: 'var(--text-primary)',
-        fontFamily: 'Inter, -apple-system, sans-serif',
       }}
     >
       {/* Top Header */}

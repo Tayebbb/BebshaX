@@ -15,12 +15,12 @@ with deterministic domain fallback templates.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
+from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
@@ -373,15 +373,7 @@ Respond ONLY with valid JSON."""
             max_output_tokens=1500,
         )
         res = await llm_service.complete(req)
-        content = res.text.strip()
-
-        # Parse JSON
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-
-        data = json.loads(content)
+        data = parse_llm_json(res.text)
         reqs = [
             DatasetRequirementSpec(
                 category=r.get("category", "demographics"),
