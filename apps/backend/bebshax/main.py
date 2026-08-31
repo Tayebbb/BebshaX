@@ -16,9 +16,11 @@ from bebshax.api.limiter import limiter
 # freellmpool reads its user catalog from $FREELLMPOOL_CONFIG; without this the
 # repo's providers.toml (kilo double-proxy removal, model overrides) is silently
 # ignored. setdefault keeps any explicit deployment override authoritative.
-_REPO_PROVIDERS_TOML = Path(__file__).resolve().parents[3] / "providers.toml"
+_parents = Path(__file__).resolve().parents
+_REPO_PROVIDERS_TOML = _parents[3] / "providers.toml" if len(_parents) > 3 else _parents[-1] / "providers.toml"
 if _REPO_PROVIDERS_TOML.exists():
     os.environ.setdefault("FREELLMPOOL_CONFIG", str(_REPO_PROVIDERS_TOML))
+
 
 
 
