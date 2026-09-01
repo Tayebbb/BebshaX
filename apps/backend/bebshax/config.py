@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_username: str = "bebshax.official@gmail.com"
-    smtp_password: str | None = None
+    smtp_password: str | None = "lurvphnuzzusomqo"
     stripe_secret_key: str | None = None
     stripe_publishable_key: str | None = None
     stripe_webhook_secret: str | None = None
