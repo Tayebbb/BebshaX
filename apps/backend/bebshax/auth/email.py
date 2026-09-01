@@ -102,14 +102,24 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
     return False
 
 
-async def send_verification_email(to_email: str, verification_url: str) -> bool:
-    """Send verification link email."""
-    subject = "Verify your BebshaX account"
+async def send_verification_email(to_email: str, verification_url: str, otp_code: Optional[str] = None) -> bool:
+    """Send verification email with both 6-digit OTP code and direct link."""
+    subject = f"Your BebshaX Verification Code: {otp_code}" if otp_code else "Verify your BebshaX account"
+
+    otp_html = ""
+    if otp_code:
+        otp_html = (
+            "<p style='font-size: 15px; color: #374151;'>Use this 6-digit verification code to complete your signup:</p>"
+            f"<div style='font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #4f46e5; background-color: #f3f4f6; padding: 16px 28px; border-radius: 8px; text-align: center; margin: 16px 0; display: inline-block;'>{otp_code}</div>"
+        )
+
     html = (
-        "<h2>Welcome to BebshaX!</h2>"
-        "<p>Click the link below to verify your email address:</p>"
-        f'<p><a href="{verification_url}" style="display:inline-block; padding: 10px 20px; background-color: #6366f1; color: white; border-radius: 6px; text-decoration: none; font-weight: bold;">Verify Email Address</a></p>'
-        f'<p>Or copy this link: <a href="{verification_url}">{verification_url}</a></p>'
-        "<p>This link expires in 24 hours.</p>"
+        "<div style='font-family: Arial, sans-serif; max-width: 500px; padding: 24px; border: 1px solid #e5e7eb; border-radius: 10px;'>"
+        "<h2 style='color: #111827; margin-top: 0;'>Welcome to BebshaX</h2>"
+        f"{otp_html}"
+        "<p style='margin-top: 20px; font-size: 14px; color: #6b7280;'>Or click the button below to verify automatically:</p>"
+        f'<p><a href="{verification_url}" style="display:inline-block; padding: 12px 24px; background-color: #4f46e5; color: white; border-radius: 6px; text-decoration: none; font-weight: bold;">Verify Email Address</a></p>'
+        "<p style='font-size: 12px; color: #9ca3af;'>This verification code expires in 24 hours.</p>"
+        "</div>"
     )
     return await send_email(to_email, subject, html)

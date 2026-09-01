@@ -201,7 +201,8 @@ async def signup(
             auth_provider="email",
         )
 
-        token_value = secrets.token_urlsafe(32)
+        otp_code = f"{secrets.randbelow(900000) + 100000}"
+        token_value = otp_code
         verification_token = EmailVerificationToken(
             id=str(uuid.uuid4()),
             user_id=user.id,
@@ -214,7 +215,7 @@ async def signup(
 
         settings = get_settings()
         verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
-        await send_verification_email(user.email, verification_url)
+        await send_verification_email(user.email, verification_url, otp_code=otp_code)
 
         token = create_access_token(user_id=user.id)
         return AuthResponse(
@@ -309,7 +310,8 @@ async def resend_verification(
             detail="Email is already verified.",
         )
 
-    token_value = secrets.token_urlsafe(32)
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
+    token_value = otp_code
     verification_token = EmailVerificationToken(
         id=str(uuid.uuid4()),
         user_id=target_user.id,
@@ -322,8 +324,8 @@ async def resend_verification(
 
     settings = get_settings()
     verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
-    await send_verification_email(target_user.email, verification_url)
-    return {"detail": "Verification email resent."}
+    await send_verification_email(target_user.email, verification_url, otp_code=otp_code)
+    return {"detail": "Verification email resent with 6-digit OTP code."}
 
 
 @auth_router.post("/signin", response_model=AuthResponse)
