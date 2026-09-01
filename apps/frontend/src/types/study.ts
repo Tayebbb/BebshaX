@@ -130,6 +130,7 @@ export interface StudyInterview {
   persona_name: string;
   persona_archetype: string;
   status: 'completed' | 'in_progress' | 'pending';
+  objective?: string;
   turns_count: number;
   duration_minutes: number;
   key_takeaway: string;

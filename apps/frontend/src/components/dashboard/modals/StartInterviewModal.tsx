@@ -98,7 +98,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
     commProfile.monthly_budget_bdt || commProfile.budget_bdt || '300–600';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in bx-backdrop">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--scrim)] animate-fade-in bx-backdrop">
       <div className="bg-[var(--bg-card)] border border-[var(--border-medium)] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] bx-modal">
         {/* Modal Header */}
         <div className="p-6 border-b border-[var(--border-medium)] flex items-center justify-between bg-[var(--bg-secondary)]">

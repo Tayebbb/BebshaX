@@ -407,11 +407,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         overflowX: 'clip',
       }}
     >
+      {/* Ambient light field — glass chrome picks up this static glow */}
+      <div className="bx-ambient" aria-hidden="true" />
+
       {/* Mobile drawer backdrop */}
       {isMobile && isMobileNavOpen && (
         <div
           onClick={() => setIsMobileNavOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'var(--glass-strong)', backdropFilter: 'blur(4px)', zIndex: 120 }}
+          style={{ position: 'fixed', inset: 0, background: 'var(--scrim)', backdropFilter: 'blur(18px) saturate(130%)', WebkitBackdropFilter: 'blur(18px) saturate(130%)', zIndex: 120 }}
         />
       )}
 
@@ -421,7 +424,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       <aside
         style={{
           width: isSidebarCollapsed ? '72px' : isMobile ? '280px' : '240px',
-          background: 'var(--bg-pure)',
+          background: isMobile ? 'var(--glass-strong)' : 'var(--glass-soft)',
+          backdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
+          WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
           borderRight: '1px solid var(--fill-soft-2)',
           display: 'flex',
           flexDirection: 'column',
@@ -616,7 +621,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                           <button
                             type="button"
                             key={st.id}
-                            onClick={() => handleOpenStudy(st.id)}
+                            onClick={() => handleOpenStudy(st.id, st.step || 1)}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
@@ -834,12 +839,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 left: 0,
                 marginBottom: '8px',
                 width: isSidebarCollapsed ? '220px' : '100%',
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
+                background: 'var(--glass-strong)',
+                backdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
+                WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
+                border: '1px solid var(--border-soft)',
                 outline: 'none',
                 borderRadius: '14px',
                 padding: '8px',
-                boxShadow: 'var(--shadow-lg)',
+                boxShadow: 'inset 0 1px 0 var(--reflect), var(--shadow-lg)',
                 zIndex: 50,
               }}
             >
@@ -990,7 +997,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       {/* ============================================================
           MAIN VIEW AREA
          ============================================================ */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative', zIndex: 1 }}>
         {/* Mobile top bar — opens the nav drawer */}
         {isMobile && (
           <div
@@ -1004,10 +1011,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               minHeight: '52px',
               boxSizing: 'border-box',
               padding: '8px 14px',
-              background: 'var(--bg-glass)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              borderBottom: '1px solid var(--border-subtle)',
+              background: 'var(--glass-mid)',
+              backdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
+              WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
+              borderBottom: '1px solid var(--border-soft)',
             }}
           >
             <button

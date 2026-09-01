@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { Persona } from '../../../../types';
+import { ProvenanceChip } from '../PersonaLibraryView';
 
 /** Full-profile persona modal. Pure JSX extraction from StudyWorkflowView —
  * the focus trap / Escape wiring lives in the parent and targets
@@ -22,8 +23,7 @@ export const PersonaDetailModal: React.FC<PersonaDetailModalProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.8)',
-            backdropFilter: 'blur(8px)',
+            background: 'var(--scrim)',
             zIndex: 50,
             display: 'flex',
             alignItems: 'center',
@@ -196,8 +196,26 @@ export const PersonaDetailModal: React.FC<PersonaDetailModalProps> = ({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {viewingPersona.attributes.map((attr: any, idx: number) => (
                     <div key={idx} style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>{attr.title}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                          {attr.title}
+                          <ProvenanceChip label={attr.provenance_class} />
+                        </div>
+                        {attr.category && (
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', flexShrink: 0 }}>{attr.category}</span>
+                        )}
+                      </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{attr.description}</div>
+                      {attr.evidence?.quote && (
+                        <div style={{ marginTop: '6px', paddingLeft: '10px', borderLeft: '2px solid var(--accent-subtle)', fontSize: '0.74rem', color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.45 }}>
+                          “{attr.evidence.quote}”
+                          {attr.evidence.source && (
+                            <span style={{ display: 'block', marginTop: '2px', fontStyle: 'normal', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                              — {attr.evidence.source}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

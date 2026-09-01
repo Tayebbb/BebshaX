@@ -273,8 +273,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(5, 7, 10, 0.85)',
-        backdropFilter: 'blur(8px)',
+        backgroundColor: 'var(--scrim)',
         zIndex: 9999,
         display: 'flex',
         alignItems: 'center',
@@ -518,7 +517,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                       onChange={(e) => setBillingPeriod(e.target.value)}
                       style={{
                         width: '100%',
-                        padding: '10px 14px',
+                        padding: '10px 34px 10px 14px',
                         borderRadius: '8px',
                         backgroundColor: 'var(--bg-card-hover)',
                         border: '1px solid var(--border-soft)',

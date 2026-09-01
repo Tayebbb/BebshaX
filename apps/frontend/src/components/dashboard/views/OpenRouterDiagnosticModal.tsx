@@ -56,8 +56,7 @@ export const OpenRouterDiagnosticModal: React.FC<Props> = ({ isOpen, onClose }) 
     <div className="bx-backdrop" style={{
       position: 'fixed',
       inset: 0,
-      background: 'rgba(0, 0, 0, 0.75)',
-      backdropFilter: 'blur(6px)',
+      background: 'var(--scrim)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',

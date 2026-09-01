@@ -92,7 +92,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
   };
 
   return (
-    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', width: '100%', color: 'var(--text-primary)' }}>
       {/* Top Header */}
       <div
         style={{
@@ -229,7 +229,11 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <TrendingUp size={16} className="text-teal-400" />
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--accent-teal-bright)' }}>
-            <CountUp value={metrics?.average_buy_likelihood_percentage ?? 52} format={(v) => `${Math.round(v)}%`} />
+            {(metrics?.completed_runs ?? 0) > 0 && typeof metrics?.average_buy_likelihood_percentage === 'number' ? (
+              <CountUp value={metrics.average_buy_likelihood_percentage} format={(v) => `${Math.round(v)}%`} />
+            ) : (
+              <span style={{ color: 'var(--text-faint)' }}>—</span>
+            )}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Simulation aggregate signal</div>
         </div>
@@ -277,7 +281,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             style={{
-              padding: '10px 14px',
+              padding: '10px 34px 10px 14px',
               borderRadius: '10px',
               backgroundColor: 'var(--glass-mid)',
               border: '1px solid var(--border-soft)',
@@ -302,7 +306,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{
-              padding: '10px 14px',
+              padding: '10px 34px 10px 14px',
               borderRadius: '10px',
               backgroundColor: 'var(--glass-mid)',
               border: '1px solid var(--border-soft)',

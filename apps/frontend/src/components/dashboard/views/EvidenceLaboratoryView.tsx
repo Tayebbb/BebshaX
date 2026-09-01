@@ -242,7 +242,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
         display: 'flex',
         flexDirection: 'column',
         minHeight: '100vh',
-        background: 'var(--bg-primary)',
+        background: 'transparent',
         color: 'var(--text-primary)',
       }}
     >
@@ -251,8 +251,6 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
         className="bx-appheader"
         style={{
           padding: '20px clamp(14px, 3.5vw, 32px)',
-          borderBottom: '1px solid var(--bg-card-hover)',
-          background: 'var(--bg-secondary)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -911,8 +909,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(4px)',
+            background: 'var(--scrim)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

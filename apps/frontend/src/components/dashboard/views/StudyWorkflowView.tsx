@@ -731,14 +731,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   }, [viewingPersona]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-pure)', color: 'var(--text-main)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'transparent', color: 'var(--text-main)' }}>
       {/* Top Header with Stepper */}
       <header
         className="bx-appheader"
         style={{
-          borderBottom: '1px solid var(--border-subtle)',
-          background: 'var(--bg-glass)',
-          backdropFilter: 'blur(12px)',
           position: 'sticky',
           top: 0,
           zIndex: 30,

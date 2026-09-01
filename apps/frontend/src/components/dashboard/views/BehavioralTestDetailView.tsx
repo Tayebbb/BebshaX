@@ -191,7 +191,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
   const isRunning = activeRun?.status === 'running' || activeRun?.status === 'pending';
 
   return (
-    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', width: '100%', color: 'var(--text-primary)' }}>
       {/* Top Breadcrumb & Actions */}
       <div
         style={{
@@ -770,8 +770,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(5, 7, 10, 0.85)',
-            backdropFilter: 'blur(8px)',
+            backgroundColor: 'var(--scrim)',
             zIndex: 9999,
             display: 'flex',
             alignItems: 'center',

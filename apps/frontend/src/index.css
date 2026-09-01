@@ -33,6 +33,19 @@
   --glass-mid: rgba(13, 17, 17, 0.65);
   --glass-soft: rgba(13, 17, 17, 0.5);
 
+  /* Glass material physics — one blur/saturation recipe app-wide */
+  --glass-blur: 26px;
+  --glass-saturate: 150%;
+  /* Top-edge light reflection (the hairline highlight on raised surfaces) */
+  --reflect: rgba(255, 255, 255, 0.07);
+  --reflect-strong: rgba(255, 255, 255, 0.12);
+  /* Dialog scrim behind frosted backdrops */
+  --scrim: rgba(4, 6, 6, 0.55);
+  /* Ambient canvas glow — static washes the glass surfaces pick up */
+  --ambient-a: rgba(20, 184, 166, 0.07);
+  --ambient-b: rgba(34, 211, 238, 0.05);
+  --ambient-c: rgba(16, 185, 129, 0.045);
+
   /* Typography Palette */
   --text-main: #ffffff;
   --text-primary: #f4f7f7;
@@ -75,10 +88,10 @@
   --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* Elevation Shadows */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+  /* Elevation Shadows — layered (tight contact + soft diffuse) for real depth */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.42);
+  --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.52);
   --shadow-glow: 0 0 24px rgba(20, 184, 166, 0.2);
 }
 
@@ -105,6 +118,13 @@
   --glass-strong: rgba(255, 255, 255, 0.92);
   --glass-mid: rgba(255, 255, 255, 0.75);
   --glass-soft: rgba(255, 255, 255, 0.6);
+
+  --reflect: rgba(255, 255, 255, 0.85);
+  --reflect-strong: rgba(255, 255, 255, 1);
+  --scrim: rgba(15, 23, 42, 0.35);
+  --ambient-a: rgba(13, 148, 136, 0.06);
+  --ambient-b: rgba(14, 116, 144, 0.05);
+  --ambient-c: rgba(5, 150, 105, 0.04);
 
   --text-main: #0e1515;
   --text-primary: #1c2626;
@@ -134,9 +154,9 @@
   --accent-gold-primary: #0d9488;
   --accent-gold-hover: #0e7490;
 
-  --shadow-sm: 0 2px 8px rgba(15, 30, 30, 0.07);
-  --shadow-md: 0 8px 24px rgba(15, 30, 30, 0.09);
-  --shadow-lg: 0 16px 40px rgba(15, 30, 30, 0.12);
+  --shadow-sm: 0 1px 2px rgba(15, 30, 30, 0.05), 0 2px 8px rgba(15, 30, 30, 0.06);
+  --shadow-md: 0 2px 4px rgba(15, 30, 30, 0.05), 0 10px 28px rgba(15, 30, 30, 0.09);
+  --shadow-lg: 0 2px 6px rgba(15, 30, 30, 0.06), 0 18px 48px rgba(15, 30, 30, 0.12);
   --shadow-glow: 0 0 24px rgba(13, 148, 136, 0.14);
 }
 
@@ -242,6 +262,11 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
 }
 
+/* Multi-line headlines break evenly instead of leaving orphan words */
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
 .text-gradient-teal {
   background: linear-gradient(135deg, var(--text-main) 20%, var(--accent-cyan) 100%);
   -webkit-background-clip: text;
@@ -294,14 +319,92 @@ h1, h2, h3, h4, h5, h6 {
 /* Minimalist Dark Cards without Outlines */
 .clean-card {
   background: var(--bg-card);
+  background-image: linear-gradient(180deg, var(--fill-soft) 0%, transparent 55%);
   border: 1px solid var(--border-subtle);
   border-radius: 18px;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  box-shadow: inset 0 1px 0 var(--reflect), var(--shadow-sm);
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease,
+    box-shadow 0.25s var(--bx-ease);
 }
 
 .clean-card:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-hover);
+  box-shadow: inset 0 1px 0 var(--reflect), var(--shadow-md);
+}
+
+/* ==========================================================================
+   Liquid Glass material system
+   Real frosted glass for CHROME (sidebar, headers, drawers, popovers,
+   dialog backdrops) — never for dozens of content cards at once, which
+   would blow the compositor budget. Content cards get a simulated
+   material instead: surface gradient + top-edge light reflection.
+   ========================================================================== */
+
+/* Ambient canvas glow — a static, inert light field behind the app.
+   Frosted surfaces scrolling over it pick up soft colour, which is what
+   makes the blur readable. Pure radial-gradients: no filter, no
+   animation, zero per-frame cost. */
+.bx-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 34% at 12% 0%, var(--ambient-a) 0%, transparent 100%),
+    radial-gradient(36% 30% at 88% 12%, var(--ambient-b) 0%, transparent 100%),
+    radial-gradient(50% 40% at 55% 100%, var(--ambient-c) 0%, transparent 100%);
+}
+
+/* Frosted chrome tiers */
+.bx-glass {
+  background: var(--glass-mid);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+.bx-glass-strong {
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+/* Canonical frosted sticky header — both app headers share this material.
+   (Component styles must not set background/backdrop-filter inline.) */
+.bx-appheader {
+  background: var(--glass-mid);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border-bottom: 1px solid var(--border-soft);
+  box-shadow: inset 0 1px 0 var(--reflect);
+}
+
+/* No-blur environments fall back to solid, fully readable chrome */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bx-glass,
+  .bx-appheader {
+    background: var(--bg-glass);
+  }
+  .bx-glass-strong {
+    background: var(--bg-secondary);
+  }
+}
+
+/* Users who ask for less transparency get opaque surfaces, no frost */
+@media (prefers-reduced-transparency: reduce) {
+  .bx-glass,
+  .bx-glass-strong,
+  .bx-appheader,
+  .bx-backdrop {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .bx-glass,
+  .bx-appheader {
+    background: var(--bg-glass);
+  }
+  .bx-glass-strong {
+    background: var(--bg-secondary);
+  }
 }
 
 /* ==========================================================================
@@ -335,13 +438,14 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Hover lift for interactive cards (inline styles can't express :hover) */
 .bx-lift {
+  box-shadow: inset 0 1px 0 var(--reflect);
   transition: transform 0.25s var(--bx-ease), border-color 0.25s var(--bx-ease),
     box-shadow 0.25s var(--bx-ease), background 0.25s var(--bx-ease);
 }
 .bx-lift:hover {
   transform: translateY(-3px);
   border-color: var(--border-hover) !important;
-  box-shadow: var(--shadow-lg), 0 0 0 1px var(--accent-subtle);
+  box-shadow: inset 0 1px 0 var(--reflect-strong), var(--shadow-lg), 0 0 0 1px var(--accent-subtle);
 }
 
 /* ==========================================================================
@@ -366,6 +470,38 @@ button:not(:disabled):active {
 input, textarea, select {
   transition: border-color 0.2s ease, box-shadow 0.25s var(--bx-ease),
     background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Native selects — restyled to the design system (OS chrome breaks both themes) */
+:root {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238d9999' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+[data-theme='light'] {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235c6b6b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg-card);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 8px 30px 8px 12px;
+  cursor: pointer;
+}
+select:hover {
+  border-color: var(--border-medium);
+  background-color: var(--bg-card-hover);
+}
+select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 /* Theme switch cross-fade — .theme-transition is applied briefly on toggle */
@@ -402,19 +538,23 @@ html.theme-transition *::after {
   to { background-position: -200% 0; }
 }
 
-/* Modal choreography: backdrop fades, dialog settles */
+/* Modal choreography: the page behind frosts over (the "sheet" effect),
+   the dialog itself settles in as a lit, raised pane. */
 .bx-backdrop {
   animation: bx-fade 0.25s ease-out both;
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(18px) saturate(130%);
 }
 .bx-modal {
-  animation: bx-modal-in 0.35s var(--bx-ease) both;
+  animation: bx-modal-in 0.4s var(--bx-ease) both;
+  box-shadow: inset 0 1px 0 var(--reflect-strong), var(--shadow-lg);
 }
 @keyframes bx-fade {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 @keyframes bx-modal-in {
-  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
   to { opacity: 1; transform: none; }
 }
 
@@ -480,6 +620,11 @@ html.theme-transition *::after {
     transform: none;
     transition: none;
   }
+  .primary-hero-btn::after,
+  .indigo-btn::after,
+  .gold-btn::after {
+    display: none;
+  }
   button,
   input, textarea, select {
     transition: none;
@@ -489,23 +634,29 @@ html.theme-transition *::after {
   }
 }
 
-/* Legacy aliases */
+/* Legacy aliases — now real materials */
 .glass-panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  background: var(--glass-mid);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--border-soft);
   border-radius: 20px;
+  box-shadow: inset 0 1px 0 var(--reflect), var(--shadow-md);
 }
 
 .glass-card {
   background: var(--bg-card);
+  background-image: linear-gradient(180deg, var(--fill-soft) 0%, transparent 55%);
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  box-shadow: inset 0 1px 0 var(--reflect);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.25s var(--bx-ease);
 }
 
 .glass-card:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-hover);
+  box-shadow: inset 0 1px 0 var(--reflect-strong), var(--shadow-sm);
 }
 
 /* Buttons */
@@ -517,6 +668,31 @@ html.theme-transition *::after {
   border-radius: 9999px;
   font-weight: 700;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Light sweep across primary CTAs on hover — transform-only, one-shot */
+.primary-hero-btn::after,
+.indigo-btn::after,
+.gold-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 62%
+  );
+  transform: translateX(-120%);
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.primary-hero-btn:hover::after,
+.indigo-btn:hover::after,
+.gold-btn:hover::after {
+  transform: translateX(120%);
 }
 
 .primary-hero-btn:hover {
@@ -533,6 +709,8 @@ html.theme-transition *::after {
   font-weight: 700;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 4px 14px var(--accent-glow);
+  position: relative;
+  overflow: hidden;
 }
 
 .indigo-btn:hover {
@@ -550,6 +728,8 @@ html.theme-transition *::after {
   font-weight: 700;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 4px 14px var(--accent-glow);
+  position: relative;
+  overflow: hidden;
 }
 
 .gold-btn:hover {

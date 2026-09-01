@@ -228,7 +228,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             </div>
             <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-lg">
               <span className="text-xs text-[var(--text-secondary)] block font-medium">Algorithm</span>
-              <span className="text-xs font-semibold text-[var(--text-primary)] mt-1 block truncate">
+              <span className="text-xs font-semibold text-[var(--text-primary)] mt-1 block leading-snug">
                 Quantile Clustering
               </span>
             </div>
@@ -319,7 +319,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                   value={desiredClusters}
                   onChange={(e) => setDesiredClusters(Number(e.target.value))}
                   disabled={isExecuting}
-                  className="bg-[var(--bg-pure)] border border-[var(--border-subtle)] rounded text-xs text-[var(--text-primary)] px-2 py-1 focus:outline-none focus:border-teal-500 font-mono"
+                  className="bg-[var(--bg-pure)] border border-[var(--border-subtle)] rounded text-xs text-[var(--text-primary)] pl-2 pr-7 py-1 focus:outline-none focus:border-teal-500 font-mono"
                   data-testid="cluster-count-select"
                 >
                   <option value={2}>2 Segments</option>
@@ -418,7 +418,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg text-xs text-[var(--text-primary)] px-3 py-1.5 focus:outline-none focus:border-teal-500"
+            className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg text-xs text-[var(--text-primary)] pl-3 pr-8 py-1.5 focus:outline-none focus:border-teal-500"
             data-testid="status-filter-select"
           >
             <option value="all">All Statuses</option>
@@ -649,12 +649,12 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
       {isComparing && comparisonResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+            className="fixed inset-0 bg-[var(--scrim)] bx-backdrop"
             onClick={() => setIsComparing(false)}
             data-testid="compare-modal-backdrop"
           />
           <div
-            className="relative z-10 w-full max-w-5xl bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative z-10 w-full max-w-5xl bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] bx-modal"
             data-testid="comparison-modal"
           >
             <div className="p-5 border-b border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-card)]">
@@ -774,12 +774,12 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
       {selectedSegment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+            className="fixed inset-0 bg-[var(--scrim)] bx-backdrop"
             onClick={() => setSelectedSegment(null)}
             data-testid="detail-modal-backdrop"
           />
           <div
-            className="relative z-10 w-full max-w-3xl bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative z-10 w-full max-w-3xl bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] bx-modal"
             data-testid="segment-detail-modal"
           >
             {/* Modal Header */}

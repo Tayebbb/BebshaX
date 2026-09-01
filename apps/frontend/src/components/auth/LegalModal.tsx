@@ -22,8 +22,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(8, 9, 9, 0.75)',
-        backdropFilter: 'blur(6px)',
+        backgroundColor: 'var(--scrim)',
         padding: '16px',
       }}
       onClick={onClose}

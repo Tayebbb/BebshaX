@@ -3091,11 +3091,49 @@ export const api = {
       } catch {
         lastKnownLive = false;
       }
+      return { interviews: [], total: 0 };
     }
-    return {
-      interviews: [],
-      total: 0,
-    };
+    // Mock mode: surface the study fixture's pre-generated interviews.
+    await loadMocks();
+    const study = this.getStoredUserStudies().find((s) => s.id === studyId);
+    let items = (study?.interviews || []).map((iv) => ({
+      id: iv.id,
+      study_id: studyId,
+      persona_id: iv.persona_id,
+      persona_version: 1,
+      objective: iv.objective || 'problem_discovery',
+      interview_type: 'adaptive',
+      length_tier: 'standard' as const,
+      max_turns: 12,
+      status: (iv.status === 'in_progress' ? 'active' : iv.status === 'pending' ? 'paused' : 'completed') as 'active' | 'completed' | 'paused',
+      topics_explored:
+        iv.status === 'completed'
+          ? { discovery: 'explored', pricing: 'explored', objections: 'explored' }
+          : {},
+      question_count: iv.turns_count,
+      turn_count: iv.turns_count,
+      summary: iv.key_takeaway,
+      persona_name: iv.persona_name,
+      persona_occupation: iv.persona_archetype,
+      created_at: study?.created_at || new Date().toISOString(),
+      updated_at: study?.updated_at,
+    }));
+    if (params?.status && params.status !== 'all') {
+      items = items.filter((iv) => iv.status === params.status);
+    }
+    if (params?.objective && params.objective !== 'all') {
+      items = items.filter((iv) => iv.objective === params.objective);
+    }
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      items = items.filter(
+        (iv) =>
+          iv.persona_name?.toLowerCase().includes(q) ||
+          iv.summary?.toLowerCase().includes(q) ||
+          iv.objective.toLowerCase().includes(q),
+      );
+    }
+    return { interviews: items, total: items.length };
   },
 
   async getStudyInterviewMetrics(studyId: string): Promise<any> {
@@ -3116,11 +3154,15 @@ export const api = {
         throw err;
       }
     }
+    // Mock mode: derive metrics from the study fixture's interviews.
+    await loadMocks();
+    const study = this.getStoredUserStudies().find((s) => s.id === studyId);
+    const ivs = study?.interviews || [];
     return {
-      total_interviews: 0,
-      active_interviews: 0,
-      completed_interviews: 0,
-      total_insights_generated: 0,
+      total_interviews: ivs.length,
+      active_interviews: ivs.filter((iv) => iv.status === 'in_progress').length,
+      completed_interviews: ivs.filter((iv) => iv.status === 'completed').length,
+      total_insights_generated: ivs.reduce((sum, iv) => sum + (iv.turns_count || 0), 0),
     };
   },
 
@@ -3550,6 +3592,19 @@ export const api = {
       } catch {
         lastKnownLive = false;
       }
+      return [];
+    }
+    // Mock mode: a study fixture can carry its own pre-built report (demo study).
+    await loadMocks();
+    const study = this.getStoredUserStudies().find((s) => s.id === studyId);
+    if (study?.report) {
+      return [{
+        ...study.report,
+        id: study.report.id || `rep_${studyId}`,
+        study_id: studyId,
+        title: study.report.title || study.title,
+        created_at: study.report.created_at || study.updated_at,
+      }];
     }
     return [];
   },

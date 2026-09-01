@@ -504,7 +504,12 @@
 
 @media (max-width: 720px) {
   .sd-root { padding: 28px 18px 64px; }
-  .sd-metrics { gap: 30px; }
+  /* 2x2 grid instead of an unbalanced 3+1 flex wrap */
+  .sd-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px 30px;
+  }
   .sd-row { flex-wrap: wrap; }
   .sd-row-right { width: 100%; justify-content: space-between; }
   .sd-row-type { text-align: left; }

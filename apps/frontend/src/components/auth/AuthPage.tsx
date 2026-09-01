@@ -536,10 +536,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         style={{
           width: '100%',
           maxWidth: '440px',
-          background: 'var(--bg-card)',
+          background: 'var(--glass-mid)',
+          backdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
+          WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
           borderRadius: '24px',
-          border: '1px solid var(--border-subtle)',
-          boxShadow: '0 24px 48px -16px rgba(0, 0, 0, 0.6), 0 1px 0 var(--fill-soft) inset',
+          border: '1px solid var(--border-soft)',
+          boxShadow: 'inset 0 1px 0 var(--reflect-strong), var(--shadow-lg)',
           padding: '38px 32px',
           position: 'relative',
         }}

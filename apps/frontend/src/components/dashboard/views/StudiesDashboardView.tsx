@@ -13,7 +13,7 @@ import './studies.css';
 
 interface StudiesDashboardViewProps {
   onCreateStudy: () => void;
-  onOpenStudy: (studyId: string) => void;
+  onOpenStudy: (studyId: string, step?: number) => void;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -123,7 +123,11 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
     return <span className="sd-status sd-status--draft"><span className="sd-status-dot" />DRAFT</span>;
   };
 
-  const openRow = (id: string) => onOpenStudy(id);
+  // Reopening a study drops the user where they left off (demo lands on its report).
+  const openRow = (id: string) => {
+    const study = studies.find((s) => s.id === id);
+    onOpenStudy(id, study?.step || 1);
+  };
 
   return (
     <div className="sd-root">

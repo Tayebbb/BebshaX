@@ -38,7 +38,7 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
   }, [studyId, runIds]);
 
   return (
-    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', width: '100%', color: 'var(--text-primary)' }}>
       {/* Top Header */}
       <div style={{ marginBottom: '24px' }}>
         <button
