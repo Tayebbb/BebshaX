@@ -116,7 +116,8 @@ describe('Blocker 6 — a failed interview is not shown as pending', () => {
 
     expect(screen.getByText('Failed')).toBeInTheDocument();
     expect(screen.queryByText('Pending')).toBeNull();
-    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
+    // The action re-runs the whole batch, so it is no longer labelled "Retry".
+    expect(screen.getByRole('button', { name: /Re-run all/i })).toBeInTheDocument();
   });
 });
 

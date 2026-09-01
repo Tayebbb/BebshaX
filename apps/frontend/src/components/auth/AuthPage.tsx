@@ -187,6 +187,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   // Form fields
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState(user?.email || '');
+  // Auth routes paint before the session resolves, so a cold load of /auth/verify
+  // mounts with user === null — adopt the address once it arrives.
+  useEffect(() => {
+    if (user?.email) setEmail((prev) => prev || user.email);
+  }, [user?.email]);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -321,6 +326,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     resetMessages();
+    if (!email) {
+      setErrorMessage('Enter the email address you signed up with.');
+      return;
+    }
     if (!otp || otp.length < 6) {
       setErrorMessage('Please enter the full 6-digit verification code.');
       return;
@@ -1082,11 +1091,37 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 Enter verification code
               </h1>
               <p style={{ ...subtitleStyle, lineHeight: 1.5 }}>
-                We sent a 6-digit code to <strong style={{ color: 'var(--text-main)' }}>{email || 'your email'}</strong>.
+                {email ? (
+                  <>
+                    We sent a 6-digit code to <strong style={{ color: 'var(--text-main)' }}>{email}</strong>.
+                  </>
+                ) : (
+                  'Confirm the email address you signed up with, then enter the 6-digit code we sent you.'
+                )}
               </p>
             </div>
 
             <form onSubmit={handleVerifyOtp}>
+              {!email && (
+                <div style={{ marginBottom: '20px' }}>
+                  <label htmlFor="verify-email" style={labelStyle}>
+                    Email address
+                  </label>
+                  <input
+                    id="verify-email"
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    style={inputStyle}
+                    onFocus={focusInput}
+                    onBlur={blurInput}
+                  />
+                </div>
+              )}
               <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
 
               <button
@@ -1103,12 +1138,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 Didn't receive the code?{' '}
                 <button
                   type="button"
-                  disabled={countdown > 0 || isResending}
+                  disabled={countdown > 0 || isResending || !email}
                   onClick={() => handleResendOtp('email-verification')}
                   style={{
                     ...linkStyle,
-                    color: countdown > 0 ? 'var(--text-muted)' : 'var(--accent-teal-bright)',
-                    cursor: countdown > 0 ? 'not-allowed' : 'pointer',
+                    color: countdown > 0 || !email ? 'var(--text-muted)' : 'var(--accent-teal-bright)',
+                    cursor: countdown > 0 || !email ? 'not-allowed' : 'pointer',
                   }}
                 >
                   {countdown > 0 ? `Resend in ${countdown}s` : isResending ? 'Sending...' : 'Resend code'}

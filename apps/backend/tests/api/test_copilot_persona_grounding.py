@@ -14,8 +14,14 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from bebshax.auth.models import Users
+from bebshax.auth.security import create_access_token
 from bebshax.db.models import Base, EvidenceClaims, Studies
 from bebshax.main import app
+
+_OWNER_ID = "usr_grounding_owner"
+# Persona generation writes into the study, so it needs the owner's token.
+_OWNER_HEADERS = {"Authorization": f"Bearer {create_access_token({'sub': _OWNER_ID})}"}
 
 
 class _CitingRouter:
@@ -58,7 +64,17 @@ async def _app_with_study(study_id: str, claim_texts: list[str]):
 
     async with session_maker() as session:
         session.add(
-            Studies(id=study_id, user_id="usr_default", title="Grounding Study", status="draft")
+            Users(
+                id=_OWNER_ID,
+                email="grounding-owner@example.com",
+                full_name="Grounding Owner",
+                hashed_password="hash",
+                is_active=True,
+                is_verified=True,
+            )
+        )
+        session.add(
+            Studies(id=study_id, user_id=_OWNER_ID, title="Grounding Study", status="draft")
         )
         for i, text in enumerate(claim_texts):
             session.add(
@@ -94,6 +110,7 @@ async def test_zero_grounding_without_evidence_is_labeled_as_an_absence():
         res = await client.post(
             "/api/study/generate-personas",
             json={"study_id": "std_ground_none", "study_prompt": "grocery app", "roles": _ROLES},
+            headers=_OWNER_HEADERS,
         )
 
     assert res.status_code == 200
@@ -118,6 +135,7 @@ async def test_grounding_is_computed_from_verified_citations_only():
         res = await client.post(
             "/api/study/generate-personas",
             json={"study_id": "std_ground_some", "study_prompt": "grocery app", "roles": _ROLES},
+            headers=_OWNER_HEADERS,
         )
 
     assert res.status_code == 200
@@ -146,6 +164,7 @@ async def test_uncited_llm_personas_score_zero_even_with_evidence_present():
         res = await client.post(
             "/api/study/generate-personas",
             json={"study_id": "std_ground_uncited", "study_prompt": "grocery app", "roles": _ROLES},
+            headers=_OWNER_HEADERS,
         )
 
     persona = res.json()[0]

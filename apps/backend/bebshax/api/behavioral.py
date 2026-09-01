@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import get_session, user_owns_study
+from bebshax.api.deps import get_session, user_can_write_study, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.behavioral.engine import BehavioralRunNotFound, BehavioralSimulationEngine, BehavioralTestNotFound
 from bebshax.behavioral.orm import (
@@ -182,8 +182,14 @@ async def _get_study_and_verify_access(
     study_id: str,
     session: AsyncSession,
     user: Optional[Users] = None,
+    *,
+    write: bool = False,
 ) -> Studies:
-    """Verify study existence and enforce strict multi-tenant ownership."""
+    """Verify study existence and enforce strict multi-tenant ownership.
+
+    ``write=True`` selects the strict write predicate: the ``is_demo`` read
+    allowance must never let a non-owner mutate the shared demo.
+    """
     res = await session.execute(select(Studies).where(Studies.id == study_id))
     study = res.scalar_one_or_none()
     if not study:
@@ -191,7 +197,8 @@ async def _get_study_and_verify_access(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Study with id '{study_id}' not found.",
         )
-    if not user_owns_study(study, user):
+    predicate = user_can_write_study if write else user_owns_study
+    if not predicate(study, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: You do not have access to this study's behavioral tests.",
@@ -211,7 +218,7 @@ async def create_behavioral_test(
     user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict[str, Any]:
     """Create a new behavioral test and its initial scenario."""
-    await _get_study_and_verify_access(study_id, session, user)
+    await _get_study_and_verify_access(study_id, session, user, write=True)
 
     test_id = f"bt_{uuid.uuid4().hex[:16]}"
     user_id = user.id if user else None
@@ -386,7 +393,7 @@ async def update_behavioral_test(
     user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict[str, Any]:
     """Update behavioral test configuration or scenario."""
-    await _get_study_and_verify_access(study_id, session, user)
+    await _get_study_and_verify_access(study_id, session, user, write=True)
 
     res = await session.execute(
         select(BehavioralTests).where(
@@ -437,7 +444,7 @@ async def delete_behavioral_test(
     user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict[str, Any]:
     """Archive a behavioral test."""
-    await _get_study_and_verify_access(study_id, session, user)
+    await _get_study_and_verify_access(study_id, session, user, write=True)
 
     res = await session.execute(
         select(BehavioralTests).where(
@@ -471,7 +478,7 @@ async def trigger_behavioral_test_run(
     user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict[str, Any]:
     """Trigger a new simulation run across target personas."""
-    await _get_study_and_verify_access(study_id, session, user)
+    await _get_study_and_verify_access(study_id, session, user, write=True)
 
     res_test = await session.execute(
         select(BehavioralTests).where(
@@ -506,6 +513,22 @@ async def trigger_behavioral_test_run(
     elif payload.target_population_type == "all" or not target_persona_ids:
         res_p = await session.execute(select(Personas.id).where(Personas.study_id == study_id))
         target_persona_ids = [p[0] for p in res_p.all()]
+    else:
+        # Client-supplied ids: constrain to this study or a caller could
+        # simulate — and read back — another tenant's personas.
+        res_p = await session.execute(
+            select(Personas.id).where(
+                Personas.id.in_(target_persona_ids),
+                Personas.study_id == study_id,
+            )
+        )
+        resolved = [p[0] for p in res_p.all()]
+        if len(resolved) != len(set(target_persona_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One or more target personas do not belong to this study.",
+            )
+        target_persona_ids = resolved
 
     run_id = f"btr_{uuid.uuid4().hex[:16]}"
     run = BehavioralTestRuns(
@@ -621,7 +644,7 @@ async def retry_failed_simulations(
     user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict[str, Any]:
     """Retry only failed persona simulations in a run."""
-    await _get_study_and_verify_access(study_id, session, user)
+    await _get_study_and_verify_access(study_id, session, user, write=True)
 
     engine: Optional[BehavioralSimulationEngine] = getattr(request.app.state, "behavioral_engine", None)
     if engine is None:

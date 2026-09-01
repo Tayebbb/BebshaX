@@ -133,8 +133,8 @@ class BehavioralTestResults(Base):
         String(64)
     )  # strongly_positive, positive, neutral, negative, strongly_negative, likely_to_buy, might_buy, unlikely_to_buy, would_not_buy
     decision_label: Mapped[str] = mapped_column(String(128))
-    probability: Mapped[float] = mapped_column(Float, default=0.5)
-    confidence: Mapped[str] = mapped_column(String(32), default="medium")  # low, medium, high
+    probability: Mapped[float] = mapped_column(Float, default=0.0)
+    confidence: Mapped[str] = mapped_column(String(32), default="low")  # low, medium, high
     confidence_score: Mapped[float] = mapped_column(Float, default=0.0)
     key_factors: Mapped[list[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=list

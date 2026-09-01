@@ -5,6 +5,7 @@ import {
   MessageSquare,
   BadgePercent,
   ArrowUp,
+  ArrowUpRight,
   Loader2,
   AlertCircle,
   Check,
@@ -14,6 +15,8 @@ import './newstudy.css';
 
 interface NewStudyViewProps {
   onStartStudy: (type: StudyType, initialPrompt?: string) => Promise<void> | void;
+  /** Provided only when a finished demo study exists to open. */
+  onOpenExampleStudy?: () => void;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -22,7 +25,7 @@ const EXAMPLE_PROMPTS = [
   'A price-drop alert service for online gadget shoppers',
 ];
 
-export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
+export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpenExampleStudy }) => {
   const [prompt, setPrompt] = useState('');
   const [selectedType, setSelectedType] = useState<StudyType>('interviews');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -176,6 +179,13 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy }) => {
             </button>
           ))}
         </div>
+
+        {onOpenExampleStudy && (
+          <button type="button" className="ns-demo-link" onClick={onOpenExampleStudy}>
+            See a finished example study
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </button>
+        )}
 
         <div className="ns-section-label">Study type</div>
         <div className="ns-grid" role="group" aria-label="Study type selection">

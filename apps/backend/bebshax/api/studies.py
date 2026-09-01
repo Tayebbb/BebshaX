@@ -673,7 +673,8 @@ async def generate_study_report(
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not _user_owns_study(study, current_user):
+    # Write gate: this persists a StudyReports row and spends LLM budget.
+    if not user_can_write_study(study, current_user):
         raise HTTPException(status_code=403, detail="Not authorized for this study")
 
     llm_service = getattr(request.app.state, "llm_service", None) if request else None
@@ -710,7 +711,8 @@ async def start_report_generation_job(
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not _user_owns_study(study, current_user):
+    # Write gate: the job persists a StudyReports row and spends LLM budget.
+    if not user_can_write_study(study, current_user):
         raise HTTPException(status_code=403, detail="Not authorized for this study")
 
     app = request.app

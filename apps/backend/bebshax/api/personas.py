@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.jobs import get_job, start_job
-from bebshax.api.deps import get_session, owner_accessible, user_owns_study
+from bebshax.api.deps import get_session, owner_accessible, user_can_write_study, user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
@@ -133,9 +133,14 @@ def _serialize_persona_run(r: PersonaGenerationRuns) -> dict[str, Any]:
     }
 
 
-async def _verify_study_access(study_id: str, current_user: Optional[Users], session: AsyncSession) -> Studies:
+async def _verify_study_access(
+    study_id: str, current_user: Optional[Users], session: AsyncSession, *, write: bool = False
+) -> Studies:
+    """``write=True`` selects the strict write predicate: the ``is_demo`` read
+    allowance must never let a non-owner mutate the shared demo."""
     study = await session.get(Studies, study_id)
-    if not study or not user_owns_study(study, current_user):
+    predicate = user_can_write_study if write else user_owns_study
+    if not study or not predicate(study, current_user):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Study '{study_id}' not found.",
@@ -204,7 +209,7 @@ async def generate_study_personas_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Generate grounded synthetic personas for a study across its market segments."""
-    await _verify_study_access(study_id, current_user, session)
+    await _verify_study_access(study_id, current_user, session, write=True)
 
     llm_service = getattr(request.app.state, "llm_service", None)
     service = PersonaGenerationService(session, llm_service=llm_service)
@@ -260,7 +265,7 @@ async def start_persona_generation_job(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Start persona generation in the background; poll the job endpoint."""
-    await _verify_study_access(study_id, current_user, session)
+    await _verify_study_access(study_id, current_user, session, write=True)
 
     app = request.app
     llm_service = getattr(app.state, "llm_service", None)
@@ -360,7 +365,7 @@ async def regenerate_study_persona_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Regenerate a single persona to create a new version while preserving grounding."""
-    await _verify_study_access(study_id, current_user, session)
+    await _verify_study_access(study_id, current_user, session, write=True)
 
     llm_service = getattr(request.app.state, "llm_service", None)
     service = PersonaGenerationService(session, llm_service=llm_service)
@@ -428,7 +433,7 @@ async def delete_study_persona_run_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Delete a persona generation run and its generated personas."""
-    await _verify_study_access(study_id, current_user, session)
+    await _verify_study_access(study_id, current_user, session, write=True)
     service = PersonaGenerationService(session)
 
     success = await service.delete_run(study_id=study_id, run_id=run_id, user_id=current_user.id)

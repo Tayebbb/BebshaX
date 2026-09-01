@@ -14,6 +14,8 @@ interface Step3ScriptProps {
   handleGenerateScript: () => Promise<void>;
   isGeneratingScript: boolean;
   scriptError: string | null;
+  /** False until the generator has actually returned questions for this study. */
+  scriptGenerated?: boolean;
   handleStepChange: (newStep: number, opts?: { reportReady?: boolean }) => void;
 }
 
@@ -26,6 +28,7 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
   handleGenerateScript,
   isGeneratingScript,
   scriptError,
+  scriptGenerated = false,
   handleStepChange,
 }) => {
   return (
@@ -73,7 +76,9 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                   Interview Script & Probing Rules
                 </h1>
                 <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  Customize the core questions the AI interviewer will ask across your personas.
+                  {scriptGenerated
+                    ? 'Customize the core questions the AI interviewer will ask across your personas.'
+                    : 'These are generic starter questions, not generated for your study — edit them, or generate a script from your study context.'}
                 </p>
               </div>
 
@@ -102,7 +107,11 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                     </svg>
                   )}
-                  {isGeneratingScript ? 'Regenerating...' : 'Regenerate Questions'}
+                  {isGeneratingScript
+                    ? 'Generating...'
+                    : scriptGenerated
+                    ? 'Regenerate Questions'
+                    : 'Generate Questions'}
                 </button>
                 <button
                   type="button"
@@ -152,6 +161,21 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
 
             {/* Question List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {!scriptGenerated && questions.length > 0 && (
+                <div
+                  style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--text-secondary)',
+                    background: 'var(--fill-soft)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '10px',
+                    padding: '10px 14px',
+                  }}
+                >
+                  Starting template — the same generic questions for every study. Edit them or press
+                  &quot;Generate Questions&quot; to write a script from your study context.
+                </div>
+              )}
               {questions.map((q, idx) => (
                 <div
                   key={idx}

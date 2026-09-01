@@ -16,7 +16,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import get_session, owner_accessible, user_owns_study
+from bebshax.api.deps import get_session, owner_accessible, user_can_write_study, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
 from bebshax.interview.engine import ConversationNotFound, InterviewEngine, InterviewFinished, PersonaNotFound
@@ -148,12 +148,15 @@ def _serialize_interview(
 
 
 async def _get_study_and_verify_access(
-    session: AsyncSession, study_id: str, current_user: Optional[Users]
+    session: AsyncSession, study_id: str, current_user: Optional[Users], *, write: bool = False
 ) -> Studies:
+    """``write=True`` selects the strict write predicate: the ``is_demo`` read
+    allowance must never let a non-owner mutate the shared demo."""
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Study not found")
-    if not user_owns_study(study, current_user):
+    predicate = user_can_write_study if write else user_owns_study
+    if not predicate(study, current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this study"
         )
@@ -174,7 +177,7 @@ async def start_study_persona_interview(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Start an adaptive persona interview under a study with strict ownership validation."""
-    await _get_study_and_verify_access(session, study_id, current_user)
+    await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
     persona = await session.get(Personas, persona_id)
     if not persona:
@@ -342,7 +345,7 @@ async def post_study_interview_message(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Submit a researcher question and receive the adaptive persona response."""
-    await _get_study_and_verify_access(session, study_id, current_user)
+    await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
     conversation = await session.get(Conversations, interview_id)
     if not conversation:
@@ -421,7 +424,7 @@ async def post_study_interview_message_stream(
     """SSE variant of the message endpoint: `delta` events as the persona
     speaks, then one `done` event with the canonical ask() payload (normalized
     reply + provenance). Errors after headers are sent arrive as `error` events."""
-    await _get_study_and_verify_access(session, study_id, current_user)
+    await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
     conversation = await session.get(Conversations, interview_id)
     if not conversation:
@@ -496,7 +499,7 @@ async def complete_study_interview(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Finish the interview, extract structured insights with turn provenance, and generate executive summary."""
-    await _get_study_and_verify_access(session, study_id, current_user)
+    await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
     conversation = await session.get(Conversations, interview_id)
     if not conversation:
@@ -744,7 +747,7 @@ async def batch_run_study_interviews(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Start a background batch-interview job across study personas; poll its status endpoint."""
-    study = await _get_study_and_verify_access(session, study_id, current_user)
+    study = await _get_study_and_verify_access(session, study_id, current_user, write=True)
     effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
 
     # 1. Resolve personas
@@ -753,8 +756,16 @@ async def batch_run_study_interviews(
         p_stmt = select(Personas).where(Personas.study_id == study_id)
         personas = list((await session.execute(p_stmt)).scalars().all())
     else:
-        p_stmt = select(Personas).where(Personas.id.in_(target_persona_ids))
+        # Client-supplied ids are scoped to this study: an unscoped `IN` let a
+        # caller interview another tenant's persona and read the transcript back.
+        p_stmt = select(Personas).where(
+            Personas.id.in_(target_persona_ids), Personas.study_id == study_id
+        )
         personas = list((await session.execute(p_stmt)).scalars().all())
+        if len(personas) != len(set(target_persona_ids)):
+            raise HTTPException(
+                status_code=400, detail="One or more personas do not belong to this study"
+            )
 
     if not personas:
         raise HTTPException(status_code=400, detail="No personas available for this study")

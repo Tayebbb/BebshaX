@@ -11,7 +11,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import get_session, user_owns_study
+from bebshax.api.deps import get_session, user_can_write_study, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.db.models import (
     DatasetCandidates,
@@ -112,7 +112,9 @@ async def start_study_research(
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not user_owns_study(study, current_user):
+    # Write gate: this run persists evidence rows and spends LLM budget, so the
+    # `is_demo` read allowance must not apply (it duplicates studies/research/run).
+    if not user_can_write_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     llm_service = getattr(request.app.state, "llm_service", None)
@@ -347,7 +349,8 @@ async def semantic_search_evidence(
 ) -> list[dict[str, Any]]:
     """Perform semantic vector retrieval against a study's evidence chunks."""
     study = await session.get(Studies, study_id)
-    if not study or not user_owns_study(study, current_user):
+    # Embedding a caller-supplied query costs compute: owner token required.
+    if not study or not user_can_write_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
 
     engine = VectorSearchEngine()

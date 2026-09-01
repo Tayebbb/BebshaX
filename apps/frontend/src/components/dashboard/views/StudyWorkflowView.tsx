@@ -9,6 +9,7 @@ import {
   StudyReport,
 } from '../../../types';
 import { api } from '../../../services/api';
+import { useNavigation } from '../../../context/NavigationContext';
 import { useViewMotion } from '../../../motion/useViewMotion';
 import { CopilotMessage } from './workflow/types';
 import { Step1Context } from './workflow/Step1Context';
@@ -36,9 +37,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   onStepChange,
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
+  const { navigate } = useNavigation();
   const stepViewRef = useViewMotion<HTMLDivElement>([currentStep]);
   const [study, setStudy] = useState<Study | null>(null);
   const [promptInput, setPromptInput] = useState<string>(initialPrompt);
+  // Seeded starter questions are a template, never generated output. The flag
+  // flips only after the generator actually returns questions.
   const [questions, setQuestions] = useState<string[]>([
     'How do you currently handle tasks and challenges in this area?',
     'What is your biggest frustration or friction point with existing alternatives?',
@@ -46,6 +50,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     'What are your pricing expectations and willingness to pay for this tool?',
     'What hesitations or barriers would prevent you from adopting this workflow?',
   ]);
+  const [scriptGenerated, setScriptGenerated] = useState<boolean>(() => {
+    if (!studyId || typeof localStorage === 'undefined') return false;
+    return localStorage.getItem(`bebshax_script_generated_${studyId}`) === '1';
+  });
   const [newQuestion, setNewQuestion] = useState<string>('');
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
@@ -489,6 +497,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       const res = await api.generateStudyScriptQuestions(studyId, study?.prompt || promptInput);
       if (res.questions && res.questions.length > 0) {
         setQuestions(res.questions);
+        setScriptGenerated(true);
+        try {
+          localStorage.setItem(`bebshax_script_generated_${studyId}`, '1');
+        } catch {
+          // storage unavailable — the label just resets on the next reload
+        }
         api.updateStudy(studyId, { script_questions: res.questions }).catch(() => {});
       } else {
         setScriptError('The generator returned no questions. Your existing script is unchanged — try again.');
@@ -943,6 +957,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               personaModalTriggerRef={personaModalTriggerRef}
               setViewingPersona={setViewingPersona}
               isStepUnlocked={isStepUnlocked}
+              onNavigateToEvidence={studyId ? () => navigate(`/research/${studyId}/evidence`) : undefined}
             />
           </div>
         )}
@@ -961,6 +976,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               handleGenerateScript={handleGenerateScript}
               isGeneratingScript={isGeneratingScript}
               scriptError={scriptError}
+              scriptGenerated={scriptGenerated}
               handleStepChange={handleStepChange}
             />
           </div>

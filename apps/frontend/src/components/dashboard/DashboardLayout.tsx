@@ -244,6 +244,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const isSidebarCollapsed = !isMobile && isSidebarCollapsedState;
   const [isRecentStudiesOpen, setIsRecentStudiesOpen] = useState(true);
   const [recentStudies, setRecentStudies] = useState<Study[]>([]);
+  const [demoStudy, setDemoStudy] = useState<Study | null>(null);
   const [loadingRecent, setLoadingRecent] = useState(true);
   const [backendDown, setBackendDown] = useState(false);
   const [createStudyError, setCreateStudyError] = useState<string | null>(null);
@@ -295,6 +296,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       try {
         const data = await api.getStudies();
         setRecentStudies(data.slice(0, 5));
+        setDemoStudy(data.find((s) => s.is_demo) || null);
       } catch {
         // fallback
       } finally {
@@ -1301,7 +1303,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}
         >
         {activeTab === 'new-study' && (
-          <NewStudyView onStartStudy={handleStartStudy} />
+          <NewStudyView
+            onStartStudy={handleStartStudy}
+            onOpenExampleStudy={
+              demoStudy ? () => handleOpenStudy(demoStudy.id, demoStudy.step || 5) : undefined
+            }
+          />
         )}
 
         {activeTab === 'dashboard' && (

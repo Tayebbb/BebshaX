@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import user_owns_study
+from bebshax.api.deps import user_can_write_study, user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
@@ -25,15 +25,38 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["datasets"])
 
 
-def _read_upload_or_413(content: bytes) -> None:
-    """Apply the same size ceiling the URL-fetch path enforces."""
-    if not content:
+_UPLOAD_CHUNK_BYTES = 64 * 1024
+
+
+def _oversized_upload() -> HTTPException:
+    return HTTPException(
+        status_code=413,
+        detail=f"Uploaded file exceeds the {MAX_DATASET_FILE_SIZE_BYTES // (1024 * 1024)} MB limit.",
+    )
+
+
+async def _read_upload_or_413(file: UploadFile, request: Optional[Request] = None) -> bytes:
+    """Read an upload under the same size ceiling the URL-fetch path enforces.
+
+    The declared Content-Length is rejected up front and the body is then read
+    in bounded chunks, so an oversized multipart never becomes fully resident.
+    """
+    if request is not None:
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > MAX_DATASET_FILE_SIZE_BYTES:
+            raise _oversized_upload()
+
+    size = 0
+    chunks: list[bytes] = []
+    while chunk := await file.read(_UPLOAD_CHUNK_BYTES):
+        size += len(chunk)
+        if size > MAX_DATASET_FILE_SIZE_BYTES:
+            raise _oversized_upload()
+        chunks.append(chunk)
+
+    if not size:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty.")
-    if len(content) > MAX_DATASET_FILE_SIZE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Uploaded file exceeds the {MAX_DATASET_FILE_SIZE_BYTES // (1024 * 1024)} MB limit.",
-        )
+    return b"".join(chunks)
 
 
 def _get_dataset_service(request: Request) -> DatasetService:
@@ -108,11 +131,16 @@ async def _verify_study_access(
     study_id: str,
     current_user: Optional[Users],
     session: AsyncSession,
+    *,
+    write: bool = False,
 ) -> Studies:
     """Canonical study gate (`user_owns_study`) — anonymous callers only
-    pass for demo / anonymous-tenant studies, never any owned study."""
+    pass for demo / anonymous-tenant studies, never any owned study.
+    ``write=True`` selects the strict write predicate, so the demo's read
+    allowance never grants mutations."""
     study = await session.get(Studies, study_id)
-    if not study or not user_owns_study(study, current_user):
+    predicate = user_can_write_study if write else user_owns_study
+    if not study or not predicate(study, current_user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Study '{study_id}' not found")
     return study
 
@@ -175,8 +203,7 @@ async def upload_dataset_file(
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
     """Upload a dataset file (CSV, JSON, TSV, XLSX) to profile and derive segments."""
-    content = await file.read()
-    _read_upload_or_413(content)
+    content = await _read_upload_or_413(file, request)
 
     user_id = current_user.id if current_user else None
     try:
@@ -353,7 +380,7 @@ async def ingest_study_dataset_url(
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
     """Ingest external dataset URL directly into a specific study."""
-    await _verify_study_access(study_id, current_user, session)
+    await _verify_study_access(study_id, current_user, session, write=True)
     user_id = current_user.id if current_user else None
     try:
         ds = await service.ingest_from_url(
@@ -389,9 +416,8 @@ async def upload_study_dataset_file(
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
     """Upload dataset file directly into a specific study."""
-    await _verify_study_access(study_id, current_user, session)
-    content = await file.read()
-    _read_upload_or_413(content)
+    await _verify_study_access(study_id, current_user, session, write=True)
+    content = await _read_upload_or_413(file, request)
 
     user_id = current_user.id if current_user else None
     try:
@@ -439,7 +465,7 @@ async def import_study_dataset_candidate(
     session: AsyncSession = Depends(_get_session),
 ) -> dict[str, Any]:
     """Manually import a discovered dataset candidate into the study's dataset sources."""
-    await _verify_study_access(study_id, current_user, session)
+    await _verify_study_access(study_id, current_user, session, write=True)
     service = ResearchEngineService()
     effective_user_id = current_user.id if current_user else "usr_default"
     try:
@@ -463,7 +489,7 @@ async def reject_study_dataset_candidate(
     session: AsyncSession = Depends(_get_session),
 ) -> dict[str, Any]:
     """Reject a discovered dataset candidate so it is excluded from auto-selection."""
-    await _verify_study_access(study_id, current_user, session)
+    await _verify_study_access(study_id, current_user, session, write=True)
     service = ResearchEngineService()
     try:
         await service.reject_candidate_dataset(session, study_id, candidate_id)
@@ -517,7 +543,7 @@ async def refresh_study_dataset(
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
     """Re-fetch URL dataset in a study and refresh statistics only if changed."""
-    await _verify_study_access(study_id, current_user, session)
+    await _verify_study_access(study_id, current_user, session, write=True)
     user_id = current_user.id if current_user else None
     ds, changed = await service.refresh_dataset(dataset_id, user_id=user_id)
     if not ds:
@@ -539,7 +565,7 @@ async def delete_study_dataset(
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
     """Delete a dataset from a study."""
-    await _verify_study_access(study_id, current_user, session)
+    await _verify_study_access(study_id, current_user, session, write=True)
     user_id = current_user.id if current_user else None
     ok = await service.delete_dataset(dataset_id, user_id=user_id)
     if not ok:

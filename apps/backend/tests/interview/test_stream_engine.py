@@ -4,7 +4,26 @@ import json
 
 from sqlalchemy import select
 
+from bebshax.auth.models import Users
+from bebshax.auth.security import create_access_token
 from bebshax.interview.orm import ConversationTurns
+
+_SSE_OWNER_ID = "usr_sse_owner"
+# Posting an interview message writes turns, so it needs the owner's token.
+_SSE_HEADERS = {"Authorization": f"Bearer {create_access_token({'sub': _SSE_OWNER_ID})}"}
+
+
+async def _seed_owner(session) -> None:
+    session.add(
+        Users(
+            id=_SSE_OWNER_ID,
+            email="sse-owner@example.com",
+            full_name="SSE Owner",
+            hashed_password="hash",
+            is_active=True,
+            is_verified=True,
+        )
+    )
 
 
 async def _collect(agen):
@@ -113,7 +132,15 @@ async def test_sse_endpoint_emits_error_event_with_kind(
 
     try:
         async with session_maker() as session:
-            session.add(Studies(id="std_sse_err", title="SSE Err", status="in_progress"))
+            await _seed_owner(session)
+            session.add(
+                Studies(
+                    id="std_sse_err",
+                    user_id=_SSE_OWNER_ID,
+                    title="SSE Err",
+                    status="in_progress",
+                )
+            )
             await session.commit()
         conversation = await engine.start(stored_persona.id, "err check", study_id="std_sse_err")
 
@@ -123,6 +150,7 @@ async def test_sse_endpoint_emits_error_event_with_kind(
                 "POST",
                 f"/api/studies/std_sse_err/interviews/{conversation.id}/messages/stream",
                 json={"content": "Anyone there?"},
+                headers=_SSE_HEADERS,
             ) as resp:
                 raw = (await resp.aread()).decode()
 
@@ -160,7 +188,15 @@ async def test_sse_endpoint_emits_delta_then_done(
 
     try:
         async with session_maker() as session:
-            session.add(Studies(id="std_sse", title="SSE Study", status="in_progress"))
+            await _seed_owner(session)
+            session.add(
+                Studies(
+                    id="std_sse",
+                    user_id=_SSE_OWNER_ID,
+                    title="SSE Study",
+                    status="in_progress",
+                )
+            )
             await session.commit()
 
         conversation = await engine.start(stored_persona.id, "sse check", study_id="std_sse")
@@ -171,6 +207,7 @@ async def test_sse_endpoint_emits_delta_then_done(
                 "POST",
                 f"/api/studies/std_sse/interviews/{conversation.id}/messages/stream",
                 json={"content": "Say something."},
+                headers=_SSE_HEADERS,
             ) as resp:
                 assert resp.status_code == 200
                 assert resp.headers["content-type"].startswith("text/event-stream")

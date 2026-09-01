@@ -325,3 +325,64 @@ async def test_full_test_run_execution(session_maker: sessionmaker[AsyncSession]
         db_results = res_results.scalars().all()
         assert len(db_results) == 2
         assert {r.persona_id for r in db_results} == {"p_run_1", "p_run_2"}
+
+
+@pytest.mark.asyncio
+async def test_missing_probability_reads_as_no_signal(session_maker: sessionmaker[AsyncSession]):
+    """A model reply without a probability must not be filled in with a
+    plausible-looking 0.5 — that number would be indistinguishable from a
+    measured coin-flip in the UI. Asserted through the engine, not its source."""
+    fake_llm = FakeBehavioralLLM(
+        json.dumps({"decision": "neutral", "decision_label": "Neutral", "reasoning_summary": "Unsure."})
+    )
+    engine = BehavioralSimulationEngine(fake_llm, session_maker)
+
+    async with session_maker() as session:
+        study = Studies(id="std_behav_nodefault", title="No Default Study", prompt="Meal planner")
+        persona = Personas(
+            id="p_behav_nodefault",
+            study_id="std_behav_nodefault",
+            owner_id="usr_system_holder",
+            name="Tanvir Hasan",
+        )
+        session.add_all([study, persona])
+        await session.commit()
+
+        result = await engine.simulate_persona_response(
+            persona=persona,
+            study=study,
+            test_type="pricing_test",
+            scenario_title="Standard Tier",
+            scenario_text="৳299/month.",
+            parameters={"price": "৳299"},
+            session=session,
+        )
+
+    assert result["probability"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_result_row_defaults_do_not_invent_a_verdict(session_maker: sessionmaker[AsyncSession]):
+    """Columns omitted at insert time must persist as absence, not as a
+    mid-scale probability and a "medium" confidence nobody measured."""
+    async with session_maker() as session:
+        session.add(
+            BehavioralTestResults(
+                id="btres_defaults",
+                test_run_id="btr_defaults",
+                behavioral_test_id="bt_defaults",
+                study_id="std_defaults",
+                persona_id="p_defaults",
+                persona_name="Defaults Persona",
+                decision="neutral",
+                decision_label="Neutral",
+                reasoning_summary="",
+            )
+        )
+        await session.commit()
+
+        row = await session.get(BehavioralTestResults, "btres_defaults")
+
+    assert row is not None
+    assert row.probability == 0.0
+    assert row.confidence == "low"

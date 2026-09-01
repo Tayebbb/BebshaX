@@ -220,11 +220,11 @@ describe('PersonaLibraryView Component', () => {
     // Verify metrics
     expect(screen.getByText('Total Synthetic Personas')).toBeInTheDocument();
     expect(screen.getByText('Represented Segments')).toBeInTheDocument();
-    expect(screen.getByText('Avg. Grounding Score')).toBeInTheDocument();
+    expect(screen.getByText('Evidence-backed personas')).toBeInTheDocument();
 
-    // Verify badges and grounding scores
-    expect(screen.getByText('94%')).toBeInTheDocument();
-    expect(screen.getByText('91%')).toBeInTheDocument();
+    // Verify badges and per-persona evidence chips
+    expect(screen.getByText('94% evidence-backed')).toBeInTheDocument();
+    expect(screen.getByText('91% evidence-backed')).toBeInTheDocument();
     expect(screen.getAllByText('Synthetic Persona').length).toBeGreaterThanOrEqual(2);
   });
 

@@ -207,6 +207,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
               <option value="all" className="bg-[var(--bg-card-hover)]">All Statuses</option>
               <option value="active" className="bg-[var(--bg-card-hover)]">Active</option>
               <option value="completed" className="bg-[var(--bg-card-hover)]">Completed</option>
+              <option value="failed" className="bg-[var(--bg-card-hover)]">Failed</option>
             </select>
           </div>
 
@@ -263,6 +264,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredInterviews.map((item) => {
             const isCompleted = item.status === 'completed';
+            const isFailed = item.status === 'failed';
             const turnsCount = item.turn_count || 0;
             const maxTurns = item.max_turns || 14;
             const exploredCount = Object.values(item.topics_explored || {}).filter(
@@ -305,11 +307,15 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${
                         isCompleted
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          : isFailed
+                          ? 'bg-red-500/10 text-red-400 border-red-500/30'
                           : 'bg-teal-500/10 text-teal-400 border-teal-500/30 flex items-center gap-1'
                       }`}
                     >
-                      {!isCompleted && <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />}
-                      {isCompleted ? 'Completed' : 'Active'}
+                      {!isCompleted && !isFailed && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+                      )}
+                      {isCompleted ? 'Completed' : isFailed ? 'Failed' : 'Active'}
                     </span>
                   </div>
 

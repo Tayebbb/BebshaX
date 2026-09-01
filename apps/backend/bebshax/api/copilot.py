@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import user_owns_study
+from bebshax.api.deps import user_can_write_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import EvidenceClaims, Personas, Studies
@@ -661,7 +661,7 @@ async def generate_study_personas(
         if gate_sessionmaker:
             async with gate_sessionmaker() as gate_session:
                 study_row = await gate_session.get(Studies, body.study_id)
-                if study_row is not None and not user_owns_study(study_row, current_user):
+                if study_row is not None and not user_can_write_study(study_row, current_user):
                     raise HTTPException(status_code=404, detail="study not found")
                 # Grounding must be measured, not assumed: show the study's own
                 # claims so citations can be verified below.

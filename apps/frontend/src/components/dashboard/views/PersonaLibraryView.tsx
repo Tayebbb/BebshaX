@@ -31,6 +31,7 @@ import {
 import { SyntheticPersona, MarketSegment, Study, PersonaGenerationRun } from '../../../types';
 import { api } from '../../../services/api';
 import { CountUp } from '../../../motion/CountUp';
+import { EvidenceBadge, TemplateBadge, countEvidenceBacked } from '../../../utils/personaEvidence';
 
 interface PersonaLibraryViewProps {
   studyId?: string;
@@ -233,9 +234,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   const metrics = useMemo(() => {
     const total = personas.length;
     const repSegments = new Set(personas.map((p) => p.segment_id).filter(Boolean)).size;
-    const avgScore = total > 0 ? Math.round((personas.reduce((acc, p) => acc + p.grounding_score, 0) / total) * 100) : 0;
+    const evidenceBacked = countEvidenceBacked(personas);
     const readyCount = personas.filter((p) => p.status === 'ready').length;
-    return { total, repSegments, avgScore, readyCount };
+    return { total, repSegments, evidenceBacked, readyCount };
   }, [personas]);
 
   // Generation Stepper Handler
@@ -421,12 +422,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         </div>
 
         <div className="bx-stagger" style={{ ['--bx-i' as string]: 2, background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-emerald)' }}>
+          <div style={metrics.evidenceBacked > 0
+            ? { width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-emerald)' }
+            : { width: '42px', height: '42px', borderRadius: '10px', background: 'var(--fill-soft)', border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
             <ShieldCheck size={20} />
           </div>
           <div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--accent-emerald)', lineHeight: 1.1 }}><CountUp value={metrics.avgScore} format={(v) => `${Math.round(v)}%`} /></div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Avg. Grounding Score</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: metrics.evidenceBacked > 0 ? 'var(--accent-emerald)' : 'var(--text-primary)', lineHeight: 1.1 }}><CountUp value={metrics.evidenceBacked} /> / <CountUp value={metrics.total} /></div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Evidence-backed personas</div>
           </div>
         </div>
 
@@ -708,7 +711,6 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               .join('')
               .toUpperCase()
               .slice(0, 2);
-            const groundingPct = Math.round(persona.grounding_score * 100);
             const isReady = persona.status === 'ready';
 
             return (
@@ -771,9 +773,11 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                               v{persona.version}
                             </span>
                           )}
-                          <span style={{ fontSize: '0.72rem', color: 'var(--accent-teal)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                            {persona.country_code || 'BD'}
-                          </span>
+                          {persona.country_code && (
+                            <span style={{ fontSize: '0.72rem', color: 'var(--accent-teal)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                              {persona.country_code}
+                            </span>
+                          )}
                           {persona.data_source === 'cached' && (
                             <span
                               title="Served from seeded/cached data — not generated live for this study"
@@ -785,8 +789,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         </div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                           {persona.demographics?.age ? `${persona.demographics.age} yo • ` : ''}
-                          {persona.demographics?.occupation || persona.archetype || 'Consumer'}
+                          {persona.demographics?.occupation || persona.archetype || 'Occupation not stated'}
                         </div>
+                        <TemplateBadge persona={persona} />
                       </div>
                     </div>
 
@@ -817,15 +822,19 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
                   {/* Segment & Synthetic Tag */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 500, padding: '2px 8px', borderRadius: '6px', background: 'rgba(34, 211, 238, 0.1)', color: 'var(--accent-cyan)', border: '1px solid rgba(34, 211, 238, 0.2)' }}>
-                      {persona.segment_name || 'Target Segment'}
-                    </span>
+                    {persona.segment_name && (
+                      <span style={{ fontSize: '0.75rem', fontWeight: 500, padding: '2px 8px', borderRadius: '6px', background: 'rgba(34, 211, 238, 0.1)', color: 'var(--accent-cyan)', border: '1px solid rgba(34, 211, 238, 0.2)' }}>
+                        {persona.segment_name}
+                      </span>
+                    )}
                     <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '2px 7px', borderRadius: '5px', border: '1px solid var(--border-subtle)' }}>
                       Synthetic Persona
                     </span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '2px 7px', borderRadius: '5px', border: '1px solid var(--border-subtle)' }}>
-                      {persona.origin_country || 'Bangladesh'}
-                    </span>
+                    {persona.origin_country && (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '2px 7px', borderRadius: '5px', border: '1px solid var(--border-subtle)' }}>
+                        {persona.origin_country}
+                      </span>
+                    )}
                   </div>
 
                   {/* Big Five Personality Micro Bars */}
@@ -884,21 +893,17 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
                 {/* Card Footer: Commercial budget, Grounding score meter, Deep Dive Button */}
                 <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       <CreditCard size={13} color="var(--accent-teal)" />
-                      <span>{persona.commercial_profile?.monthly_budget_bdt ? `৳${persona.commercial_profile.monthly_budget_bdt}/mo` : '৳350/mo'}</span>
-                    </div>
-
-                    {/* Grounding Score */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div style={{ width: '48px', height: '5px', borderRadius: '3px', background: 'var(--border-subtle)', overflow: 'hidden' }}>
-                        <div style={{ width: `${groundingPct}%`, height: '100%', background: groundingPct >= 90 ? 'var(--accent-emerald)' : '#14B8A6' }} />
-                      </div>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: groundingPct >= 90 ? 'var(--accent-emerald)' : 'var(--accent-teal)' }}>
-                        {groundingPct}%
+                      <span>
+                        {persona.commercial_profile?.monthly_budget_bdt
+                          ? `৳${persona.commercial_profile.monthly_budget_bdt}/mo`
+                          : 'Budget not stated'}
                       </span>
                     </div>
+
+                    <EvidenceBadge persona={persona} />
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1151,9 +1156,11 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             CACHED
                           </span>
                         )}
-                        <span style={{ fontSize: '0.78rem', color: 'var(--accent-teal)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
-                          {inspectingPersona.country_code || 'BD'} • {inspectingPersona.origin_country || 'Bangladesh'}
-                        </span>
+                        {(inspectingPersona.country_code || inspectingPersona.origin_country) && (
+                          <span style={{ fontSize: '0.78rem', color: 'var(--accent-teal)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                            {[inspectingPersona.country_code, inspectingPersona.origin_country].filter(Boolean).join(' • ')}
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1464,21 +1471,23 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Estimated Monthly Budget</div>
                       <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-teal)' }}>
-                        ৳{inspectingPersona.commercial_profile?.monthly_budget_bdt || 350} / mo
+                        {inspectingPersona.commercial_profile?.monthly_budget_bdt
+                          ? `৳${inspectingPersona.commercial_profile.monthly_budget_bdt} / mo`
+                          : 'Not stated'}
                       </div>
                     </div>
 
                     <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Price Sensitivity</div>
                       <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {inspectingPersona.commercial_profile?.price_sensitivity || 'High'}
+                        {inspectingPersona.commercial_profile?.price_sensitivity || 'Not stated'}
                       </div>
                     </div>
 
                     <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Payment Preference</div>
                       <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
-                        {inspectingPersona.commercial_profile?.payment_preference || 'bKash / Nagad Mobile Wallet'}
+                        {inspectingPersona.commercial_profile?.payment_preference || 'Not stated'}
                       </div>
                     </div>
                   </div>
@@ -1486,7 +1495,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                     <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Willingness-to-Pay Range</div>
                     <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', margin: 0 }}>
-                      {inspectingPersona.commercial_profile?.willingness_to_pay || '৳250–৳400 / month based on empirical student budget distributions.'}
+                      {inspectingPersona.commercial_profile?.willingness_to_pay || 'Not stated'}
                     </p>
                   </div>
                 </div>

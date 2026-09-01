@@ -236,7 +236,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                       type="button"
                       onClick={handleRunBatchInterviews}
                       disabled={isBatchRunning}
-                      title={`Re-run the interviews — ${p.name}'s did not finish`}
+                      title={`Re-runs the interviews for every persona — ${p.name}'s did not finish`}
                       style={{
                         background: 'transparent',
                         border: '1px solid var(--border-subtle)',
@@ -249,7 +249,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                         opacity: isBatchRunning ? 0.5 : 1,
                       }}
                     >
-                      Retry
+                      Re-run all
                     </button>
                   )}
                   </div>

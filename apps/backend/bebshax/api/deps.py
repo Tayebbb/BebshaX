@@ -37,12 +37,14 @@ def user_can_write_study(study: Studies, current_user: Optional[Users]) -> bool:
 
     Deliberately stricter than ``user_owns_study``: the ``is_demo`` allowance
     exists so anyone can *read* the shared demo, not so any unauthenticated
-    caller can overwrite it. Writes require the owner's token (or, for
-    unowned/anonymous-tenant studies, the anonymous workflow that created them).
+    caller can overwrite it. Every mutation requires the owner's token —
+    unauthenticated callers all share the ``usr_default`` anonymous identity,
+    so granting them writes would let any visitor edit or delete any other
+    visitor's study.
     """
-    if current_user is not None:
-        return bool(study.user_id) and study.user_id == current_user.id
-    return not study.user_id or study.user_id in STUDY_ANON_OWNER_IDS
+    if current_user is None:
+        return False
+    return bool(study.user_id) and study.user_id == current_user.id
 
 
 def owner_accessible(owner_id: Optional[str], current_user: Optional[Users]) -> bool:

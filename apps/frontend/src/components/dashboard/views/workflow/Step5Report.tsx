@@ -2,6 +2,7 @@ import React from 'react';
 import { Copy, Download, FileText } from 'lucide-react';
 import { Persona, Study, StudyReport } from '../../../../types';
 import { ProvenanceChip } from '../PersonaLibraryView';
+import { countEvidenceBacked } from '../../../../utils/personaEvidence';
 
 /** Step 5 — final decision report. Pure JSX extraction from StudyWorkflowView;
  * `verificationAssumptions` is derived in the parent from persona provenance. */
@@ -32,6 +33,8 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
   handleGenerateFinalReport,
   verificationAssumptions,
 }) => {
+  const evidenceBackedCount = countEvidenceBacked(personas);
+  const claimCount = report?.metrics?.total_claims ?? report?.evidence_findings?.length ?? 0;
   return (
     <>
             {reportError && (
@@ -74,8 +77,8 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                 </h1>
                 <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
                   {report
-                    ? `Synthesized from ${personas.length} grounded synthetic personas and empirical research claims.`
-                    : `Will be synthesized from your study data — ${personas.length} grounded synthetic personas and collected research claims.`}
+                    ? `Synthesized from ${personas.length} synthetic personas${claimCount > 0 ? ' and empirical research claims' : ''}.`
+                    : `Will be synthesized from your study data — ${personas.length} synthetic personas and any research claims you have collected.`}
                 </p>
               </div>
 
@@ -139,9 +142,12 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                 </div>
               </div>
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Grounded Personas</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Personas</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent-cyan)', marginTop: '4px' }}>
                   {personas.length}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {evidenceBackedCount} of {personas.length} evidence-backed
                 </div>
               </div>
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>

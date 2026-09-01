@@ -13,6 +13,19 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
   const { navigate } = useNavigation();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [paymentsUnavailable, setPaymentsUnavailable] = useState(false);
+
+  /** Only the backend can tell us checkout is switched off in this build —
+   * every other failure (network, 429, decline) stays undiagnosed. */
+  const isPaymentsNotConfigured = (err: unknown): boolean => {
+    const detail = `${(err as { message?: string })?.message || ''}`.toLowerCase();
+    return (
+      detail.includes('not configured') ||
+      detail.includes('not enabled') ||
+      detail.includes('stripe secret key') ||
+      detail.includes('payments are disabled')
+    );
+  };
 
   const handleSelectPlan = async (planId: 'free' | 'pro' | 'enterprise') => {
     setErrorMessage(null);
@@ -49,7 +62,14 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
       // The backend detail can name unconfigured infrastructure ("Stripe secret
       // key is not configured") — keep it for developers, never show it to visitors.
       console.error('Checkout creation error:', err);
-      setErrorMessage("Payments aren't available in this demo build. The free plan works right now — start there and everything else stays unlocked.");
+      if (isPaymentsNotConfigured(err)) {
+        setPaymentsUnavailable(true);
+        setErrorMessage(
+          "Paid plans aren't enabled in this build. The free plan works right now — start there and everything else stays unlocked."
+        );
+      } else {
+        setErrorMessage("We couldn't start checkout. Please try again.");
+      }
     } finally {
       setLoadingPlan(null);
     }
@@ -392,7 +412,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
           })}
         </div>
 
-        {/* Stripe Trust Footer */}
+        {/* Payment processor note — only claimed once checkout is known to work. */}
         <div
           style={{
             marginTop: '56px',
@@ -406,7 +426,11 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
           }}
         >
           <Shield size={16} color="var(--lp-text-gray)" />
-          <span>Payments securely processed by Stripe. All major credit cards accepted with 256-bit encryption.</span>
+          <span>
+            {paymentsUnavailable
+              ? 'Paid plans are not enabled in this build — no payment is taken.'
+              : 'The free plan needs no payment details. Paid plans, when enabled, are processed by Stripe.'}
+          </span>
         </div>
       </div>
     </section>

@@ -235,6 +235,22 @@
 }
 .ns-example:disabled { opacity: 0.4; cursor: default; }
 
+/* Finished-example shortcut, shown only when a demo study exists */
+.ns-demo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: -28px auto 40px auto;
+  padding: 6px 4px;
+  border: none;
+  background: transparent;
+  color: var(--accent-teal-bright);
+  font: 600 0.8rem var(--font-sans);
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+.ns-demo-link:hover { border-bottom-color: var(--ns-accent-line); }
+
 /* Study-type selector */
 .ns-section-label {
   align-self: flex-start;

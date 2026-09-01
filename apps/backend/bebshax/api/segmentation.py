@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import get_session, user_owns_study
+from bebshax.api.deps import get_session, user_can_write_study, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.db.models import (
     DatasetSources,
@@ -76,15 +76,20 @@ def _serialize_segment(s: MarketSegments) -> dict[str, Any]:
     }
 
 
-async def _verify_study_access(session: AsyncSession, study_id: str, current_user: Optional[Users]) -> Studies:
+async def _verify_study_access(
+    session: AsyncSession, study_id: str, current_user: Optional[Users], *, write: bool = False
+) -> Studies:
     """Verify study exists and caller has access. Return 404 for unowned studies.
 
     Delegates to the canonical `user_owns_study` rule — anonymous callers
     only pass for demo / anonymous-tenant studies (never any owned study).
+    ``write=True`` selects the strict write predicate instead, so the demo's
+    read allowance never grants mutations.
     """
     study_res = await session.execute(select(Studies).where(Studies.id == study_id))
     study = study_res.scalars().first()
-    if not study or not user_owns_study(study, current_user):
+    predicate = user_can_write_study if write else user_owns_study
+    if not study or not predicate(study, current_user):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Study '{study_id}' not found.",
@@ -141,7 +146,7 @@ async def run_segmentation(
     current_user: Optional[Users] = Depends(get_optional_current_user),
 ):
     """Trigger a new market segmentation run for a study."""
-    study = await _verify_study_access(session, study_id, current_user)
+    study = await _verify_study_access(session, study_id, current_user, write=True)
     user_id = current_user.id if current_user else study.user_id
 
     llm_service = getattr(req.app.state, "llm_service", None) if req else None
@@ -284,7 +289,7 @@ async def compare_segments(
     current_user: Optional[Users] = Depends(get_optional_current_user),
 ):
     """Generate side-by-side comparison for 2 to 4 segments."""
-    await _verify_study_access(session, study_id, current_user)
+    await _verify_study_access(session, study_id, current_user, write=True)
     user_id = current_user.id if current_user else None
 
     service = SegmentationEngineService(session=session)
@@ -302,7 +307,7 @@ async def delete_segmentation_run(
     current_user: Optional[Users] = Depends(get_optional_current_user),
 ):
     """Delete a segmentation run and its associated segments."""
-    await _verify_study_access(session, study_id, current_user)
+    await _verify_study_access(session, study_id, current_user, write=True)
     user_id = current_user.id if current_user else None
 
     run_q = select(SegmentationRuns).where(SegmentationRuns.study_id == study_id, SegmentationRuns.id == run_id)

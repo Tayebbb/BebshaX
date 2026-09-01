@@ -419,7 +419,7 @@ class BehavioralSimulationEngine:
 
             # Compute deterministic confidence
             confidence_str, confidence_score = self._compute_confidence(
-                persona, context_sources, parsed.get("probability", 0.5)
+                persona, context_sources, parsed.get("probability", 0.0)
             )
 
             reasoning = parsed.get("reasoning_summary", "")
@@ -433,7 +433,7 @@ class BehavioralSimulationEngine:
                 "segment_id": persona.segment_id,
                 "decision": parsed.get("decision", "neutral"),
                 "decision_label": parsed.get("decision_label", "Neutral"),
-                "probability": float(parsed.get("probability", 0.5)),
+                "probability": float(parsed.get("probability", 0.0)),
                 "confidence": confidence_str,
                 "confidence_score": confidence_score,
                 "key_factors": parsed.get("key_factors", []),
