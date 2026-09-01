@@ -32,17 +32,17 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,https://bebshax-frontend.vercel.app"
     frontend_base_url: str = "http://localhost:5173"
     resend_api_key: str | None = "re_LyyJHGMg_H4mdCTe82mzZtvvdwS5FbG8o"
-    email_from_address: str = "onboarding@resend.dev"
-    smtp_host: str = "smtp.gmail.com"
+    email_from_address: str = "bebshax.official@gmail.com"
+    smtp_host: str = "smtp-relay.brevo.com"
     smtp_port: int = 587
-    smtp_username: str = "bebshax.official@gmail.com"
-    smtp_password: str | None = "lurvphnuzzusomqo"
+    smtp_username: str = "b77169001@smtp-brevo.com"
+    smtp_password: str | None = "xsmtpsib-adb0dd11dfb7ab41e18a9776db6bb4017f423389e3fbbfad4db4ced0285abc3d-pmokSgVfpMAxbu7t"
 
     @property
     def active_smtp_password(self) -> str:
-        if self.smtp_password and self.smtp_password.strip() and self.smtp_password.strip() != "mfnyksbpgfhfhocp":
+        if self.smtp_password and self.smtp_password.strip() and "xsmtpsib" in self.smtp_password:
             return self.smtp_password.strip()
-        return "lurvphnuzzusomqo"
+        return "xsmtpsib-adb0dd11dfb7ab41e18a9776db6bb4017f423389e3fbbfad4db4ced0285abc3d-pmokSgVfpMAxbu7t"
     stripe_secret_key: str | None = None
     stripe_publishable_key: str | None = None
     stripe_webhook_secret: str | None = None
