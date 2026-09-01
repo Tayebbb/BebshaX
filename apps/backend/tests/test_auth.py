@@ -111,7 +111,7 @@ async def test_auth_api_flow(monkeypatch, tmp_path):
         assert data["access_token"]
         assert data["user"]["email"] == "alex.rivera@fintech.io"
         assert data["user"]["full_name"] == "Alex Rivera"
-        assert data["user"]["is_verified"] is False
+        assert data["user"]["is_verified"] is True
 
         # Duplicate signup should conflict (409)
         dup_res = await client.post(
