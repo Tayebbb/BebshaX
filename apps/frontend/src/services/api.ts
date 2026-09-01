@@ -830,24 +830,16 @@ export const api = {
 
   async signup(data: SignUpData): Promise<AuthResponse> {
     if (!this.isMockMode()) {
-      // 1. Primary: Direct Backend API registration (commits to PostgreSQL users table)
       try {
         const res = await fetch(`${API_BASE}/auth/signup`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
-          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
+          signal: AbortSignal.timeout(30000),
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
           lastKnownLive = true;
-          // H9: NO session is stored at signup. The session is only committed
-          // after Neon's OTP verification succeeds (AuthContext.verifyEmailOtp).
-          neonAuth.signUp({
-            email: data.email,
-            password: data.password,
-            name: data.full_name,
-          }).catch(() => {});
           return result;
         }
         if (res.status === 409) {
@@ -857,25 +849,7 @@ export const api = {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.detail || 'Registration failed');
       } catch (backendErr: any) {
-        if (backendErr.message && backendErr.message.includes('already exists')) {
-          throw backendErr;
-        }
-
-        // 2. Secondary: backend unreachable — register with Neon Auth only.
-        // Still no session until the email is verified.
-        const neonRes = await neonAuth.signUp({
-          email: data.email,
-          password: data.password,
-          name: data.full_name,
-        });
-        lastKnownLive = false;
-        return {
-          access_token: '',
-          token_type: 'bearer',
-          expires_in_days: 0,
-          verification_required: true,
-          user: neonRes.user,
-        } as AuthResponse;
+        throw backendErr;
       }
     }
 
@@ -1070,17 +1044,27 @@ export const api = {
   },
 
   async resendVerificationEmail(email: string): Promise<boolean> {
-    return await neonAuth.sendVerificationEmail(email);
+    if (!this.isMockMode()) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/resend-verification`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
+    return true;
   },
 
   async sendOtp(
     email: string,
-    type: 'email-verification' | 'forget-password' | 'sign-in' = 'email-verification'
+    _type: 'email-verification' | 'forget-password' | 'sign-in' = 'email-verification'
   ): Promise<boolean> {
-    if (!this.isMockMode()) {
-      return await neonAuth.sendVerificationOtp(email, type);
-    }
-    return true;
+    return await this.resendVerificationEmail(email);
   },
 
   async verifyEmailOtp(
