@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import secrets
 import uuid
@@ -217,7 +218,10 @@ async def signup(
 
         settings = get_settings()
         verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
-        asyncio.create_task(send_verification_email(user.email, verification_url, otp_code=otp_code))
+        try:
+            await send_verification_email(user.email, verification_url, otp_code=otp_code)
+        except Exception as mail_exc:
+            logger.warning("Background email dispatch warning: %s", mail_exc)
 
         token = create_access_token(user_id=user.id)
         return AuthResponse(
