@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_username: str = "bebshax.official@gmail.com"
     smtp_password: str | None = "lurvphnuzzusomqo"
+
+    @property
+    def active_smtp_password(self) -> str:
+        if self.smtp_password and self.smtp_password.strip() and self.smtp_password.strip() != "mfnyksbpgfhfhocp":
+            return self.smtp_password.strip()
+        return "lurvphnuzzusomqo"
     stripe_secret_key: str | None = None
     stripe_publishable_key: str | None = None
     stripe_webhook_secret: str | None = None
