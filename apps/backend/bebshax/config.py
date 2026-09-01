@@ -72,7 +72,7 @@ class Settings(BaseSettings):
 
     neon_auth_url: str = "https://ep-cold-star-azazjakq.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth"
 
-    require_email_verification: bool | None = False
+    require_email_verification: bool | None = None
 
     rate_limit_storage_uri: str | None = None
     rate_limit_trust_forwarded_for: bool = False
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     def email_verification_enforced(self) -> bool:
         if self.require_email_verification is not None:
             return self.require_email_verification
-        return False
+        return self.environment in ("production", "staging") and bool(self.resend_api_key)
 
     @field_validator("jwt_secret")
     @classmethod
