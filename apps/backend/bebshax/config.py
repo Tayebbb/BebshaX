@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # M6: explicit origins — wildcard + allow_credentials is invalid per the
     # Fetch spec and unsafe. Comma-separated; override via BEBSHAX_CORS_ORIGINS.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,https://bebshax-frontend.vercel.app"
+    # Only local dev ports by default. Deployed frontends must be listed
+    # explicitly in BEBSHAX_CORS_ORIGINS — a wildcard here combined with
+    # credentialed requests would let any origin act as a logged-in user.
+    cors_origin_regex: str = r"http://localhost:\d+|http://127\.0\.0\.1:\d+"
     frontend_base_url: str = "http://localhost:5173"
     resend_api_key: str | None = None
     email_from_address: str = "bebshax.official@gmail.com"

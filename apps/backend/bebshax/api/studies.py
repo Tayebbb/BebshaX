@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bebshax.auth.models import Users
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import get_session, owner_accessible, user_owns_study
+from bebshax.api.limiter import limiter
 from bebshax.api.jobs import get_job, start_job
 from bebshax.db.models import (
     DatasetCandidates,
@@ -463,6 +464,7 @@ async def delete_audience(
 # ============================================================================
 
 @router.post("/studies/{study_id}/script/generate")
+@limiter.limit("20/minute")
 async def generate_script_questions(
     study_id: str,
     payload: Optional[GenerateScriptRequest] = None,
@@ -555,6 +557,7 @@ async def generate_script_questions(
 # ============================================================================
 
 @router.post("/studies/{study_id}/research/run")
+@limiter.limit("20/minute")
 async def trigger_study_research(
     study_id: str,
     request: Request = None,

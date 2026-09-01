@@ -51,7 +51,7 @@ async def create_checkout_session_endpoint(
         logger.error(f"Failed to create Stripe checkout session: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Payment provider error: {e}",
+            detail="Payment processing error — please try again.",
         ) from e
 
 
@@ -75,7 +75,7 @@ async def create_portal_session_endpoint(
         logger.error(f"Failed to create Stripe billing portal session: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Payment provider error: {e}",
+            detail="Payment processing error — please try again.",
         ) from e
 
 

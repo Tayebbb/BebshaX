@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.jobs import get_job, start_job
 from bebshax.api.deps import get_session, owner_accessible, user_owns_study
+from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
 from bebshax.db.models import DATA_SOURCE_LIVE
@@ -194,6 +195,7 @@ async def list_study_personas_endpoint(
 
 
 @router.post("/studies/{study_id}/personas/generate", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def generate_study_personas_endpoint(
     study_id: str,
     body: StudyGeneratePersonasRequest,

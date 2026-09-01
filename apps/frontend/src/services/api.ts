@@ -778,25 +778,6 @@ export const api = {
     return null;
   },
 
-  /** Return all registered users. Requires a valid login token (any authenticated user). */
-  async listUsers(): Promise<User[]> {
-    if (this.isMockMode()) return [];
-    try {
-      const res = await fetch(`${API_BASE}/auth/users`, {
-        headers: this.getAuthHeaders(),
-        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
-      });
-      if (res.ok) {
-        lastKnownLive = true;
-        return await res.json();
-      }
-      lastKnownLive = false;
-    } catch {
-      lastKnownLive = false;
-    }
-    return [];
-  },
-
   async syncUser(data: {
     neon_token: string;
     auth_provider?: string;

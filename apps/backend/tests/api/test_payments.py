@@ -158,7 +158,34 @@ def test_create_portal_session_success(mock_portal_create, mock_customer_create,
     assert data["url"] == "https://billing.stripe.com/p/session/test_portal"
 
 
-def test_webhook_checkout_session_completed_upgrades_user(seeded_user):
+@pytest.fixture
+def signed_webhook(monkeypatch):
+    """Stripe webhooks are only processed when the signature verifies, so tests
+    must go through construct_event rather than posting raw JSON."""
+    monkeypatch.setattr(get_settings(), "stripe_webhook_secret", "whsec_unit_tests_only")
+
+    def _post(event: dict):
+        with patch("stripe.Webhook.construct_event", return_value=event):
+            return client.post(
+                "/api/payments/webhook",
+                content=json.dumps(event).encode("utf-8"),
+                headers={"Content-Type": "application/json", "stripe-signature": "t=1,v1=test"},
+            )
+
+    return _post
+
+
+def test_webhook_rejects_unsigned_event(seeded_user):
+    """An unsigned webhook must never be trusted — it could forge a plan upgrade."""
+    res = client.post(
+        "/api/payments/webhook",
+        content=json.dumps({"id": "evt_forged", "type": "checkout.session.completed"}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    assert res.status_code == 400
+
+
+def test_webhook_checkout_session_completed_upgrades_user(seeded_user, signed_webhook):
     """Webhook event checkout.session.completed upgrades the user's plan to pro."""
     webhook_event = {
         "id": "evt_test_checkout_01",
@@ -176,11 +203,7 @@ def test_webhook_checkout_session_completed_upgrades_user(seeded_user):
         },
     }
 
-    res = client.post(
-        "/api/payments/webhook",
-        content=json.dumps(webhook_event).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-    )
+    res = signed_webhook(webhook_event)
     assert res.status_code == 200
     assert res.json()["received"] is True
 
@@ -193,7 +216,7 @@ def test_webhook_checkout_session_completed_upgrades_user(seeded_user):
     assert sub_res.json()["is_paid"] is True
 
 
-def test_webhook_subscription_deleted_reverts_user(seeded_user):
+def test_webhook_subscription_deleted_reverts_user(seeded_user, signed_webhook):
     """Webhook event customer.subscription.deleted reverts user to free tier."""
     webhook_event = {
         "id": "evt_test_sub_deleted",
@@ -207,11 +230,7 @@ def test_webhook_subscription_deleted_reverts_user(seeded_user):
         },
     }
 
-    res = client.post(
-        "/api/payments/webhook",
-        content=json.dumps(webhook_event).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-    )
+    res = signed_webhook(webhook_event)
     assert res.status_code == 200
 
     # Verify user state is reverted

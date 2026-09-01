@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import user_owns_study
+from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
 from bebshax.llm.json_utils import parse_llm_json
@@ -399,6 +400,7 @@ def _make_roles(role_specs: list[tuple]) -> list[PersonaRoleSuggestion]:
 
 
 @router.post("/study/copilot", response_model=CopilotResponse)
+@limiter.limit("30/minute")
 async def study_design_copilot(body: CopilotRequest, request: Request) -> CopilotResponse:
     """Conversational study design copilot running through FreeLLMpool/OpenRouter with fallback."""
     llm_router = getattr(request.app.state, "llm_router", None)
@@ -471,6 +473,7 @@ async def study_design_copilot(body: CopilotRequest, request: Request) -> Copilo
 
 
 @router.post("/study/suggest-roles", response_model=list[PersonaRoleSuggestion])
+@limiter.limit("30/minute")
 async def suggest_persona_roles(body: SuggestRolesRequest, request: Request) -> list[PersonaRoleSuggestion]:
     """Generates suggested persona roles for any research study context via LLM."""
     llm_router = getattr(request.app.state, "llm_router", None)

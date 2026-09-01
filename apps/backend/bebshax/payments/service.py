@@ -34,9 +34,18 @@ PLAN_CONFIGS: dict[str, dict[str, Any]] = {
 }
 
 
+def _assert_internal_redirect(url: Optional[str], base_url: str) -> None:
+    """Reject client-supplied redirects that point away from our own frontend.
+
+    Stripe sends the user's browser to these URLs after checkout, so an
+    unvalidated value is a ready-made phishing hop.
+    """
+    if url and not url.startswith(base_url):
+        raise ValueError("Redirect URL must stay within the application origin.")
+
+
 class StripePaymentService:
     """Encapsulates Stripe Checkout, Billing Portal, and Webhook lifecycle."""
-
     def __init__(self, session: AsyncSession):
         self.session = session
         self.settings = get_settings()
@@ -82,6 +91,8 @@ class StripePaymentService:
         base_url = self.settings.frontend_base_url.rstrip("/")
         default_success = f"{base_url}/app?checkout=success&plan={plan_lower}"
         default_cancel = f"{base_url}/app?checkout=cancelled"
+        _assert_internal_redirect(success_url, base_url)
+        _assert_internal_redirect(cancel_url, base_url)
 
         checkout_session = stripe.checkout.Session.create(
             customer=customer_id,
@@ -130,6 +141,7 @@ class StripePaymentService:
         customer_id = await self.get_or_create_customer(user)
         base_url = self.settings.frontend_base_url.rstrip("/")
         default_return = f"{base_url}/app"
+        _assert_internal_redirect(return_url, base_url)
 
         portal_session = stripe.billing_portal.Session.create(
             customer=customer_id,
@@ -148,20 +160,19 @@ class StripePaymentService:
         """Process incoming Stripe webhook events."""
         event: dict[str, Any]
 
-        if self.settings.stripe_webhook_secret and sig_header:
-            try:
-                event = stripe.Webhook.construct_event(
-                    payload, sig_header, self.settings.stripe_webhook_secret
-                )
-            except Exception as e:
-                logger.error(f"Stripe webhook signature verification failed: {e}")
-                raise ValueError("Invalid webhook signature") from e
-        else:
-            try:
-                event = json.loads(payload.decode("utf-8"))
-            except Exception as e:
-                logger.error(f"Failed to parse webhook JSON payload: {e}")
-                raise ValueError("Invalid JSON payload") from e
+        if not self.settings.stripe_webhook_secret or not sig_header:
+            # Without signature verification anyone could POST a forged
+            # checkout.session.completed and upgrade an arbitrary account.
+            logger.error("Stripe webhook rejected: signature verification is not configured")
+            raise ValueError("Webhook signature verification is not configured")
+
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, self.settings.stripe_webhook_secret
+            )
+        except Exception as e:
+            logger.error(f"Stripe webhook signature verification failed: {e}")
+            raise ValueError("Invalid webhook signature") from e
 
         event_type = event.get("type", "")
         data_object = event.get("data", {}).get("object", {})

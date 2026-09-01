@@ -182,7 +182,9 @@ async def get_optional_current_user(
 
 
 @auth_router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/hour")
 async def signup(
+    request: Request,
     payload: SignUpRequest,
     session: AsyncSession = Depends(get_session),
 ):
@@ -233,7 +235,7 @@ async def signup(
         logger.error("Signup exception: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Signup failed: {exc}",
+            detail="Signup failed due to an internal error. Please try again.",
         )
 
 
@@ -248,7 +250,9 @@ class VerifyEmailRequest(BaseModel):
 
 
 @auth_router.post("/verify-email")
+@limiter.limit("10/hour")
 async def verify_email(
+    request: Request,
     payload: VerifyEmailRequest,
     session: AsyncSession = Depends(get_session),
 ):
@@ -299,21 +303,17 @@ async def resend_verification(
     current_user: Optional[Users] = Depends(get_optional_current_user),
 ):
     """Resend email verification link (rate-limited)."""
+    # The response is deliberately identical whether or not the address exists
+    # and whether or not it is already verified — differing replies let an
+    # unauthenticated caller enumerate registered accounts.
+    uniform_response = {"detail": "Verification email resent with 6-digit OTP code."}
+
     target_user = current_user
     if not target_user and payload and payload.email:
         target_user = await get_user_by_email(session, payload.email)
 
-    if not target_user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication or registered email required to resend verification.",
-        )
-
-    if target_user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email is already verified.",
-        )
+    if not target_user or target_user.is_verified:
+        return uniform_response
 
     otp_code = f"{secrets.randbelow(900000) + 100000}"
     token_value = otp_code
@@ -330,7 +330,7 @@ async def resend_verification(
     settings = get_settings()
     verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
     await send_verification_email(target_user.email, verification_url, otp_code=otp_code)
-    return {"detail": "Verification email resent with 6-digit OTP code."}
+    return uniform_response
 
 
 @auth_router.post("/signin", response_model=AuthResponse)
@@ -413,7 +413,9 @@ async def verify_neon_token(token: str) -> dict:
 
 
 @auth_router.post("/sync", response_model=AuthResponse)
+@limiter.limit("20/minute")
 async def sync_user(
+    request: Request,
     payload: UserSyncRequest,
     session: AsyncSession = Depends(get_session),
 ):
@@ -496,14 +498,3 @@ async def refresh_token(current_user: Users = Depends(get_current_user)):
         access_token=token,
         user=_serialize_user(current_user),
     )
-
-
-@auth_router.get("/users", response_model=list[UserProfileResponse])
-async def list_users(
-    current_user: Users = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> list[UserProfileResponse]:
-    """Return all registered user accounts. Requires a valid login token."""
-    result = await session.execute(select(Users).order_by(Users.created_at.desc()))
-    users = list(result.scalars().all())
-    return [_serialize_user(u) for u in users]
