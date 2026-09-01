@@ -42,7 +42,7 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
-    database_url: str = "postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax"
+    database_url: str = "postgresql+asyncpg://neondb_owner:npg_Cr8Y3dTmpVbk@ep-cold-star-azazjakq-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 
     @property
     def sync_database_url(self) -> str:
