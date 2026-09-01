@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -24,6 +25,8 @@ from bebshax.behavioral.orm import (
     BehavioralTests,
 )
 from bebshax.db.models import Personas, Studies
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["behavioral-testing"])
 
@@ -636,10 +639,11 @@ async def retry_failed_simulations(
     try:
         updated_run = await engine.retry_failed_simulations(run_id)
         return await get_behavioral_run_status(study_id, run_id, session, user)
-    except Exception as exc:
+    except Exception:
+        logger.error("behavioral retry failed for run %s", run_id, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Retry failed: {str(exc)}",
+            detail="Retry failed. Please try again.",
         )
 
 

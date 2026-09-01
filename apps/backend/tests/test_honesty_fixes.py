@@ -248,3 +248,32 @@ def test_heuristic_fallback_negative_branch_is_labeled():
     assert "[heuristic fallback" not in result.get("reasoning_summary", ""), (
         "The note is appended by the caller, not by _parse_simulation_response itself"
     )
+
+
+def test_behavioral_confidence_defaults_are_not_invented():
+    """A missing confidence must read as "no signal", not as a plausible 0.8.
+    The ORM default has to agree with the DB server_default (0)."""
+    import inspect
+
+    from bebshax.behavioral.engine import BehavioralSimulationEngine
+    from bebshax.behavioral.orm import BehavioralTestResults
+
+    assert BehavioralTestResults.__table__.c.confidence_score.default.arg == 0.0
+
+    persist_src = inspect.getsource(BehavioralSimulationEngine.execute_test_run)
+    assert 'confidence_score=r_data.get("confidence_score", 0.8)' not in persist_src
+    assert 'probability=r_data.get("probability", 0.5)' not in persist_src
+
+
+def test_heuristic_fallback_flag_is_not_a_dead_key():
+    """The flag has no column and no API field — it must only exist where it is
+    actually consumed (the reasoning-summary note), never as inert payload."""
+    import inspect
+
+    from bebshax.behavioral.engine import BehavioralSimulationEngine
+
+    src = inspect.getsource(BehavioralSimulationEngine.simulate_persona_response)
+    assert 'if parsed.get("is_heuristic_fallback")' in src, "the note must still be appended"
+    assert '"is_heuristic_fallback": parsed.get(' not in src, (
+        "the returned dict must not carry a key that no boundary persists"
+    )

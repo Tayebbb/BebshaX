@@ -148,6 +148,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     verifyEmailOtp,
     resetPasswordWithOtp,
     isAuthenticated,
+    user,
   } = useAuth();
 
   // Determine current view
@@ -175,16 +176,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     }
   }, [currentPath]);
 
-  // If already authenticated, redirect to /app
+  // If already authenticated, redirect to /app — except on the verification
+  // screen, which an authenticated user is allowed to open deliberately.
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && view !== 'verify-otp') {
       navigate('/app');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, view]);
 
   // Form fields
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(user?.email || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -274,8 +276,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
     try {
       setIsLoading(true);
-      await signup(fullName, email, password);
-      // Verification wall: send the OTP and say honestly whether it went out.
+      const res = await signup(fullName, email, password);
+      setOtp('');
+      // The backend decides: when signup already returned a session, the user
+      // is authenticated and must not be walled behind an OTP screen. The
+      // code is still sent, and the dashboard carries a dismissible reminder.
+      const authenticated = !!res?.access_token && !!res?.user;
+      if (authenticated) {
+        void sendOtp(email, 'email-verification').catch(() => false);
+        navigate('/app');
+        return;
+      }
+      // No session: verification really is required to continue.
       const sent = await sendOtp(email, 'email-verification').catch(() => false);
       if (sent) {
         setSuccessMessage(`Account created! We've sent a 6-digit verification code to ${email}.`);
@@ -285,7 +297,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           `Account created, but we could not send a verification code to ${email}. Use "Resend" to retry — you cannot sign in until the email is verified.`
         );
       }
-      setOtp('');
       setView('verify-otp');
     } catch (err: any) {
       if (err.message?.includes('already exists')) {

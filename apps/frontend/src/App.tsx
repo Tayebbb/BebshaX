@@ -58,8 +58,47 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // 1. Session verification loading screen
-  if (isLoading) {
+  // Check if current URL is a dedicated Auth page route
+  const isAuthRoute =
+    currentPath.startsWith('/auth') ||
+    currentPath === '/signin' ||
+    currentPath === '/signup' ||
+    currentPath === '/login' ||
+    currentPath === '/register';
+
+  if (isAuthRoute) {
+    // Verification is reachable while signed in: the backend already
+    // authenticated this user, verifying is a follow-up, not a gate.
+    if (isAuthenticated && !currentPath.includes('/verify') && !currentPath.includes('/otp')) {
+      return (
+        <DashboardLayout onOpenLandingPage={() => navigate('/')} />
+      );
+    }
+    return <AuthPage />;
+  }
+
+  // Check if current URL is an App / Dashboard route
+  const isAppRoute =
+    currentPath.startsWith('/app') ||
+    currentPath.startsWith('/dashboard') ||
+    currentPath.startsWith('/create-study') ||
+    currentPath.startsWith('/new-study') ||
+    currentPath.startsWith('/persona-library') ||
+    currentPath.startsWith('/personas') ||
+    currentPath.startsWith('/research') ||
+    currentPath.startsWith('/study') ||
+    currentPath.startsWith('/router') ||
+    currentPath.startsWith('/provenance') ||
+    // Study-scoped tabs opened without an active study render their own
+    // "pick a study" empty state inside the dashboard shell.
+    currentPath.startsWith('/interviews') ||
+    currentPath.startsWith('/behavioral-tests') ||
+    currentPath.startsWith('/evidence') ||
+    currentPath.startsWith('/segmentation');
+
+  // Only the authenticated app waits on the session check — the landing and
+  // auth pages must paint immediately, without blocking on a network call.
+  if (isLoading && isAppRoute) {
     return (
       <div
         style={{
@@ -90,36 +129,6 @@ const AppContent: React.FC = () => {
       </div>
     );
   }
-
-  // Check if current URL is a dedicated Auth page route
-  const isAuthRoute =
-    currentPath.startsWith('/auth') ||
-    currentPath === '/signin' ||
-    currentPath === '/signup' ||
-    currentPath === '/login' ||
-    currentPath === '/register';
-
-  if (isAuthRoute) {
-    if (isAuthenticated) {
-      return (
-        <DashboardLayout onOpenLandingPage={() => navigate('/')} />
-      );
-    }
-    return <AuthPage />;
-  }
-
-  // Check if current URL is an App / Dashboard route
-  const isAppRoute =
-    currentPath.startsWith('/app') ||
-    currentPath.startsWith('/dashboard') ||
-    currentPath.startsWith('/create-study') ||
-    currentPath.startsWith('/new-study') ||
-    currentPath.startsWith('/persona-library') ||
-    currentPath.startsWith('/personas') ||
-    currentPath.startsWith('/research') ||
-    currentPath.startsWith('/study') ||
-    currentPath.startsWith('/router') ||
-    currentPath.startsWith('/provenance');
 
   if (isAppRoute) {
     if (!isAuthenticated) {

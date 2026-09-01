@@ -7,7 +7,7 @@ export const FAQ: React.FC = () => {
   const faqs = [
     {
       q: 'What is a synthetic persona in BebshaX?',
-      a: 'It is a generated profile of a plausible customer for a business you describe — name, age, occupation, location and behavioural attributes — that you can then interview in a multi-turn conversation. The persona is never rebuilt between turns: the identity card is byte-identical on every turn, and a test enforces that.',
+      a: 'It is a generated profile of a plausible customer for an idea you describe — name, age, occupation, location and behavioural attributes — that you can then interview in a multi-turn conversation. The persona is never rebuilt between turns: the identity card is byte-identical on every turn, and a test enforces that.',
     },
     {
       q: 'What does “evidence-grounded” actually mean here?',
@@ -15,11 +15,11 @@ export const FAQ: React.FC = () => {
     },
     {
       q: 'What happens when a provider fails or a context is too large?',
-      a: 'Failures are classified into a closed set of 14 kinds, each with one policy: retry the same route once, advance to the next candidate, or put the route on a 60-second cooldown per provider and model. Context is never truncated to fit a smaller model — if nothing in the pool can hold the request, it fails explicitly with ContextWindowExceeded. Low answer quality is never treated as an infrastructure failure; quality belongs to the evaluation layer.',
+      a: 'Failures are classified into a closed set of 13 kinds, each with one policy: retry the same route once, advance to the next candidate, or put the route on a 60-second cooldown per provider and model. Context is never truncated to fit a smaller model — if nothing in the pool can hold the request, it fails explicitly with ContextWindowExceeded. Low answer quality is never treated as an infrastructure failure; quality belongs to the evaluation layer.',
     },
     {
-      q: 'Do we need to connect any of our own data?',
-      a: 'No. The input is a business name, description, industry and target market, plus an optional audience segment and optional generation hints. That is all. There is no data connection of any kind.',
+      q: 'What does using BebshaX actually look like?',
+      a: 'Five guided steps. You start by telling the Study Design Copilot what you want to find out, in plain English — it asks follow-up questions and turns that into a research objective and a set of customer roles. Then BebshaX generates the personas, drafts an interview script you can edit, runs the interviews as multi-turn conversations, and synthesises a decision report at the end. You never connect any of your own data.',
     },
     {
       q: 'Are models fine-tuned on the datasets?',

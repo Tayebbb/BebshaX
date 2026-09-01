@@ -4,34 +4,40 @@ import { Check, X, Sparkles } from 'lucide-react';
 export const Comparison: React.FC = () => {
   const criteria = [
     {
-      feature: 'Context handling',
-      bebshax: 'Never truncated — explicit ContextWindowExceeded when nothing fits',
-      traditional: 'Silently trimmed or dropped to fit the model in hand',
+      feature: 'Your persona gets complicated',
+      bebshax: 'You get the whole persona, or an honest error — never a quietly shortened one',
+      detail: 'Identity, memory and evidence are never compressed to fit a smaller model; the call fails with ContextWindowExceeded instead.',
+      traditional: 'Details are silently trimmed to fit whatever model is free right now',
     },
     {
-      feature: 'Failure handling',
-      bebshax: '14 classified kinds, one policy each: retry, advance, or cool the route',
-      traditional: 'One error path — raise it, or blindly try the next key',
+      feature: 'An AI provider goes down',
+      bebshax: 'It moves to another model and keeps going — you barely notice',
+      detail: '13 classified failure kinds, one policy each: retry the route once, advance to the next candidate, or cool the route.',
+      traditional: 'The request fails, or it retries the same broken route',
     },
     {
-      feature: 'Route cooldown',
-      bebshax: '60 seconds per provider and model, skipped then returned automatically',
-      traditional: 'Rate-limited routes stay in rotation and keep failing',
+      feature: 'A provider hits its free limit',
+      bebshax: 'That route steps aside and comes back on its own',
+      detail: '60-second cooldown per provider and model; cooling routes are skipped, then returned automatically.',
+      traditional: 'The rate-limited route stays in rotation and keeps failing',
     },
     {
-      feature: 'Provenance',
-      bebshax: 'Per attempt: provider, model, latency, failure kind, fallback reason, routing path',
-      traditional: 'No record of which provider answered or why',
+      feature: 'You ask "where did this come from?"',
+      bebshax: 'Every answer records which AI answered it, how long it took, and what it tried first',
+      detail: 'A provenance record per attempt: provider, model, latency, failure kind, fallback reason, routing path.',
+      traditional: 'No record of which provider answered, or why',
     },
     {
-      feature: 'Identity stability',
-      bebshax: 'Byte-identical identity card on every interview turn',
-      traditional: 'Persona rebuilt per turn and free to drift',
+      feature: 'A long interview goes on',
+      bebshax: 'The persona is the same person on turn one and on turn twenty',
+      detail: 'The identity card is byte-identical every turn, and a test enforces it.',
+      traditional: 'The persona is rebuilt each turn and quietly drifts',
     },
     {
-      feature: 'Local fallback',
-      bebshax: 'Every pool terminates on-machine; the emergency pool is local-first',
-      traditional: 'Nothing left to try once the remote tier is exhausted',
+      feature: 'Every free provider is exhausted',
+      bebshax: 'It falls back to a model on your own machine and still answers',
+      detail: 'Every pool terminates at the local Ollama adapter, and the emergency pool is local-first.',
+      traditional: 'Nothing left to try once the free tier runs out',
     },
   ];
 
@@ -72,7 +78,7 @@ export const Comparison: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            The Policy Layer
+            What This Means For You
           </div>
 
           <h2
@@ -84,14 +90,14 @@ export const Comparison: React.FC = () => {
               color: 'var(--lp-text)',
             }}
           >
-            One key and a retry loop{' '}
+            When the AI fails,{' '}
             <span className="text-gradient-blue">
-              is not a routing layer.
+              you should still get an answer.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
-            What changes when the fallback path is a data table of pools and policies instead of a try/except around a single provider.
+            Free AI models are unreliable. Here is what happens on a bad day with BebshaX, and what happens with a tool wired to a single provider.
           </p>
         </div>
 
@@ -111,7 +117,7 @@ export const Comparison: React.FC = () => {
               <thead>
                 <tr>
                   <th style={{ padding: '20px 24px', fontSize: '0.84rem', color: 'var(--lp-text-muted)', fontWeight: 600, width: '28%' }}>
-                    Capability
+                    What happens when…
                   </th>
                   <th
                     style={{
@@ -125,11 +131,11 @@ export const Comparison: React.FC = () => {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Sparkles size={16} color="var(--lp-gold)" />
-                      <span>BebshaX policy layer</span>
+                      <span>With BebshaX</span>
                     </div>
                   </th>
                   <th style={{ padding: '20px 24px', fontSize: '0.84rem', color: 'var(--lp-text-muted)', fontWeight: 500, width: '34%' }}>
-                    A single free API key, or naive round-robin rotation
+                    With a tool wired to one free API key
                   </th>
                 </tr>
               </thead>
@@ -150,11 +156,14 @@ export const Comparison: React.FC = () => {
                         background: 'rgba(var(--lp-fill-rgb), 0.03)',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--lp-contrast-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--lp-contrast-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: 'none', marginTop: '1px' }}>
                           <Check size={12} color="var(--lp-contrast-fg)" strokeWidth={3} />
                         </div>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--lp-text)', fontWeight: 600 }}>{c.bebshax}</span>
+                        <div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--lp-text)', fontWeight: 600 }}>{c.bebshax}</div>
+                          <div style={{ fontSize: '0.76rem', color: 'var(--lp-text-faint)', marginTop: '5px', lineHeight: 1.45 }}>{c.detail}</div>
+                        </div>
                       </div>
                     </td>
                     <td style={{ padding: '18px 24px' }}>

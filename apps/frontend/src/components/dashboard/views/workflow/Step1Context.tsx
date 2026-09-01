@@ -13,12 +13,15 @@ interface Step1ContextProps {
   showRoleSelection: boolean;
   handleApproveGoal: (summary?: string) => Promise<void>;
   handleSendCopilotMessage: (text?: string) => void;
+  handleRetryCopilotMessage: (errorMessageId: string) => void;
   step1InputRef: React.MutableRefObject<HTMLInputElement | null>;
   step1Prompt: string;
   setStep1Prompt: React.Dispatch<React.SetStateAction<string>>;
   roleSelectionRef: React.MutableRefObject<HTMLDivElement | null>;
   suggestedRoles: PersonaRoleSuggestion[];
   isLoadingRoles: boolean;
+  roleError: string | null;
+  handleRetrySuggestedRoles: () => void;
   isGeneratingPersonas: boolean;
   handleGeneratePersonas: () => Promise<void>;
   handleToggleRole: (roleId: string) => void;
@@ -33,12 +36,15 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
   showRoleSelection,
   handleApproveGoal,
   handleSendCopilotMessage,
+  handleRetryCopilotMessage,
   step1InputRef,
   step1Prompt,
   setStep1Prompt,
   roleSelectionRef,
   suggestedRoles,
   isLoadingRoles,
+  roleError,
+  handleRetrySuggestedRoles,
   isGeneratingPersonas,
   handleGeneratePersonas,
   handleToggleRole,
@@ -103,7 +109,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                   {msg.isRetryPrompt && msg.retryContent && (
                     <button
                       type="button"
-                      onClick={() => handleSendCopilotMessage(msg.retryContent)}
+                      onClick={() => handleRetryCopilotMessage(msg.id)}
                       style={{
                         marginTop: '10px',
                         background: 'var(--accent-subtle)',
@@ -243,14 +249,15 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                       Suggested roles for your study
                     </h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--accent-teal)', fontWeight: 600 }}>Persona Panel Configured</span>
-                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>• Grounded in empirical evidence and dataset distributions</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--accent-teal)', fontWeight: 600 }}>Panel not created yet</span>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>• Pick the roles you want, then generate the personas</span>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={handleGeneratePersonas}
-                    disabled={isGeneratingPersonas}
+                    disabled={isGeneratingPersonas || suggestedRoles.length === 0}
+                    title={suggestedRoles.length === 0 ? 'Pick at least one role first' : undefined}
                     style={{
                       background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                       border: 'none',
@@ -277,6 +284,45 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '0.85rem', padding: '14px 4px' }}>
                       <Sparkles size={14} className="text-teal-400 animate-spin" />
                       Discovering suggested roles for your study...
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                        Free providers may take up to 1–2 minutes
+                      </span>
+                    </div>
+                  )}
+                  {roleError && !isLoadingRoles && (
+                    <div
+                      role="alert"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        borderRadius: '10px',
+                        padding: '12px 16px',
+                        color: 'var(--status-error-text)',
+                        fontSize: '0.85rem',
+                      }}
+                    >
+                      <span>{roleError}</span>
+                      <button
+                        type="button"
+                        onClick={handleRetrySuggestedRoles}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid currentColor',
+                          borderRadius: '6px',
+                          padding: '4px 12px',
+                          color: 'inherit',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          fontSize: '0.82rem',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Retry
+                      </button>
                     </div>
                   )}
                   {suggestedRoles.map((role, roleIdx) => {

@@ -29,7 +29,7 @@ describe('AuthPage OTP Verification & Reset Flows', () => {
     expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
   });
 
-  it('shows 6-digit OTP verification form after signing up with email', async () => {
+  it('lets a user the backend already authenticated continue into the app after signup', async () => {
     renderAuthPage('signup-email');
 
     // Fill sign up form
@@ -46,11 +46,19 @@ describe('AuthPage OTP Verification & Reset Flows', () => {
     const createBtn = screen.getByRole('button', { name: /Create account/i });
     fireEvent.click(createBtn);
 
+    // Signup returned a session, so the user is routed into the app instead of
+    // being trapped on an OTP screen with no way past it.
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Enter verification code/i })).toBeInTheDocument();
-      expect(screen.getByText(/We sent a 6-digit code to/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Verify & Continue/i })).toBeInTheDocument();
+      expect(window.location.pathname).toBe('/app');
     });
+    expect(screen.queryByRole('heading', { name: /Enter verification code/i })).toBeNull();
+  });
+
+  it('still offers the 6-digit OTP screen when verification is opened directly', async () => {
+    renderAuthPage('verify-otp');
+
+    expect(screen.getByRole('heading', { name: /Enter verification code/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Verify & Continue/i })).toBeInTheDocument();
 
     // Enter 6 digit OTP
     const digit1 = screen.getByLabelText('Digit 1');

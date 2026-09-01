@@ -6,7 +6,7 @@ export const TrustMetrics: React.FC = () => {
     {
       value: '7',
       label: 'Routing pools',
-      description: 'Sixteen fixed task types map onto reasoning, conversation, long_context, structured, fast, local and emergency.',
+      description: 'Eighteen fixed task types route across reasoning, conversation, long_context, structured, fast and emergency — plus a dedicated local pool.',
       icon: <Database size={20} color="var(--lp-text)" />,
     },
     {
@@ -16,7 +16,7 @@ export const TrustMetrics: React.FC = () => {
       icon: <Eye size={20} color="var(--lp-text)" />,
     },
     {
-      value: '14',
+      value: '13',
       label: 'Failure kinds',
       description: 'A closed taxonomy. Each kind has one policy: retry the route once, advance to the next candidate, or cool the route.',
       icon: <Zap size={20} color="var(--lp-gold)" />,

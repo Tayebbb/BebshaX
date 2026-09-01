@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   Sparkles,
@@ -34,8 +34,8 @@ import { CountUp } from '../../../motion/CountUp';
 
 interface PersonaLibraryViewProps {
   studyId?: string;
-  onStartInterviewWithPersona?: (personaId: string) => void;
-  onTestBehaviorWithPersona?: (personaId: string) => void;
+  onStartInterviewWithPersona?: (personaId: string, studyId?: string) => void;
+  onTestBehaviorWithPersona?: (personaId: string, studyId?: string) => void;
   onNavigateToEvidence?: () => void;
   onNavigateToSegmentation?: () => void;
 }
@@ -116,6 +116,17 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   const [distributionStrategy, setDistributionStrategy] = useState<'population_weighted' | 'equal'>('population_weighted');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Real unmount guard for post-await state writes (a `let mounted` inside a
+  // click handler is never reset by React and guards nothing).
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Load Studies on mount
   useEffect(() => {
@@ -233,41 +244,41 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
     setIsGenerating(true);
     setGenerationError(null);
 
-    let mounted = true;
     try {
       const res = await api.generateSyntheticPersonas(activeStudyId, {
         personas_per_segment: personasPerSegment,
         distribution_strategy: distributionStrategy,
       });
 
-      if (!mounted) return;
+      if (!isMountedRef.current) return;
       setIsGenerating(false);
       setShowGenerateModal(false);
       setPersonas(res.personas);
       setRuns((prev) => [res.run, ...prev]);
     } catch (err: any) {
-      if (!mounted) return;
+      if (!isMountedRef.current) return;
       setIsGenerating(false);
       setGenerationError(err.message || 'Persona generation failed. Please ensure segmentation has completed.');
     }
-
-    return () => { mounted = false; };
   };
 
   // Regenerate Persona Handler
   const handleRegeneratePersona = async (personaId: string) => {
     if (!activeStudyId) return;
     setIsRegenerating(true);
+    setActionError(null);
     try {
       const updated = await api.regenerateStudyPersona(activeStudyId, personaId);
+      if (!isMountedRef.current) return;
       setPersonas((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       if (inspectingPersona && inspectingPersona.id === updated.id) {
         setInspectingPersona(updated);
       }
     } catch (err: any) {
-      alert(`Regeneration failed: ${err.message}`);
+      if (!isMountedRef.current) return;
+      setActionError(`Regeneration failed: ${err.message || 'the request did not complete.'}`);
     } finally {
-      setIsRegenerating(false);
+      if (isMountedRef.current) setIsRegenerating(false);
     }
   };
 
@@ -582,6 +593,35 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       {/* =========================================================================
           4. PERSONA CARDS GRID / SKELETON / EMPTY STATE
          ========================================================================= */}
+      {actionError && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '16px',
+            color: 'var(--status-error-text)',
+            fontSize: '0.85rem',
+          }}
+        >
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss error"
+            style={{ background: 'none', border: 'none', color: 'var(--status-error-text)', cursor: 'pointer', fontWeight: 700 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {isLoading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: '20px' }}>
           {[1, 2, 3, 4, 5, 6].map((idx) => (
@@ -901,7 +941,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     {onStartInterviewWithPersona && (
                       <button
                         type="button"
-                        onClick={() => onStartInterviewWithPersona(persona.id)}
+                        onClick={() => onStartInterviewWithPersona(persona.id, activeStudyId || undefined)}
                         title="Start Adaptive Interview with this persona (Part 6)"
                         style={{
                           background: 'rgba(34, 211, 238, 0.1)',
@@ -922,7 +962,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     {onTestBehaviorWithPersona && (
                       <button
                         type="button"
-                        onClick={() => onTestBehaviorWithPersona(persona.id)}
+                        onClick={() => onTestBehaviorWithPersona(persona.id, activeStudyId || undefined)}
                         title="Simulate Behavioral Scenario with this persona (Part 7)"
                         style={{
                           background: 'var(--accent-subtle)',
@@ -976,7 +1016,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               maxHeight: '90vh',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 24px 64px rgba(0, 0, 0, 0.9)',
+              boxShadow: 'var(--shadow-lg)',
               overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1566,7 +1606,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      onStartInterviewWithPersona(inspectingPersona.id);
+                      onStartInterviewWithPersona(inspectingPersona.id, activeStudyId || undefined);
                       setInspectingPersona(null);
                     }}
                     style={{
@@ -1634,7 +1674,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               maxWidth: '560px',
               width: '100%',
               padding: '28px',
-              boxShadow: '0 24px 64px rgba(0, 0, 0, 0.9)',
+              boxShadow: 'var(--shadow-lg)',
             }}
             onClick={(e) => e.stopPropagation()}
           >

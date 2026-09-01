@@ -46,8 +46,10 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
         throw new Error('No checkout URL received from payment provider');
       }
     } catch (err: any) {
+      // The backend detail can name unconfigured infrastructure ("Stripe secret
+      // key is not configured") — keep it for developers, never show it to visitors.
       console.error('Checkout creation error:', err);
-      setErrorMessage(err.message || 'Unable to initiate checkout. Please try again.');
+      setErrorMessage("Payments aren't available in this demo build. The free plan works right now — start there and everything else stays unlocked.");
     } finally {
       setLoadingPlan(null);
     }
@@ -66,10 +68,10 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
       features: [
         '3 active customer research studies',
         '5 synthetic personas per study',
-        'Aggregated free LLM provider pool (200+ routes)',
+        'Runs on the aggregated free provider pool — no API key needed',
         'Standard interactive interview simulator',
         'Basic demographic & persona attribute cards',
-        'Community Discord & docs support',
+        'Community & documentation support',
       ],
       ctaText: isAuthenticated ? 'Go to Dashboard' : 'Get Started Free',
     },
@@ -85,11 +87,11 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
       features: [
         'Unlimited active research studies',
         '50 grounded synthetic personas per study',
-        'Empirical evidence grounding (HuggingFace datasets)',
-        'Verified citations with paper & source URLs',
+        'Empirical evidence grounding (public research datasets)',
+        'Evidence panel: inspect the records behind grounded attributes',
         'Priority high-capacity reasoning model routes',
         'Multi-segment behavioral simulations',
-        'Complete PDF & JSON audit export reports',
+        'Decision reports with the provenance trail behind every finding',
       ],
       ctaText: 'Upgrade to Pro',
     },
@@ -104,7 +106,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
       icon: Shield,
       features: [
         'Everything in Pro Researcher',
-        'Dedicated LLM routing capacity & failover SLAs',
+        'Higher routing capacity and priority provider configuration',
         'Unlimited personas & batch parallel interviews',
         'Custom proprietary dataset ingestion',
         'Custom Big Five & demographic archetypes',
@@ -175,7 +177,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
               lineHeight: 1.6,
             }}
           >
-            Zero hallucinated personas. Transparent pricing backed by secure Stripe checkout. Cancel anytime.
+            Every persona attribute is labelled with how it is known — evidence, inference, or assumption — so you can see what is grounded and what is a guess. Cancel anytime.
           </p>
 
           {errorMessage && (

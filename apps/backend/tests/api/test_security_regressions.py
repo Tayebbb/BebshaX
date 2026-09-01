@@ -56,6 +56,13 @@ def test_checkout_redirect_must_stay_on_our_origin():
     _assert_internal_redirect(f"{base}/app?checkout=success", base)
     with pytest.raises(ValueError):
         _assert_internal_redirect("https://phishing.example/steal", base)
+    # A prefix check ("startswith") accepts these — origins must be compared parsed.
+    with pytest.raises(ValueError):
+        _assert_internal_redirect(f"{base}.evil.example/x", base)
+    with pytest.raises(ValueError):
+        _assert_internal_redirect("https://app.example.com.attacker.com/x", base)
+    with pytest.raises(ValueError):
+        _assert_internal_redirect("http://app.example.com/app", base)  # scheme downgrade
 
 
 def test_cors_regex_does_not_trust_arbitrary_hosting_subdomains():
@@ -91,4 +98,91 @@ def test_no_hardcoded_credentials_in_settings_defaults():
     assert fields["smtp_username"].default is None
     assert "neon.tech" not in fields["database_url"].default
     assert "npg_" not in fields["database_url"].default
+
+
+def test_demo_studies_are_readable_but_not_writable_by_anonymous_callers(client):
+    """`is_demo` is a READ allowance. It must never let an unauthenticated
+    caller overwrite the shared demo a judge is about to open."""
+    import asyncio
+
+    from bebshax.db.models import Studies
+
+    async def seed():
+        sm = app.state.db_sessionmaker
+        async with sm() as session:
+            session.add(
+                Studies(
+                    id="std_demo_write_guard",
+                    user_id="usr_system_holder",
+                    title="Shared Demo",
+                    status="in_progress",
+                    is_demo=True,
+                    prompt="Demo prompt",
+                )
+            )
+            await session.commit()
+
+    asyncio.run(seed())
+
+    # Read stays open — the demo must remain browsable.
+    assert client.get("/api/studies/std_demo_write_guard").status_code == 200
+
+    # Every mutating path is closed to anonymous callers.
+    assert client.patch(
+        "/api/studies/std_demo_write_guard", json={"title": "Defaced"}
+    ).status_code == 403
+    assert client.post(
+        "/api/studies/std_demo_write_guard/script/generate", json={"question_count": 3}
+    ).status_code == 403
+    assert client.post("/api/studies/std_demo_write_guard/research/run").status_code == 403
+    assert client.delete("/api/studies/std_demo_write_guard").status_code == 403
+
+    async def unchanged():
+        sm = app.state.db_sessionmaker
+        async with sm() as session:
+            row = await session.get(Studies, "std_demo_write_guard")
+            assert row is not None and row.title == "Shared Demo"
+
+    asyncio.run(unchanged())
+
+
+def test_dataset_upload_enforces_the_shared_size_ceiling(client):
+    """The 25 MB cap used on the URL-fetch path must also bound raw uploads."""
+    from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
+
+    oversized = b"a,b\n" + b"1,2\n" * ((MAX_DATASET_FILE_SIZE_BYTES // 4) + 1)
+    assert len(oversized) > MAX_DATASET_FILE_SIZE_BYTES
+    resp = client.post(
+        "/api/datasets/upload",
+        files={"file": ("big.csv", oversized, "text/csv")},
+        data={"name": "Oversized"},
+    )
+    assert resp.status_code == 413
+
+
+def test_unauthenticated_llm_and_upload_endpoints_are_rate_limited():
+    """These accept anonymous callers and either spend LLM budget or accept
+    bulk bytes — each must carry an explicit limit like its siblings."""
+    from bebshax.api.limiter import limiter
+
+    for qualified in (
+        "bebshax.api.copilot.generate_study_personas",
+        "bebshax.api.datasets.upload_dataset_file",
+        "bebshax.api.datasets.upload_study_dataset_file",
+    ):
+        assert limiter._route_limits.get(qualified), f"{qualified} must be rate-limited"
+
+
+def test_signup_limits_survive_a_shared_nat_venue():
+    """Every judge at an exhibition shares one socket IP; the account-creation
+    limits are sized per-venue, while signin stays tight against brute force."""
+    from bebshax.api.limiter import limiter
+
+    def _limit_str(qualified: str) -> str:
+        return str(limiter._route_limits[qualified][0].limit)
+
+    assert "20 per 1 hour" in _limit_str("bebshax.api.auth.signup")
+    assert "30 per 1 hour" in _limit_str("bebshax.api.auth.verify_email")
+    assert "10 per 1 hour" in _limit_str("bebshax.api.auth.resend_verification")
+    assert "5 per 1 minute" in _limit_str("bebshax.api.auth.signin")
     assert get_settings() is not None

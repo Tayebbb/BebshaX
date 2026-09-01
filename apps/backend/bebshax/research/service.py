@@ -191,24 +191,32 @@ class ResearchEngineService:
                 all_chunks_meta.append((source_id, d, raw_chunks_for_source))
                 all_raw_chunks.extend(raw_chunks_for_source)
 
-            # One embed_texts call covers all sources — avoids N sequential round-trips.
-            all_embeddings = await self.vector_engine.embed_texts(all_raw_chunks)
-            emb_iter = iter(all_embeddings)
-            for source_id, d, raw_chunks in all_chunks_meta:
-                for idx, chunk_text in enumerate(raw_chunks):
-                    emb = next(emb_iter)
-                    chunk_id = f"chk_{uuid.uuid4().hex[:16]}"
-                    chunk = EvidenceChunks(
-                        id=chunk_id,
-                        source_id=source_id,
-                        study_id=study.id,
-                        chunk_index=idx,
-                        content=chunk_text,
-                        embedding=emb,
-                        embedding_space=self.vector_engine.backend.space,
-                        metadata_payload={"source_title": d.title, "publisher": d.publisher},
+            # One embed_texts call covers all sources — avoids N sequential
+            # round-trips. Skipped entirely when there is nothing to embed:
+            # some backends reject an empty batch.
+            if all_raw_chunks:
+                all_embeddings = await self.vector_engine.embed_texts(all_raw_chunks)
+                if len(all_embeddings) != len(all_raw_chunks):
+                    raise RuntimeError(
+                        "embedding backend returned "
+                        f"{len(all_embeddings)} vectors for {len(all_raw_chunks)} chunks"
                     )
-                    chunks_to_insert.append(chunk)
+                emb_iter = iter(all_embeddings)
+                for source_id, d, raw_chunks in all_chunks_meta:
+                    for idx, chunk_text in enumerate(raw_chunks):
+                        emb = next(emb_iter)
+                        chunk_id = f"chk_{uuid.uuid4().hex[:16]}"
+                        chunk = EvidenceChunks(
+                            id=chunk_id,
+                            source_id=source_id,
+                            study_id=study.id,
+                            chunk_index=idx,
+                            content=chunk_text,
+                            embedding=emb,
+                            embedding_space=self.vector_engine.backend.space,
+                            metadata_payload={"source_title": d.title, "publisher": d.publisher},
+                        )
+                        chunks_to_insert.append(chunk)
 
             session.add_all(sources_to_insert)
             session.add_all(chunks_to_insert)

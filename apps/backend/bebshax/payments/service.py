@@ -6,6 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import stripe
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,9 +39,14 @@ def _assert_internal_redirect(url: Optional[str], base_url: str) -> None:
     """Reject client-supplied redirects that point away from our own frontend.
 
     Stripe sends the user's browser to these URLs after checkout, so an
-    unvalidated value is a ready-made phishing hop.
+    unvalidated value is a ready-made phishing hop. Compare parsed origins:
+    a prefix test also accepts ``https://<base_url>.attacker.com/x``.
     """
-    if url and not url.startswith(base_url):
+    if not url:
+        return
+    target = urlparse(url)
+    allowed = urlparse(base_url)
+    if (target.scheme, target.netloc) != (allowed.scheme, allowed.netloc):
         raise ValueError("Redirect URL must stay within the application origin.")
 
 

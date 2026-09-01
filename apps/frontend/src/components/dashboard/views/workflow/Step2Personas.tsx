@@ -2,6 +2,22 @@ import React from 'react';
 import { ArrowRight, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { Persona, PersonaRoleSuggestion } from '../../../../types';
 
+/** The backend may mark a persona as generated without retrieved evidence.
+ * The field is optional — the grounding value alone decides when it is absent. */
+type PersonaGroundingHints = Persona & { grounding_basis?: string };
+
+/** Evidence-backed only when a real grounding ratio survived generation and the
+ * backend did not flag the persona as "no evidence retrieved". */
+const isEvidenceBacked = (p: Persona): boolean => {
+  const ratio = p.grounding_ratio ?? 0;
+  const basis = (p as PersonaGroundingHints).grounding_basis;
+  return ratio > 0 && basis !== 'no_evidence_retrieved';
+};
+
+/** Skeleton/template fallbacks are stamped by the backend generator. */
+const isTemplatePersona = (p: Persona): boolean =>
+  typeof p.generation_model === 'string' && p.generation_model.includes('skeleton-fallback');
+
 /** Step 2 — grounded persona library. Pure JSX extraction from
  * StudyWorkflowView: generation state/handlers stay in the parent; the modal
  * trigger ref is written here so the parent can return focus on close. */
@@ -30,6 +46,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
   setViewingPersona,
   isStepUnlocked,
 }) => {
+  const evidenceBackedCount = personas.filter(isEvidenceBacked).length;
   return (
     <>
             {personaGenError && (
@@ -55,7 +72,11 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
                   <span>Total Personas</span>
                   <span>({personas.length})</span>
-                  <span>• Grounded in empirical evidence & distributions</span>
+                  <span>
+                    {personas.length > 0
+                      ? `• ${evidenceBackedCount} of ${personas.length} backed by retrieved evidence — each card says which`
+                      : '• Built from your description; any evidence we retrieve is labelled per persona'}
+                  </span>
                 </div>
               </div>
 
@@ -231,6 +252,24 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                         </div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--accent-cyan)' }}>{p.archetype || p.role_title}</div>
                         {p.tagline && <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>{p.tagline}</div>}
+                        {isTemplatePersona(p) && (
+                          <div
+                            title={p.critic_notes || 'Generated from a template because the model output could not be used.'}
+                            style={{
+                              display: 'inline-block',
+                              marginTop: '4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              color: 'var(--status-warn-text)',
+                              background: 'var(--fill-soft)',
+                              border: '1px solid var(--border-subtle)',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            Template — regenerate for full detail
+                          </div>
+                        )}
                       </div>
                     </div>
                     <button
@@ -260,7 +299,10 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                   )}
 
                   <p style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.45, margin: 0 }}>
-                    {p.description || p.tagline || (p.quote ? `"${p.quote}"` : '')}
+                    {p.description ||
+                      p.tagline ||
+                      (p.quote ? `"${p.quote}"` : '') ||
+                      'No summary yet — open the full profile to see this persona’s attributes.'}
                   </p>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px' }}>
@@ -285,9 +327,21 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                     >
                       View full profile <ArrowRight size={13} />
                     </button>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-emerald)', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '6px' }}>
-                      {Math.round((p.grounding_ratio ?? 0) * 100)}% Grounded
-                    </span>
+                    {isEvidenceBacked(p) ? (
+                      <span
+                        title="Share of this persona's claims traced to retrieved evidence"
+                        style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-emerald)', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '6px' }}
+                      >
+                        {Math.round((p.grounding_ratio ?? 0) * 100)}% evidence-backed
+                      </span>
+                    ) : (
+                      <span
+                        title="No supporting evidence was retrieved for this persona — its details come from your description."
+                        style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--fill-soft)', border: '1px solid var(--border-subtle)', padding: '2px 8px', borderRadius: '6px' }}
+                      >
+                        Not evidence-backed — inferred from your description
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

@@ -64,6 +64,11 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
   const [isStarting, setIsStarting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The grounding claim is only made when the persona actually carries one.
+  const isEvidenceBacked =
+    (persona.grounding_score ?? 0) > 0 &&
+    (persona as SyntheticPersona & { grounding_basis?: string }).grounding_basis !== 'no_evidence_retrieved';
+
   if (!isOpen) return null;
 
   const handleStart = async () => {
@@ -144,10 +149,20 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
           <div className="bg-[var(--bg-card-hover)] border border-teal-500/20 rounded-xl p-4 flex items-start gap-3">
             <Sparkles className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
             <div className="text-xs leading-relaxed text-[var(--text-label)]">
-              <span className="font-semibold text-white">Adaptive Anti-Sycophantic Agent: </span>
-              This persona is grounded in empirical research and will realistically push back on
-              expensive pricing or irrelevant solutions. Answers represent synthetic simulation
-              insights.
+              <span className="font-semibold text-[var(--text-main)]">Adaptive Anti-Sycophantic Agent: </span>
+              {isEvidenceBacked ? (
+                <>
+                  This persona&apos;s profile is backed by retrieved evidence, and it will realistically
+                  push back on expensive pricing or irrelevant solutions. Answers represent synthetic
+                  simulation insights.
+                </>
+              ) : (
+                <>
+                  No supporting evidence was retrieved for this persona — its profile is inferred from
+                  your study description. It will still push back on expensive pricing or irrelevant
+                  solutions, but treat every answer as a synthetic simulation, not a finding.
+                </>
+              )}
             </div>
           </div>
 

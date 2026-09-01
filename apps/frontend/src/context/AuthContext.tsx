@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import { User, GoogleAuthData } from '../types/auth';
+import { User, GoogleAuthData, AuthResponse } from '../types/auth';
 import { api } from '../services/api';
 import { neonAuth } from '../services/neonAuth';
 
@@ -9,7 +9,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   signin: (email: string, password: string) => Promise<void>;
-  signup: (fullName: string, email: string, password: string) => Promise<void>;
+  signup: (fullName: string, email: string, password: string) => Promise<AuthResponse>;
   googleAuth: (data?: GoogleAuthData) => Promise<void>;
   resendVerification: (email: string) => Promise<boolean>;
   sendOtp: (email: string, type?: 'email-verification' | 'forget-password') => Promise<boolean>;
@@ -125,10 +125,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const signup = async (fullName: string, email: string, password: string) => {
+  const signup = async (fullName: string, email: string, password: string): Promise<AuthResponse> => {
     const res = await api.signup({ full_name: fullName, email, password });
-    // H9: no session until the email is verified — keep credentials pending
-    // so verifyEmailOtp can complete the Neon sign-in + backend sync.
+    // Keep credentials pending so a later verifyEmailOtp can complete the
+    // Neon sign-in + backend sync.
     pendingCredsRef.current = { email, password };
     if (res.access_token && res.user) {
       api.setAuthToken(res.access_token);
@@ -136,6 +136,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setToken(res.access_token);
       setUser(res.user);
     }
+    return res;
   };
 
   const googleAuth = async (data?: GoogleAuthData) => {

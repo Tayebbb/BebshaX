@@ -134,6 +134,9 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                 <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent-emerald)', marginTop: '4px' }}>
                   {report?.metrics?.demand_score != null ? `${report.metrics.demand_score}%` : '—'}
                 </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Model-estimated from the synthetic transcripts — not a measurement
+                </div>
               </div>
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Grounded Personas</div>
@@ -148,10 +151,40 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                     ? `${Math.round(report.metrics.confidence_score * 100)}%`
                     : '—'}
                 </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  The model&apos;s own confidence in this synthesis — not a measurement
+                </div>
               </div>
             </div>
 
-            {report ? (
+            {isGeneratingReport && !report ? (
+              /* Synthesis can take minutes on free routes — show the wait here
+                 instead of on a disabled button back in step 4. */
+              <div
+                role="status"
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-teal-bright)', fontWeight: 600, fontSize: '0.92rem' }}>
+                  <FileText size={16} />
+                  Synthesizing your decision report…
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.78rem' }}>
+                    Free providers may take up to 1–2 minutes
+                  </span>
+                </div>
+                <div className="bx-skeleton" style={{ height: '14px', width: '90%' }} />
+                <div className="bx-skeleton" style={{ height: '14px', width: '78%' }} />
+                <div className="bx-skeleton" style={{ height: '14px', width: '84%' }} />
+                <div className="bx-skeleton" style={{ height: '14px', width: '60%' }} />
+              </div>
+            ) : report ? (
               <>
                 {/* Executive Summary */}
                 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>

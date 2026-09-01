@@ -198,7 +198,7 @@ export const ProblemSection: React.FC = () => {
                 },
                 {
                   title: 'A closed failure taxonomy',
-                  desc: 'Fourteen failure kinds, each with one policy — retry, advance, or cool the route — and every pool ends at a local model.',
+                  desc: 'Thirteen failure kinds, each with one policy — retry, advance, or cool the route — and every pool ends at a local model.',
                 },
               ].map((adv, idx) => (
                 <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>

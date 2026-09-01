@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import {
-  Link2,
+  MessagesSquare,
   BrainCircuit,
+  ListChecks,
   Rocket,
+  FileText,
   CheckCircle2,
   ArrowRight,
   Sparkles,
@@ -14,30 +16,48 @@ export const HowItWorks: React.FC = () => {
   const steps = [
     {
       num: '01',
-      title: 'Describe your business',
-      subtitle: 'No data connection required',
+      title: 'Define your goal',
+      subtitle: 'A conversation, not a form',
       description:
-        'Give BebshaX a name, a description, an industry, and a target market. Add an optional audience segment and optional generation hints. That is the entire input.',
-      icon: <Link2 size={22} color="var(--lp-text)" />,
-      features: ['Name, description, industry, target market', 'Optional audience segment', 'Optional generation hints'],
+        'Tell the Study Design Copilot what you want to find out, in plain English. It asks follow-up questions, sharpens it into a research objective you can defend, and proposes which kinds of customers you should be talking to.',
+      icon: <MessagesSquare size={22} color="var(--lp-text)" />,
+      features: ['Free-text chat — start with one sentence', 'The copilot refines the objective with you', 'Pick the customer roles to generate'],
     },
     {
       num: '02',
-      title: 'Generate a grounded persona',
-      subtitle: 'Evidence, provenance, then consistency rules',
+      title: 'Generate your personas',
+      subtitle: 'Grounded, and labelled',
       description:
-        'Evidence retrieval runs over preprocessed public dataset records, the persona is generated, provenance is enforced in code, and deterministic consistency rules run before storage. One refinement attempt is allowed — after that, generation fails with the list of violations.',
+        'BebshaX retrieves supporting records from public research datasets, builds the personas, and labels every attribute with how it is known — cited evidence, reasoned inference, or an explicit assumption. Consistency rules run before anything is saved.',
       icon: <BrainCircuit size={22} color="var(--lp-gold)" />,
-      features: ['idf-weighted lexical evidence retrieval', 'OBSERVED, INFERRED or SYNTHETIC per attribute', 'One refinement attempt, then explicit failure'],
+      features: ['Evidence retrieved from public datasets', 'Every attribute labelled with how it is known', 'Inconsistent personas are rejected, not patched'],
     },
     {
       num: '03',
-      title: 'Interview the persona',
-      subtitle: 'Multi-turn, with the same person every turn',
+      title: 'Build the interview script',
+      subtitle: 'The questions you would actually ask',
       description:
-        'Each turn recomposes the immutable identity card, the business context, the interview objective, retrieved memories, evidence themes, and the full conversation history. Every exchange is written back as an episodic memory.',
-      icon: <Rocket size={22} color="var(--lp-text)" />,
-      features: ['Byte-identical identity card on every turn', 'Top 4 memories retrieved per turn', 'Context is never truncated to fit'],
+        'BebshaX drafts the questions and the probing rules that follow up on vague answers. You read them, edit them, and cut the ones you do not need — before a single interview runs.',
+      icon: <ListChecks size={22} color="var(--lp-text)" />,
+      features: ['Questions drafted from your objective', 'Probing rules for shallow answers', 'Fully editable before you run it'],
+    },
+    {
+      num: '04',
+      title: 'Run the interviews',
+      subtitle: 'Multi-turn, and in character',
+      description:
+        'Each persona answers your script across a real back-and-forth conversation, remembering what it already told you. The identity is byte-identical on every turn, so the person you started with is the person you finish with.',
+      icon: <Rocket size={22} color="var(--lp-gold)" />,
+      features: ['Multi-turn, not one-shot answers', 'The persona never drifts mid-interview', 'Every exchange is remembered'],
+    },
+    {
+      num: '05',
+      title: 'Get your decision report',
+      subtitle: 'What you should do next',
+      description:
+        'One report synthesised across every interview: what you heard, where the personas disagreed, and what it means for the idea — with each finding traceable back to the persona and the evidence behind it.',
+      icon: <FileText size={22} color="var(--lp-text)" />,
+      features: ['Synthesised across all interviews', 'Findings traceable to their source', 'Regenerate it as the study evolves'],
     },
   ];
 
@@ -78,7 +98,7 @@ export const HowItWorks: React.FC = () => {
               marginBottom: '16px',
             }}
           >
-            Clear 3-Step Process
+            Five Guided Steps
           </div>
 
           <h2
@@ -90,14 +110,14 @@ export const HowItWorks: React.FC = () => {
               color: 'var(--lp-text)',
             }}
           >
-            From a business description to{' '}
+            From a rough idea to{' '}
             <span className="text-gradient-blue">
-              an interview.
+              a decision you can defend.
             </span>
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
-            Three steps, and no data connection at any point in them.
+            You start by describing your idea in plain English. BebshaX walks you through the rest.
           </p>
         </div>
 
@@ -213,7 +233,7 @@ export const HowItWorks: React.FC = () => {
 
             <div style={{ display: 'flex', gap: '12px' }}>
               <button
-                onClick={() => setActiveStep(activeStep === 3 ? 1 : activeStep + 1)}
+                onClick={() => setActiveStep(activeStep === steps.length ? 1 : activeStep + 1)}
                 className="primary-hero-btn"
                 style={{
                   padding: '10px 22px',

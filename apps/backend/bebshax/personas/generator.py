@@ -1078,23 +1078,42 @@ async def generate_personas_for_study(
         idx_starts.append(running)
         running += quotas.get(getattr(seg, "id", ""), 1)
 
+    seg_specs = [
+        (seg, quotas.get(getattr(seg, "id", ""), 1), idx_start)
+        for seg, idx_start in zip(segments, idx_starts)
+    ]
     coros = [
         _process_segment(
-            seg, quotas.get(getattr(seg, "id", ""), 1), idx_start,
+            seg, count_for_seg, idx_start,
             study_ctx, claims, detected_domain, llm_service,
         )
-        for seg, idx_start in zip(segments, idx_starts)
+        for seg, count_for_seg, idx_start in seg_specs
     ]
     # Segments are independent — run concurrently; the pool semaphore caps
     # real parallelism to max_concurrency without exceeding provider rate limits.
     seg_results = await asyncio.gather(*coros, return_exceptions=True)
 
     all_generated: list[GeneratedPersonaDraft] = []
-    for seg_result in seg_results:
+    for (seg, count_for_seg, idx_start), seg_result in zip(seg_specs, seg_results):
         if isinstance(seg_result, (AllCandidatesFailed, ContextWindowExceeded)):
             raise seg_result
         if isinstance(seg_result, Exception):
-            logger.warning("unexpected segment error (skipping segment): %s", seg_result, exc_info=seg_result)
+            # Skipping the segment would return fewer personas than
+            # target_count while the run row still claims the full quota
+            # (R2/R6). Fill it with the same honestly-labeled templates used
+            # for LLM failures; if templating also fails, the error propagates.
+            logger.warning(
+                "unexpected segment error for %s — filling quota with labeled templates: %s",
+                getattr(seg, "name", "Segment"),
+                seg_result,
+                exc_info=seg_result,
+            )
+            idx = idx_start
+            for _ in range(count_for_seg):
+                all_generated.append(
+                    _generate_deterministic_persona_fallback(seg, idx, study_ctx, claims)
+                )
+                idx += 1
             continue
         all_generated.extend(seg_result)
 

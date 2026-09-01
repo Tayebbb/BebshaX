@@ -182,7 +182,9 @@ async def get_optional_current_user(
 
 
 @auth_router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/hour")
+# Limits key on socket IP; a demo venue puts every judge behind one NAT address,
+# so these are sized per-venue rather than per-person. signin stays at 5/minute.
+@limiter.limit("20/hour")
 async def signup(
     request: Request,
     payload: SignUpRequest,
@@ -250,7 +252,7 @@ class VerifyEmailRequest(BaseModel):
 
 
 @auth_router.post("/verify-email")
-@limiter.limit("10/hour")
+@limiter.limit("30/hour")
 async def verify_email(
     request: Request,
     payload: VerifyEmailRequest,
@@ -295,7 +297,7 @@ class ResendVerificationRequest(BaseModel):
 
 
 @auth_router.post("/resend-verification")
-@limiter.limit("3/hour")
+@limiter.limit("10/hour")
 async def resend_verification(
     request: Request,
     payload: Optional[ResendVerificationRequest] = None,
@@ -393,9 +395,12 @@ async def verify_neon_token(token: str) -> dict:
                 headers={"Authorization": f"Bearer {token}"},
             )
         except httpx.RequestError as exc:
+            # The exception text carries the Neon endpoint hostname — log it,
+            # never echo it to the caller.
+            logger.error("Neon session verification transport failure", exc_info=exc)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Unable to reach Neon authentication service: {exc}",
+                detail="Unable to reach the authentication service. Please try again.",
             )
     if resp.status_code != 200:
         raise HTTPException(

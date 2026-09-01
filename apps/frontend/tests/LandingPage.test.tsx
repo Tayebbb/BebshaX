@@ -62,7 +62,7 @@ describe('BebshaX Premium Landing Page', () => {
 
     // How it works
     expect(
-      screen.getByText(/From a business description to/i)
+      screen.getByRole('heading', { name: /From a rough idea to a decision you can defend/i })
     ).toBeInTheDocument();
 
     // Console showcase

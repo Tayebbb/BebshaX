@@ -629,3 +629,114 @@ async def test_one_failing_segment_does_not_abort_others():
     # Bad segment fell back to template (deterministic fallback model label)
     bad = [d for d in drafts if d.generation_model == "deterministic-template-fallback"]
     assert len(bad) == 1
+
+
+@pytest.mark.asyncio
+async def test_failure_after_the_llm_call_never_silently_under_delivers():
+    """A malformed value that only blows up AFTER the LLM call (e.g. a
+    non-numeric age) escapes the per-batch guard and fails the whole segment.
+    That must not silently drop the segment: the run still delivers
+    target_count personas, with the failed segment honestly template-labeled."""
+    import json as _json
+
+    class _PostCallPoisonLLM:
+        """Succeeds at the transport level, but 'Poison Segment' returns an
+        un-parseable age so int() raises outside the per-batch try/except."""
+
+        async def complete(self, request):
+            from types import SimpleNamespace
+            payload = _json.loads(request.messages[-1].content)
+            seg_name = payload.get("segment", {}).get("name", "")
+            n = payload["count_to_generate"]
+            age = "twenty-two" if seg_name == "Poison Segment" else 22
+            personas = [
+                {
+                    "name": f"P-{seg_name}-{i}",
+                    "age": age,
+                    "occupation": "Student",
+                    "location": "Dhaka",
+                    "monthly_budget_bdt": 400,
+                    "goals": ["study"],
+                    "pain_points": ["cost"],
+                }
+                for i in range(n)
+            ]
+            return SimpleNamespace(
+                text=_json.dumps({"personas": personas}),
+                provenance=SimpleNamespace(served_by_provider="fake", served_by_model="m1"),
+            )
+
+    segments = [
+        MockSegment("seg_ok", "Clean Segment", 50.0),
+        MockSegment("seg_bad", "Poison Segment", 50.0),
+    ]
+    mock_study = MagicMock()
+    mock_study.title = "Post-call failure test"
+    mock_study.prompt = ""
+    mock_study.target_audience = "Mixed"
+    mock_study.pricing_hypothesis = ""
+
+    drafts = await generate_personas_for_study(
+        study=mock_study,
+        segments=segments,
+        target_count=4,
+        distribution_strategy="equal",
+        evidence_claims=[],
+        llm_service=_PostCallPoisonLLM(),
+    )
+
+    assert len(drafts) == 4, "run must not silently return fewer personas than target_count"
+    templates = [d for d in drafts if d.generation_model == "deterministic-template-fallback"]
+    assert len(templates) == 2, "the failed segment's quota must be honestly labeled as templates"
+
+
+@pytest.mark.asyncio
+async def test_evidence_snapshot_records_the_true_claim_count():
+    """claim_count is provenance about the study, not about the prompt budget:
+    a study with more claims than _CLAIM_FETCH_LIMIT must record the real total."""
+    from bebshax.db.models import EvidenceClaims
+    from bebshax.personas.service import _CLAIM_FETCH_LIMIT
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_maker = async_sessionmaker(engine, expire_on_commit=False)
+
+    total_claims = _CLAIM_FETCH_LIMIT + 5
+    async with session_maker() as session:
+        session.add(Studies(id="std_claim_count", title="Claim Count Study", status="active"))
+        session.add(
+            MarketSegments(
+                id="seg_claim_count",
+                study_id="std_claim_count",
+                segmentation_run_id="srun_cc",
+                name="Segment",
+                cluster_label="cluster_0",
+                description="Segment used for claim-count provenance",
+                population_count=100,
+                population_percentage=100.0,
+                characteristics={
+                    "demographics": {"age_range": [19, 23]},
+                    "economics": {"monthly_budget": {"min": 300, "max": 600, "median": 450}},
+                },
+            )
+        )
+        for i in range(total_claims):
+            session.add(
+                EvidenceClaims(
+                    id=f"clm_{i}",
+                    study_id="std_claim_count",
+                    claim_text=f"Claim {i}",
+                    category="general",
+                    confidence=0.5,
+                )
+            )
+        await session.commit()
+
+        service = PersonaGenerationService(session)
+        run, _ = await service.create_generation_run(
+            study_id="std_claim_count", target_count=2, distribution_strategy="equal"
+        )
+
+        assert run.evidence_snapshot["claim_count"] == total_claims
+        assert run.evidence_snapshot["claims_used_count"] == _CLAIM_FETCH_LIMIT

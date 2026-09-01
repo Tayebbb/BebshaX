@@ -15,11 +15,11 @@ export const UseCases: React.FC = () => {
       id: 'founders' as const,
       label: 'Founders',
       icon: <Briefcase size={16} />,
-      headline: 'Interview a persona for your idea before you build it.',
+      headline: 'Interview your customers before you build for them.',
       pain: 'Validating an idea normally means recruiting and scheduling real interviews first.',
-      gain: 'Describe the business, generate a grounded persona, and interview it in a multi-turn conversation the same day.',
-      metrics: ['Name, description, industry, target market', 'Optional audience segment', 'No data connection required'],
-      detail: 'Input is a business description and nothing else. There is no data connection of any kind.',
+      gain: 'Describe the idea in plain English, let the copilot sharpen the question, generate the personas, and interview them the same day.',
+      metrics: ['Start from one sentence, not a form', 'A guided 5-step study', 'No data connection required'],
+      detail: 'You never connect your own data. The input is a conversation with the Study Design Copilot about what you want to find out.',
     },
     {
       id: 'researchers' as const,
@@ -49,7 +49,7 @@ export const UseCases: React.FC = () => {
       pain: 'Most persona tooling assumes you already pay for a frontier model.',
       gain: 'Keyless free provider tiers work out of the box, and every pool terminates at a local Ollama model.',
       metrics: ['Keyless start', 'Local model as final fallback', 'Emergency pool is local-first'],
-      detail: 'The freellmpool adapter aggregates roughly 18–24 free providers and 200+ routes behind one API.',
+      detail: 'The freellmpool adapter aggregates the free provider catalog behind one API — roughly 18–24 providers and 200+ routes, depending on the catalog version.',
     },
   ];
 

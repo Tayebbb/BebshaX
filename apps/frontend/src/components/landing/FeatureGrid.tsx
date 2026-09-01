@@ -25,7 +25,7 @@ export const FeatureGrid: React.FC = () => {
     },
     {
       title: 'A closed failure taxonomy',
-      description: 'Fourteen failure kinds, each with one policy: retry the route once, advance, or cool it for 60 seconds per provider and model.',
+      description: 'Thirteen failure kinds, each with one policy: retry the route once, advance, or cool it for 60 seconds per provider and model.',
       icon: <Gauge size={20} color="var(--lp-gold)" />,
       tag: 'Routing',
       span: 'span 4',

@@ -195,7 +195,8 @@ def test_verify_email_rejects_expired_token(client):
 
 
 def test_resend_verification_rate_limited(client):
-    """Stage 3: Resend verification is rate-limited to 3/hour."""
+    """Stage 3: Resend verification is rate-limited (10/hour — sized for a
+    shared-NAT exhibition venue where every judge presents one socket IP)."""
     with patch("bebshax.api.auth.send_verification_email", new_callable=AsyncMock) as mock_send:
         client.post(
             "/api/auth/signup",
@@ -205,12 +206,12 @@ def test_resend_verification_rate_limited(client):
                 "password": "Password123!",
             },
         )
-        # 3 resends allowed
-        for _ in range(3):
+        # 10 resends allowed
+        for _ in range(10):
             r = client.post("/api/auth/resend-verification", json={"email": "throttle_resend@example.com"})
             assert r.status_code == 200
 
-        # 4th resend hits 429
+        # 11th resend hits 429
         blocked = client.post("/api/auth/resend-verification", json={"email": "throttle_resend@example.com"})
         assert blocked.status_code == 429
 

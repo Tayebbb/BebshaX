@@ -440,7 +440,6 @@ class BehavioralSimulationEngine:
                 "motivators": parsed.get("motivators", []),
                 "objections": parsed.get("objections", []),
                 "reasoning_summary": reasoning,
-                "is_heuristic_fallback": parsed.get("is_heuristic_fallback", False),
                 "simulation_context_sources": context_sources,
                 "interview_signals_used": interview_signals,
                 "provenance_id": result.provenance.request_id if result.provenance else None,
@@ -861,9 +860,12 @@ class BehavioralSimulationEngine:
                         segment_name=r_data.get("segment_name"),
                         decision=r_data.get("decision", "neutral"),
                         decision_label=r_data.get("decision_label", "Neutral"),
-                        probability=r_data.get("probability", 0.5),
-                        confidence=r_data.get("confidence", "medium"),
-                        confidence_score=r_data.get("confidence_score", 0.8),
+                        # Both simulation paths always supply these; a missing
+                        # key means no signal, so record zero rather than
+                        # inventing a plausible-looking score.
+                        probability=r_data.get("probability", 0.0),
+                        confidence=r_data.get("confidence", "low"),
+                        confidence_score=r_data.get("confidence_score", 0.0),
                         key_factors=r_data.get("key_factors", []),
                         motivators=r_data.get("motivators", []),
                         objections=r_data.get("objections", []),

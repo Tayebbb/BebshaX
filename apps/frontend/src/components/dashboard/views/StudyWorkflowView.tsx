@@ -60,6 +60,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [showRoleSelection, setShowRoleSelection] = useState<boolean>(false);
   const [suggestedRoles, setSuggestedRoles] = useState<PersonaRoleSuggestion[]>([]);
   const [isLoadingRoles, setIsLoadingRoles] = useState<boolean>(false);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [scriptError, setScriptError] = useState<string | null>(null);
 
   // Live Interview Simulation States (Step 4)
   const [activeInterviewPersonaId, setActiveInterviewPersonaId] = useState<string>('');
@@ -263,6 +265,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   };
 
   const handleSendCopilotMessage = (text?: string) => {
+    // Guard first: a second fast click must add nothing at all (it used to
+    // append a duplicate user bubble before the in-flight check ran).
+    if (isFetchingCopilotRef.current) return;
     const inputValue = step1InputRef.current?.value || '';
     const messageToSend = (
       typeof text === 'string' && text.trim() ? text : step1Prompt || promptInput || inputValue
@@ -290,6 +295,55 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     fetchCopilotTurn(updated.map((m) => ({ role: m.role, content: m.content })));
   };
 
+  /** Retry a failed turn: drop the error bubble and re-send the existing
+   * history. Appending a new user message would feed the model its own error
+   * line and leave the error visible after a successful retry. */
+  const handleRetryCopilotMessage = (errorMessageId: string) => {
+    if (isFetchingCopilotRef.current) return;
+    const trimmed = copilotMessagesRef.current.filter((m) => m.id !== errorMessageId);
+    if (trimmed.length === 0) return;
+    copilotMessagesRef.current = trimmed;
+    setCopilotMessages(trimmed);
+    if (studyId) {
+      api.updateStudy(studyId, { copilot_messages: trimmed as any }).catch(() => {});
+    }
+    fetchCopilotTurn(trimmed.map((m) => ({ role: m.role, content: m.content })));
+  };
+
+  const lastRolePromptRef = useRef<string>('');
+
+  /** Role discovery is a visible, retryable step — an empty drawer with a live
+   * "Generate Personas" button used to be the only sign that it had failed. */
+  const loadSuggestedRoles = async (activePrompt: string) => {
+    lastRolePromptRef.current = activePrompt;
+    setIsLoadingRoles(true);
+    setRoleError(null);
+    try {
+      const roles = await api.getSuggestedPersonaRoles(activePrompt);
+      if (roles && roles.length > 0) {
+        setSuggestedRoles(roles);
+      } else {
+        setRoleError('No roles came back for this goal. Retry, or add your own detail in the chat above.');
+      }
+    } catch (err: any) {
+      setRoleError(
+        `We couldn't suggest persona roles: ${err?.message || 'the request did not complete.'}`
+      );
+    } finally {
+      setIsLoadingRoles(false);
+    }
+  };
+
+  const handleRetrySuggestedRoles = () => {
+    const activePrompt =
+      lastRolePromptRef.current ||
+      [...copilotMessagesRef.current].reverse().find((m) => m.role === 'user')?.content ||
+      promptInput ||
+      study?.prompt ||
+      'Product Research Study';
+    void loadSuggestedRoles(activePrompt);
+  };
+
   const handleApproveGoal = async (summary?: string) => {
     setShowRoleSelection(true);
     // The drawer mounts below the fold — scroll to it so the click has visible feedback.
@@ -311,17 +365,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     // 2. Fetch suggested roles only when the copilot didn't already supply them,
     //    so re-approving never clobbers the user's count/selection tweaks.
     if (suggestedRoles.length === 0) {
-      setIsLoadingRoles(true);
-      try {
-        const roles = await api.getSuggestedPersonaRoles(activePrompt);
-        if (roles && roles.length > 0) {
-          setSuggestedRoles(roles);
-        }
-      } catch {
-        // ignore
-      } finally {
-        setIsLoadingRoles(false);
-      }
+      await loadSuggestedRoles(activePrompt);
     }
 
     if (studyId) {
@@ -440,14 +484,21 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const handleGenerateScript = async () => {
     if (!studyId) return;
     setIsGeneratingScript(true);
+    setScriptError(null);
     try {
       const res = await api.generateStudyScriptQuestions(studyId, study?.prompt || promptInput);
       if (res.questions && res.questions.length > 0) {
         setQuestions(res.questions);
         api.updateStudy(studyId, { script_questions: res.questions }).catch(() => {});
+      } else {
+        setScriptError('The generator returned no questions. Your existing script is unchanged — try again.');
       }
-    } catch {
-      // ignore
+    } catch (err: any) {
+      // Silently swallowing this left the user staring at unchanged questions
+      // after a 30-120s wait with no explanation.
+      setScriptError(
+        `${err?.message || 'The question generator did not respond.'} Your existing script is unchanged.`
+      );
     } finally {
       setIsGeneratingScript(false);
     }
@@ -573,6 +624,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     if (!studyId) return;
     setIsGeneratingReport(true);
     setReportError(null);
+    // Move to the report step first: synthesis can take minutes, and waiting
+    // on a disabled button with no feedback looks like nothing happened.
+    handleStepChange(5);
     try {
       const rep = await api.generateStudyReport(studyId);
       setReport(rep);
@@ -580,10 +634,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       // The freshly-generated report is what earns 'completed' status.
       handleStepChange(5, { reportReady: true });
     } catch (err: any) {
-      // Honest failure: navigate to the report step and show the error there
-      // instead of leaving the user staring at an unchanged page.
+      // Honest failure: the error is shown on the report step with a retry.
       setReportError(err?.message || 'Report generation failed. Please retry.');
-      handleStepChange(5);
     } finally {
       setIsGeneratingReport(false);
     }
@@ -857,12 +909,15 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               showRoleSelection={showRoleSelection}
               handleApproveGoal={handleApproveGoal}
               handleSendCopilotMessage={handleSendCopilotMessage}
+              handleRetryCopilotMessage={handleRetryCopilotMessage}
               step1InputRef={step1InputRef}
               step1Prompt={step1Prompt}
               setStep1Prompt={setStep1Prompt}
               roleSelectionRef={roleSelectionRef}
               suggestedRoles={suggestedRoles}
               isLoadingRoles={isLoadingRoles}
+              roleError={roleError}
+              handleRetrySuggestedRoles={handleRetrySuggestedRoles}
               isGeneratingPersonas={isGeneratingPersonas}
               handleGeneratePersonas={handleGeneratePersonas}
               handleToggleRole={handleToggleRole}
@@ -905,6 +960,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               setNewQuestion={setNewQuestion}
               handleGenerateScript={handleGenerateScript}
               isGeneratingScript={isGeneratingScript}
+              scriptError={scriptError}
               handleStepChange={handleStepChange}
             />
           </div>

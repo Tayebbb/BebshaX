@@ -13,6 +13,7 @@ interface Step3ScriptProps {
   setNewQuestion: React.Dispatch<React.SetStateAction<string>>;
   handleGenerateScript: () => Promise<void>;
   isGeneratingScript: boolean;
+  scriptError: string | null;
   handleStepChange: (newStep: number, opts?: { reportReady?: boolean }) => void;
 }
 
@@ -24,10 +25,48 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
   setNewQuestion,
   handleGenerateScript,
   isGeneratingScript,
+  scriptError,
   handleStepChange,
 }) => {
   return (
     <>
+            {scriptError && (
+              <div
+                role="alert"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  color: 'var(--status-error-text)',
+                  fontSize: '0.86rem',
+                }}
+              >
+                <span>Question generation failed: {scriptError}</span>
+                <button
+                  type="button"
+                  onClick={handleGenerateScript}
+                  disabled={isGeneratingScript}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid currentColor',
+                    borderRadius: '6px',
+                    padding: '4px 12px',
+                    color: 'inherit',
+                    cursor: isGeneratingScript ? 'not-allowed' : 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
@@ -87,6 +126,29 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 </button>
               </div>
             </div>
+
+            {isGeneratingScript && (
+              <div
+                role="status"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  background: 'var(--accent-subtle)',
+                  border: '1px solid var(--accent-glow)',
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  color: 'var(--accent-teal-bright)',
+                  fontSize: '0.86rem',
+                  fontWeight: 600,
+                }}
+              >
+                Writing interview questions from your study context…
+                <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.78rem' }}>
+                  Free providers may take up to 1–2 minutes
+                </span>
+              </div>
+            )}
 
             {/* Question List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

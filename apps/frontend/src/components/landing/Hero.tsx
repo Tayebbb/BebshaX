@@ -51,18 +51,18 @@ const CountUp: React.FC<{ to: number }> = ({ to }) => {
 
 const STATS: Array<{ value: number; label: React.ReactNode }> = [
   {
-    value: 16,
+    value: 5,
     label: (
       <>
-        Research task types, each routed to the <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>right AI model automatically</strong>
+        Guided steps from a rough idea to a <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>decision report you can act on</strong>
       </>
     ),
   },
   {
-    value: 14,
+    value: 3,
     label: (
       <>
-        Ways an AI call can fail — every one has an <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>explicit recovery policy</strong>
+        Labels on every persona attribute — <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>evidence, inference, or assumption</strong>
       </>
     ),
   },
@@ -70,7 +70,7 @@ const STATS: Array<{ value: number; label: React.ReactNode }> = [
     value: 0,
     label: (
       <>
-        API keys required — works with <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>free providers and local Ollama</strong>
+        API keys required — works on <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>free providers and a local model</strong>
       </>
     ),
   },
@@ -168,7 +168,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
           className="lp-soft"
           style={{ ['--lp-i' as string]: 4, fontSize: 'clamp(0.95rem, 1.5vw, 1.15rem)', color: 'var(--lp-text-dim)', maxWidth: '680px', lineHeight: 1.6, marginBottom: '38px', fontWeight: 400 }}
         >
-          Describe your business. BebshaX generates personas whose every attribute is labelled with how we know it — cited evidence (OBSERVED), reasoned from context (INFERRED), or an explicit assumption (SYNTHETIC) — then you interview them in multi-turn conversations routed across free LLM providers, with a local model as the final fallback.
+          Pressure-test your idea against realistic customers in minutes, not weeks — and see exactly where every answer came from. Each persona attribute is labelled as cited evidence, reasoned inference, or an explicit assumption, so you always know what is fact and what is a guess.
         </p>
 
         <button
@@ -191,7 +191,8 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
         {STATS.map((s, i) => (
           <div key={i} className="lp-soft" style={{ ['--lp-i' as string]: 6 + i }}>
             <div style={{ fontSize: 'clamp(2rem, 3.5vw, 2.8rem)', fontWeight: 800, color: 'var(--lp-gold)', letterSpacing: '-0.03em', marginBottom: '6px' }}>
-              <CountUp to={s.value} />
+              {/* counting from 0 to 0 reads as a broken animation next to its neighbours */}
+              {s.value === 0 ? <span>0</span> : <CountUp to={s.value} />}
             </div>
             <div style={{ fontSize: '0.82rem', color: 'var(--lp-text-muted)', lineHeight: '1.4' }}>{s.label}</div>
           </div>

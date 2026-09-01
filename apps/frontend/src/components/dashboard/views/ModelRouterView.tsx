@@ -16,9 +16,11 @@ export const ModelRouterView: React.FC = () => {
   const [routesStatus, setRoutesStatus] = useState<RoutesStatusResponse | null>(null);
   const [provenance, setProvenance] = useState<ProvenanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const [routes, prov] = await Promise.all([
         api.getRoutesStatus(),
@@ -26,8 +28,12 @@ export const ModelRouterView: React.FC = () => {
       ]);
       setRoutesStatus(routes);
       setProvenance(prov.items);
-    } catch {
-      // fallback handled in service
+    } catch (err: any) {
+      // The service throws — swallowing this rendered an empty matrix that
+      // looked like "no providers" instead of "we couldn't check".
+      setLoadError(err?.message || 'Provider status could not be loaded.');
+      setRoutesStatus(null);
+      setProvenance([]);
     } finally {
       setIsLoading(false);
     }
@@ -114,7 +120,7 @@ export const ModelRouterView: React.FC = () => {
             border: '1px solid var(--fill-soft-2)',
             borderRadius: '16px',
             padding: '24px',
-            boxShadow: '0 12px 30px rgba(0, 0, 0, 0.4)',
+            boxShadow: 'var(--shadow-md)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
@@ -125,7 +131,12 @@ export const ModelRouterView: React.FC = () => {
           </div>
           <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
             <div>Operational Budget: <strong style={{ color: 'var(--accent-emerald)' }}>Zero API Cost (Free Tier Aggregation)</strong></div>
-            <div>Total Model Routes: <strong style={{ color: 'var(--text-main)' }}>222 Free Model Routes</strong></div>
+            {routesStatus?.providers && (
+              <div>
+                Providers reporting now:{' '}
+                <strong style={{ color: 'var(--text-main)' }}>{routesStatus.providers.length}</strong>
+              </div>
+            )}
             <div>Reliability Fallback: <strong style={{ color: 'var(--status-warn-text)' }}>Local Ollama (Qwen / LLaMA)</strong></div>
           </div>
         </div>
@@ -137,7 +148,7 @@ export const ModelRouterView: React.FC = () => {
             border: '1px solid var(--fill-soft-2)',
             borderRadius: '16px',
             padding: '24px',
-            boxShadow: '0 12px 30px rgba(0, 0, 0, 0.4)',
+            boxShadow: 'var(--shadow-md)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
@@ -170,6 +181,51 @@ export const ModelRouterView: React.FC = () => {
             Live Provider Health Matrix
           </h2>
         </div>
+
+        {loadError && (
+          <div
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              color: 'var(--status-error-text)',
+              fontSize: '0.85rem',
+            }}
+          >
+            <span>Provider status unavailable: {loadError}</span>
+            <button
+              type="button"
+              onClick={loadData}
+              disabled={isLoading}
+              style={{
+                background: 'transparent',
+                border: '1px solid currentColor',
+                borderRadius: '6px',
+                padding: '4px 12px',
+                color: 'inherit',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                fontWeight: 600,
+                fontSize: '0.82rem',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!loadError && !isLoading && (routesStatus?.providers?.length ?? 0) === 0 && (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.86rem', padding: '12px 0' }}>
+            No providers reported yet.
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '14px' }}>
           {routesStatus?.providers.map((p) => {

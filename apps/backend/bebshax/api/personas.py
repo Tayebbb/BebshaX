@@ -227,9 +227,10 @@ async def generate_study_personas_endpoint(
             status_code=503, detail="no LLM route could serve persona generation"
         ) from exc
     except Exception as exc:
+        logger.error("persona generation failed for study %s", study_id, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Persona generation failed: {exc}",
+            detail="Persona generation failed. Please try again.",
         ) from exc
 
     # Segment map

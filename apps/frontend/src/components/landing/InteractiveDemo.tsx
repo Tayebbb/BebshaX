@@ -17,12 +17,14 @@ interface PoolInfo {
   candidates: string;
 }
 
+// Mirrors apps/backend/bebshax/llm/pools.py — all 7 configured pools.
 const POOLS: Record<string, PoolInfo> = {
-  reasoning: { pool: 'reasoning', limit: 2, candidates: 'freellmpool → ollama (local)' },
-  conversation: { pool: 'conversation', limit: 5, candidates: 'freellmpool → ollama (local)' },
-  structured: { pool: 'structured', limit: 3, candidates: 'freellmpool → ollama (local)' },
-  fast: { pool: 'fast', limit: 5, candidates: 'freellmpool → ollama (local)' },
-  long_context: { pool: 'long_context', limit: 2, candidates: 'freellmpool → ollama (local)' },
+  reasoning: { pool: 'reasoning', limit: 2, candidates: 'openrouter → freellmpool → ollama (local)' },
+  conversation: { pool: 'conversation', limit: 5, candidates: 'ollama (local) → freellmpool → openrouter' },
+  structured: { pool: 'structured', limit: 3, candidates: 'openrouter → freellmpool → ollama (local)' },
+  fast: { pool: 'fast', limit: 5, candidates: 'ollama (local) → freellmpool → openrouter' },
+  long_context: { pool: 'long_context', limit: 2, candidates: 'openrouter → freellmpool → ollama (local)' },
+  local: { pool: 'local', limit: 2, candidates: 'ollama (local)' },
   emergency: { pool: 'emergency', limit: 2, candidates: 'ollama (local) → freellmpool' },
 };
 
@@ -30,6 +32,8 @@ const TASK_TYPES: { task: string; pool: keyof typeof POOLS }[] = [
   { task: 'PERSONA_GENERATION', pool: 'reasoning' },
   { task: 'PERSONA_REFINEMENT', pool: 'reasoning' },
   { task: 'PERSONA_VALIDATION', pool: 'reasoning' },
+  { task: 'PERSONA_NARRATIVE', pool: 'reasoning' },
+  { task: 'BEHAVIORAL_SIMULATION', pool: 'reasoning' },
   { task: 'CONTRADICTION_CHECK', pool: 'reasoning' },
   { task: 'CRITIC', pool: 'reasoning' },
   { task: 'PERSONA_INTERVIEW', pool: 'conversation' },
@@ -117,7 +121,7 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
-            This is the real configuration: 16 fixed task types, 7 pools, preference-ordered candidates, and a local model at the end of every chain.
+            This is the real configuration: 18 fixed task types routed across 7 pools, in preference order, with a local model at the end of every chain — including a dedicated <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--lp-text)' }}>local</span> pool that runs entirely on your machine.
           </p>
         </div>
 

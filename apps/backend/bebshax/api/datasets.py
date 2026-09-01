@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Query, Request, UploadFile, status
@@ -12,12 +13,27 @@ from sqlalchemy.orm import sessionmaker
 
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import user_owns_study
+from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
+from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
 from bebshax.datasets.service import DatasetService
 from bebshax.db.models import DatasetSources, Studies
 from bebshax.research.service import ResearchEngineService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["datasets"])
+
+
+def _read_upload_or_413(content: bytes) -> None:
+    """Apply the same size ceiling the URL-fetch path enforces."""
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty.")
+    if len(content) > MAX_DATASET_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploaded file exceeds the {MAX_DATASET_FILE_SIZE_BYTES // (1024 * 1024)} MB limit.",
+        )
 
 
 def _get_dataset_service(request: Request) -> DatasetService:
@@ -135,15 +151,21 @@ async def ingest_dataset_url(
             file_type=payload.file_type,
         )
         return _serialize_dataset(ds)
+    except ValueError as exc:
+        # Our own validation/SSRF messages are user-facing by design.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
+        logger.error("dataset URL ingestion failed for %r", payload.name, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Dataset ingestion failed: {exc}",
+            detail="Dataset ingestion failed. Check the URL and file format.",
         ) from exc
 
 
 @router.post("/datasets/upload", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/hour")
 async def upload_dataset_file(
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(...),
     description: Optional[str] = Form(None),
@@ -154,8 +176,7 @@ async def upload_dataset_file(
 ) -> dict[str, Any]:
     """Upload a dataset file (CSV, JSON, TSV, XLSX) to profile and derive segments."""
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty.")
+    _read_upload_or_413(content)
 
     user_id = current_user.id if current_user else None
     try:
@@ -169,10 +190,14 @@ async def upload_dataset_file(
             file_type=file_type,
         )
         return _serialize_dataset(ds)
+    except ValueError as exc:
+        # Our own validation messages are user-facing by design.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
+        logger.error("dataset upload processing failed for %r", name, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Uploaded dataset processing failed: {exc}",
+            detail="Uploaded dataset could not be processed.",
         ) from exc
 
 
@@ -226,8 +251,14 @@ async def refresh_dataset(
         return resp
     except HTTPException:
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Refresh failed: {exc}") from exc
+        logger.error("dataset refresh failed for %s", dataset_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Dataset refresh failed.",
+        ) from exc
 
 
 @router.post("/datasets/{dataset_id}/query")
@@ -288,9 +319,10 @@ async def generate_personas_from_dataset(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except Exception as exc:
+        logger.error("dataset-grounded persona generation failed for %s", dataset_id, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Persona generation failed: {exc}",
+            detail="Persona generation failed. Please try again.",
         ) from exc
 
 
@@ -333,16 +365,21 @@ async def ingest_study_dataset_url(
             file_type=payload.file_type,
         )
         return _serialize_dataset(ds)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
+        logger.error("study dataset URL ingestion failed for study %s", study_id, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Dataset ingestion failed: {exc}",
+            detail="Dataset ingestion failed. Check the URL and file format.",
         ) from exc
 
 
 @router.post("/studies/{study_id}/datasets/upload", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/hour")
 async def upload_study_dataset_file(
     study_id: str,
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(...),
     description: Optional[str] = Form(None),
@@ -354,8 +391,7 @@ async def upload_study_dataset_file(
     """Upload dataset file directly into a specific study."""
     await _verify_study_access(study_id, current_user, session)
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty.")
+    _read_upload_or_413(content)
 
     user_id = current_user.id if current_user else None
     try:
@@ -369,10 +405,13 @@ async def upload_study_dataset_file(
             file_type=file_type,
         )
         return _serialize_dataset(ds)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
+        logger.error("study dataset upload processing failed for study %s", study_id, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Uploaded dataset processing failed: {exc}",
+            detail="Uploaded dataset could not be processed.",
         ) from exc
 
 

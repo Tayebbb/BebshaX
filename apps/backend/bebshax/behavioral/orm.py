@@ -135,7 +135,7 @@ class BehavioralTestResults(Base):
     decision_label: Mapped[str] = mapped_column(String(128))
     probability: Mapped[float] = mapped_column(Float, default=0.5)
     confidence: Mapped[str] = mapped_column(String(32), default="medium")  # low, medium, high
-    confidence_score: Mapped[float] = mapped_column(Float, default=0.8)
+    confidence_score: Mapped[float] = mapped_column(Float, default=0.0)
     key_factors: Mapped[list[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=list
     )

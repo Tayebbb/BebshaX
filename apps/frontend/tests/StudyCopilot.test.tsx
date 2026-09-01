@@ -95,7 +95,10 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       expect(screen.getAllByText(/UNIVERSITY STUDENT/i)[0]).toBeInTheDocument();
       expect(screen.getAllByText(/COLLEGE APPLICANT/i)[0]).toBeInTheDocument();
       expect(screen.getAllByText(/BUSY HIGH SCHOOLER/i)[0]).toBeInTheDocument();
-      expect(screen.getByText(/Persona Panel Configured/i)).toBeInTheDocument();
+      // The drawer must not claim a configured, evidence-grounded panel
+      // before any persona exists.
+      expect(screen.getByText(/Panel not created yet/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Grounded in empirical evidence/i)).toBeNull();
     });
 
     // Click Generate Personas -> Advances to Step 2 (Personas)

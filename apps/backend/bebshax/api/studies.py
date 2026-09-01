@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import get_session, owner_accessible, user_owns_study
+from bebshax.api.deps import get_session, owner_accessible, user_can_write_study, user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.api.jobs import get_job, start_job
 from bebshax.db.models import (
@@ -326,7 +326,8 @@ async def update_study(
         session.add(study)
     else:
         # Ownership guard: return 403 Forbidden when trying to update another user's study
-        if not _user_owns_study(study, current_user):
+        # (write gate — the is_demo read allowance must not grant overwrites)
+        if not user_can_write_study(study, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to modify this study",
@@ -368,7 +369,7 @@ async def delete_study(
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not _user_owns_study(study, current_user):
+    if not user_can_write_study(study, current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this study",
@@ -476,7 +477,9 @@ async def generate_script_questions(
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not _user_owns_study(study, current_user):
+    # Write gate, not the read gate: this overwrites study.script_questions,
+    # so the is_demo read allowance must not apply.
+    if not user_can_write_study(study, current_user):
         raise HTTPException(status_code=403, detail="Not authorized for this study")
 
     prompt = (payload and payload.prompt) or study.prompt or study.title or "Business Idea"
@@ -568,7 +571,8 @@ async def trigger_study_research(
     study = await session.get(Studies, study_id)
     if not study:
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not _user_owns_study(study, current_user):
+    # Write gate: a research run writes evidence rows and spends LLM budget.
+    if not user_can_write_study(study, current_user):
         raise HTTPException(status_code=403, detail="Not authorized for this study")
 
     research_engine = getattr(request.app.state, "research_engine", None) if request else None

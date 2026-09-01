@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Sparkles,
@@ -50,6 +50,15 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
   const [isRunningResearch, setIsRunningResearch] = useState<boolean>(false);
   const [researchStatusText, setResearchStatusText] = useState<string>('');
 
+  // Real unmount guard for post-await state writes.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const loadAllData = async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -78,20 +87,23 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
   const handleRunResearch = async () => {
     if (isRunningResearch) return;
     setIsRunningResearch(true);
+    setLoadError(null);
     setResearchStatusText('Researching — this usually takes 30–90 seconds on free providers…');
 
-    let mounted = true;
     try {
       await api.startResearch(studyId);
-      if (!mounted) return;
+      if (!isMountedRef.current) return;
       setResearchStatusText('Research complete — evidence extracted.');
       await loadAllData();
-    } catch {
-      // nothing to do
+    } catch (err: any) {
+      if (!isMountedRef.current) return;
+      setResearchStatusText('');
+      setLoadError(
+        `Research run failed: ${err?.message || 'the request did not complete.'} Nothing was added — you can retry.`
+      );
     } finally {
-      if (mounted) setIsRunningResearch(false);
+      if (isMountedRef.current) setIsRunningResearch(false);
     }
-    return () => { mounted = false; };
   };
 
   const handleInspectClaim = async (claimId: string) => {

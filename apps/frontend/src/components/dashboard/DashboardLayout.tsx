@@ -14,6 +14,11 @@ import {
   Sun,
   Moon,
   X,
+  FlaskConical,
+  PieChart,
+  Cpu,
+  FolderOpen,
+  MailWarning,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
@@ -54,6 +59,70 @@ interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
 }
 
+/** Shown wherever a study-scoped view is opened without an active study —
+ * a fresh account has none, and inventing an id 404s. */
+const NoStudySelected: React.FC<{
+  title: string;
+  onPickStudy: () => void;
+  onCreateStudy: () => void;
+}> = ({ title, onPickStudy, onCreateStudy }) => (
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '12px',
+      textAlign: 'center',
+      padding: '72px 24px',
+      margin: '24px clamp(16px, 4vw, 40px)',
+      border: '1px dashed var(--border-subtle)',
+      borderRadius: '16px',
+      color: 'var(--text-secondary)',
+    }}
+  >
+    <FolderOpen size={28} color="var(--accent-teal)" />
+    <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)' }}>{title}</div>
+    <div style={{ fontSize: '0.88rem', maxWidth: '420px' }}>
+      Pick one of your studies to work in, or start a new one.
+    </div>
+    <div style={{ display: 'flex', gap: '10px', marginTop: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+      <button
+        type="button"
+        onClick={onPickStudy}
+        style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-subtle)',
+          color: 'var(--text-main)',
+          borderRadius: '8px',
+          padding: '10px 18px',
+          fontSize: '0.85rem',
+          fontWeight: 600,
+          cursor: 'pointer',
+        }}
+      >
+        Choose a study
+      </button>
+      <button
+        type="button"
+        onClick={onCreateStudy}
+        style={{
+          background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+          border: 'none',
+          color: 'var(--text-on-accent)',
+          borderRadius: '8px',
+          padding: '10px 18px',
+          fontSize: '0.85rem',
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        New study
+      </button>
+    </div>
+  </div>
+);
+
 const parseDashboardPath = (path: string): {
   tab: DashboardTab;
   studyId?: string;
@@ -68,40 +137,40 @@ const parseDashboardPath = (path: string): {
     const queryParams = new URLSearchParams(parts[1] || '');
     const runIds = queryParams.get('run_ids')?.split(',').filter(Boolean) || [];
     const pathParts = parts[0].split('/').filter(Boolean);
-    const studyId = pathParts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const studyId = pathParts[1];
     return { tab: 'behavioral-compare', studyId, compareRunIds: runIds };
   }
   if (path.includes('/behavioral-tests/') && !path.endsWith('/behavioral-tests')) {
     const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const studyId = parts[1];
     const testId = parts[3] || parts[2] || '';
     const runId = parts[5] || undefined;
     return { tab: 'behavioral-test-detail', studyId, testId, runId };
   }
   if (path.includes('/behavioral-tests') || path.startsWith('/behavioral-tests')) {
     const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const studyId = parts[1];
     return { tab: 'behavioral-tests', studyId };
   }
   if (path.includes('/interviews/') || path.startsWith('/interviews/')) {
     const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const studyId = parts[1];
     const interviewId = parts[3] || parts[2] || '';
     return { tab: 'interview-workspace', studyId, interviewId };
   }
   if (path.includes('/interviews') || path.startsWith('/interviews')) {
     const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const studyId = parts[1];
     return { tab: 'interviews', studyId };
   }
   if (path.includes('/segmentation') || path.startsWith('/segmentation')) {
     const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const studyId = parts[1];
     return { tab: 'segmentation', studyId };
   }
   if (path.includes('/evidence') || path.startsWith('/evidence')) {
     const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const studyId = parts[1];
     return { tab: 'evidence', studyId };
   }
   if (path.startsWith('/dataset') || path.startsWith('/data-sources')) {
@@ -121,7 +190,7 @@ const parseDashboardPath = (path: string): {
   }
   if (path.startsWith('/research') || path.startsWith('/study')) {
     const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1] || 'tj6FY3cXDO8oxpuxeAMb';
+    const studyId = parts[1];
     if (parts[2] === 'behavioral-tests' && parts[3] === 'compare') {
       const queryParams = new URLSearchParams(path.split('?')[1] || '');
       const runIds = queryParams.get('run_ids')?.split(',').filter(Boolean) || [];
@@ -177,6 +246,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [recentStudies, setRecentStudies] = useState<Study[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
   const [backendDown, setBackendDown] = useState(false);
+  const [createStudyError, setCreateStudyError] = useState<string | null>(null);
+  const [verifyReminderDismissed, setVerifyReminderDismissed] = useState<boolean>(
+    () => localStorage.getItem('bebshax_verify_reminder_dismissed') === '1'
+  );
   const [initialWorkflowType, setInitialWorkflowType] = useState<StudyType>('interviews');
   const [initialWorkflowPrompt, setInitialWorkflowPrompt] = useState<string | undefined>(undefined);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -313,23 +386,36 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     setShowTourHint(false);
   };
 
+  /** Study-scoped destinations. Without an active study we stay on the plain
+   * tab route, which renders the "pick a study" empty state — inventing a
+   * study id here used to 404 every fresh account. */
+  const studyScopedPath = (suffix: string): string =>
+    activeStudyId ? `/research/${activeStudyId}/${suffix}` : `/${suffix}`;
+
   const handleTabClick = (tab: DashboardTab) => {
     setIsMobileNavOpen(false);
     if (tab === 'new-study') navigate('/create-study');
     else if (tab === 'dashboard') navigate('/dashboard');
     else if (tab === 'personas') navigate('/persona-library');
-    else if (tab === 'interviews') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`);
-    else if (tab === 'behavioral-tests') navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests`);
+    else if (tab === 'interviews') navigate(studyScopedPath('interviews'));
+    else if (tab === 'behavioral-tests') navigate(studyScopedPath('behavioral-tests'));
+    else if (tab === 'evidence') navigate(studyScopedPath('evidence'));
+    else if (tab === 'segmentation') navigate(studyScopedPath('segmentation'));
     else if (tab === 'router') navigate('/router');
     else if (tab === 'study-workflow') {
       setInitialWorkflowPrompt(undefined);
-      navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step1`);
+      if (!activeStudyId) {
+        navigate('/create-study');
+        return;
+      }
+      navigate(`/research/${activeStudyId}/step1`);
     }
   };
 
   const handleStartStudy = async (type: StudyType, prompt?: string) => {
     setInitialWorkflowType(type);
     setInitialWorkflowPrompt(prompt);
+    setCreateStudyError(null);
     try {
       const created = await api.createStudy({
         type: type,
@@ -343,11 +429,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       setActiveStudyId(created.id);
       setActiveStep(1);
       navigate(`/research/${created.id}/step1`);
-    } catch {
-      const fallbackId = `study_${Date.now()}`;
-      setActiveStudyId(fallbackId);
-      setActiveStep(1);
-      navigate(`/research/${fallbackId}/step1`);
+    } catch (err: any) {
+      // Never fabricate a study id: the workflow would look fine while every
+      // save silently no-ops and the user's work is lost.
+      setCreateStudyError(
+        err?.message
+          ? `We couldn't create your study: ${err.message}`
+          : "We couldn't create your study — the server didn't respond. Please try again."
+      );
+      setInitialWorkflowPrompt(undefined);
     }
   };
 
@@ -363,7 +453,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
   const handleStepChange = (step: number) => {
     setActiveStep(step);
-    navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/step${step}`);
+    if (!activeStudyId) {
+      navigate('/create-study');
+      return;
+    }
+    navigate(`/research/${activeStudyId}/step${step}`);
   };
 
   const navItems = [
@@ -391,6 +485,21 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       id: 'behavioral-tests' as DashboardTab,
       label: 'Behavioral Testing',
       icon: <Sliders size={16} />,
+    },
+    {
+      id: 'evidence' as DashboardTab,
+      label: 'Evidence Laboratory',
+      icon: <FlaskConical size={16} />,
+    },
+    {
+      id: 'segmentation' as DashboardTab,
+      label: 'Audience Segments',
+      icon: <PieChart size={16} />,
+    },
+    {
+      id: 'router' as DashboardTab,
+      label: 'AI Provider Status',
+      icon: <Cpu size={16} />,
     },
   ];
 
@@ -1086,6 +1195,105 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           </div>
         )}
 
+        {/* Study creation failed — say so and stay put; no fabricated study id. */}
+        {createStudyError && (
+          <div
+            role="alert"
+            style={{
+              margin: '14px clamp(16px, 4vw, 40px) 0',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: '14px',
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: '12px',
+              padding: '12px 16px',
+            }}
+          >
+            <div style={{ fontSize: '0.85rem', color: 'var(--status-error-text)', lineHeight: 1.55 }}>
+              {createStudyError} Nothing was saved — please try again.
+            </div>
+            <button
+              type="button"
+              onClick={() => setCreateStudyError(null)}
+              aria-label="Dismiss study creation error"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--status-error-text)',
+                cursor: 'pointer',
+                padding: '2px',
+                flexShrink: 0,
+                display: 'flex',
+              }}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
+
+        {/* Dismissible reminder — the backend already authenticated this user,
+            so verification is a nudge, never a wall. */}
+        {user && user.is_verified === false && !verifyReminderDismissed && (
+          <div
+            role="status"
+            style={{
+              margin: '14px clamp(16px, 4vw, 40px) 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '14px',
+              flexWrap: 'wrap',
+              background: 'var(--fill-soft)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '12px',
+              padding: '12px 16px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
+              <MailWarning size={16} color="var(--status-warn-text)" />
+              Your email isn&apos;t verified yet. You can keep working — verify when convenient.
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => navigate('/auth/verify')}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--accent-teal)',
+                  color: 'var(--accent-cyan)',
+                  borderRadius: '8px',
+                  padding: '6px 14px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Verify email
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.setItem('bebshax_verify_reminder_dismissed', '1');
+                  setVerifyReminderDismissed(true);
+                }}
+                aria-label="Dismiss email verification reminder"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  display: 'flex',
+                }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Tab View Switcher — keyed so each view replays its entrance */}
         <div
           key={activeTab}
@@ -1106,85 +1314,126 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         {activeTab === 'personas' && (
           <PersonaLibraryView
             studyId={activeStudyId}
-            onStartInterviewWithPersona={async (pId) => {
+            onStartInterviewWithPersona={async (pId, fromStudyId) => {
+              const sid = fromStudyId || activeStudyId;
+              if (!sid) {
+                navigate('/dashboard');
+                return;
+              }
+              setActiveStudyId(sid);
               try {
-                const p = await api.getStudyPersonaDetail(activeStudyId || 'tj6FY3cXDO8oxpuxeAMb', pId);
+                const p = await api.getStudyPersonaDetail(sid, pId);
                 setModalPersona(p);
                 setShowStartInterviewModal(true);
               } catch {
-                navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`);
+                navigate(`/research/${sid}/interviews`);
               }
             }}
-            onTestBehaviorWithPersona={(pId) => {
+            onTestBehaviorWithPersona={(pId, fromStudyId) => {
+              const sid = fromStudyId || activeStudyId;
+              if (!sid) {
+                navigate('/dashboard');
+                return;
+              }
+              setActiveStudyId(sid);
               setInitialBehavioralPersonaId(pId);
               setShowCreateBehavioralModal(true);
             }}
-            onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}
-            onNavigateToSegmentation={() => navigate(`/research/${activeStudyId || 'study_default'}/segmentation`)}
+            onNavigateToEvidence={() => navigate(studyScopedPath('evidence'))}
+            onNavigateToSegmentation={() => navigate(studyScopedPath('segmentation'))}
           />
         )}
 
-        {activeTab === 'interviews' && (
-          <InterviewsView
-            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
-            onOpenInterview={(intId) => {
-              setActiveInterviewId(intId);
-              navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews/${intId}`);
-            }}
-            onNavigateToPersonas={() => navigate('/persona-library')}
-          />
-        )}
+        {activeTab === 'interviews' &&
+          (activeStudyId ? (
+            <InterviewsView
+              studyId={activeStudyId}
+              onOpenInterview={(intId) => {
+                setActiveInterviewId(intId);
+                navigate(`/research/${activeStudyId}/interviews/${intId}`);
+              }}
+              onNavigateToPersonas={() => navigate('/persona-library')}
+            />
+          ) : (
+            <NoStudySelected
+              title="No study selected for interviews"
+              onPickStudy={() => navigate('/dashboard')}
+              onCreateStudy={() => navigate('/create-study')}
+            />
+          ))}
 
-        {activeTab === 'interview-workspace' && activeInterviewId && (
-          <InterviewWorkspace
-            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
-            interviewId={activeInterviewId}
-            onBackToInterviews={() => navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews`)}
-            onNavigateToPersona={() => navigate('/persona-library')}
-          />
-        )}
+        {activeTab === 'interview-workspace' &&
+          activeInterviewId &&
+          (activeStudyId ? (
+            <InterviewWorkspace
+              studyId={activeStudyId}
+              interviewId={activeInterviewId}
+              onBackToInterviews={() => navigate(`/research/${activeStudyId}/interviews`)}
+              onNavigateToPersona={() => navigate('/persona-library')}
+            />
+          ) : (
+            <NoStudySelected
+              title="No study selected for this interview"
+              onPickStudy={() => navigate('/dashboard')}
+              onCreateStudy={() => navigate('/create-study')}
+            />
+          ))}
 
-        {activeTab === 'behavioral-tests' && (
-          <BehavioralTestingView
-            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
-            onOpenTest={(testId, runId) => {
-              setActiveTestId(testId);
-              setActiveRunId(runId);
-              navigate(
-                runId
-                  ? `/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/${testId}/runs/${runId}`
-                  : `/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/${testId}`
-              );
-            }}
-            onCompareRuns={(runIds) => {
-              setActiveCompareRunIds(runIds);
-              navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/compare?run_ids=${runIds.join(',')}`);
-            }}
-            onNavigateToPersonas={() => navigate('/persona-library')}
-          />
-        )}
+        {activeTab === 'behavioral-tests' &&
+          (activeStudyId ? (
+            <BehavioralTestingView
+              studyId={activeStudyId}
+              onOpenTest={(testId, runId) => {
+                setActiveTestId(testId);
+                setActiveRunId(runId);
+                navigate(
+                  runId
+                    ? `/research/${activeStudyId}/behavioral-tests/${testId}/runs/${runId}`
+                    : `/research/${activeStudyId}/behavioral-tests/${testId}`
+                );
+              }}
+              onCompareRuns={(runIds) => {
+                setActiveCompareRunIds(runIds);
+                navigate(`/research/${activeStudyId}/behavioral-tests/compare?run_ids=${runIds.join(',')}`);
+              }}
+              onNavigateToPersonas={() => navigate('/persona-library')}
+            />
+          ) : (
+            <NoStudySelected
+              title="No study selected for behavioral testing"
+              onPickStudy={() => navigate('/dashboard')}
+              onCreateStudy={() => navigate('/create-study')}
+            />
+          ))}
 
-        {activeTab === 'behavioral-test-detail' && activeTestId && (
+        {activeTab === 'behavioral-test-detail' && activeTestId && activeStudyId && (
           <BehavioralTestDetailView
-            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+            studyId={activeStudyId}
             testId={activeTestId}
             initialRunId={activeRunId}
-            onBack={() => navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests`)}
+            onBack={() => navigate(`/research/${activeStudyId}/behavioral-tests`)}
             onCompareRuns={(runIds) => {
               setActiveCompareRunIds(runIds);
-              navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/compare?run_ids=${runIds.join(',')}`);
+              navigate(`/research/${activeStudyId}/behavioral-tests/compare?run_ids=${runIds.join(',')}`);
             }}
             onNavigateToPersona={() => navigate('/persona-library')}
           />
         )}
 
-        {activeTab === 'behavioral-compare' && (
-          <BehavioralComparisonView
-            studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
-            runIds={activeCompareRunIds}
-            onBack={() => navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests`)}
-          />
-        )}
+        {activeTab === 'behavioral-compare' &&
+          (activeStudyId ? (
+            <BehavioralComparisonView
+              studyId={activeStudyId}
+              runIds={activeCompareRunIds}
+              onBack={() => navigate(`/research/${activeStudyId}/behavioral-tests`)}
+            />
+          ) : (
+            <NoStudySelected
+              title="No study selected for this comparison"
+              onPickStudy={() => navigate('/dashboard')}
+              onCreateStudy={() => navigate('/create-study')}
+            />
+          ))}
 
         {activeTab === 'router' && <ModelRouterView />}
 
@@ -1199,24 +1448,35 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           />
         )}
 
-        {activeTab === 'evidence' && (
-          <EvidenceLaboratoryView
-            studyId={activeStudyId || 'study_default'}
-            onBack={() => navigate('/dashboard')}
-          />
-        )}
-
-        {activeTab === 'segmentation' && (
-          <div style={{ padding: '24px clamp(16px, 4vw, 40px)' }}>
-            <SegmentationView
-              studyId={activeStudyId || 'study_default'}
-              onNavigateToEvidence={() => navigate(`/research/${activeStudyId || 'study_default'}/evidence`)}
-              onProceedToPersonas={() => {
-                navigate(`/research/${activeStudyId || 'study_default'}/step3`);
-              }}
+        {activeTab === 'evidence' &&
+          (activeStudyId ? (
+            <EvidenceLaboratoryView studyId={activeStudyId} onBack={() => navigate('/dashboard')} />
+          ) : (
+            <NoStudySelected
+              title="No study selected for the evidence laboratory"
+              onPickStudy={() => navigate('/dashboard')}
+              onCreateStudy={() => navigate('/create-study')}
             />
-          </div>
-        )}
+          ))}
+
+        {activeTab === 'segmentation' &&
+          (activeStudyId ? (
+            <div style={{ padding: '24px clamp(16px, 4vw, 40px)' }}>
+              <SegmentationView
+                studyId={activeStudyId}
+                onNavigateToEvidence={() => navigate(`/research/${activeStudyId}/evidence`)}
+                onProceedToPersonas={() => {
+                  navigate(`/research/${activeStudyId}/step3`);
+                }}
+              />
+            </div>
+          ) : (
+            <NoStudySelected
+              title="No study selected for audience segments"
+              onPickStudy={() => navigate('/dashboard')}
+              onCreateStudy={() => navigate('/create-study')}
+            />
+          ))}
         </div>
       </main>
 
@@ -1243,12 +1503,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             backdropFilter: 'blur(8px)',
           }}
         >
-          Showing sample data — backend unreachable. Data shown here is not live research output.
+          {api.isMockMode()
+            ? 'Showing sample data — backend unreachable. Data shown here is not live research output.'
+            : "Backend unreachable — your studies can't be loaded right now. Nothing shown here is missing data; it simply hasn't loaded."}
         </div>
       )}
 
       {/* Start Adaptive Interview Modal */}
-      {showStartInterviewModal && modalPersona && (
+      {showStartInterviewModal && modalPersona && activeStudyId && (
         <StartInterviewModal
           isOpen={showStartInterviewModal}
           onClose={() => {
@@ -1256,31 +1518,31 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             setModalPersona(null);
           }}
           persona={modalPersona}
-          studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+          studyId={activeStudyId}
           onInterviewStarted={(newInterviewId) => {
             setActiveInterviewId(newInterviewId);
-            navigate(`/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/interviews/${newInterviewId}`);
+            navigate(`/research/${activeStudyId}/interviews/${newInterviewId}`);
           }}
         />
       )}
 
       {/* Create Behavioral Simulation Modal */}
-      {showCreateBehavioralModal && (
+      {showCreateBehavioralModal && activeStudyId && (
         <CreateBehavioralTestModal
           isOpen={showCreateBehavioralModal}
           onClose={() => {
             setShowCreateBehavioralModal(false);
             setInitialBehavioralPersonaId(undefined);
           }}
-          studyId={activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}
+          studyId={activeStudyId}
           initialPersonaId={initialBehavioralPersonaId}
           onTestCreated={(testId, runId) => {
             setActiveTestId(testId);
             setActiveRunId(runId);
             navigate(
               runId
-                ? `/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/${testId}/runs/${runId}`
-                : `/research/${activeStudyId || 'tj6FY3cXDO8oxpuxeAMb'}/behavioral-tests/${testId}`
+                ? `/research/${activeStudyId}/behavioral-tests/${testId}/runs/${runId}`
+                : `/research/${activeStudyId}/behavioral-tests/${testId}`
             );
           }}
         />

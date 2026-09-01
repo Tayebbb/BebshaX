@@ -138,8 +138,18 @@ class PersonaGenerationService:
             .limit(_CLAIM_FETCH_LIMIT)
         )
         claims = list((await self.session.execute(claim_stmt)).scalars().all())
+        # claim_count is a provenance fact about the study, not about how many
+        # claims we chose to feed the model — count the real total separately.
+        total_claim_count = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(EvidenceClaims)
+                .where(EvidenceClaims.study_id == study_id)
+            )
+        ).scalar_one()
         evidence_snapshot = {
-            "claim_count": len(claims),
+            "claim_count": int(total_claim_count or 0),
+            "claims_used_count": len(claims),
             "top_claims": [
                 {"id": c.id, "claim_text": c.claim_text, "category": c.category, "confidence": c.confidence}
                 for c in claims[:5]

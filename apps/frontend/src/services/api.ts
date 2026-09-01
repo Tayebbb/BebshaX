@@ -59,6 +59,15 @@ const TIMEOUT_MS = {
 let forceMockMode: boolean | null = null;
 let lastKnownLive = false;
 
+/** Auth failures the caller must surface verbatim. The `code` marks the error
+ * as "the server answered" so the Neon fallback (for an unreachable backend)
+ * is skipped instead of masking a real 4xx/5xx. */
+const authError = (message: string, code: string = 'AUTH_SERVER_ERROR'): Error & { code: string } => {
+  const err = new Error(message) as Error & { code: string };
+  err.code = code;
+  return err;
+};
+
 /** Lazily-loaded mock layer (MockStore + fixtures, ~1.8k lines). A static
  * import shipped it all in the production bundle; the dynamic import keeps it
  * in a separate chunk only mock-mode paths ever request. `_mocksSync` mirrors
@@ -810,128 +819,134 @@ export const api = {
   },
 
   async signup(data: SignUpData): Promise<AuthResponse> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/auth/signup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-          signal: AbortSignal.timeout(30000),
-        });
-        if (res.ok) {
-          const result: AuthResponse = await res.json();
-          lastKnownLive = true;
-          return result;
-        }
-        if (res.status === 409) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.detail || 'An account with this email address already exists.');
-        }
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Registration failed');
-      } catch (backendErr: any) {
-        throw backendErr;
-      }
+    if (this.isMockMode()) {
+      // Mock/test builds only — a fabricated session must never be reachable
+      // from a live backend response.
+      const mockUser: User = {
+        id: `usr_${Date.now()}`,
+        email: data.email,
+        full_name: data.full_name,
+        avatar_url: null,
+        is_active: true,
+        is_verified: false,
+        auth_provider: 'email',
+        created_at: new Date().toISOString(),
+      };
+      return {
+        access_token: `mock_jwt_${Date.now()}`,
+        token_type: 'bearer',
+        expires_in_days: 7,
+        user: mockUser,
+      };
     }
 
-    // Mock fallback response
-    const mockUser: User = {
-      id: `usr_${Date.now()}`,
-      email: data.email,
-      full_name: data.full_name,
-      avatar_url: null,
-      is_active: true,
-      is_verified: false,
-      auth_provider: 'email',
-      created_at: new Date().toISOString(),
-    };
-    const mockRes: AuthResponse = {
-      access_token: `mock_jwt_${Date.now()}`,
-      token_type: 'bearer',
-      expires_in_days: 7,
-      user: mockUser,
-    };
-    return mockRes;
+    const res = await fetch(`${API_BASE}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (res.ok) {
+      const result: AuthResponse = await res.json();
+      lastKnownLive = true;
+      return result;
+    }
+    lastKnownLive = true;
+    const errorData = await res.json().catch(() => ({}));
+    if (res.status === 409) {
+      throw authError(errorData.detail || 'An account with this email address already exists.');
+    }
+    throw authError(
+      errorData.detail || `Registration failed (server error ${res.status}). Please try again.`
+    );
   },
 
   async signin(data: SignInData): Promise<AuthResponse> {
-    if (!this.isMockMode()) {
-      // 1. Primary: Direct Backend API authentication (verifies against PostgreSQL users table)
-      try {
-        const res = await fetch(`${API_BASE}/auth/signin`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
-        });
-        if (res.ok) {
-          const result: AuthResponse = await res.json();
-          this.setAuthToken(result.access_token);
-          this.setStoredUser(result.user);
-          lastKnownLive = true;
-          return result;
-        }
-        if (res.status === 401 || res.status === 403) {
-          const errorData = await res.json().catch(() => ({}));
-          const detail: string = errorData.detail || 'Invalid email or password.';
-          if (detail.includes('EMAIL_NOT_VERIFIED')) {
-            const err = new Error(
-              'Your email address is not verified yet. Enter the 6-digit code we send you to finish signing in.'
-            ) as Error & { code: string };
-            err.code = 'EMAIL_NOT_VERIFIED';
-            throw err;
-          }
-          throw new Error(detail);
-        }
-      } catch (backendErr: any) {
-        if (backendErr.code === 'EMAIL_NOT_VERIFIED') {
-          throw backendErr;
-        }
-        if (backendErr.message && (backendErr.message.includes('Invalid email') || backendErr.message.includes('disabled'))) {
-          throw backendErr;
-        }
-
-        // 2. Secondary: Neon Auth authentication fallback — a session only
-        // exists if Neon authenticates AND the server-side /auth/sync
-        // (which verifies the Neon token + emailVerified) mints a real JWT.
-        try {
-          const neonRes = await neonAuth.signIn({
-            email: data.email,
-            password: data.password,
-          });
-          if (neonRes.token) {
-            const synced = await this.syncUser({ neon_token: neonRes.token });
-            if (synced) return synced;
-          }
-          throw new Error(
-            'Signed in with Neon, but the BebshaX backend is unreachable to establish a session. Please try again.'
-          );
-        } catch (neonErr: any) {
-          throw neonErr || backendErr;
-        }
-      }
+    if (this.isMockMode()) {
+      // Mock/test builds only — never reachable from a live backend response.
+      const mockUser: User = {
+        id: 'usr_sarah_founder',
+        email: data.email,
+        full_name: data.email.split('@')[0] || 'BebshaX User',
+        avatar_url: null,
+        is_active: true,
+        is_verified: true,
+        auth_provider: 'email',
+        created_at: new Date().toISOString(),
+      };
+      const mockRes: AuthResponse = {
+        access_token: `mock_jwt_${Date.now()}`,
+        token_type: 'bearer',
+        expires_in_days: 7,
+        user: mockUser,
+      };
+      this.setAuthToken(mockRes.access_token);
+      this.setStoredUser(mockUser);
+      return mockRes;
     }
 
-    // Mock fallback response
-    const mockUser: User = {
-      id: 'usr_sarah_founder',
-      email: data.email,
-      full_name: data.email.split('@')[0] || 'BebshaX User',
-      avatar_url: null,
-      is_active: true,
-      is_verified: true,
-      auth_provider: 'email',
-      created_at: new Date().toISOString(),
-    };
-    const mockRes: AuthResponse = {
-      access_token: `mock_jwt_${Date.now()}`,
-      token_type: 'bearer',
-      expires_in_days: 7,
-      user: mockUser,
-    };
-    this.setAuthToken(mockRes.access_token);
-    this.setStoredUser(mockUser);
-    return mockRes;
+    // 1. Primary: Direct Backend API authentication (verifies against PostgreSQL users table)
+    try {
+      const res = await fetch(`${API_BASE}/auth/signin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
+      });
+      if (res.ok) {
+        const result: AuthResponse = await res.json();
+        this.setAuthToken(result.access_token);
+        this.setStoredUser(result.user);
+        lastKnownLive = true;
+        return result;
+      }
+      // The server answered, so it is reachable — every non-ok status is a
+      // real failure and must surface. Falling through here once minted a
+      // fabricated session on a 500.
+      lastKnownLive = true;
+      const errorData = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) {
+        const detail: string = errorData.detail || 'Invalid email or password.';
+        if (detail.includes('EMAIL_NOT_VERIFIED')) {
+          throw authError(
+            'Your email address is not verified yet. Enter the 6-digit code we send you to finish signing in.',
+            'EMAIL_NOT_VERIFIED'
+          );
+        }
+        throw authError(detail);
+      }
+      throw authError(
+        errorData.detail || `Sign-in failed (server error ${res.status}). Please try again.`
+      );
+    } catch (backendErr: any) {
+      // Only an unreachable backend justifies the Neon fallback; a server
+      // that answered has already given us the truth.
+      if (backendErr?.code === 'EMAIL_NOT_VERIFIED' || backendErr?.code === 'AUTH_SERVER_ERROR') {
+        throw backendErr;
+      }
+      if (backendErr?.message && (backendErr.message.includes('Invalid email') || backendErr.message.includes('disabled'))) {
+        throw backendErr;
+      }
+
+      // 2. Secondary: Neon Auth authentication fallback — a session only
+      // exists if Neon authenticates AND the server-side /auth/sync
+      // (which verifies the Neon token + emailVerified) mints a real JWT.
+      try {
+        const neonRes = await neonAuth.signIn({
+          email: data.email,
+          password: data.password,
+        });
+        if (neonRes.token) {
+          const synced = await this.syncUser({ neon_token: neonRes.token });
+          if (synced) return synced;
+        }
+        throw new Error(
+          'Signed in with Neon, but the BebshaX backend is unreachable to establish a session. Please try again.'
+        );
+      } catch (neonErr: any) {
+        throw neonErr || backendErr;
+      }
+    }
   },
 
   async googleAuth(data: GoogleAuthData): Promise<AuthResponse> {

@@ -115,7 +115,7 @@ export const IntelligenceSection: React.FC = () => {
                 <TrendingDown size={18} color="var(--lp-blue-mid)" />
               </div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--lp-text)' }}>
-                16 task types, 7 pools
+                18 task types, 7 pools
               </h3>
             </div>
 
@@ -165,7 +165,7 @@ export const IntelligenceSection: React.FC = () => {
                 <Sparkles size={18} color="var(--lp-blue-mid)" />
               </div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--lp-text)' }}>
-                14 failure kinds, one policy each
+                13 failure kinds, one policy each
               </h3>
             </div>
 

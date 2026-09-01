@@ -9,12 +9,13 @@ import uuid
 from typing import Any, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
-from bebshax.db.models import Personas, Studies
+from bebshax.db.models import EvidenceClaims, Personas, Studies
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
@@ -540,11 +541,57 @@ def _get_initials(name: str) -> str:
     return "".join(p[0].upper() for p in parts[:2]) if len(parts) >= 2 else name[:2].upper()
 
 
+# Claims shown to the model on the copilot persona path; mirrors the generator's
+# own prompt budget so a large study cannot blow the context window.
+_COPILOT_CLAIM_LIMIT = 6
+
+
+def _apply_evidence_grounding(
+    persona: dict[str, Any], evidence_claims: list[dict[str, Any]]
+) -> None:
+    """Score grounding from verified citations and label the basis honestly.
+
+    OBSERVED means "cited a claim we actually showed the model" — citation
+    existence, not semantic entailment. Unverifiable citations are stripped and
+    the attribute downgrades to INFERRED (downgrade-only, never upgraded).
+    ``grounding_basis`` tells the UI whether 0.0 is a measurement or an absence
+    of evidence, so a bare "0% Grounded" badge cannot imply the former.
+    """
+    alias_to_claim = {c["alias"]: c["claim_id"] for c in evidence_claims}
+    attributes = [a for a in (persona.get("attributes") or []) if isinstance(a, dict)]
+    observed = 0
+    for attr in attributes:
+        raw = attr.get("evidence")
+        cited = raw if isinstance(raw, list) else ([raw] if isinstance(raw, str) else [])
+        resolved = list(
+            dict.fromkeys(
+                alias_to_claim[str(cid).strip().upper()]
+                for cid in cited
+                if str(cid).strip().upper() in alias_to_claim
+            )
+        )
+        if resolved:
+            attr["evidence"] = resolved
+            attr["provenance_class"] = "OBSERVED"
+            observed += 1
+        else:
+            attr["evidence"] = None
+            attr["provenance_class"] = "INFERRED"
+
+    persona["grounding_ratio"] = round(observed / len(attributes), 4) if attributes else 0.0
+    persona["consistency_score"] = 0.0
+    persona["evidence_claim_count"] = len(evidence_claims)
+    persona["grounding_basis"] = (
+        "citations_verified" if evidence_claims else "no_evidence_retrieved"
+    )
+
+
 async def _generate_persona_via_llm(
     llm_router: Any,
     role: PersonaRoleSuggestion,
     study_prompt: str,
     count: int,
+    evidence_claims: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """Use LLM to generate contextual personas for the given role and study prompt."""
     # NOTE: .replace(), not .format() — the template embeds a JSON example
@@ -558,6 +605,18 @@ async def _generate_persona_via_llm(
         .replace("{role_description}", role.description or "")
         .replace("{role_id}", role.id or "")
     )
+    if evidence_claims:
+        claim_lines = "\n".join(
+            f"- {c['alias']}: {c['claim_text']}" for c in evidence_claims
+        )
+        prompt += (
+            "\n\nEvidence claims retrieved for this study:\n"
+            f"{claim_lines}\n"
+            "When an attribute is directly supported by one of these claims, set its "
+            '"evidence" field to an array of the supporting claim ids (e.g. ["C1"]) and '
+            'its "provenance_class" to "OBSERVED". Never invent claim ids; leave '
+            '"evidence" null when no listed claim supports the attribute.'
+        )
     chat_messages = [
         ChatMessage(role="system", content="You are a synthetic persona generator. Return ONLY a valid JSON array, no markdown. Keep every description under 40 words so the full array always fits in the response."),
         ChatMessage(role="user", content=prompt),
@@ -587,6 +646,7 @@ async def _generate_persona_via_llm(
 
 
 @router.post("/study/generate-personas", response_model=list[dict[str, Any]])
+@limiter.limit("20/minute")
 async def generate_study_personas(
     body: GeneratePersonasRequest,
     request: Request,
@@ -595,13 +655,32 @@ async def generate_study_personas(
     """Generates and grounds synthetic personas conditioned on study prompt and selected roles via LLM."""
     # Ownership gate BEFORE any LLM spend or writes: a client-supplied
     # study_id must never inject personas into another tenant's study.
+    evidence_claims: list[dict[str, Any]] = []
     if body.study_id:
         gate_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
         if gate_sessionmaker:
             async with gate_sessionmaker() as gate_session:
                 study_row = await gate_session.get(Studies, body.study_id)
-            if study_row is not None and not user_owns_study(study_row, current_user):
-                raise HTTPException(status_code=404, detail="study not found")
+                if study_row is not None and not user_owns_study(study_row, current_user):
+                    raise HTTPException(status_code=404, detail="study not found")
+                # Grounding must be measured, not assumed: show the study's own
+                # claims so citations can be verified below.
+                claim_rows = (
+                    (
+                        await gate_session.execute(
+                            select(EvidenceClaims)
+                            .where(EvidenceClaims.study_id == body.study_id)
+                            .order_by(EvidenceClaims.confidence.desc())
+                            .limit(_COPILOT_CLAIM_LIMIT)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                evidence_claims = [
+                    {"alias": f"C{i + 1}", "claim_id": c.id, "claim_text": c.claim_text or ""}
+                    for i, c in enumerate(claim_rows)
+                ]
 
     llm_router = getattr(request.app.state, "llm_router", None)
     study_prompt = body.study_prompt or "General product/service research study"
@@ -615,7 +694,9 @@ async def generate_study_personas(
         async def _one_role(role: PersonaRoleSuggestion) -> list[dict[str, Any]]:
             count = max(1, min(role.count, 3))
             try:
-                return await _generate_persona_via_llm(llm_router, role, study_prompt, count)
+                return await _generate_persona_via_llm(
+                    llm_router, role, study_prompt, count, evidence_claims
+                )
             except Exception:
                 logger.warning(
                     "LLM persona generation failed for role %s; emitting skeleton fallback",
@@ -631,6 +712,10 @@ async def generate_study_personas(
     if not all_personas:
         all_personas = [_make_skeleton_persona(r, study_prompt) for r in selected_roles[:5]]
 
+    # Grounding is computed from verified citations only — never self-reported.
+    for p in all_personas:
+        _apply_evidence_grounding(p, evidence_claims)
+
     # If study_id provided, persist personas into DB Personas table and update Studies record
     db_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
     if db_sessionmaker and body.study_id and all_personas:
@@ -645,14 +730,6 @@ async def generate_study_personas(
                     p_id = f"per_{uuid.uuid4().hex[:12]}"
                     p["id"] = p_id
                     p["study_id"] = body.study_id
-                    # No evidence is retrieved on the copilot path, so the
-                    # model may not self-declare grounding: every attribute is
-                    # at most INFERRED and scores are honestly zero.
-                    p["grounding_ratio"] = 0.0
-                    p["consistency_score"] = 0.0
-                    for attr in p.get("attributes", []) or []:
-                        if isinstance(attr, dict) and not attr.get("evidence"):
-                            attr["provenance_class"] = "INFERRED"
                     existing = await db_session.get(Personas, p_id)
                     if not existing:
                         db_p = Personas(
@@ -681,7 +758,7 @@ async def generate_study_personas(
                             goals=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Goals"] or ["Efficiency", "Convenience"],
                             needs=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Needs"] or ["Frictionless onboarding"],
                             pain_points=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Pain Points"] or ["Manual workarounds", "High cost"],
-                            grounding_score=0.0,  # copilot path retrieves no evidence — never trust a self-score
+                            grounding_score=float(p.get("grounding_ratio", 0.0)),  # verified citations only — never a self-score
                         )
                         db_session.add(db_p)
                 if study:

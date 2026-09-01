@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -20,6 +21,8 @@ from bebshax.db.models import (
 )
 from bebshax.segmentation.pre_check import check_segmentation_readiness
 from bebshax.segmentation.service import SegmentationEngineService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/studies", tags=["segmentation"])
 
@@ -159,9 +162,14 @@ async def run_segmentation(
             "segments": [_serialize_segment(s) for s in segments],
         }
     except ValueError as val_err:
+        # Deliberate, user-facing validation messages stay verbatim.
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
-    except Exception as err:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Segmentation failed: {err}")
+    except Exception:
+        logger.error("segmentation run failed for study %s", study_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Segmentation failed. Please try again.",
+        )
 
 
 @router.get("/{study_id}/segmentation/runs")

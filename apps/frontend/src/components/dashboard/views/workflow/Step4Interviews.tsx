@@ -175,8 +175,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                 const status = interviewStatusMap[p.id] || 'pending';
                 const isActive = activeInterviewPersonaId === p.id;
                 return (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   <button
-                    key={p.id}
                     type="button"
                     onClick={() => {
                       setActiveInterviewPersonaId(p.id);
@@ -209,18 +209,50 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                             ? 'rgba(16, 185, 129, 0.15)'
                             : status === 'in_progress'
                             ? 'rgba(34, 211, 238, 0.15)'
+                            : status === 'failed'
+                            ? 'rgba(239, 68, 68, 0.12)'
                             : 'var(--fill-soft)',
                         color:
                           status === 'completed'
                             ? 'var(--accent-emerald)'
                             : status === 'in_progress'
                             ? 'var(--accent-cyan)'
+                            : status === 'failed'
+                            ? 'var(--status-error-text)'
                             : 'var(--text-secondary)',
                       }}
                     >
-                      {status === 'completed' ? 'Completed' : status === 'in_progress' ? 'Running' : 'Pending'}
+                      {status === 'completed'
+                        ? 'Completed'
+                        : status === 'in_progress'
+                        ? 'Running'
+                        : status === 'failed'
+                        ? 'Failed'
+                        : 'Pending'}
                     </span>
                   </button>
+                  {status === 'failed' && (
+                    <button
+                      type="button"
+                      onClick={handleRunBatchInterviews}
+                      disabled={isBatchRunning}
+                      title={`Re-run the interviews — ${p.name}'s did not finish`}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid var(--border-subtle)',
+                        color: 'var(--accent-cyan)',
+                        borderRadius: '6px',
+                        padding: '5px 10px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        cursor: isBatchRunning ? 'not-allowed' : 'pointer',
+                        opacity: isBatchRunning ? 0.5 : 1,
+                      }}
+                    >
+                      Retry
+                    </button>
+                  )}
+                  </div>
                 );
               })}
             </div>

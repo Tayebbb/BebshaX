@@ -32,6 +32,19 @@ def user_owns_study(study: Studies, current_user: Optional[Users]) -> bool:
     return False
 
 
+def user_can_write_study(study: Studies, current_user: Optional[Users]) -> bool:
+    """Write gate for study mutations.
+
+    Deliberately stricter than ``user_owns_study``: the ``is_demo`` allowance
+    exists so anyone can *read* the shared demo, not so any unauthenticated
+    caller can overwrite it. Writes require the owner's token (or, for
+    unowned/anonymous-tenant studies, the anonymous workflow that created them).
+    """
+    if current_user is not None:
+        return bool(study.user_id) and study.user_id == current_user.id
+    return not study.user_id or study.user_id in STUDY_ANON_OWNER_IDS
+
+
 def owner_accessible(owner_id: Optional[str], current_user: Optional[Users]) -> bool:
     """Row-level access rule for owner-stamped rows (audiences, businesses,
     personas, conversations): shared/system rows are readable by every caller;
