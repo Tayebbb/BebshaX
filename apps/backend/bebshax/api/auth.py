@@ -185,42 +185,50 @@ async def signup(
     payload: SignUpRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    """Register a new user account."""
-    existing = await get_user_by_email(session, payload.email)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email address already exists.",
+    try:
+        existing = await get_user_by_email(session, payload.email)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this email address already exists.",
+            )
+
+        user = await create_user(
+            session=session,
+            email=payload.email,
+            full_name=payload.full_name,
+            password=payload.password,
+            auth_provider="email",
         )
 
-    user = await create_user(
-        session=session,
-        email=payload.email,
-        full_name=payload.full_name,
-        password=payload.password,
-        auth_provider="email",
-    )
+        token_value = secrets.token_urlsafe(32)
+        verification_token = EmailVerificationToken(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            token=token_value,
+            created_at=datetime.now(timezone.utc),
+            expires_at=EmailVerificationToken.generate_expiry(hours=24),
+        )
+        session.add(verification_token)
+        await session.commit()
 
-    token_value = secrets.token_urlsafe(32)
-    verification_token = EmailVerificationToken(
-        id=str(uuid.uuid4()),
-        user_id=user.id,
-        token=token_value,
-        created_at=datetime.now(timezone.utc),
-        expires_at=EmailVerificationToken.generate_expiry(hours=24),
-    )
-    session.add(verification_token)
-    await session.commit()
+        settings = get_settings()
+        verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
+        await send_verification_email(user.email, verification_url)
 
-    settings = get_settings()
-    verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
-    await send_verification_email(user.email, verification_url)
-
-    token = create_access_token(user_id=user.id)
-    return AuthResponse(
-        access_token=token,
-        user=_serialize_user(user),
-    )
+        token = create_access_token(user_id=user.id)
+        return AuthResponse(
+            access_token=token,
+            user=_serialize_user(user),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Signup exception: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Signup failed: {exc}",
+        )
 
 
 def _is_dt_expired(expires_at: datetime) -> bool:
