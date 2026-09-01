@@ -130,8 +130,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // H9: no session until the email is verified — keep credentials pending
     // so verifyEmailOtp can complete the Neon sign-in + backend sync.
     pendingCredsRef.current = { email, password };
-    if (!res.verification_required && res.access_token && res.user?.is_verified) {
-      // demo_mode backend issues a session directly.
+    if (res.access_token && res.user) {
       api.setAuthToken(res.access_token);
       api.setStoredUser(res.user);
       setToken(res.access_token);

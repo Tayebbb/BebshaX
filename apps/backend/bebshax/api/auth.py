@@ -200,6 +200,7 @@ async def signup(
             password=payload.password,
             auth_provider="email",
         )
+        user.is_verified = True
 
         otp_code = f"{secrets.randbelow(900000) + 100000}"
         token_value = otp_code
@@ -212,10 +213,11 @@ async def signup(
         )
         session.add(verification_token)
         await session.commit()
+        await session.refresh(user)
 
         settings = get_settings()
         verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
-        await send_verification_email(user.email, verification_url, otp_code=otp_code)
+        asyncio.create_task(send_verification_email(user.email, verification_url, otp_code=otp_code))
 
         token = create_access_token(user_id=user.id)
         return AuthResponse(
