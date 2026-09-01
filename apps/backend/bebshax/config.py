@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # M6: explicit origins — wildcard + allow_credentials is invalid per the
     # Fetch spec and unsafe. Comma-separated; override via BEBSHAX_CORS_ORIGINS.
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,https://bebshax-frontend.vercel.app"
     frontend_base_url: str = "http://localhost:5173"
     resend_api_key: str | None = None
     email_from_address: str = "noreply@bebshax.ai"
