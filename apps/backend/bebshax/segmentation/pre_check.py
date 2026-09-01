@@ -104,11 +104,10 @@ def check_segmentation_readiness(
             f"and {claim_count} evidence claim(s). Segmentation can proceed, but results will reflect lower empirical confidence."
         )
     else:
-        status = "no_data"
-        can_run = False
+        status = "prompt_grounded"
+        can_run = True
         guidance = (
-            "Not enough information yet. Connect an empirical dataset (CSV, JSON, XLSX) in the Data Lab "
-            "or run research in the Evidence Laboratory before building market segments."
+            "No uploaded empirical datasets yet — generating market segments and synthetic personas grounded on study prompt context."
         )
 
     return SegmentationReadiness(
