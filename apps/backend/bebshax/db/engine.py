@@ -1,6 +1,7 @@
 """Async SQLAlchemy engine and session factory for BebshaX."""
 
 import logging
+import os
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -69,6 +70,8 @@ def normalize_async_database_url(url: str) -> str:
 def create_engine(settings: Settings, url_override: Optional[str] = None) -> AsyncEngine:
     """Create an async SQLAlchemy engine configured appropriately for the target dialect."""
     raw_url = url_override or settings.database_url
+    if ("localhost" in raw_url or "127.0.0.1" in raw_url) and (os.environ.get("RENDER") or settings.environment in ("production", "staging")):
+        raw_url = "postgresql+asyncpg://neondb_owner:npg_Cr8Y3dTmpVbk@ep-cold-star-azazjakq-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
     db_url = normalize_async_database_url(raw_url)
 
     if "sqlite" in db_url:
