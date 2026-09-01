@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
@@ -766,6 +767,286 @@ def _generate_deterministic_persona_fallback(
     )
 
 
+
+async def _process_segment(
+    seg: Any,
+    count_for_seg: int,
+    global_idx_start: int,
+    study_ctx: dict,
+    claims: list,
+    detected_domain: str,
+    llm_service: Optional[LLMService],
+) -> list[GeneratedPersonaDraft]:
+    """Generate all personas for a single market segment; runs concurrently with other segments."""
+    seg_char = getattr(seg, "characteristics", {}) or {}
+    seg_name = getattr(seg, "name", "Segment")
+    global_idx = global_idx_start
+    seg_drafts: list[GeneratedPersonaDraft] = []
+
+    if not llm_service:
+        for _ in range(count_for_seg):
+            draft = _generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims)
+            seg_drafts.append(draft)
+            global_idx += 1
+        return seg_drafts
+
+    # LLM-assisted generation — in sub-batches (see _MAX_PERSONAS_PER_REQUEST)
+    base_payload = {
+        "study_context": study_ctx,
+        "detected_domain": detected_domain,
+        "segment": {
+            "name": seg_name,
+            "cluster_label": getattr(seg, "cluster_label", "cluster_0"),
+            "population_percentage": getattr(seg, "population_percentage", 35.0),
+            "characteristics": seg_char,
+        },
+        "evidence_claims": [
+            {"id": f"C{i + 1}", "text": getattr(c, "claim_text", ""), "category": getattr(c, "category", "general")}
+            for i, c in enumerate(claims[:6])
+        ],
+    }
+    # Alias → real evidence id, so stored citations resolve after generation.
+    # Claims without a real id keep the alias rather than losing the link.
+    claim_id_map = {
+        f"C{i + 1}": (getattr(c, "id", "") or f"C{i + 1}") for i, c in enumerate(claims[:6])
+    }
+
+    system_prompt = (
+        "You are BebshaX's synthetic customer persona synthesis engine. Generate realistic, data-grounded "
+        "synthetic personas strictly matching the provided market segment characteristics, business domain, and evidence findings.\n"
+        "Rules:\n"
+        "1. Output valid JSON with key 'personas' containing an array of persona objects.\n"
+        "2. Each persona must include:\n"
+        "   - name, age, occupation, location, country_code (e.g. 'BD'), tagline (e.g. 'The Steady Night Caregiver'), bio (2-3 sentences), quote (1 sentence)\n"
+        "   - personality: object with integer scores (0-100) for openness, conscientiousness, extroversion, agreeableness, neuroticism\n"
+        "   - domain_attributes: object tailored to the business domain (e.g. food delivery: food_source, meal_timing, delivery_frequency, delivery_concerns; SaaS: current_tools, workflow, switching_barrier, desired_features; fitness: exercise_habits, fitness_goals, workout_frequency)\n"
+        "   - constraints: object with max_monthly_budget, subscription_tolerance, switching_tolerance, preferred_payment_method, price_sensitivity\n"
+        "   - detailed_attributes: object with hobbies, commute_mode, work_schedule, communication_style, coping_strategies, daily_activities, decision_style, financial_attitude, tech_interest, technology_usage, time_management\n"
+        "   - goals, needs, pain_points: arrays of claim objects {\"value\": str, \"provenance\": \"OBSERVED\"|\"INFERRED\"|\"SYNTHETIC\", \"evidence_ids\": [claim ids like \"C1\"]}.\n"
+        "     Provenance rules (citations are checked against the provided claim ids): OBSERVED only when directly supported by a provided evidence claim — cite its id(s); "
+        "INFERRED when reasonably deduced from segment/domain context; SYNTHETIC for plausible invention. Never fabricate ids.\n"
+        "   - behaviors, preferences, motivations, objections (arrays of strings)\n"
+        "   - monthly_budget_bdt (number), price_sensitivity, primary_devices (array), platforms (array), tech_familiarity\n"
+        "3. Ages and budgets must strictly fall within the segment's specified bounds.\n"
+        "4. Ground every persona authentically in their regional lifestyle, domain behavior, and practical daily reality."
+    )
+
+    raw_personas: list[tuple[dict, str]] = []  # (persona dict, serving provider/model)
+    template_fill = 0  # personas owed by failed/empty batches — filled honestly below
+    remaining = count_for_seg
+    while remaining > 0:
+        batch_count = min(remaining, _MAX_PERSONAS_PER_REQUEST)
+        remaining -= batch_count
+        request = LLMRequest(
+            task=TaskType.PERSONA_GENERATION,
+            messages=[
+                ChatMessage(role="system", content=system_prompt),
+                ChatMessage(role="user", content=json.dumps({**base_payload, "count_to_generate": batch_count})),
+            ],
+            json_mode=True,
+            # 0.75, not 0.3: low temperature makes every segment's personas
+            # converge on the same archetype phrasing — diversity is a core
+            # quality metric. Structure safety comes from json_mode + the
+            # per-field validation below, not from a frozen sampler.
+            temperature=0.75,
+            # ~1200 tokens covers one persona's full schema with headroom;
+            # the adapter raises on budget-exhausted completions.
+            max_output_tokens=min(1200 * batch_count, 4000),
+        )
+        try:
+            llm_result = await llm_service.complete(request)
+            served_by = (
+                f"{llm_result.provenance.served_by_provider}/{llm_result.provenance.served_by_model}"
+                if llm_result.provenance.served_by_provider
+                else "llm/unknown"
+            )
+            parsed = parse_llm_json(llm_result.text)
+            batch_personas = parsed.get("personas", []) if isinstance(parsed, dict) else []
+            if batch_personas:
+                # pair each draft with ITS batch's serving model — pool
+                # failover mid-segment must not misattribute earlier batches
+                raw_personas.extend((p, served_by) for p in batch_personas[:batch_count])
+            else:
+                logger.warning(
+                    "persona generation returned no personas for segment %s — "
+                    "filling batch with labeled templates",
+                    seg_name,
+                )
+                template_fill += batch_count
+        except (AllCandidatesFailed, ContextWindowExceeded):
+            # Honest infrastructure failure — never quietly replaced with
+            # template personas pretending to be research output (R2/R6).
+            raise
+        except Exception:
+            logger.warning(
+                "persona generation failed for segment %s — filling batch with labeled templates",
+                seg_name,
+                exc_info=True,
+            )
+            template_fill += batch_count
+
+    for p_raw, served_by in raw_personas[: count_for_seg - template_fill]:
+        fallback_draft = _generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims)
+        fallback_template = _RICH_ARCHETYPE_TEMPLATES[global_idx % len(_RICH_ARCHETYPE_TEMPLATES)]
+        name = p_raw.get("name") or fallback_template["name"]
+        age = int(p_raw.get("age", fallback_template.get("age", 25)))
+        occupation = p_raw.get("occupation", fallback_template.get("occupation", "Professional"))
+        location = p_raw.get("location", fallback_template.get("location", "Dhaka, Bangladesh"))
+        tagline = p_raw.get("tagline") or fallback_template.get("tagline", f"The Grounded {seg_name} Representative")
+        country_code = p_raw.get("country_code") or fallback_template.get("country_code", "BD")
+        origin_country = p_raw.get("origin_country") or fallback_template.get("origin_country", "Bangladesh")
+        budget_num = int(p_raw.get("monthly_budget_bdt", fallback_draft.commercial_profile.get("monthly_budget_bdt", 450)))
+
+        personality_raw = p_raw.get("personality", {})
+        personality = {
+            "openness": int(personality_raw.get("openness", fallback_template["personality"]["openness"])),
+            "conscientiousness": int(personality_raw.get("conscientiousness", fallback_template["personality"]["conscientiousness"])),
+            "extroversion": int(personality_raw.get("extroversion", fallback_template["personality"]["extroversion"])),
+            "agreeableness": int(personality_raw.get("agreeableness", fallback_template["personality"]["agreeableness"])),
+            "neuroticism": int(personality_raw.get("neuroticism", fallback_template["personality"]["neuroticism"])),
+        }
+
+        domain_attrs = dict(fallback_draft.domain_attributes)
+        if isinstance(p_raw.get("domain_attributes"), dict):
+            for k, v in p_raw["domain_attributes"].items():
+                if v:
+                    domain_attrs[k] = v
+
+        constraints = dict(fallback_draft.constraints)
+        if isinstance(p_raw.get("constraints"), dict):
+            for k, v in p_raw["constraints"].items():
+                if v:
+                    constraints[k] = v
+        constraints["max_monthly_budget"] = budget_num
+
+        # Bangladeshi archetype templates only backfill Bangladeshi
+        # personas — a US-market persona must not inherit bKash habits.
+        is_bd_context = "bangladesh" in str(location).lower() or str(country_code).upper() == "BD"
+        detailed_attributes = (
+            dict(fallback_template.get("detailed_attributes", {})) if is_bd_context else {}
+        )
+        if isinstance(p_raw.get("detailed_attributes"), dict):
+            for k, v in p_raw["detailed_attributes"].items():
+                if v:
+                    detailed_attributes[k] = v
+        detailed_attributes["domain_attributes"] = domain_attrs
+        detailed_attributes["constraints"] = constraints
+        for k, v in domain_attrs.items():
+            detailed_attributes[k] = v
+
+        # Per-claim provenance (downgrade-only, citations verified
+        # against the claim ids actually shown to the model).
+        claim_values: dict[str, list[str]] = {}
+        claim_provenance: dict[str, list[dict[str, Any]]] = {}
+        for group in _CLASSED_GROUPS:
+            vals, classed = _coerce_claim_list(p_raw.get(group), claim_id_map)
+            if not vals:
+                vals = list(getattr(fallback_draft, group))
+                classed = [
+                    {"value": v, "provenance": "SYNTHETIC", "evidence_ids": []} for v in vals
+                ]
+            claim_values[group] = vals
+            claim_provenance[group] = classed
+        detailed_attributes["claim_provenance"] = claim_provenance
+
+        # Citations mirror what the persona actually cites — the union
+        # of verified evidence_ids across its claims, never claims[:3].
+        claim_by_id = {getattr(c, "id", ""): c for c in claims}
+        cited_ids = sorted(
+            {
+                eid
+                for group_entries in claim_provenance.values()
+                for entry in group_entries
+                for eid in entry.get("evidence_ids", [])
+                if eid in claim_by_id
+            }
+        )
+        matched_citations = [
+            {
+                "claim_id": cid,
+                "claim_text": getattr(claim_by_id[cid], "claim_text", ""),
+                "category": getattr(claim_by_id[cid], "category", "general"),
+                "confidence": getattr(claim_by_id[cid], "confidence", 0.0),
+            }
+            for cid in cited_ids
+        ]
+
+        commercial_prof = {
+            "monthly_budget_bdt": budget_num,
+            "price_sensitivity": p_raw.get("price_sensitivity", "High" if budget_num <= 500 else "Moderate"),
+            "payment_preference": p_raw.get("payment_preference", constraints.get("preferred_payment_method", "bKash Mobile Wallet")),
+            "willingness_to_pay": f"\u09f3{budget_num}/mo",
+            "constraints": constraints,
+        }
+
+        validation = validate_synthetic_persona(
+            {
+                "name": name,
+                "demographics": {"age": age, "occupation": occupation, "location": location},
+                "goals": claim_values["goals"],
+                "needs": claim_values["needs"],
+                "pain_points": claim_values["pain_points"],
+                "behaviors": p_raw.get("behaviors", fallback_draft.behaviors),
+                "commercial_profile": commercial_prof,
+                "evidence_citations": matched_citations,
+                "claim_provenance": claim_provenance,
+            },
+            seg_char,
+            claims,
+        )
+
+        seg_drafts.append(
+            GeneratedPersonaDraft(
+                name=name,
+                archetype=occupation or f"{seg_name} Archetype",
+                tagline=tagline,
+                country_code=country_code,
+                origin_country=origin_country,
+                demographics={
+                    "age": age,
+                    "occupation": occupation,
+                    "location": location,
+                    "education": p_raw.get("education", "Graduate / Professional"),
+                    "income_or_budget": f"\u09f3{budget_num}/mo",
+                },
+                bio=p_raw.get("bio") or f"{name} is a {age}-year-old {occupation} in {location}.",
+                quote=p_raw.get("quote") or "I need a dependable, cost-effective service.",
+                personality=personality,
+                detailed_attributes=detailed_attributes,
+                domain_attributes=domain_attrs,
+                constraints=constraints,
+                goals=claim_values["goals"],
+                needs=claim_values["needs"],
+                pain_points=claim_values["pain_points"],
+                behaviors=p_raw.get("behaviors") or fallback_draft.behaviors,
+                preferences=p_raw.get("preferences") or fallback_draft.preferences,
+                motivations=p_raw.get("motivations") or fallback_draft.motivations,
+                objections=p_raw.get("objections") or fallback_draft.objections,
+                commercial_profile=commercial_prof,
+                technology_profile={
+                    "primary_devices": p_raw.get("primary_devices", ["Android Smartphone"]),
+                    "platforms": p_raw.get("platforms", ["WhatsApp", "Messenger", "bKash"]),
+                    "familiarity": p_raw.get("tech_familiarity", "Medium"),
+                },
+                evidence_citations=matched_citations,
+                dataset_refs=[{"variable": "monthly_budget", "value": budget_num, "source": "Market Segment"}],
+                grounding_score=validation.grounding_score,
+                confidence=validation.confidence,
+                status=validation.status,
+                validation_warnings=validation.warnings,
+                generation_model=served_by,
+            )
+        )
+        global_idx += 1
+
+    # Personas owed by failed/empty batches — honestly labeled templates.
+    for _ in range(min(template_fill, count_for_seg)):
+        seg_drafts.append(_generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims))
+        global_idx += 1
+
+    return seg_drafts
+
+
 async def generate_personas_for_study(
     study: Any,
     segments: list[Any],
@@ -789,275 +1070,32 @@ async def generate_personas_for_study(
     }
     detected_domain = detect_study_domain(study_ctx)
 
-    all_generated: list[GeneratedPersonaDraft] = []
-    global_idx = 0
-
+    # Pre-compute each segment's starting global_idx so ordering is deterministic
+    # regardless of which segment coroutine finishes first.
+    idx_starts: list[int] = []
+    running = 0
     for seg in segments:
-        seg_id = getattr(seg, "id", "")
-        count_for_seg = quotas.get(seg_id, 1)
-        seg_char = getattr(seg, "characteristics", {}) or {}
-        seg_name = getattr(seg, "name", "Segment")
+        idx_starts.append(running)
+        running += quotas.get(getattr(seg, "id", ""), 1)
 
-        if not llm_service:
-            for i in range(count_for_seg):
-                draft = _generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims)
-                all_generated.append(draft)
-                global_idx += 1
-            continue
-
-        # LLM-assisted generation — in sub-batches (see _MAX_PERSONAS_PER_REQUEST)
-        base_payload = {
-            "study_context": study_ctx,
-            "detected_domain": detected_domain,
-            "segment": {
-                "name": seg_name,
-                "cluster_label": getattr(seg, "cluster_label", "cluster_0"),
-                "population_percentage": getattr(seg, "population_percentage", 35.0),
-                "characteristics": seg_char,
-            },
-            "evidence_claims": [
-                {"id": f"C{i + 1}", "text": getattr(c, "claim_text", ""), "category": getattr(c, "category", "general")}
-                for i, c in enumerate(claims[:6])
-            ],
-        }
-        # Alias → real evidence id, so stored citations resolve after generation.
-        # Claims without a real id keep the alias rather than losing the link.
-        claim_id_map = {
-            f"C{i + 1}": (getattr(c, "id", "") or f"C{i + 1}") for i, c in enumerate(claims[:6])
-        }
-
-        system_prompt = (
-            "You are BebshaX's synthetic customer persona synthesis engine. Generate realistic, data-grounded "
-            "synthetic personas strictly matching the provided market segment characteristics, business domain, and evidence findings.\n"
-            "Rules:\n"
-            "1. Output valid JSON with key 'personas' containing an array of persona objects.\n"
-            "2. Each persona must include:\n"
-            "   - name, age, occupation, location, country_code (e.g. 'BD'), tagline (e.g. 'The Steady Night Caregiver'), bio (2-3 sentences), quote (1 sentence)\n"
-            "   - personality: object with integer scores (0-100) for openness, conscientiousness, extroversion, agreeableness, neuroticism\n"
-            "   - domain_attributes: object tailored to the business domain (e.g. food delivery: food_source, meal_timing, delivery_frequency, delivery_concerns; SaaS: current_tools, workflow, switching_barrier, desired_features; fitness: exercise_habits, fitness_goals, workout_frequency)\n"
-            "   - constraints: object with max_monthly_budget, subscription_tolerance, switching_tolerance, preferred_payment_method, price_sensitivity\n"
-            "   - detailed_attributes: object with hobbies, commute_mode, work_schedule, communication_style, coping_strategies, daily_activities, decision_style, financial_attitude, tech_interest, technology_usage, time_management\n"
-            "   - goals, needs, pain_points: arrays of claim objects {\"value\": str, \"provenance\": \"OBSERVED\"|\"INFERRED\"|\"SYNTHETIC\", \"evidence_ids\": [claim ids like \"C1\"]}.\n"
-            "     Provenance rules (citations are checked against the provided claim ids): OBSERVED only when directly supported by a provided evidence claim — cite its id(s); "
-            "INFERRED when reasonably deduced from segment/domain context; SYNTHETIC for plausible invention. Never fabricate ids.\n"
-            "   - behaviors, preferences, motivations, objections (arrays of strings)\n"
-            "   - monthly_budget_bdt (number), price_sensitivity, primary_devices (array), platforms (array), tech_familiarity\n"
-            "3. Ages and budgets must strictly fall within the segment's specified bounds.\n"
-            "4. Ground every persona authentically in their regional lifestyle, domain behavior, and practical daily reality."
+    coros = [
+        _process_segment(
+            seg, quotas.get(getattr(seg, "id", ""), 1), idx_start,
+            study_ctx, claims, detected_domain, llm_service,
         )
+        for seg, idx_start in zip(segments, idx_starts)
+    ]
+    # Segments are independent — run concurrently; the pool semaphore caps
+    # real parallelism to max_concurrency without exceeding provider rate limits.
+    seg_results = await asyncio.gather(*coros, return_exceptions=True)
 
-        raw_personas: list[tuple[dict, str]] = []  # (persona dict, serving provider/model)
-        template_fill = 0  # personas owed by failed/empty batches — filled honestly below
-        remaining = count_for_seg
-        while remaining > 0:
-            batch_count = min(remaining, _MAX_PERSONAS_PER_REQUEST)
-            remaining -= batch_count
-            request = LLMRequest(
-                task=TaskType.PERSONA_GENERATION,
-                messages=[
-                    ChatMessage(role="system", content=system_prompt),
-                    ChatMessage(role="user", content=json.dumps({**base_payload, "count_to_generate": batch_count})),
-                ],
-                json_mode=True,
-                # 0.75, not 0.3: low temperature makes every segment's personas
-                # converge on the same archetype phrasing — diversity is a core
-                # quality metric. Structure safety comes from json_mode + the
-                # per-field validation below, not from a frozen sampler.
-                temperature=0.75,
-                # ~1200 tokens covers one persona's full schema with headroom;
-                # the adapter raises on budget-exhausted completions.
-                max_output_tokens=min(1200 * batch_count, 4000),
-            )
-            try:
-                result = await llm_service.complete(request)
-                served_by = (
-                    f"{result.provenance.served_by_provider}/{result.provenance.served_by_model}"
-                    if result.provenance.served_by_provider
-                    else "llm/unknown"
-                )
-                parsed = parse_llm_json(result.text)
-                batch_personas = parsed.get("personas", []) if isinstance(parsed, dict) else []
-                if batch_personas:
-                    # pair each draft with ITS batch's serving model — pool
-                    # failover mid-segment must not misattribute earlier batches
-                    raw_personas.extend((p, served_by) for p in batch_personas[:batch_count])
-                else:
-                    logger.warning(
-                        "persona generation returned no personas for segment %s — "
-                        "filling batch with labeled templates",
-                        seg_name,
-                    )
-                    template_fill += batch_count
-            except (AllCandidatesFailed, ContextWindowExceeded):
-                # Honest infrastructure failure — never quietly replaced with
-                # template personas pretending to be research output (R2/R6).
-                raise
-            except Exception:
-                logger.warning(
-                    "persona generation failed for segment %s — filling batch with labeled templates",
-                    seg_name,
-                    exc_info=True,
-                )
-                template_fill += batch_count
-
-        for p_raw, served_by in raw_personas[: count_for_seg - template_fill]:
-                fallback_draft = _generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims)
-                fallback_template = _RICH_ARCHETYPE_TEMPLATES[global_idx % len(_RICH_ARCHETYPE_TEMPLATES)]
-                name = p_raw.get("name") or fallback_template["name"]
-                age = int(p_raw.get("age", fallback_template.get("age", 25)))
-                occupation = p_raw.get("occupation", fallback_template.get("occupation", "Professional"))
-                location = p_raw.get("location", fallback_template.get("location", "Dhaka, Bangladesh"))
-                tagline = p_raw.get("tagline") or fallback_template.get("tagline", f"The Grounded {seg_name} Representative")
-                country_code = p_raw.get("country_code") or fallback_template.get("country_code", "BD")
-                origin_country = p_raw.get("origin_country") or fallback_template.get("origin_country", "Bangladesh")
-                budget_num = int(p_raw.get("monthly_budget_bdt", fallback_draft.commercial_profile.get("monthly_budget_bdt", 450)))
-
-                personality_raw = p_raw.get("personality", {})
-                personality = {
-                    "openness": int(personality_raw.get("openness", fallback_template["personality"]["openness"])),
-                    "conscientiousness": int(personality_raw.get("conscientiousness", fallback_template["personality"]["conscientiousness"])),
-                    "extroversion": int(personality_raw.get("extroversion", fallback_template["personality"]["extroversion"])),
-                    "agreeableness": int(personality_raw.get("agreeableness", fallback_template["personality"]["agreeableness"])),
-                    "neuroticism": int(personality_raw.get("neuroticism", fallback_template["personality"]["neuroticism"])),
-                }
-
-                domain_attrs = dict(fallback_draft.domain_attributes)
-                if isinstance(p_raw.get("domain_attributes"), dict):
-                    for k, v in p_raw["domain_attributes"].items():
-                        if v:
-                            domain_attrs[k] = v
-
-                constraints = dict(fallback_draft.constraints)
-                if isinstance(p_raw.get("constraints"), dict):
-                    for k, v in p_raw["constraints"].items():
-                        if v:
-                            constraints[k] = v
-                constraints["max_monthly_budget"] = budget_num
-
-                # Bangladeshi archetype templates only backfill Bangladeshi
-                # personas — a US-market persona must not inherit bKash habits.
-                is_bd_context = "bangladesh" in str(location).lower() or str(country_code).upper() == "BD"
-                detailed_attributes = (
-                    dict(fallback_template.get("detailed_attributes", {})) if is_bd_context else {}
-                )
-                if isinstance(p_raw.get("detailed_attributes"), dict):
-                    for k, v in p_raw["detailed_attributes"].items():
-                        if v:
-                            detailed_attributes[k] = v
-                detailed_attributes["domain_attributes"] = domain_attrs
-                detailed_attributes["constraints"] = constraints
-                for k, v in domain_attrs.items():
-                    detailed_attributes[k] = v
-
-                # Per-claim provenance (downgrade-only, citations verified
-                # against the claim ids actually shown to the model).
-                claim_values: dict[str, list[str]] = {}
-                claim_provenance: dict[str, list[dict[str, Any]]] = {}
-                for group in _CLASSED_GROUPS:
-                    vals, classed = _coerce_claim_list(p_raw.get(group), claim_id_map)
-                    if not vals:
-                        vals = list(getattr(fallback_draft, group))
-                        classed = [
-                            {"value": v, "provenance": "SYNTHETIC", "evidence_ids": []} for v in vals
-                        ]
-                    claim_values[group] = vals
-                    claim_provenance[group] = classed
-                detailed_attributes["claim_provenance"] = claim_provenance
-
-                # Citations mirror what the persona actually cites — the union
-                # of verified evidence_ids across its claims, never claims[:3].
-                claim_by_id = {getattr(c, "id", ""): c for c in claims}
-                cited_ids = sorted(
-                    {
-                        eid
-                        for group_entries in claim_provenance.values()
-                        for entry in group_entries
-                        for eid in entry.get("evidence_ids", [])
-                        if eid in claim_by_id
-                    }
-                )
-                matched_citations = [
-                    {
-                        "claim_id": cid,
-                        "claim_text": getattr(claim_by_id[cid], "claim_text", ""),
-                        "category": getattr(claim_by_id[cid], "category", "general"),
-                        "confidence": getattr(claim_by_id[cid], "confidence", 0.0),
-                    }
-                    for cid in cited_ids
-                ]
-
-                commercial_prof = {
-                    "monthly_budget_bdt": budget_num,
-                    "price_sensitivity": p_raw.get("price_sensitivity", "High" if budget_num <= 500 else "Moderate"),
-                    "payment_preference": p_raw.get("payment_preference", constraints.get("preferred_payment_method", "bKash Mobile Wallet")),
-                    "willingness_to_pay": f"৳{budget_num}/mo",
-                    "constraints": constraints,
-                }
-
-                validation = validate_synthetic_persona(
-                    {
-                        "name": name,
-                        "demographics": {"age": age, "occupation": occupation, "location": location},
-                        "goals": claim_values["goals"],
-                        "needs": claim_values["needs"],
-                        "pain_points": claim_values["pain_points"],
-                        "behaviors": p_raw.get("behaviors", fallback_draft.behaviors),
-                        "commercial_profile": commercial_prof,
-                        "evidence_citations": matched_citations,
-                        "claim_provenance": claim_provenance,
-                    },
-                    seg_char,
-                    claims,
-                )
-
-                all_generated.append(
-                    GeneratedPersonaDraft(
-                        name=name,
-                        archetype=occupation or f"{seg_name} Archetype",
-                        tagline=tagline,
-                        country_code=country_code,
-                        origin_country=origin_country,
-                        demographics={
-                            "age": age,
-                            "occupation": occupation,
-                            "location": location,
-                            "education": p_raw.get("education", "Graduate / Professional"),
-                            "income_or_budget": f"৳{budget_num}/mo",
-                        },
-                        bio=p_raw.get("bio") or f"{name} is a {age}-year-old {occupation} in {location}.",
-                        quote=p_raw.get("quote") or "I need a dependable, cost-effective service.",
-                        personality=personality,
-                        detailed_attributes=detailed_attributes,
-                        domain_attributes=domain_attrs,
-                        constraints=constraints,
-                        goals=claim_values["goals"],
-                        needs=claim_values["needs"],
-                        pain_points=claim_values["pain_points"],
-                        behaviors=p_raw.get("behaviors") or fallback_draft.behaviors,
-                        preferences=p_raw.get("preferences") or fallback_draft.preferences,
-                        motivations=p_raw.get("motivations") or fallback_draft.motivations,
-                        objections=p_raw.get("objections") or fallback_draft.objections,
-                        commercial_profile=commercial_prof,
-                        technology_profile={
-                            "primary_devices": p_raw.get("primary_devices", ["Android Smartphone"]),
-                            "platforms": p_raw.get("platforms", ["WhatsApp", "Messenger", "bKash"]),
-                            "familiarity": p_raw.get("tech_familiarity", "Medium"),
-                        },
-                        evidence_citations=matched_citations,
-                        dataset_refs=[{"variable": "monthly_budget", "value": budget_num, "source": "Market Segment"}],
-                        grounding_score=validation.grounding_score,
-                        confidence=validation.confidence,
-                        status=validation.status,
-                        validation_warnings=validation.warnings,
-                        generation_model=served_by,
-                    )
-                )
-                global_idx += 1
-
-        # Personas owed by failed/empty batches — honestly labeled templates.
-        for _ in range(min(template_fill, count_for_seg)):
-            all_generated.append(_generate_deterministic_persona_fallback(seg, global_idx, study_ctx, claims))
-            global_idx += 1
+    all_generated: list[GeneratedPersonaDraft] = []
+    for seg_result in seg_results:
+        if isinstance(seg_result, (AllCandidatesFailed, ContextWindowExceeded)):
+            raise seg_result
+        if isinstance(seg_result, Exception):
+            logger.warning("unexpected segment error (skipping segment): %s", seg_result, exc_info=seg_result)
+            continue
+        all_generated.extend(seg_result)
 
     return all_generated
-

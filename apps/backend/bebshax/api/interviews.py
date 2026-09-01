@@ -12,7 +12,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
@@ -260,12 +260,15 @@ async def get_study_interview_metrics(
     """Aggregate metric counts for study interviews."""
     await _get_study_and_verify_access(session, study_id, current_user)
 
-    stmt = select(Conversations).where(Conversations.study_id == study_id)
-    conv_list = list((await session.execute(stmt)).scalars())
-
-    total = len(conv_list)
-    active = sum(1 for c in conv_list if c.status == "active")
-    completed = sum(1 for c in conv_list if c.status == "completed")
+    agg_stmt = select(
+        func.count().label("total"),
+        func.sum(case((Conversations.status == "active", 1), else_=0)).label("active"),
+        func.sum(case((Conversations.status == "completed", 1), else_=0)).label("completed"),
+    ).where(Conversations.study_id == study_id)
+    row = (await session.execute(agg_stmt)).one()
+    total = row.total or 0
+    active = row.active or 0
+    completed = row.completed or 0
 
     insights_count = (
         await session.execute(

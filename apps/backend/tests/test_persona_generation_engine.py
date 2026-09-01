@@ -436,3 +436,196 @@ async def test_persona_generation_service_lifecycle():
 
         personas_after_del = await service.list_personas(study_id=study.id)
         assert len(personas_after_del) == 0
+
+
+# ---------------------------------------------------------------------------
+# Fix-1 regression tests — concurrent segment generation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_concurrent_generation_preserves_segment_order():
+    """Segments complete in reverse order (slowest first) but output must still
+    be in the declared segment order (seg_a personas before seg_b personas)."""
+    import asyncio as _asyncio
+    import json as _json
+
+    class _DelayedLLM:
+        def __init__(self, delay: float, prefix: str) -> None:
+            self._delay = delay
+            self._prefix = prefix
+
+        async def complete(self, request):
+            from types import SimpleNamespace
+            payload = _json.loads(request.messages[-1].content)
+            n = payload["count_to_generate"]
+            await _asyncio.sleep(self._delay)
+            personas = [
+                {
+                    "name": f"{self._prefix}-{i}",
+                    "age": 22,
+                    "occupation": "Student",
+                    "location": "Dhaka",
+                    "monthly_budget_bdt": 400,
+                    "goals": ["study"],
+                    "pain_points": ["cost"],
+                }
+                for i in range(n)
+            ]
+            return SimpleNamespace(
+                text=_json.dumps({"personas": personas}),
+                provenance=SimpleNamespace(served_by_provider="fake", served_by_model="m1"),
+            )
+
+    # seg_a is slower — would finish last without concurrency, but its personas
+    # must still appear first in the output because it is declared first.
+    segments = [
+        MockSegment("seg_a", "Slow Segment", 50.0),
+        MockSegment("seg_b", "Fast Segment", 50.0),
+    ]
+    mock_study = MagicMock()
+    mock_study.title = "Order Test"
+    mock_study.prompt = ""
+    mock_study.target_audience = "Students"
+    mock_study.pricing_hypothesis = ""
+
+    # Use a shared LLM that tracks which segment completed first via delay
+    import time
+    completion_order: list[str] = []
+
+    class _TrackingLLM:
+        def __init__(self, delay: float, tag: str) -> None:
+            self._delay = delay
+            self._tag = tag
+
+        async def complete(self, request):
+            from types import SimpleNamespace
+            payload = _json.loads(request.messages[-1].content)
+            n = payload["count_to_generate"]
+            await _asyncio.sleep(self._delay)
+            completion_order.append(self._tag)
+            personas = [
+                {
+                    "name": f"Persona-{self._tag}-{i}",
+                    "age": 22,
+                    "occupation": "Student",
+                    "location": "Dhaka",
+                    "monthly_budget_bdt": 400,
+                    "goals": ["study"],
+                    "pain_points": ["cost"],
+                }
+                for i in range(n)
+            ]
+            return SimpleNamespace(
+                text=_json.dumps({"personas": personas}),
+                provenance=SimpleNamespace(served_by_provider="fake", served_by_model="m1"),
+            )
+
+    # Patch _process_segment to use different LLM instances per segment
+    # Instead, use a shared LLM that dispatches by segment name via payload
+    class _OrderTestLLM:
+        async def complete(self, request):
+            from types import SimpleNamespace
+            payload = _json.loads(request.messages[-1].content)
+            n = payload["count_to_generate"]
+            seg_name = payload.get("segment", {}).get("name", "")
+            delay = 0.05 if "Slow" in seg_name else 0.01
+            await _asyncio.sleep(delay)
+            completion_order.append(seg_name)
+            personas = [
+                {
+                    "name": f"Persona-{seg_name}-{i}",
+                    "age": 22,
+                    "occupation": "Student",
+                    "location": "Dhaka",
+                    "monthly_budget_bdt": 400,
+                    "goals": ["study"],
+                    "pain_points": ["cost"],
+                }
+                for i in range(n)
+            ]
+            return SimpleNamespace(
+                text=_json.dumps({"personas": personas}),
+                provenance=SimpleNamespace(served_by_provider="fake", served_by_model="m1"),
+            )
+
+    drafts = await generate_personas_for_study(
+        study=mock_study,
+        segments=segments,
+        target_count=2,
+        distribution_strategy="equal",
+        evidence_claims=[],
+        llm_service=_OrderTestLLM(),
+    )
+
+    assert len(drafts) == 2
+    # Fast segment completed first, but output must be in declared segment order
+    assert "Slow Segment" in completion_order[1], "Fast Segment should finish first"
+    # Output personas must be in segment declaration order
+    assert "Slow Segment" in drafts[0].name
+    assert "Fast Segment" in drafts[1].name
+
+
+@pytest.mark.asyncio
+async def test_one_failing_segment_does_not_abort_others():
+    """A non-critical exception in one segment must not abort the other segments.
+    The failed segment produces template personas (existing fallback behaviour).
+    This mirrors the pre-existing per-batch except-Exception path."""
+    import json as _json
+
+    class _PartiallyDeadLLM:
+        """Fails for 'Bad Segment', succeeds for all others."""
+
+        async def complete(self, request):
+            from types import SimpleNamespace
+            payload = _json.loads(request.messages[-1].content)
+            seg_name = payload.get("segment", {}).get("name", "")
+            n = payload["count_to_generate"]
+            if seg_name == "Bad Segment":
+                raise RuntimeError("simulated transient provider error")
+            personas = [
+                {
+                    "name": f"OK-{seg_name}-{i}",
+                    "age": 22,
+                    "occupation": "Student",
+                    "location": "Dhaka",
+                    "monthly_budget_bdt": 400,
+                    "goals": ["study"],
+                    "pain_points": ["cost"],
+                }
+                for i in range(n)
+            ]
+            return SimpleNamespace(
+                text=_json.dumps({"personas": personas}),
+                provenance=SimpleNamespace(served_by_provider="fake", served_by_model="m1"),
+            )
+
+    segments = [
+        MockSegment("seg_a", "Good Segment A", 33.0),
+        MockSegment("seg_b", "Bad Segment", 34.0),
+        MockSegment("seg_c", "Good Segment C", 33.0),
+    ]
+    mock_study = MagicMock()
+    mock_study.title = "Partial Failure Test"
+    mock_study.prompt = ""
+    mock_study.target_audience = "Mixed"
+    mock_study.pricing_hypothesis = ""
+
+    # Should NOT raise; the bad segment is handled internally with template fallback
+    drafts = await generate_personas_for_study(
+        study=mock_study,
+        segments=segments,
+        target_count=3,
+        distribution_strategy="equal",
+        evidence_claims=[],
+        llm_service=_PartiallyDeadLLM(),
+    )
+
+    assert len(drafts) == 3
+    # Good segments produced LLM personas
+    good_a = [d for d in drafts if "Good Segment A" in d.name]
+    good_c = [d for d in drafts if "Good Segment C" in d.name]
+    assert len(good_a) == 1
+    assert len(good_c) == 1
+    # Bad segment fell back to template (deterministic fallback model label)
+    bad = [d for d in drafts if d.generation_model == "deterministic-template-fallback"]
+    assert len(bad) == 1

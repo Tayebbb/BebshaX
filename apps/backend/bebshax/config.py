@@ -31,18 +31,17 @@ class Settings(BaseSettings):
     # Fetch spec and unsafe. Comma-separated; override via BEBSHAX_CORS_ORIGINS.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,https://bebshax-frontend.vercel.app"
     frontend_base_url: str = "http://localhost:5173"
-    resend_api_key: str | None = "re_LyyJHGMg_H4mdCTe82mzZtvvdwS5FbG8o"
+    resend_api_key: str | None = None
     email_from_address: str = "bebshax.official@gmail.com"
     smtp_host: str = "smtp-relay.brevo.com"
     smtp_port: int = 587
-    smtp_username: str = "b77169001@smtp-brevo.com"
-    smtp_password: str | None = "xsmtpsib-adb0dd11dfb7ab41e18a9776db6bb4017f423389e3fbbfad4db4ced0285abc3d-pmokSgVfpMAxbu7t"
+    smtp_username: str | None = None
+    smtp_password: str | None = None
 
     @property
-    def active_smtp_password(self) -> str:
-        if self.smtp_password and self.smtp_password.strip() and "xsmtpsib" in self.smtp_password:
-            return self.smtp_password.strip()
-        return "xsmtpsib-adb0dd11dfb7ab41e18a9776db6bb4017f423389e3fbbfad4db4ced0285abc3d-pmokSgVfpMAxbu7t"
+    def active_smtp_password(self) -> str | None:
+        password = (self.smtp_password or "").strip()
+        return password or None
     stripe_secret_key: str | None = None
     stripe_publishable_key: str | None = None
     stripe_webhook_secret: str | None = None
@@ -52,7 +51,7 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
-    database_url: str = "postgresql+asyncpg://neondb_owner:npg_Cr8Y3dTmpVbk@ep-cold-star-azazjakq-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+    database_url: str = "postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax"
 
     @property
     def sync_database_url(self) -> str:
@@ -73,7 +72,9 @@ class Settings(BaseSettings):
     embedding_backend: str = "local"
     embedding_model: str | None = None
 
-    jwt_secret: str = "bebshax_default_production_jwt_signing_secret_key_2026_unburned_32chars"  # Safe default if env var not set
+    # B4: no default — a shipped signing key lets anyone forge tokens for every
+    # deployment that forgets to set the env var. Empty fails the validator below.
+    jwt_secret: str = ""
     jwt_secret_previous: str | None = None  # rotation grace window only
     jwt_issuer: str = "bebshax-api"
     jwt_audience: str = "bebshax-client"

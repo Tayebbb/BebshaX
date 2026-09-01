@@ -22,28 +22,19 @@ def upgrade() -> None:
     # 1. Ensure tagged system holder account exists for demo/system ownership
     system_user_id = "usr_system_holder"
     op.execute(
-        f"""
-        INSERT INTO users (id, email, full_name, auth_provider, is_active, is_verified, created_at, updated_at)
-        VALUES (
-            '{system_user_id}',
-            'system@bebshax.internal',
-            'BebshaX System Data (do not treat as a real user)',
-            'system',
-            true,
-            true,
-            now(),
-            now()
-        )
-        ON CONFLICT (id) DO NOTHING;
-        """
+        sa.text(
+            "INSERT INTO users (id, email, full_name, auth_provider, is_active, is_verified, created_at, updated_at)"
+            " VALUES (:id, 'system@bebshax.internal', 'BebshaX System Data (do not treat as a real user)', 'system', true, true, now(), now())"
+            " ON CONFLICT (id) DO NOTHING"
+        ).bindparams(id=system_user_id)
     )
 
     # 2. Backfill existing orphaned rows to the tagged system holder account
     op.execute(
-        f"UPDATE businesses SET owner_id = '{system_user_id}' WHERE owner_id IS NULL;"
+        sa.text("UPDATE businesses SET owner_id = :uid WHERE owner_id IS NULL").bindparams(uid=system_user_id)
     )
     op.execute(
-        f"UPDATE personas SET owner_id = '{system_user_id}' WHERE owner_id IS NULL;"
+        sa.text("UPDATE personas SET owner_id = :uid WHERE owner_id IS NULL").bindparams(uid=system_user_id)
     )
 
     # 3. Enforce NOT NULL on businesses and personas

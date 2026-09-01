@@ -155,7 +155,7 @@ def test_resend_verification_dispatches_new_token(client):
             json={"email": "resend_test@example.com"},
         )
         assert resend_resp.status_code == 200
-        assert resend_resp.json()["detail"] == "Verification email resent."
+        assert resend_resp.json()["detail"] == "Verification email resent with 6-digit OTP code."
         assert mock_send.call_count == 2
 
 

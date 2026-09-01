@@ -41,10 +41,12 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const fetchTestsAndMetrics = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const [testList, metricsData] = await Promise.all([
         api.getBehavioralTests(studyId, searchQuery, typeFilter, statusFilter),
@@ -52,15 +54,34 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
       ]);
       setTests(testList || []);
       setMetrics(metricsData || null);
-    } catch {
-      // Graceful fallback
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load behavioral tests.');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchTestsAndMetrics();
+    let cancelled = false;
+    const run = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [testList, metricsData] = await Promise.all([
+          api.getBehavioralTests(studyId, searchQuery, typeFilter, statusFilter),
+          api.getBehavioralMetrics(studyId),
+        ]);
+        if (cancelled) return;
+        setTests(testList || []);
+        setMetrics(metricsData || null);
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message || 'Failed to load behavioral tests.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
   }, [studyId, typeFilter, statusFilter]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -93,6 +114,33 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
 
   return (
     <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', width: '100%', color: 'var(--text-primary)' }}>
+      {error && (
+        <div
+          role="alert"
+          style={{
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.4)',
+            borderRadius: '10px',
+            padding: '14px 18px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            color: 'var(--status-error-text)',
+            fontSize: '0.88rem',
+          }}
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={fetchTestsAndMetrics}
+            style={{ background: 'transparent', border: '1px solid currentColor', borderRadius: '6px', padding: '4px 12px', color: 'inherit', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* Top Header */}
       <div
         style={{

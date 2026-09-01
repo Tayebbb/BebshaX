@@ -10,7 +10,8 @@ def test_app_refuses_to_start_without_resend_key_in_production(monkeypatch):
     monkeypatch.delenv("BEBSHAX_RESEND_API_KEY", raising=False)
 
     with pytest.raises(ValueError, match="BEBSHAX_RESEND_API_KEY is required in production/staging environments"):
-        Settings()
+        # _env_file=None: a developer's local .env must never decide this outcome.
+        Settings(_env_file=None)
 
 
 def test_app_starts_without_resend_key_in_local_dev(monkeypatch):
@@ -19,5 +20,5 @@ def test_app_starts_without_resend_key_in_local_dev(monkeypatch):
     monkeypatch.setenv("BEBSHAX_ENVIRONMENT", "development")
     monkeypatch.delenv("BEBSHAX_RESEND_API_KEY", raising=False)
 
-    s = Settings()
+    s = Settings(_env_file=None)
     assert s.resend_api_key is None

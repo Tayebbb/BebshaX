@@ -122,3 +122,50 @@ async def test_user_a_cannot_access_user_b_interviews(tmp_path, monkeypatch):
         assert res_start_foreign.status_code in (403, 404)
 
 
+@pytest.mark.asyncio
+async def test_interview_metrics_aggregation_matches_counting(tmp_path, monkeypatch):
+    """Fix-3 regression: SQL aggregation must return the same totals as the
+    old Python list-counting approach for a known dataset."""
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'metrics_test.db'}"
+    monkeypatch.setenv("BEBSHAX_DATABASE_URL", db_url)
+    get_settings.cache_clear()
+
+    engine = create_async_engine(db_url)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with maker() as session:
+        user = Users(id="usr_m", email="metrics@example.com", hashed_password="pw", full_name="Metrics")
+        study = Studies(id="std_m", user_id="usr_m", title="Metrics Study", status="in_progress")
+        persona = Personas(id="per_m", study_id="std_m", user_id="usr_m", owner_id="usr_m", name="P", version=1)
+        # 2 active, 3 completed, 1 other
+        convs = [
+            Conversations(id=f"cv_{i}", study_id="std_m", user_id="usr_m", persona_id="per_m",
+                          objective="Test", status=st)
+            for i, st in enumerate(["active", "active", "completed", "completed", "completed", "pending"])
+        ]
+        session.add_all([user, study, persona] + convs)
+        await session.commit()
+    await engine.dispose()
+
+    from bebshax.main import create_app
+    app = create_app()
+    token = create_access_token({"sub": "usr_m", "email": "metrics@example.com"})
+
+    adapter = FakeAdapter([FakeRoute(candidate=RouteCandidate(provider="fake", model="m1"), replies=["Hi"])])
+    llm = SingleAdapterLLMService(adapter)
+    app.state.db_sessionmaker = maker
+    app.state.interview_engine = InterviewEngine(llm, maker, memory=None)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.get("/api/studies/std_m/interviews/metrics",
+                               headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total_interviews"] == 6
+    assert data["active_interviews"] == 2
+    assert data["completed_interviews"] == 3
+
+

@@ -201,7 +201,6 @@ async def signup(
             password=payload.password,
             auth_provider="email",
         )
-        user.is_verified = True
 
         otp_code = f"{secrets.randbelow(900000) + 100000}"
         token_value = otp_code

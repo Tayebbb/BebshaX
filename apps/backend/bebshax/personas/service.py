@@ -22,6 +22,9 @@ from bebshax.db.models import (
 from bebshax.llm.service import LLMService
 from bebshax.personas.generator import generate_personas_for_study
 
+# Generator only consumes up to 6 claims; fetch no more to avoid full-table scans.
+_CLAIM_FETCH_LIMIT = 6
+
 
 class PersonaGenerationService:
     def __init__(self, session: AsyncSession, llm_service: Optional[LLMService] = None) -> None:
@@ -128,7 +131,12 @@ class PersonaGenerationService:
             for d in datasets
         ]
 
-        claim_stmt = select(EvidenceClaims).where(EvidenceClaims.study_id == study_id)
+        claim_stmt = (
+            select(EvidenceClaims)
+            .where(EvidenceClaims.study_id == study_id)
+            .order_by(EvidenceClaims.confidence.desc(), EvidenceClaims.created_at.desc())
+            .limit(_CLAIM_FETCH_LIMIT)
+        )
         claims = list((await self.session.execute(claim_stmt)).scalars().all())
         evidence_snapshot = {
             "claim_count": len(claims),

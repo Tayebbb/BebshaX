@@ -809,23 +809,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               )}
             </div>
 
-            {!isSidebarCollapsed && (
-              <span
-                title="Study credits left on the free plan — each new research study uses one credit"
-                style={{
-                  fontSize: '0.7rem',
-                  fontWeight: 600,
-                  color: 'var(--status-warn-text)',
-                  background: 'rgba(246, 200, 120, 0.12)',
-                  border: 'none',
-                  outline: 'none',
-                  padding: '2px 7px',
-                  borderRadius: '6px',
-                }}
-              >
-                1 left
-              </span>
-            )}
           </button>
 
           {/* User Popover Menu */}

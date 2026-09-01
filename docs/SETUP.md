@@ -86,13 +86,13 @@ Frontend checks: `npm run build` (type-checks via tsc), `npm test -- --run`, `np
 
 ### Verified startup matrix (Last verified: 2026-09-02)
 
-| Flow | Command |
-| --- | --- |
-| Full stack | `node scripts/dev.js` |
-| Backend only | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
-| Frontend only | `cd apps/frontend; npm run dev` |
-| DB on Docker | `docker compose up -d --wait db` |
-| Apply migrations | `cd apps/backend; ..\.venv\Scripts\python -m alembic upgrade head` |
+| Flow             | Command                                                                         |
+| ---------------- | ------------------------------------------------------------------------------- |
+| Full stack       | `node scripts/dev.js`                                                           |
+| Backend only     | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
+| Frontend only    | `cd apps/frontend; npm run dev`                                                 |
+| DB on Docker     | `docker compose up -d --wait db`                                                |
+| Apply migrations | `cd apps/backend; ..\.venv\Scripts\python -m alembic upgrade head`              |
 
 The repo-level launcher in [../scripts/dev.js](../scripts/dev.js) is the reference path for daily development; it automatically starts Docker Postgres when available and prints the backend/frontend URLs without exposing credentials.
 

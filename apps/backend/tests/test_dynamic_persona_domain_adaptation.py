@@ -141,7 +141,8 @@ def test_contradiction_detection_in_interview_engine():
     )
     assert has_contra2 is False
     assert details2 is None
-    assert conf2 == 0.90
+    # No contradiction detected — confidence is None (not invented)
+    assert conf2 is None
 
 
 def test_classify_memory_type():

@@ -115,7 +115,6 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   const [personasPerSegment, setPersonasPerSegment] = useState<number>(2);
   const [distributionStrategy, setDistributionStrategy] = useState<'population_weighted' | 'equal'>('population_weighted');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [generationStep, setGenerationStep] = useState<number>(0);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
   // Load Studies on mount
@@ -169,7 +168,28 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   };
 
   useEffect(() => {
-    loadStudyData();
+    let cancelled = false;
+    const run = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [personasRes, segmentsRes, runsRes] = await Promise.allSettled([
+          api.getStudyPersonas(activeStudyId || 'default'),
+          activeStudyId ? api.getMarketSegments(activeStudyId) : Promise.resolve([]),
+          activeStudyId ? api.listStudyPersonaRuns(activeStudyId) : Promise.resolve({ runs: [] }),
+        ]);
+        if (cancelled) return;
+        if (personasRes.status === 'fulfilled') setPersonas(personasRes.value.personas);
+        if (segmentsRes.status === 'fulfilled') setSegments((segmentsRes.value as MarketSegment[]) || []);
+        if (runsRes.status === 'fulfilled') setRuns((runsRes.value as any)?.runs || []);
+      } catch (err: any) {
+        if (!cancelled) setError(err.message || 'Failed to load synthetic personas.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
   }, [activeStudyId]);
 
   // Filtered Personas
@@ -211,33 +231,27 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   const handleTriggerGeneration = async () => {
     if (!activeStudyId) return;
     setIsGenerating(true);
-    setGenerationStep(1);
     setGenerationError(null);
 
-    const stepTimer = setInterval(() => {
-      setGenerationStep((prev) => (prev < 4 ? prev + 1 : prev));
-    }, 900);
-
+    let mounted = true;
     try {
       const res = await api.generateSyntheticPersonas(activeStudyId, {
         personas_per_segment: personasPerSegment,
         distribution_strategy: distributionStrategy,
       });
 
-      clearInterval(stepTimer);
-      setGenerationStep(5);
-
-      setTimeout(() => {
-        setIsGenerating(false);
-        setShowGenerateModal(false);
-        setPersonas(res.personas);
-        setRuns((prev) => [res.run, ...prev]);
-      }, 600);
+      if (!mounted) return;
+      setIsGenerating(false);
+      setShowGenerateModal(false);
+      setPersonas(res.personas);
+      setRuns((prev) => [res.run, ...prev]);
     } catch (err: any) {
-      clearInterval(stepTimer);
+      if (!mounted) return;
       setIsGenerating(false);
       setGenerationError(err.message || 'Persona generation failed. Please ensure segmentation has completed.');
     }
+
+    return () => { mounted = false; };
   };
 
   // Regenerate Persona Handler
@@ -1746,48 +1760,25 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                 </div>
               </div>
             ) : (
-              /* LIVE EXECUTION PROGRESS STEPPER */
-              <div style={{ padding: '16px 0' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-                  {[
-                    { step: 1, label: 'Loading study segments and distributions' },
-                    { step: 2, label: 'Synthesizing grounded consumer profiles' },
-                    { step: 3, label: 'Validating age, budget & behavioral bounds' },
-                    { step: 4, label: 'Computing exact grounding scores' },
-                    { step: 5, label: 'Persisting personas in Study Library' },
-                  ].map((s) => {
-                    const isDone = generationStep > s.step;
-                    const isCurrent = generationStep === s.step;
-
-                    return (
-                      <div key={s.step} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div
-                          style={{
-                            width: '24px',
-                            height: '24px',
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            background: isDone ? 'var(--accent-emerald)' : isCurrent ? 'var(--accent-glow)' : 'var(--bg-card-hover)',
-                            color: isDone ? 'var(--bg-pure)' : isCurrent ? 'var(--accent-teal)' : 'var(--text-secondary)',
-                            border: `1px solid ${isDone ? 'var(--accent-emerald)' : isCurrent ? 'var(--accent-teal)' : 'var(--border-subtle)'}`,
-                          }}
-                        >
-                          {isDone ? <CheckCircle2 size={14} /> : s.step}
-                        </div>
-                        <span style={{ fontSize: '0.86rem', color: isDone || isCurrent ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: isCurrent ? 600 : 400 }}>
-                          {s.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-card-hover)', overflow: 'hidden' }}>
-                  <div style={{ width: `${(generationStep / 5) * 100}%`, height: '100%', background: 'linear-gradient(90deg, #14B8A6, var(--accent-cyan))', transition: 'width 0.4s ease' }} />
+              /* HONEST INDETERMINATE LOADING — no fake step timers */
+              <div style={{ padding: '24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    border: '3px solid var(--accent-glow)',
+                    borderTopColor: 'var(--accent-teal)',
+                    borderRadius: '50%',
+                    animation: 'authSpin 0.7s linear infinite',
+                  }}
+                />
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+                    Generating personas…
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    This may take up to a minute on free providers
+                  </div>
                 </div>
               </div>
             )}

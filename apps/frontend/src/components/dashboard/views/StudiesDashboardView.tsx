@@ -232,11 +232,13 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
             <div className="sd-empty">
               <div className="sd-empty-kicker">Nothing In Flight</div>
               <div className="sd-empty-line">
-                {searchQuery ? 'No studies match your search.' : 'Your first study starts with a question.'}
+                {searchQuery || selectedFilter !== 'all'
+                  ? 'No studies match your filter.'
+                  : 'Your first study starts with a question.'}
               </div>
               <div className="sd-empty-sub">
-                {searchQuery
-                  ? 'Try a different name, or clear the filters.'
+                {searchQuery || selectedFilter !== 'all'
+                  ? 'Try a different name or status, or clear the filters.'
                   : 'Describe a business idea and interview grounded synthetic personas about it.'}
               </div>
               <button type="button" className="sd-empty-cta" onClick={onCreateStudy}>

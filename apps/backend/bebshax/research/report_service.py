@@ -489,18 +489,13 @@ class StudyReportService:
             for i in interview_insights[:8]
         ]
         if not interview_findings and conversations:
+            # No insights extracted yet — never invent citations or claims.
             interview_findings = [
                 {
-                    "topic": "Core Demand & Workflow",
-                    "finding": f"Participants confirmed high interest in solving daily friction for {prompt}.",
-                    "supporting_personas": [p.name for p in personas[:3]],
-                    "turn_citations": ["Turn 2", "Turn 4"],
-                },
-                {
-                    "topic": "Price Sensitivity",
-                    "finding": "Transparent pricing and immediate ROI are critical adoption prerequisites.",
-                    "supporting_personas": [p.name for p in personas[:2]],
-                    "turn_citations": ["Turn 3"],
+                    "topic": "No insights extracted yet",
+                    "finding": "Interview conversations exist but no structured insights have been extracted from them. Run the insight extraction step to populate this section.",
+                    "supporting_personas": [],
+                    "turn_citations": [],
                 },
             ]
 

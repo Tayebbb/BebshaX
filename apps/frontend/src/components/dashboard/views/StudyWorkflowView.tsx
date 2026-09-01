@@ -75,6 +75,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [availableReports, setAvailableReports] = useState<StudyReport[]>([]);
   const [copiedToast, setCopiedToast] = useState(false);
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
 
   const copilotMessagesRef = useRef<CopilotMessage[]>([]);
   const isFetchingCopilotRef = useRef<boolean>(false);
@@ -191,7 +192,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           if (firstId) setActiveInterviewPersonaId(firstId);
           setSelectedPersonaIds((s.personas_data as any[]).map((p: any) => p.id));
         }
-        if (s.step && !initialStep) {
+        // Honor the URL step when it was explicitly provided (> 1);
+        // otherwise restore the persisted step from the DB.
+        if (s.step && initialStep === 1) {
           setCurrentStep(s.step);
         }
       })
@@ -237,22 +240,17 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setSuggestedRoles(res.suggested_roles);
       }
     } catch {
-      const userTurns = history.filter((m) => m.role === 'user');
-      const latestUserPrompt = userTurns[userTurns.length - 1]?.content || 'Product Study';
-      const fallbackMsg: CopilotMessage = {
+      // Never synthesise a goal card on error — that would present a fabrication as AI success.
+      const lastUserMsg = history.filter((m) => m.role === 'user').pop();
+      const errorMsg: CopilotMessage = {
         id: `msg_a_${Date.now()}`,
         role: 'assistant',
-        content: `Understood! I've structured your customer discovery objective for "${latestUserPrompt}". Let's validate target market demand, price sensitivity, and adoption barriers.`,
+        content: `I couldn't process that — the AI providers may be busy. Please try again.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
-        isGoalCard: true,
-        goalCardData: {
-          title: 'RESEARCH GOAL',
-          summary: `Validate demand, pricing sensitivity, and willingness to pay for "${latestUserPrompt}".`,
-          target_audience: 'Primary target users and decision makers',
-          core_hypothesis: 'Strong product-market fit and willingness to pay',
-        },
+        isRetryPrompt: true,
+        retryContent: lastUserMsg?.content,
       };
-      const updated = [...copilotMessagesRef.current, fallbackMsg];
+      const updated = [...copilotMessagesRef.current, errorMsg];
       copilotMessagesRef.current = updated;
       setCopilotMessages(updated);
       if (studyId) {
@@ -441,6 +439,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   const handleGenerateScript = async () => {
     if (!studyId) return;
+    setIsGeneratingScript(true);
     try {
       const res = await api.generateStudyScriptQuestions(studyId, study?.prompt || promptInput);
       if (res.questions && res.questions.length > 0) {
@@ -449,6 +448,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       }
     } catch {
       // ignore
+    } finally {
+      setIsGeneratingScript(false);
     }
   };
 
@@ -797,6 +798,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   }}
                   aria-disabled={!unlocked}
                   aria-current={isCurrent ? 'step' : undefined}
+                  tabIndex={unlocked ? 0 : -1}
                   title={unlocked ? s.sub : stepLockReason(s.num)}
                   style={{
                     display: 'flex',
@@ -885,6 +887,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               handleRemovePersona={handleRemovePersona}
               personaModalTriggerRef={personaModalTriggerRef}
               setViewingPersona={setViewingPersona}
+              isStepUnlocked={isStepUnlocked}
             />
           </div>
         )}
@@ -901,6 +904,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               newQuestion={newQuestion}
               setNewQuestion={setNewQuestion}
               handleGenerateScript={handleGenerateScript}
+              isGeneratingScript={isGeneratingScript}
               handleStepChange={handleStepChange}
             />
           </div>
@@ -915,6 +919,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               personas={personas}
               isBatchRunning={isBatchRunning}
               handleRunBatchInterviews={handleRunBatchInterviews}
+              onCancelBatch={() => { batchPollCancelledRef.current = true; }}
               isGeneratingReport={isGeneratingReport}
               handleGenerateFinalReport={handleGenerateFinalReport}
               handleStepChange={handleStepChange}

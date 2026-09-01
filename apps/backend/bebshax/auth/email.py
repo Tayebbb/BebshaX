@@ -46,9 +46,9 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
     """Send an HTML email using SMTP (Gmail) or Resend API."""
     settings = get_settings()
 
-    # 1. Try SMTP (Gmail) if configured
-    smtp_user = getattr(settings, "smtp_username", None) or "bebshax.official@gmail.com"
-    smtp_pass = getattr(settings, "active_smtp_password", "lurvphnuzzusomqo")
+    # 1. Try SMTP if configured
+    smtp_user = getattr(settings, "smtp_username", None)
+    smtp_pass = getattr(settings, "active_smtp_password", None)
     if smtp_user and smtp_pass:
         try:
             from_addr = getattr(settings, "email_from_address", smtp_user)

@@ -151,9 +151,8 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
                 is_demo=True,
                 duration_text="Completed • 3 Personas interviewed",
                 findings={
-                    "executive_summary": "Strong demand for automated scheduling with 84% willingness to pay among surveyed university students.",
+                    "executive_summary": "[Simulated demo data] Study script ran on synthetic personas; numbers are illustrative, not measured.",
                     "demand_signal": "High",
-                    "sentiment_score": 84,
                 },
             ),
             Studies(

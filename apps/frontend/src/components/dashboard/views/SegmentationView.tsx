@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   PieChart,
   Sparkles,
@@ -40,10 +40,14 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
   const [segments, setSegments] = useState<MarketSegment[]>([]);
   const [, setRuns] = useState<SegmentationRun[]>([]);
   const [activeRun, setActiveRun] = useState<SegmentationRun | null>(null);
-  const [, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [executionStep, setExecutionStep] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const segmentIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear any in-flight interval on unmount
+  useEffect(() => () => { if (segmentIntervalRef.current) clearInterval(segmentIntervalRef.current); }, []);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -58,11 +62,11 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
   const [isComparing, setIsComparing] = useState<boolean>(false);
 
   const executionSteps = [
-    'Analyzing Study Datasets & Profiles',
-    'Selecting High-Signal Segmentation Variables',
-    'Deterministic Population Quantile Clustering',
-    'Synthesizing Qualitative Profiles & Evidence Links',
-    'Segmentation Run Complete',
+    'Analysing study datasets and profiles',
+    'Selecting high-signal variables',
+    'Grouping your market into distinct customer segments…',
+    'Building qualitative profiles and evidence links',
+    'Segmentation complete',
   ];
 
   const loadData = async () => {
@@ -99,6 +103,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
     const stepInterval = setInterval(() => {
       setExecutionStep((prev) => (prev < 3 ? prev + 1 : prev));
     }, 600);
+    segmentIntervalRef.current = stepInterval;
 
     try {
       const result = await api.runSegmentation(studyId, { desired_clusters: desiredClusters });
@@ -182,6 +187,38 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn pb-16" data-testid="segmentation-view">
+      {isLoading && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 24px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+          Loading segmentation data…
+        </div>
+      )}
+      {error && !isLoading && (
+        <div
+          role="alert"
+          style={{
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.4)',
+            borderRadius: '10px',
+            padding: '14px 18px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            color: 'var(--status-error-text)',
+            fontSize: '0.88rem',
+          }}
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={loadData}
+            style={{ background: 'transparent', border: '1px solid currentColor', borderRadius: '6px', padding: '4px 12px', color: 'inherit', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* Top Banner / Metrics Header */}
       <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-6 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />

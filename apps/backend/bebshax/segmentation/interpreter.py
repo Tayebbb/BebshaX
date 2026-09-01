@@ -60,7 +60,7 @@ def _match_evidence_to_cluster(
         elif any(w in lower_claim for w in ("student", "habit", "app", "mobile", "friction", "pain")):
             is_relevant = True
 
-        if is_relevant or len(matched) < 2:
+        if is_relevant:
             matched.append({
                 "claim_id": claim_id,
                 "claim_text": claim_text,

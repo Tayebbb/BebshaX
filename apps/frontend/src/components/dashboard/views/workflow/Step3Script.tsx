@@ -12,6 +12,7 @@ interface Step3ScriptProps {
   newQuestion: string;
   setNewQuestion: React.Dispatch<React.SetStateAction<string>>;
   handleGenerateScript: () => Promise<void>;
+  isGeneratingScript: boolean;
   handleStepChange: (newStep: number, opts?: { reportReady?: boolean }) => void;
 }
 
@@ -22,6 +23,7 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
   newQuestion,
   setNewQuestion,
   handleGenerateScript,
+  isGeneratingScript,
   handleStepChange,
 }) => {
   return (
@@ -40,6 +42,7 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 <button
                   type="button"
                   onClick={handleGenerateScript}
+                  disabled={isGeneratingScript}
                   style={{
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border-subtle)',
@@ -48,10 +51,19 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                     padding: '8px 16px',
                     fontSize: '0.84rem',
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: isGeneratingScript ? 'not-allowed' : 'pointer',
+                    opacity: isGeneratingScript ? 0.6 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
                   }}
                 >
-                  Regenerate Questions
+                  {isGeneratingScript && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'authSpin 0.7s linear infinite' }} aria-hidden="true">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                  )}
+                  {isGeneratingScript ? 'Regenerating...' : 'Regenerate Questions'}
                 </button>
                 <button
                   type="button"
@@ -113,6 +125,8 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                       fontSize: '0.9rem',
                       outline: 'none',
                     }}
+                    onFocus={(e) => { (e.currentTarget as HTMLInputElement).style.boxShadow = '0 0 0 2px var(--accent-teal)'; }}
+                    onBlur={(e) => { (e.currentTarget as HTMLInputElement).style.boxShadow = 'none'; }}
                   />
                   <button
                     type="button"

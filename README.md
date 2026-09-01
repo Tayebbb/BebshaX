@@ -59,15 +59,15 @@ npm run dev
 
 ### Verified command matrix (Last verified: 2026-09-02)
 
-| Purpose | Command |
-| --- | --- |
-| Start the app stack | `node scripts/dev.js` |
-| Start only the backend | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
-| Start only the frontend | `cd apps/frontend && npm run dev` |
-| Start the Postgres service | `docker compose up -d --wait db` |
-| Apply migrations | `cd apps/backend && ..\.venv\Scripts\python -m alembic upgrade head` |
-| Run backend tests | `.venv\Scripts\python -m pytest apps/backend/tests -q` |
-| Build frontend | `cd apps/frontend && npm run build` |
+| Purpose                    | Command                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| Start the app stack        | `node scripts/dev.js`                                                           |
+| Start only the backend     | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
+| Start only the frontend    | `cd apps/frontend && npm run dev`                                               |
+| Start the Postgres service | `docker compose up -d --wait db`                                                |
+| Apply migrations           | `cd apps/backend && ..\.venv\Scripts\python -m alembic upgrade head`            |
+| Run backend tests          | `.venv\Scripts\python -m pytest apps/backend/tests -q`                          |
+| Build frontend             | `cd apps/frontend && npm run build`                                             |
 
 The root launcher in [scripts/dev.js](scripts/dev.js) is the current daily-dev entry point: it boots the FastAPI backend and the Vite frontend together and intentionally warns rather than blocking when Docker is unavailable.
 

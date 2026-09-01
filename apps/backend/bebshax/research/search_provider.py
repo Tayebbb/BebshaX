@@ -22,7 +22,7 @@ class DiscoveredSource:
     source_type: str  # web, reddit, review, report, upload
     content: str
     content_hash: str
-    relevance_score: float = 0.85
+    relevance_score: float = 0.0  # providers must set explicitly; 0.0 fails loudly if forgotten
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

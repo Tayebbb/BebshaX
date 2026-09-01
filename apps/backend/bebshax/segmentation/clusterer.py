@@ -133,6 +133,8 @@ def cluster_dataset_populations(
                 },
                 "needs": constraints.get("observed_needs", []),
                 "rule_description": constraints.get("rule_description", ""),
+                # confidence_score is a population-size heuristic, not a statistical measure
+                "confidence_basis": "population_size_heuristic",
             }
 
             clusters.append(
@@ -140,6 +142,7 @@ def cluster_dataset_populations(
                     cluster_label=f"cluster_{idx}",
                     population_count=pop_count,
                     population_percentage=pop_pct,
+                    # population-size heuristic: >=100 records -> 0.92, else 0.85
                     confidence_score=0.92 if pop_count >= 100 else 0.85,
                     status="data_backed",
                     characteristics=characteristics,
@@ -221,6 +224,8 @@ def cluster_dataset_populations(
                 "needs": [
                     "Affordable structured plans" if i == 0 else ("Comprehensive exam tracking" if i == 1 else "Advanced multi-device analytics")
                 ],
+                # confidence_score is a population-size heuristic, not a statistical measure
+                "confidence_basis": "population_size_heuristic",
             }
 
             var_dists: dict[str, Any] = {
@@ -244,6 +249,7 @@ def cluster_dataset_populations(
                 f"Population share: {pct}% of surveyed cohort",
             ]
 
+            # population-size heuristic: >=100 records -> 0.90, else 0.80
             confidence = 0.90 if count >= 100 else 0.80
 
             clusters.append(
@@ -287,6 +293,7 @@ def cluster_dataset_populations(
                 cluster_label=f"cluster_{idx}",
                 population_count=int(pct * 10),
                 population_percentage=pct,
+                # population-size heuristic: no real data available for strategy C
                 confidence_score=0.75,
                 status="inference_assisted",
                 characteristics={
@@ -295,6 +302,8 @@ def cluster_dataset_populations(
                     "economics": {"monthly_budget": {"min": 250, "median": 400, "max": 600, "currency": "BDT"}},
                     "behavior": {"technology_familiarity": "Medium"},
                     "needs": [desc],
+                    # confidence_score is a population-size heuristic, not a statistical measure
+                    "confidence_basis": "population_size_heuristic",
                 },
                 variable_distributions={"archetype": name},
                 distinctive_traits=[name, f"{pct}% estimated share", desc],

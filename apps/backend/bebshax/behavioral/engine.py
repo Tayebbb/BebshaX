@@ -422,6 +422,10 @@ class BehavioralSimulationEngine:
                 persona, context_sources, parsed.get("probability", 0.5)
             )
 
+            reasoning = parsed.get("reasoning_summary", "")
+            if parsed.get("is_heuristic_fallback"):
+                reasoning += " [heuristic fallback: LLM response not parseable — budget-price estimate used]"
+
             return {
                 "persona_id": persona.id,
                 "persona_name": persona.name,
@@ -435,7 +439,8 @@ class BehavioralSimulationEngine:
                 "key_factors": parsed.get("key_factors", []),
                 "motivators": parsed.get("motivators", []),
                 "objections": parsed.get("objections", []),
-                "reasoning_summary": parsed.get("reasoning_summary", ""),
+                "reasoning_summary": reasoning,
+                "is_heuristic_fallback": parsed.get("is_heuristic_fallback", False),
                 "simulation_context_sources": context_sources,
                 "interview_signals_used": interview_signals,
                 "provenance_id": result.provenance.request_id if result.provenance else None,
@@ -529,6 +534,7 @@ class BehavioralSimulationEngine:
                 "motivators": ["Useful feature automation", "Time saving potential"],
                 "objections": ["Recurring price exceeds disposable budget", "Free tools are currently sufficient"],
                 "reasoning_summary": f"The proposed price of ৳{price_num} exceeds {persona.name}'s modest disposable BDT budget, leading to adoption resistance despite perceived convenience.",
+                "is_heuristic_fallback": True,
             }
 
         return {
@@ -546,6 +552,7 @@ class BehavioralSimulationEngine:
             "motivators": ["Saves substantial daily time", "Affordable price point"],
             "objections": ["Requires initial onboarding effort"],
             "reasoning_summary": f"{persona.name} finds the proposition attractive as the cost is within their commercial threshold and directly addresses their pain points.",
+            "is_heuristic_fallback": True,
         }
 
     # -----------------------------------------------------------------------

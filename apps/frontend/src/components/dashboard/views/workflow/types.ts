@@ -15,4 +15,6 @@ export interface CopilotMessage {
     target_audience: string;
     core_hypothesis: string;
   };
+  isRetryPrompt?: boolean;
+  retryContent?: string;
 }

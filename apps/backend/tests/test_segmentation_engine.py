@@ -45,11 +45,11 @@ def test_deterministic_categorical_statistics():
 
 
 def test_segmentation_readiness_states():
-    """Verify ready, limited_data, and no_data states."""
-    # State 1: No data
+    """Verify ready, limited_data, and prompt_grounded states."""
+    # State 1: No datasets and no claims — segmentation falls back to prompt grounding
     no_data_res = check_segmentation_readiness("study_1", [], [])
-    assert no_data_res.status == "no_data"
-    assert no_data_res.can_run is False
+    assert no_data_res.status == "prompt_grounded"
+    assert no_data_res.can_run is True
 
     # State 2: Limited data (small sample or single claim)
     dummy_claim = EvidenceClaims(id="clm_1", claim_text="Students want cheap tools", status="supported")

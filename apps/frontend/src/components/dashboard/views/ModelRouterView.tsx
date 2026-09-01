@@ -67,10 +67,10 @@ export const ModelRouterView: React.FC = () => {
               margin: '0 0 6px 0',
             }}
           >
-            Model Router & Telemetry
+            AI Provider Status
           </h1>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', margin: 0 }}>
-            Live FreeLLMpool provider health matrix, task routing pools, and Rule R3 LLM provenance traces.
+            Which AI providers are online right now, and how requests are being routed.
           </p>
         </div>
 

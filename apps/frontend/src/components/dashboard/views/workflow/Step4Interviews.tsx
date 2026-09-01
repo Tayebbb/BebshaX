@@ -9,6 +9,7 @@ interface Step4InterviewsProps {
   personas: Persona[];
   isBatchRunning: boolean;
   handleRunBatchInterviews: () => Promise<void>;
+  onCancelBatch: () => void;
   isGeneratingReport: boolean;
   handleGenerateFinalReport: () => Promise<void>;
   handleStepChange: (newStep: number, opts?: { reportReady?: boolean }) => void;
@@ -29,6 +30,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
   personas,
   isBatchRunning,
   handleRunBatchInterviews,
+  onCancelBatch,
   isGeneratingReport,
   handleGenerateFinalReport,
   handleStepChange,
@@ -56,51 +58,76 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                 </p>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  type="button"
-                  onClick={handleRunBatchInterviews}
-                  disabled={isBatchRunning}
-                  style={{
-                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '10px 20px',
-                    color: 'var(--text-on-accent)',
-                    fontWeight: 700,
-                    fontSize: '0.88rem',
-                    cursor: isBatchRunning ? 'not-allowed' : 'pointer',
-                    opacity: isBatchRunning ? 0.6 : 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <Sparkles size={16} className={isBatchRunning ? 'animate-spin' : ''} />
-                  {isBatchRunning ? 'Running Interviews...' : 'Run All Synthetic Interviews'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGenerateFinalReport}
-                  disabled={isGeneratingReport}
-                  style={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--accent-teal)',
-                    color: 'var(--accent-cyan)',
-                    borderRadius: '8px',
-                    padding: '10px 20px',
-                    fontSize: '0.88rem',
-                    fontWeight: 700,
-                    cursor: isGeneratingReport ? 'not-allowed' : 'pointer',
-                    opacity: isGeneratingReport ? 0.6 : 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <FileText size={16} />
-                  {isGeneratingReport ? 'Synthesizing Report...' : 'Generate Decision Report'}
-                </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleRunBatchInterviews}
+                    disabled={isBatchRunning}
+                    style={{
+                      background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '10px 20px',
+                      color: 'var(--text-on-accent)',
+                      fontWeight: 700,
+                      fontSize: '0.88rem',
+                      cursor: isBatchRunning ? 'not-allowed' : 'pointer',
+                      opacity: isBatchRunning ? 0.6 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <Sparkles size={16} className={isBatchRunning ? 'animate-spin' : ''} />
+                    {isBatchRunning ? 'Running Interviews...' : 'Run All Synthetic Interviews'}
+                  </button>
+                  {isBatchRunning && (
+                    <button
+                      type="button"
+                      onClick={onCancelBatch}
+                      style={{
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-subtle)',
+                        color: 'var(--text-secondary)',
+                        borderRadius: '8px',
+                        padding: '10px 16px',
+                        fontSize: '0.84rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleGenerateFinalReport}
+                    disabled={isGeneratingReport}
+                    style={{
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--accent-teal)',
+                      color: 'var(--accent-cyan)',
+                      borderRadius: '8px',
+                      padding: '10px 20px',
+                      fontSize: '0.88rem',
+                      fontWeight: 700,
+                      cursor: isGeneratingReport ? 'not-allowed' : 'pointer',
+                      opacity: isGeneratingReport ? 0.6 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <FileText size={16} />
+                    {isGeneratingReport ? 'Synthesizing Report...' : 'Generate Decision Report'}
+                  </button>
+                </div>
+                {isBatchRunning && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>
+                    This can take 1–2 minutes on free providers. Cancelling stops polling but the backend job continues.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -279,6 +306,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                 value={userInputMessage}
                 onChange={(e) => setUserInputMessage(e.target.value)}
                 placeholder="Ask a follow-up interview question..."
+                aria-label="Follow-up interview question"
                 style={{
                   flex: 1,
                   background: 'var(--bg-card)',

@@ -71,7 +71,11 @@ def create_engine(settings: Settings, url_override: Optional[str] = None) -> Asy
     """Create an async SQLAlchemy engine configured appropriately for the target dialect."""
     raw_url = url_override or settings.database_url
     if ("localhost" in raw_url or "127.0.0.1" in raw_url) and (os.environ.get("RENDER") or settings.environment in ("production", "staging")):
-        raw_url = "postgresql+asyncpg://neondb_owner:npg_Cr8Y3dTmpVbk@ep-cold-star-azazjakq-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+        raise RuntimeError(
+            "BEBSHAX_DATABASE_URL points at localhost while running in a hosted "
+            f"environment (environment={settings.environment!r}). Set BEBSHAX_DATABASE_URL "
+            "to the managed Postgres connection string in the deployment environment."
+        )
     db_url = normalize_async_database_url(raw_url)
 
     if "sqlite" in db_url:

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from bebshax.auth.models import Users
 from bebshax.auth.security import create_access_token
+from bebshax.config import get_settings
 from bebshax.db.models import Base
 from bebshax.main import app
 
@@ -30,6 +31,13 @@ def _setup_app_db():
 
 
 client = TestClient(app)
+
+
+@pytest.fixture
+def stripe_configured(monkeypatch):
+    """The service refuses to run without a key by design; the success-path tests
+    need the configured branch, so inject a dummy key that never leaves the process."""
+    monkeypatch.setattr(get_settings(), "stripe_secret_key", "sk_test_unit_tests_only")
 
 
 @pytest.fixture(scope="module")
@@ -99,7 +107,7 @@ def test_create_checkout_session_invalid_plan(seeded_user):
 
 @patch("stripe.Customer.create")
 @patch("stripe.checkout.Session.create")
-def test_create_checkout_session_success(mock_session_create, mock_customer_create, seeded_user):
+def test_create_checkout_session_success(mock_session_create, mock_customer_create, seeded_user, stripe_configured):
     """Successfully generate a Stripe Checkout session for Pro plan."""
     mock_customer = MagicMock()
     mock_customer.id = "cus_mock_12345"
@@ -127,7 +135,7 @@ def test_create_checkout_session_success(mock_session_create, mock_customer_crea
 
 @patch("stripe.Customer.create")
 @patch("stripe.billing_portal.Session.create")
-def test_create_portal_session_success(mock_portal_create, mock_customer_create, seeded_user):
+def test_create_portal_session_success(mock_portal_create, mock_customer_create, seeded_user, stripe_configured):
     """Successfully generate a Stripe Billing Portal session."""
     mock_customer = MagicMock()
     mock_customer.id = "cus_mock_12345"

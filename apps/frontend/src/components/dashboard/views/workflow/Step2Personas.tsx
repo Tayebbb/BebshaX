@@ -15,6 +15,7 @@ interface Step2PersonasProps {
   handleRemovePersona: (personaId: string, e: React.MouseEvent) => void;
   personaModalTriggerRef: React.MutableRefObject<HTMLElement | null>;
   setViewingPersona: React.Dispatch<React.SetStateAction<Persona | null>>;
+  isStepUnlocked: (step: number) => boolean;
 }
 
 export const Step2Personas: React.FC<Step2PersonasProps> = ({
@@ -27,6 +28,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
   handleRemovePersona,
   personaModalTriggerRef,
   setViewingPersona,
+  isStepUnlocked,
 }) => {
   return (
     <>
@@ -82,20 +84,41 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleStepChange(3)}
-                  style={{
-                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-                    border: 'none',
-                    color: 'var(--text-on-accent)',
-                    borderRadius: '8px',
-                    padding: '8px 20px',
-                    fontSize: '0.84rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
+                  onClick={() => {
+                    if (isStepUnlocked(3)) handleStepChange(3);
                   }}
+                  disabled={!isStepUnlocked(3)}
+                  title={isStepUnlocked(3) ? undefined : 'Generate personas first'}
+                  style={
+                    isStepUnlocked(3)
+                      ? {
+                          background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                          border: 'none',
+                          color: 'var(--text-on-accent)',
+                          borderRadius: '8px',
+                          padding: '8px 20px',
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }
+                      : {
+                          background: 'var(--bg-card-hover)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--text-faint)',
+                          borderRadius: '8px',
+                          padding: '8px 20px',
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                          cursor: 'not-allowed',
+                          opacity: 0.5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }
+                  }
                 >
                   Generate Script
                   <ArrowRight size={15} />

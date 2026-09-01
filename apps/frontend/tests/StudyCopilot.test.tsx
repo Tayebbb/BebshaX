@@ -594,4 +594,112 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     const items = Array.from(syntheticItem.parentElement!.children);
     expect(items.indexOf(syntheticItem)).toBeLessThan(items.indexOf(inferredItem));
   });
+
+  // ── Regression tests for audit fixes ────────────────────────────────────
+
+  it('Fix 2: restores persisted step from DB when initialStep is the default (1)', async () => {
+    vi.spyOn(api, 'getStudy').mockResolvedValue({
+      id: 'study_restore',
+      step: 3,
+      status: 'in_progress',
+      type: 'interviews',
+      title: 'Restored Study',
+      copilot_messages: [],
+      personas_data: [],
+      suggested_roles: [],
+      script_questions: [],
+    } as any);
+
+    render(
+      <StudyWorkflowView
+        studyId="study_restore"
+        initialStep={1}
+        initialType="interviews"
+        initialPrompt=""
+        onExit={vi.fn()}
+        onStepChange={vi.fn()}
+      />
+    );
+
+    // DB says step 3 and initialStep was default (1) → should restore to step 3
+    await waitFor(() => {
+      expect(screen.getByText('Interview Script & Probing Rules')).toBeInTheDocument();
+    });
+  });
+
+  it('Fix 2: URL-provided step (initialStep > 1) takes precedence over DB step', async () => {
+    vi.spyOn(api, 'getStudy').mockResolvedValue({
+      id: 'study_url_step',
+      step: 4,
+      status: 'in_progress',
+      type: 'interviews',
+      title: 'URL Step Study',
+      copilot_messages: [],
+      personas_data: [],
+      suggested_roles: [],
+      script_questions: [],
+    } as any);
+
+    render(
+      <StudyWorkflowView
+        studyId="study_url_step"
+        initialStep={2}
+        initialType="interviews"
+        initialPrompt=""
+        onExit={vi.fn()}
+        onStepChange={vi.fn()}
+      />
+    );
+
+    // URL says step 2 (initialStep=2 > 1) → should stay on step 2, not override to DB step 4
+    await waitFor(() => {
+      expect(screen.getByText('Grounded Persona Library')).toBeInTheDocument();
+    });
+  });
+
+  it('Fix 7: copilot API failure shows honest error message — never fabricates a goal card', async () => {
+    vi.spyOn(api, 'sendStudyCopilotMessage').mockRejectedValue(new Error('LLM providers busy'));
+
+    render(
+      <StudyWorkflowView
+        studyId="study_copilot_error"
+        initialStep={1}
+        initialType="interviews"
+        initialPrompt=""
+        onExit={vi.fn()}
+        onStepChange={vi.fn()}
+      />
+    );
+
+    const input = screen.getByPlaceholderText(/Type here to answer or give more context/i);
+    fireEvent.change(input, { target: { value: 'my business idea' } });
+    fireEvent.click(screen.getByLabelText(/Send prompt/i));
+
+    await waitFor(() => {
+      expect(screen.getByText(/I couldn't process that/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
+    });
+
+    // Must never invent a goal card
+    expect(screen.queryByText('RESEARCH GOAL')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Understood! I've structured/i)).not.toBeInTheDocument();
+  });
+
+  it('Fix 14: Generate Script button in Step 2 is disabled when step 3 is not yet unlocked (no goal approved)', () => {
+    render(
+      <StudyWorkflowView
+        studyId="study_step14"
+        initialStep={2}
+        initialType="interviews"
+        initialPrompt=""
+        onExit={vi.fn()}
+        onStepChange={vi.fn()}
+      />
+    );
+
+    // No goal approved, no personas → step 3 locked → Generate Script must be disabled
+    const generateScriptBtn = screen.getByRole('button', { name: /Generate Script/i });
+    expect(generateScriptBtn).toBeDisabled();
+    expect(generateScriptBtn).toHaveAttribute('title', 'Generate personas first');
+  });
 });

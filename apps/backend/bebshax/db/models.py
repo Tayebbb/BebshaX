@@ -533,7 +533,7 @@ class EvidenceSources(Base):
     publisher: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
-    relevance_score: Mapped[float] = mapped_column(Float, default=0.8)
+    relevance_score: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(64), default="processed")  # discovered, processed, failed
     metadata_payload: Mapped[dict] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=dict
@@ -576,7 +576,7 @@ class EvidenceClaims(Base):
     claim_text: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(64), default="supported")  # supported, inference, unsupported
     category: Mapped[str] = mapped_column(String(64), default="general")  # problem, competition, pricing, behavior, complaints, general
-    confidence: Mapped[float] = mapped_column(Float, default=0.75)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
     supporting_source_ids: Mapped[list[str]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=list
     )
@@ -637,7 +637,7 @@ class MarketSegments(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     population_count: Mapped[int] = mapped_column(default=0)
     population_percentage: Mapped[float] = mapped_column(Float, default=0.0)
-    confidence_score: Mapped[float] = mapped_column(Float, default=0.85)
+    confidence_score: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(
         String(64), default="data_backed"
     )  # data_backed, inference_assisted, insufficient_evidence

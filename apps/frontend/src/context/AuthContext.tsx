@@ -39,7 +39,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     return null;
   });
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   // H9: credentials held in memory only until OTP verification commits the
   // session (needed for the Neon sign-in that proves emailVerified).
   const pendingCredsRef = useRef<{ email: string; password: string } | null>(null);

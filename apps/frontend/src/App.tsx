@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { NavigationProvider, useNavigation } from './context/NavigationContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { initScrollReveal } from './utils/scrollReveal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -193,7 +194,9 @@ export const App: React.FC = () => {
     <ThemeProvider>
       <NavigationProvider>
         <AuthProvider>
-          <AppContent />
+          <ErrorBoundary>
+            <AppContent />
+          </ErrorBoundary>
         </AuthProvider>
       </NavigationProvider>
     </ThemeProvider>

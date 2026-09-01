@@ -595,7 +595,7 @@ export const api = {
           const assistantTurn: ConversationTurn = {
             id: `t_${Date.now() + 1}`,
             role: 'assistant',
-            content: data.persona_reply?.content || data.reply,
+            content: data.persona_reply?.content || data.reply || '',
             timestamp: data.persona_reply?.timestamp || new Date().toISOString(),
             // Honest pass-through: absent metadata stays absent (audit M4 hand-off) —
             // the backend's null must never become a fabricated 750/route/memory.

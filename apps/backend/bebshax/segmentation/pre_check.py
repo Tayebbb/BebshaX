@@ -21,7 +21,7 @@ class UsableVariableSummary(BaseModel):
 
 
 class SegmentationReadiness(BaseModel):
-    status: str  # ready, limited_data, no_data
+    status: str  # ready, limited_data, prompt_grounded
     can_run: bool
     dataset_count: int
     total_records: int

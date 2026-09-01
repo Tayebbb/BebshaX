@@ -54,7 +54,7 @@ const STATS: Array<{ value: number; label: React.ReactNode }> = [
     value: 16,
     label: (
       <>
-        Fixed task types, routed across <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>7 routing pools</strong>
+        Research task types, each routed to the <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>right AI model automatically</strong>
       </>
     ),
   },
@@ -62,7 +62,7 @@ const STATS: Array<{ value: number; label: React.ReactNode }> = [
     value: 14,
     label: (
       <>
-        Failure kinds, each with an <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>explicit routing policy</strong>
+        Ways an AI call can fail — every one has an <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>explicit recovery policy</strong>
       </>
     ),
   },
@@ -70,7 +70,7 @@ const STATS: Array<{ value: number; label: React.ReactNode }> = [
     value: 0,
     label: (
       <>
-        API keys required — <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>keyless providers plus local Ollama</strong>
+        API keys required — works with <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>free providers and local Ollama</strong>
       </>
     ),
   },
@@ -168,7 +168,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
           className="lp-soft"
           style={{ ['--lp-i' as string]: 4, fontSize: 'clamp(0.95rem, 1.5vw, 1.15rem)', color: 'var(--lp-text-dim)', maxWidth: '680px', lineHeight: 1.6, marginBottom: '38px', fontWeight: 400 }}
         >
-          Describe your business. BebshaX generates personas whose every attribute is labelled OBSERVED, INFERRED or SYNTHETIC against public research datasets — then you interview them in multi-turn conversations routed across free LLM providers, with a local model as the final fallback.
+          Describe your business. BebshaX generates personas whose every attribute is labelled with how we know it — cited evidence (OBSERVED), reasoned from context (INFERRED), or an explicit assumption (SYNTHETIC) — then you interview them in multi-turn conversations routed across free LLM providers, with a local model as the final fallback.
         </p>
 
         <button

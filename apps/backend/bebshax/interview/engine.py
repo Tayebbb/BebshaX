@@ -452,7 +452,7 @@ class InterviewEngine:
         question: str,
         reply: str,
         prior_persona_texts: Optional[list[str]] = None,
-    ) -> tuple[bool, Optional[str], Optional[str], float]:
+    ) -> tuple[bool, Optional[str], Optional[str], Optional[float]]:
         """Structurally check for contradictions against persona commercial constraints and identity."""
         comm = getattr(persona, "commercial_profile", {}) or {}
         max_budget = comm.get("monthly_budget_bdt") or 500
@@ -499,7 +499,7 @@ class InterviewEngine:
                             )
                             return True, details, follow_up, 0.65
 
-        return False, None, None, 0.90
+        return False, None, None, None
 
     def _classify_memory_type(self, topic: str, question: str, reply: str) -> str:
         """Map exchange to one of the 15 specification memory categories."""
@@ -547,13 +547,13 @@ class InterviewEngine:
     ) -> dict[str, str]:
         """Compute evolving customer research decision state across turns."""
         state = dict(prior_state or {
-            "problem_awareness": "High",
-            "problem_severity": "High",
-            "product_interest": "Medium",
-            "trust": "Medium",
-            "purchase_intent": "Low",
-            "switching_intent": "Medium",
-            "price_acceptance": "Low",
+            "problem_awareness": "not_assessed",
+            "problem_severity": "not_assessed",
+            "product_interest": "not_assessed",
+            "trust": "not_assessed",
+            "purchase_intent": "not_assessed",
+            "switching_intent": "not_assessed",
+            "price_acceptance": "not_assessed",
         })
 
         lower = reply.lower()
@@ -748,7 +748,7 @@ class InterviewEngine:
                         "contradiction_detected": has_contradiction,
                         "contradiction_details": contradiction_details,
                         "follow_up_guidance": follow_up_guidance,
-                        "confidence": confidence,
+                        **( {"confidence": confidence} if confidence is not None else {} ),
                         "memory_kind": memory_kind,
                         "decision_state": decision_state,
                     },
@@ -787,7 +787,7 @@ class InterviewEngine:
             "retrieved_memories": retrieved_memories,
             "contradiction_detected": has_contradiction,
             "contradiction_details": contradiction_details,
-            "confidence": confidence,
+            **( {"confidence": confidence} if confidence is not None else {} ),
             "memory_kind": memory_kind,
             "decision_state": decision_state,
         }

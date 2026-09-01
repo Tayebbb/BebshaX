@@ -100,6 +100,26 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                 >
                   <div style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.content}</div>
 
+                  {msg.isRetryPrompt && msg.retryContent && (
+                    <button
+                      type="button"
+                      onClick={() => handleSendCopilotMessage(msg.retryContent)}
+                      style={{
+                        marginTop: '10px',
+                        background: 'var(--accent-subtle)',
+                        border: '1px solid var(--accent-teal)',
+                        borderRadius: '8px',
+                        padding: '7px 14px',
+                        color: 'var(--accent-teal-bright)',
+                        fontWeight: 600,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Retry
+                    </button>
+                  )}
+
                   {msg.isGoalCard && msg.goalCardData && (
                     <div
                       style={{
@@ -158,9 +178,14 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
               ))}
 
               {isCopilotTyping && (
-                <div style={{ alignSelf: 'flex-start', color: 'var(--text-secondary)', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Sparkles size={14} className="text-teal-400 animate-spin" />
-                  Synthesizing market context & assumptions...
+                <div style={{ alignSelf: 'flex-start', color: 'var(--text-secondary)', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={14} className="text-teal-400 animate-spin" />
+                    Synthesizing market context &amp; assumptions...
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', paddingLeft: '20px' }}>
+                    Free providers may take up to 1–2 minutes
+                  </span>
                 </div>
               )}
             </div>

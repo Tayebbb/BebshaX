@@ -46,12 +46,13 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
   const [sourceTypeFilter, setSourceTypeFilter] = useState<string>('all');
   const [selectedClaimDetail, setSelectedClaimDetail] = useState<ClaimDetail | null>(null);
   const [, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isRunningResearch, setIsRunningResearch] = useState<boolean>(false);
-  const [researchProgressStep, setResearchProgressStep] = useState<number>(0);
   const [researchStatusText, setResearchStatusText] = useState<string>('');
 
   const loadAllData = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const [sumRes, claimsRes, sourcesRes, runsRes] = await Promise.all([
         api.getEvidenceSummary(studyId),
@@ -63,8 +64,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
       setClaims(claimsRes);
       setSources(sourcesRes);
       setRuns(runsRes);
-    } catch {
-      // Fallback in case of network issue
+    } catch (err: any) {
+      setLoadError(err?.message || 'Failed to load evidence data.');
     } finally {
       setIsLoading(false);
     }
@@ -77,46 +78,20 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
   const handleRunResearch = async () => {
     if (isRunningResearch) return;
     setIsRunningResearch(true);
-    setResearchProgressStep(1);
-    setResearchStatusText('Building autonomous research plan...');
+    setResearchStatusText('Researching — this usually takes 30–90 seconds on free providers…');
 
+    let mounted = true;
     try {
-      setTimeout(() => {
-        setResearchProgressStep(2);
-        setResearchStatusText('Discovering datasets (illustrative catalog modeled on BBS, World Bank, Kaggle)...');
-      }, 800);
-
-      setTimeout(() => {
-        setResearchProgressStep(3);
-        setResearchStatusText('Generating targeted research queries...');
-      }, 1800);
-
-      setTimeout(() => {
-        setResearchProgressStep(4);
-        setResearchStatusText('Searching empirical sources & public discussions...');
-      }, 2800);
-
-      setTimeout(() => {
-        setResearchProgressStep(5);
-        setResearchStatusText('Chunking documents & computing pgvector embeddings...');
-      }, 3800);
-
-      setTimeout(() => {
-        setResearchProgressStep(6);
-        setResearchStatusText('Extracting structured claims & empirical classification...');
-      }, 5000);
-
       await api.startResearch(studyId);
-
-      setTimeout(async () => {
-        setResearchProgressStep(7);
-        setResearchStatusText('Research complete — datasets discovered & evidence extracted.');
-        await loadAllData();
-        setIsRunningResearch(false);
-      }, 6200);
+      if (!mounted) return;
+      setResearchStatusText('Research complete — evidence extracted.');
+      await loadAllData();
     } catch {
-      setIsRunningResearch(false);
+      // nothing to do
+    } finally {
+      if (mounted) setIsRunningResearch(false);
     }
+    return () => { mounted = false; };
   };
 
   const handleInspectClaim = async (claimId: string) => {
@@ -342,7 +317,36 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
 
       {/* Main Content Body */}
       <div style={{ maxWidth: '1400px', width: '100%', margin: '0 auto', padding: '28px clamp(14px, 3.5vw, 32px)' }}>
-        {/* Research Running Stepper Banner */}
+        {/* Load error banner */}
+        {loadError && !isRunningResearch && (
+          <div
+            role="alert"
+            style={{
+              background: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.4)',
+              borderRadius: '10px',
+              padding: '14px 18px',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              color: 'var(--status-error-text)',
+              fontSize: '0.88rem',
+            }}
+          >
+            <span>{loadError}</span>
+            <button
+              type="button"
+              onClick={loadAllData}
+              style={{ background: 'transparent', border: '1px solid currentColor', borderRadius: '6px', padding: '4px 12px', color: 'inherit', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Research Running Banner */}
         {isRunningResearch && (
           <div
             style={{
@@ -352,43 +356,15 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               padding: '20px 24px',
               marginBottom: '24px',
               boxShadow: '0 8px 24px var(--accent-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <RefreshCw size={18} color="var(--accent-cyan)" className="spin" />
-                <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {researchStatusText}
-                </span>
-              </div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
-                Step {researchProgressStep} of 7
-              </span>
-            </div>
-
-            {/* Stepper Progress Bar */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {[1, 2, 3, 4, 5, 6, 7].map((step) => {
-                const isPassed = researchProgressStep > step;
-                const isCurrent = researchProgressStep === step;
-                return (
-                  <div
-                    key={step}
-                    style={{
-                      flex: 1,
-                      height: '6px',
-                      borderRadius: '3px',
-                      background: isPassed
-                        ? 'var(--accent-emerald)'
-                        : isCurrent
-                        ? '#14B8A6'
-                        : 'var(--border-subtle)',
-                      transition: 'background 0.3s ease',
-                    }}
-                  />
-                );
-              })}
-            </div>
+            <RefreshCw size={18} color="var(--accent-cyan)" className="spin" />
+            <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {researchStatusText}
+            </span>
           </div>
         )}
 

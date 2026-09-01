@@ -163,6 +163,8 @@ class ResearchEngineService:
             # Chunk, embed, and store sources
             sources_to_insert: list[EvidenceSources] = []
             chunks_to_insert: list[EvidenceChunks] = []
+            all_chunks_meta: list[tuple] = []  # (source_id, discovered_source, raw_chunks)
+            all_raw_chunks: list[str] = []
 
             for d in discovered_sources:
                 source_id = f"src_{uuid.uuid4().hex[:16]}"
@@ -183,12 +185,18 @@ class ResearchEngineService:
                 )
                 sources_to_insert.append(source)
 
-                raw_chunks = chunk_document(d.content, chunk_size=400, chunk_overlap=40)
-                if not raw_chunks:
-                    raw_chunks = [d.content[:400]]
+                raw_chunks_for_source = chunk_document(d.content, chunk_size=400, chunk_overlap=40)
+                if not raw_chunks_for_source:
+                    raw_chunks_for_source = [d.content[:400]]
+                all_chunks_meta.append((source_id, d, raw_chunks_for_source))
+                all_raw_chunks.extend(raw_chunks_for_source)
 
-                embeddings = await self.vector_engine.embed_texts(raw_chunks)
-                for idx, (chunk_text, emb) in enumerate(zip(raw_chunks, embeddings)):
+            # One embed_texts call covers all sources — avoids N sequential round-trips.
+            all_embeddings = await self.vector_engine.embed_texts(all_raw_chunks)
+            emb_iter = iter(all_embeddings)
+            for source_id, d, raw_chunks in all_chunks_meta:
+                for idx, chunk_text in enumerate(raw_chunks):
+                    emb = next(emb_iter)
                     chunk_id = f"chk_{uuid.uuid4().hex[:16]}"
                     chunk = EvidenceChunks(
                         id=chunk_id,
