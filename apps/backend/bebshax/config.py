@@ -32,7 +32,11 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,https://bebshax-frontend.vercel.app"
     frontend_base_url: str = "http://localhost:5173"
     resend_api_key: str | None = None
-    email_from_address: str = "noreply@bebshax.ai"
+    email_from_address: str = "bebshax.official@gmail.com"
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: str = "bebshax.official@gmail.com"
+    smtp_password: str | None = None
     stripe_secret_key: str | None = None
     stripe_publishable_key: str | None = None
     stripe_webhook_secret: str | None = None
