@@ -182,10 +182,15 @@ async def _lifespan(app: FastAPI):
     from bebshax.llm.quota import QuotaLedger, quota_aware_ranker
 
     ledger = QuotaLedger()
-    seed_requests, seed_tokens = await load_todays_consumption(sessionmaker_)
-    ledger.seed(seed_requests, seed_tokens)
-    cooldown_store = CooldownStore(sessionmaker_)
-    initial_cooldowns = await cooldown_store.load_active()
+    initial_cooldowns = {}
+    try:
+        seed_requests, seed_tokens = await load_todays_consumption(sessionmaker_)
+        ledger.seed(seed_requests, seed_tokens)
+        cooldown_store = CooldownStore(sessionmaker_)
+        initial_cooldowns = await cooldown_store.load_active()
+    except Exception:
+        logger.warning("quota ledger / cooldown seeding failed on startup — proceeding with cold ledger", exc_info=True)
+        cooldown_store = CooldownStore(sessionmaker_)
 
     # Fast-routing memory: freellmpool's routing="fast" ranks by in-process
     # smoothed latency and forgets everything on restart — replay recent
