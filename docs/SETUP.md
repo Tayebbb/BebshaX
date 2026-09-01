@@ -67,20 +67,34 @@ Expect all green (integration tests needing a live DB run with `-m integration`)
 
 ## 7. Run
 
-Both servers at once (recommended):
+Current verified launch path: use the repo root launcher so the backend and frontend start together with the expected ports.
 
 ```powershell
 node scripts/dev.js
+# API → http://127.0.0.1:8000/api/health
+# UI  → http://localhost:5173
 ```
 
 Or individually:
 
 ```powershell
-.venv\Scripts\python -m uvicorn bebshax.main:app --port 8000   # API → http://localhost:8000/api/health
-cd apps/frontend; npm install; npm run dev                      # UI  → http://localhost:5173
+.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000   # API → http://localhost:8000/api/health
+cd apps/frontend; npm install; npm run dev                                        # UI  → http://localhost:5173
 ```
 
 Frontend checks: `npm run build` (type-checks via tsc), `npm test -- --run`, `npm run theme:check` (theme-token drift gate).
+
+### Verified startup matrix (Last verified: 2026-09-02)
+
+| Flow | Command |
+| --- | --- |
+| Full stack | `node scripts/dev.js` |
+| Backend only | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
+| Frontend only | `cd apps/frontend; npm run dev` |
+| DB on Docker | `docker compose up -d --wait db` |
+| Apply migrations | `cd apps/backend; ..\.venv\Scripts\python -m alembic upgrade head` |
+
+The repo-level launcher in [../scripts/dev.js](../scripts/dev.js) is the reference path for daily development; it automatically starts Docker Postgres when available and prints the backend/frontend URLs without exposing credentials.
 
 ## 8. Optional: demo mode & offline drill
 

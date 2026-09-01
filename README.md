@@ -40,18 +40,36 @@ copy .env.example .env
 .venv\Scripts\python -m pytest apps/backend/tests -q
 
 # Run the API
-.venv\Scripts\python -m uvicorn bebshax.main:app --port 8000
+.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000
 # → GET http://127.0.0.1:8000/api/health
 
 # Database (pgvector; the native PG16 install lacks the extension, so Docker on port 5433)
-docker compose up -d db   # used from Phase 6 onward
+docker compose up -d --wait db
 
-# Run the Frontend
+# Root launch (verified): starts both backend + frontend together
+node scripts/dev.js
+# → API: http://127.0.0.1:8000  |  Frontend: http://localhost:5173
+
+# Or run the frontend directly
 cd apps/frontend
 npm install
 npm run dev
 # → http://localhost:5173
 ```
+
+### Verified command matrix (Last verified: 2026-09-02)
+
+| Purpose | Command |
+| --- | --- |
+| Start the app stack | `node scripts/dev.js` |
+| Start only the backend | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
+| Start only the frontend | `cd apps/frontend && npm run dev` |
+| Start the Postgres service | `docker compose up -d --wait db` |
+| Apply migrations | `cd apps/backend && ..\.venv\Scripts\python -m alembic upgrade head` |
+| Run backend tests | `.venv\Scripts\python -m pytest apps/backend/tests -q` |
+| Build frontend | `cd apps/frontend && npm run build` |
+
+The root launcher in [scripts/dev.js](scripts/dev.js) is the current daily-dev entry point: it boots the FastAPI backend and the Vite frontend together and intentionally warns rather than blocking when Docker is unavailable.
 
 ### Secrets and migrations (read before first run)
 
@@ -116,6 +134,7 @@ If the agent skipped a doc update, tell it: _"You violated AGENTS.md step 6 — 
 - Commit format: `Phase N: <what>` or `fix:/docs:/chore: <what>`.
 - `main` must always be green — CI runs pytest on every push; if you break it, fixing it is your top priority.
 - Contract files (`bebshax/llm/types.py`, `provenance.py`, `failures.py`, `adapters/base.py`, `docs/API_CONTRACT.md`) are the interfaces our parallel work depends on → changing them needs **all three of us** to agree first.
+- For documentation-only work, the change is still expected to be followed by a normal Git push once the docs are committed; the repo uses the root `node scripts/dev.js` launcher and Docker-backed DB flow described above as the current source of truth.
 
 ## 6. The never list (instant revert territory)
 

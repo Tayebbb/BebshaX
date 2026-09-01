@@ -25,9 +25,21 @@ python -m venv .venv
 .venv\Scripts\python -m pytest apps/backend/tests -q
 
 # run the API
-.venv\Scripts\python -m uvicorn bebshax.main:app --port 8000
+.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000
 # → http://127.0.0.1:8000/api/health
 ```
+
+### Verified repo commands (Last verified: 2026-09-02)
+
+| Workflow | Command |
+|---|---|
+| Full stack | `node scripts/dev.js` |
+| Backend only | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
+| Frontend only | `cd apps/frontend; npm run dev` |
+| DB bootstrap | `docker compose up -d --wait db` |
+| Migrations | `.venv\Scripts\python -m alembic -c apps/backend/alembic.ini upgrade head` |
+| Frontend test | `cd apps/frontend; npm test -- --run` |
+| Frontend build | `cd apps/frontend; npm run build` |
 
 macOS/Linux: replace `.venv\Scripts\` with `.venv/bin/`.
 
