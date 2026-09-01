@@ -2,16 +2,40 @@
   "name": "bebshax",
   "type": "module",
   "private": true,
+  "workspaces": [
+    "apps/frontend"
+  ],
   "scripts": {
     "dev": "node scripts/dev.js",
     "start": "node scripts/dev.js",
     "backend": "node scripts/run_backend.js",
     "frontend": "node scripts/dev.js",
     "dev:frontend": "npm --prefix apps/frontend run dev",
-    "dev:backend": "node scripts/run_backend.js"
+    "dev:backend": "node scripts/run_backend.js",
+    "build": "npm --prefix apps/frontend run build"
   },
   "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "@fontsource/space-grotesk": "^5.3.0",
+    "@fontsource/unbounded": "^5.3.0",
+    "@gsap/react": "^2.1.2",
     "@neon/config": "^1.1.0",
-    "@neon/env": "^1.1.6"
+    "@neon/env": "^1.1.6",
+    "gsap": "^3.15.0",
+    "lucide-react": "^1.34.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.1"
   }
 }
