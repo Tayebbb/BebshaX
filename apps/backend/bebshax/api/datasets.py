@@ -19,6 +19,7 @@ from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
 from bebshax.datasets.service import DatasetService
 from bebshax.db.models import DatasetSources, Studies
 from bebshax.research.service import ResearchEngineService
+from bebshax.tenancy import ANONYMOUS_OWNER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -506,7 +507,7 @@ async def import_study_dataset_candidate(
     """Manually import a discovered dataset candidate into the study's dataset sources."""
     await _verify_study_access(study_id, current_user, session, write=True)
     service = ResearchEngineService()
-    effective_user_id = current_user.id if current_user else "usr_default"
+    effective_user_id = current_user.id if current_user else ANONYMOUS_OWNER_ID
     try:
         imported_ds = await service.import_candidate_dataset(session, study_id, candidate_id, effective_user_id)
         return {

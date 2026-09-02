@@ -11,7 +11,7 @@ import {
 import { api } from '../../../services/api';
 import { useNavigation } from '../../../context/NavigationContext';
 import { useViewMotion } from '../../../motion/useViewMotion';
-import { CopilotMessage, READ_ONLY_TITLE } from './workflow/types';
+import { CopilotMessage, DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE } from './workflow/types';
 import { Step1Context } from './workflow/Step1Context';
 import { Step2Personas } from './workflow/Step2Personas';
 import { Step3Script } from './workflow/Step3Script';
@@ -511,7 +511,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     handleStepChange(2);
 
     const activeRoles = suggestedRoles.filter((r) => r.selected && r.count > 0);
-    const totalCount = activeRoles.reduce((sum, r) => sum + r.count, 0) || 6;
+    const totalCount = activeRoles.reduce((sum, r) => sum + r.count, 0) || DEFAULT_PERSONA_COUNT;
 
     const allUserTexts = copilotMessagesRef.current
       .filter((m) => m.role === 'user')

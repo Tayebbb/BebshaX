@@ -19,17 +19,6 @@ describe('Frontend API Service with Mock Fallback', () => {
     expect(status.pools.length).toBeGreaterThan(0);
   });
 
-  it('generates a synthetic persona with full provenance', async () => {
-    const result = await api.generatePersona(
-      'biz_fintech_01',
-      'Test Variable Courier',
-      ['Fast turnaround', 'High sensitivity']
-    );
-    expect(result.persona).toHaveProperty('id');
-    expect(result.persona.attributes.length).toBeGreaterThan(0);
-    expect(result.provenance.success).toBe(true);
-  });
-
   it('sends interactive interview message and receives grounded response', async () => {
     const conv = await api.startConversation('per_sarah_01', 'Test Interview');
     expect(conv.id).toBeDefined();

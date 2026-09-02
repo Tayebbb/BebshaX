@@ -36,6 +36,7 @@ from bebshax.interview.orm import Conversations, ConversationTurns, InterviewIns
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+from bebshax.tenancy import ANONYMOUS_OWNER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class StudyReportService:
         if not study:
             raise ValueError(f"Study '{study_id}' not found")
 
-        effective_user_id = user_id or study.user_id or "usr_default"
+        effective_user_id = user_id or study.user_id or ANONYMOUS_OWNER_ID
 
         # 1. Gather all study data from database
         evidence_sources = list(
@@ -532,19 +533,8 @@ class StudyReportService:
                             "context": "Essential for ongoing retention",
                         }
                     )
-        if not customer_needs:
-            customer_needs = [
-                {
-                    "need": "Frictionless setup with immediate utility",
-                    "priority": "Crucial",
-                    "context": "First 5 minutes",
-                },
-                {
-                    "need": "Predictable, fair pricing structure",
-                    "priority": "High",
-                    "context": "Monthly renewal",
-                },
-            ]
+        # No persona needs recorded -> empty list. A deterministic template must
+        # never invent specific needs ("frictionless setup", pricing claims).
 
         # Behavioral simulation results
         behavioral_summary = [
@@ -553,8 +543,9 @@ class StudyReportService:
                 "scenario": f"Simulation across {r.persona_name}",
                 "decision": r.decision_label or r.decision,
                 "average_likelihood": round(r.probability, 2),
-                "key_objection": (r.objections[0] if r.objections else "Price sensitivity"),
-                "key_motivator": (r.motivators[0] if r.motivators else "Time savings & convenience"),
+                # None, not an invented objection/motivator, when the run recorded none.
+                "key_objection": (r.objections[0] if r.objections else None),
+                "key_motivator": (r.motivators[0] if r.motivators else None),
             }
             for r in behavioral_results[:6]
         ]
@@ -573,11 +564,9 @@ class StudyReportService:
         return {
             "title": title,
             "executive_summary": exec_summary,
-            "key_findings": [
-                f"Hypothesis: demand for '{prompt}' is likely strongest when pitched on immediate time savings and convenience — validate in live interviews.",
-                "Hypothesis: transparent pricing tiers may improve conversion for price-sensitive cohorts — not yet measured.",
-                "Hypothesis: personas suggest reliability proof is a switching prerequisite — verify with real users.",
-            ],
+            # Grounded in stored evidence claims only — empty when none exist.
+            # Canned "Hypothesis: …" strings were invented business claims.
+            "key_findings": [c.claim_text for c in evidence_claims[:3]],
             "target_market_summary": (
                 f"The target market comprises {target_aud}, characterized by high digital engagement "
                 f"and moderate-to-high price sensitivity."

@@ -130,13 +130,23 @@ export const ModelRouterView: React.FC = () => {
             </h2>
           </div>
           <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            <div>Operational Budget: <strong style={{ color: 'var(--accent-emerald)' }}>Zero API Cost (Free Tier Aggregation)</strong></div>
             {routesStatus?.providers && (
               <div>
                 Providers reporting now:{' '}
                 <strong style={{ color: 'var(--text-main)' }}>{routesStatus.providers.length}</strong>
               </div>
             )}
+            <div
+              style={{
+                fontSize: '0.72rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                margin: '10px 0 2px',
+              }}
+            >
+              How routing works — architecture, not live status
+            </div>
+            <div>Operational Budget: <strong style={{ color: 'var(--accent-emerald)' }}>Zero API Cost (Free Tier Aggregation)</strong></div>
             <div>Reliability Fallback: <strong style={{ color: 'var(--status-warn-text)' }}>Local Ollama (Qwen / LLaMA)</strong></div>
           </div>
         </div>
@@ -151,11 +161,22 @@ export const ModelRouterView: React.FC = () => {
             boxShadow: 'var(--shadow-md)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
             <Layers size={20} color="var(--status-warn-text)" />
             <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
-              Active Task Pools
+              Task Pool Design
             </h2>
+          </div>
+          <div
+            style={{
+              fontSize: '0.72rem',
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              marginBottom: '12px',
+            }}
+          >
+            How routing works — architecture, not live status
           </div>
           <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
             <div>Reasoning Pool: <strong style={{ color: 'var(--text-main)' }}>Persona Generation & Consistency</strong></div>
@@ -403,12 +424,12 @@ export const ModelRouterView: React.FC = () => {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--text-muted)' }}>
                   <span style={{ color: 'var(--text-primary)' }}>
-                    Served: <strong style={{ color: 'var(--text-main)' }}>{rec.served_by_provider || 'pollinations'}</strong>
+                    Served: <strong style={{ color: 'var(--text-main)' }}>{rec.served_by_provider || 'not served'}</strong>
                     {rec.served_by_model && ` (${rec.served_by_model})`}
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Clock size={13} />
-                    {rec.total_latency_ms ? `${Math.round(rec.total_latency_ms)}ms` : '340ms'}
+                    {rec.total_latency_ms != null ? `${Math.round(rec.total_latency_ms)}ms` : '—'}
                   </span>
                   <span
                     style={{

@@ -35,6 +35,7 @@ from bebshax.db.models import (
 )
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.llm.json_utils import parse_llm_json
+from bebshax.tenancy import ANONYMOUS_OWNER_ID
 from bebshax.tenancy import PUBLIC_OWNER_IDS as _PUBLIC_OWNER_IDS
 from bebshax.utils.title_generator import generate_deterministic_study_title
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
@@ -256,7 +257,7 @@ async def create_study(
     study_id = payload.id or f"study_{uuid.uuid4().hex[:16]}"
     # Identity comes from the token only — payload.user_id would let any
     # caller attach rows to another tenant (spoofing).
-    study_user_id = current_user.id if current_user else "usr_default"
+    study_user_id = current_user.id if current_user else ANONYMOUS_OWNER_ID
 
     study = Studies(
         id=study_id,
@@ -318,7 +319,7 @@ async def update_study(
     if not study:
         # Auto-create — supports seamless workflow initialization.
         # Identity from the token only (never payload.user_id — spoofing).
-        study_user_id = current_user.id if current_user else "usr_default"
+        study_user_id = current_user.id if current_user else ANONYMOUS_OWNER_ID
         prompt = (payload.prompt or payload.product_idea or "").strip()
         study_type = payload.type or payload.study_type or "interviews"
         title = payload.title or (generate_deterministic_study_title(prompt, study_type) if prompt else "Untitled Study")
@@ -434,7 +435,7 @@ async def save_audience(
             raise HTTPException(status_code=404, detail=f"Study '{payload.study_id}' not found")
     audience_id = payload.id or f"aud_{uuid.uuid4().hex[:16]}"
     # Identity from the token only (never payload.user_id — spoofing).
-    aud_user_id = current_user.id if current_user else "usr_default"
+    aud_user_id = current_user.id if current_user else ANONYMOUS_OWNER_ID
     audience = SavedAudiences(
         id=audience_id,
         user_id=aud_user_id,
@@ -591,7 +592,7 @@ async def trigger_study_research(
         vector_engine = getattr(request.app.state, "vector_engine", None) if request else None
         research_engine = ResearchEngineService(llm_service=llm_service, vector_engine=vector_engine)
 
-    effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
+    effective_user_id = (current_user.id if current_user else None) or study.user_id or ANONYMOUS_OWNER_ID
     run = await research_engine.run_study_research(
         session=session,
         study=study,
@@ -688,7 +689,7 @@ async def generate_study_report(
     llm_service = getattr(request.app.state, "llm_service", None) if request else None
     report_service = StudyReportService(session=session, llm_service=llm_service)
 
-    effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
+    effective_user_id = (current_user.id if current_user else None) or study.user_id or ANONYMOUS_OWNER_ID
     custom_title = payload.title if payload else None
 
     report = await report_service.generate_report(
@@ -727,7 +728,7 @@ async def start_report_generation_job(
     if sessionmaker_ is None:
         raise HTTPException(status_code=500, detail="Database not configured")
     llm_service = getattr(app.state, "llm_service", None)
-    effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
+    effective_user_id = (current_user.id if current_user else None) or study.user_id or ANONYMOUS_OWNER_ID
     custom_title = payload.title if payload else None
 
     async def _runner(job: dict[str, Any]) -> None:

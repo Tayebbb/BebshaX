@@ -6,9 +6,24 @@ describe('Neon Auth Client & Service', () => {
     vi.restoreAllMocks();
   });
 
-  it('exposes the configured Neon Auth base URL', () => {
+  it('reads the Neon Auth URL from the environment with no hardcoded tenant fallback', async () => {
     expect(neonAuth.getAuthUrl()).toBe(NEON_AUTH_URL);
-    expect(NEON_AUTH_URL).toContain('neonauth');
+
+    vi.resetModules();
+    vi.stubEnv('VITE_NEON_AUTH_URL', 'https://auth.example.test/neondb/auth');
+    const configured = await import('../src/services/neonAuth');
+    expect(configured.NEON_AUTH_URL).toBe('https://auth.example.test/neondb/auth');
+    expect(configured.isNeonAuthConfigured()).toBe(true);
+
+    // Absent/empty env ⇒ '' ⇒ federated sign-in disabled — never a default tenant URL.
+    vi.resetModules();
+    vi.stubEnv('VITE_NEON_AUTH_URL', '');
+    const unconfigured = await import('../src/services/neonAuth');
+    expect(unconfigured.NEON_AUTH_URL).toBe('');
+    expect(unconfigured.isNeonAuthConfigured()).toBe(false);
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
   });
 
   it('handles sign-up successfully and maps user profile', async () => {

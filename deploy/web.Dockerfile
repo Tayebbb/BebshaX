@@ -10,6 +10,10 @@ COPY apps/frontend/ ./
 # Vite inlines VITE_* at build time; /api rides the nginx proxy below (no CORS).
 ARG VITE_API_BASE=/api
 ENV VITE_API_BASE=${VITE_API_BASE}
+# Empty = federated Neon sign-in disabled (frontend's documented default);
+# operators point it at their own Neon Auth tenant at build time.
+ARG VITE_NEON_AUTH_URL=""
+ENV VITE_NEON_AUTH_URL=${VITE_NEON_AUTH_URL}
 RUN npm run build
 
 # ── Stage 2: nginx serves the build and proxies /api → app:8000 ─────────────

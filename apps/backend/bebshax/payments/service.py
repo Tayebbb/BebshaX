@@ -100,12 +100,16 @@ class StripePaymentService:
         _assert_internal_redirect(success_url, base_url)
         _assert_internal_redirect(cancel_url, base_url)
 
-        checkout_session = stripe.checkout.Session.create(
-            customer=customer_id,
-            client_reference_id=user.id,
-            mode="subscription",
-            payment_method_types=["card"],
-            line_items=[
+        # Prefer a Stripe Dashboard price id when configured; the inline
+        # price_data path below is the unchanged default.
+        configured_price_id = {
+            "pro": self.settings.stripe_price_id_pro,
+            "enterprise": self.settings.stripe_price_id_enterprise,
+        }.get(plan_lower)
+        if configured_price_id:
+            line_items = [{"price": configured_price_id, "quantity": 1}]
+        else:
+            line_items = [
                 {
                     "price_data": {
                         "currency": plan_info["currency"],
@@ -120,7 +124,14 @@ class StripePaymentService:
                     },
                     "quantity": 1,
                 }
-            ],
+            ]
+
+        checkout_session = stripe.checkout.Session.create(
+            customer=customer_id,
+            client_reference_id=user.id,
+            mode="subscription",
+            payment_method_types=["card"],
+            line_items=line_items,
             success_url=success_url or default_success,
             cancel_url=cancel_url or default_cancel,
             metadata={

@@ -315,151 +315,6 @@ export const api = {
     return mockStore.personas[id] || null;
   },
 
-  async generatePersona(
-    businessId: string,
-    audienceSegment: string,
-    hints: string[]
-  ): Promise<{ persona: Persona; provenance: ProvenanceRecord }> {
-    if (!this.isMockMode()) {
-      try {
-        const res = await fetch(`${API_BASE}/businesses/${businessId}/personas`, {
-          method: 'POST',
-          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({
-            audience_segment: audienceSegment,
-            generation_hints: hints,
-            hints: hints.join(', '),
-          }),
-          signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
-        });
-        if (res.ok) {
-          lastKnownLive = true;
-          const persona: Persona = await res.json();
-
-          // Query freshest provenance record for this persona
-          const provRes = await this.getProvenance(1);
-          const prov = provRes.items[0] || {
-            request_id: `req_${Date.now().toString(36)}`,
-            task: 'PERSONA_GENERATION' as const,
-            pool: 'reasoning',
-            persona_id: persona.id,
-            conversation_id: null,
-            created_at: new Date().toISOString(),
-            routing_path: ['pollinations/deepseek-r1'],
-            attempts: [],
-            served_by_provider: 'pollinations',
-            served_by_model: persona.generation_model || 'deepseek-r1',
-            input_tokens: 1420,
-            output_tokens: 850,
-            total_latency_ms: 1200,
-            success: true,
-          };
-
-          const { mockStore } = await loadMocks();
-          mockStore.personas[persona.id] = persona;
-          return { persona, provenance: prov };
-        }
-        lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Persona generation failed' }));
-        throw new Error(err.detail || err.message || `Persona generation failed (HTTP ${res.status})`);
-      } catch (err) {
-        lastKnownLive = false;
-        throw err;
-      }
-    }
-
-    // Mock generation simulation
-    const id = `per_${Date.now().toString(36)}`;
-    const newPersona: Persona = {
-      id,
-      business_id: businessId,
-      name: `Synthetic Persona (${audienceSegment.split(' ')[0] || 'User'})`,
-      status: 'active',
-      version: 1,
-      archetype: 'The Adaptive Adopter',
-      tagline: `Targeted persona synthesized for: ${audienceSegment.slice(0, 60)}...`,
-      demographics: {
-        age: 32,
-        gender: 'Non-binary',
-        occupation: audienceSegment.includes('driver') ? 'Independent Courier' : 'Professional Specialist',
-        income_bracket: '$45,000 - $58,000 / year',
-        location: 'Chicago, IL (Urban)',
-        education: "Bachelor's Degree",
-      },
-      attributes: [
-        {
-          category: 'Goals',
-          title: 'Frictionless Task Completion',
-          description: 'Prioritizes workflows that eliminate redundant manual inputs and deliver instant feedback.',
-          provenance_class: 'OBSERVED',
-          evidence: {
-            source: 'PersonaHub Grounding Slice',
-            quote: 'Target audience segment emphasizes rapid feedback loops and minimal cognitive load.',
-            confidence: 0.94,
-          },
-        },
-        {
-          category: 'Pain Points',
-          title: 'Unclear Pricing & Subscription Traps',
-          description: 'Extremely wary of surprise charges or vague recurring tiers with penalty terms.',
-          provenance_class: 'INFERRED',
-          evidence: {
-            source: 'EmpatheticDialogues Corpus',
-            quote: 'Users consistently express frustration with obscure billing models.',
-            confidence: 0.89,
-          },
-        },
-        {
-          category: 'Behaviors',
-          title: 'Multi-Device Synchronized Usage',
-          description: 'Seamlessly switches between mobile browser during transit and desktop at work.',
-          provenance_class: 'SYNTHETIC',
-          evidence: null,
-        },
-      ],
-      consistency_score: 0.97,
-      grounding_ratio: 0.67,
-      critic_notes: 'Verified: Synthetic persona passes all validation heuristics with no demographic inconsistencies.',
-      generation_model: 'pollinations/deepseek-r1',
-      created_at: new Date().toISOString(),
-    };
-
-    const newProvenance: ProvenanceRecord = {
-      request_id: `req_${Date.now().toString(36)}`,
-      task: 'PERSONA_GENERATION',
-      pool: 'reasoning',
-      persona_id: id,
-      conversation_id: null,
-      created_at: new Date().toISOString(),
-      routing_path: ['groq/llama-3.3-70b-versatile', 'pollinations/deepseek-r1'],
-      attempts: [
-        {
-          attempt_number: 1,
-          provider: 'pollinations',
-          model: 'deepseek-r1',
-          started_at: new Date().toISOString(),
-          latency_ms: 1180,
-          success: true,
-          failure_kind: null,
-          failure_detail: null,
-          fallback_reason: null,
-          notes: ['Direct route completion'],
-        },
-      ],
-      served_by_provider: 'pollinations',
-      served_by_model: 'deepseek-r1',
-      input_tokens: 1650,
-      output_tokens: 880,
-      total_latency_ms: 1180,
-      success: true,
-    };
-
-    const { mockStore } = await loadMocks();
-    mockStore.personas[id] = newPersona;
-    mockStore.provenance.unshift(newProvenance);
-    return { persona: newPersona, provenance: newProvenance };
-  },
-
   // 6. Memories
   async getMemories(personaId: string): Promise<MemoryItem[]> {
     if (!this.isMockMode()) {
@@ -3815,7 +3670,7 @@ export const api = {
           ...this.getAuthHeaders(),
         },
         body: JSON.stringify({ plan, success_url: successUrl, cancel_url: cancelUrl }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: `Checkout creation failed (${res.status})` }));
@@ -3840,7 +3695,7 @@ export const api = {
     if (!this.isMockMode()) {
       const res = await fetch(`${API_BASE}/payments/subscription`, {
         headers: this.getAuthHeaders(),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: `Get subscription failed (${res.status})` }));
@@ -3865,7 +3720,7 @@ export const api = {
           ...this.getAuthHeaders(),
         },
         body: JSON.stringify({ return_url: returnUrl }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: `Portal session failed (${res.status})` }));

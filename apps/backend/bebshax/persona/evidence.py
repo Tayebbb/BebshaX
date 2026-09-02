@@ -24,6 +24,7 @@ import math
 import re
 from pathlib import Path
 
+from bebshax.config import get_settings
 from bebshax.persona.schema import EvidenceItem
 
 _TOKEN_RE = re.compile(r"[a-z0-9]{3,}")
@@ -75,8 +76,10 @@ class _Doc:
 
 
 class EvidenceStore:
-    def __init__(self, processed_dir: Path | str = Path("data/processed")) -> None:
-        self._dir = Path(processed_dir)
+    def __init__(self, processed_dir: Path | str | None = None) -> None:
+        # None -> configured processed root (BEBSHAX_PROCESSED_DIR / BEBSHAX_DATA_DIR),
+        # resolved when the store is built, not at import time.
+        self._dir = Path(processed_dir) if processed_dir is not None else get_settings().processed_dir_path
         self._docs: list[_Doc] | None = None
         self._seeds: list[str] | None = None
         self._df: dict[str, int] = {}

@@ -535,7 +535,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             const budgetRange =
               econ?.min && econ?.max ? `৳${econ.min}–৳${econ.max}` : medianBudget;
             const ageRange =
-              demo?.age_range ? `${demo.age_range[0]}–${demo.age_range[1]} yrs` : '18–24 yrs';
+              demo?.age_range ? `${demo.age_range[0]}–${demo.age_range[1]} yrs` : '—';
 
             return (
               <div
@@ -619,7 +619,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     <div>
                       <span className="text-[10px] text-[var(--text-secondary)] block">Tech Familiarity</span>
                       <span className="font-semibold text-[var(--text-primary)]">
-                        {behav?.technology_familiarity || 'Medium'}
+                        {behav?.technology_familiarity || 'Not stated'}
                       </span>
                     </div>
                     <div>
@@ -883,32 +883,40 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     </p>
                   </div>
 
-                  <div>
-                    <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
-                      Key Differentiation Rationale
-                    </h4>
-                    <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg leading-relaxed text-teal-300">
-                      {selectedSegment.differentiation_summary || 'Distinct behavior and economic limits.'}
-                    </p>
-                  </div>
+                  {selectedSegment.differentiation_summary && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+                        Key Differentiation Rationale
+                      </h4>
+                      <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg leading-relaxed text-teal-300">
+                        {selectedSegment.differentiation_summary}
+                      </p>
+                    </div>
+                  )}
 
                   <div>
                     <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
                       Identified Needs & Pain Points
                     </h4>
-                    <div className="space-y-2">
-                      {(selectedSegment.characteristics?.needs || ['Affordable and distraction-free experience']).map(
-                        (need, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2.5 bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg"
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0" />
-                            <span>{need}</span>
-                          </div>
-                        )
-                      )}
-                    </div>
+                    {(selectedSegment.characteristics?.needs?.length ?? 0) > 0 ? (
+                      <div className="space-y-2">
+                        {(selectedSegment.characteristics?.needs ?? []).map(
+                          (need, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center gap-2.5 bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0" />
+                              <span>{need}</span>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    ) : (
+                      <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg text-[var(--text-secondary)]">
+                        No needs identified from the data yet.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -921,13 +929,15 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                       <span className="text-base font-bold text-teal-400 font-mono mt-1 block">
                         {selectedSegment.characteristics?.demographics?.age_range
                           ? `${selectedSegment.characteristics.demographics.age_range[0]} – ${selectedSegment.characteristics.demographics.age_range[1]} years`
-                          : '18 – 24 years'}
+                          : '—'}
                       </span>
                     </div>
                     <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
                       <span className="text-[10px] text-[var(--text-secondary)] block uppercase font-bold">Median Age</span>
                       <span className="text-base font-bold text-[var(--text-primary)] font-mono mt-1 block">
-                        {selectedSegment.characteristics?.demographics?.median_age || 21} years old
+                        {selectedSegment.characteristics?.demographics?.median_age != null
+                          ? `${selectedSegment.characteristics.demographics.median_age} years old`
+                          : '—'}
                       </span>
                     </div>
                   </div>
@@ -935,16 +945,16 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                   <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
                     <span className="text-[10px] text-[var(--text-secondary)] block uppercase font-bold">Dominant Role / Occupation</span>
                     <span className="text-sm font-semibold text-[var(--text-primary)] mt-1 block">
-                      {selectedSegment.characteristics?.demographics?.dominant_occupation || 'Undergraduate Student / Candidate'}
+                      {selectedSegment.characteristics?.demographics?.dominant_occupation || 'Not stated'}
                     </span>
                   </div>
 
                   <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
                     <span className="text-[10px] text-[var(--text-secondary)] block uppercase font-bold">Study Intensity</span>
                     <span className="text-sm font-semibold text-cyan-400 mt-1 block font-mono">
-                      {selectedSegment.characteristics?.behavior?.study_hours_per_day
+                      {selectedSegment.characteristics?.behavior?.study_hours_per_day != null
                         ? `${selectedSegment.characteristics.behavior.study_hours_per_day} hours/day`
-                        : '4.5 hours/day'}
+                        : '—'}
                     </span>
                   </div>
                 </div>
@@ -952,38 +962,57 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
               {modalTab === 'economics' && (
                 <div className="space-y-4" data-testid="tab-content-economics">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg">
-                      <span className="text-[10px] text-[var(--text-secondary)] block">Min Budget</span>
-                      <span className="text-sm font-bold text-[var(--text-primary)] font-mono">
-                        ৳{selectedSegment.characteristics?.economics?.monthly_budget?.min || 250}
-                      </span>
+                  {selectedSegment.characteristics?.economics?.monthly_budget ? (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg">
+                        <span className="text-[10px] text-[var(--text-secondary)] block">Min Budget</span>
+                        <span className="text-sm font-bold text-[var(--text-primary)] font-mono">
+                          {selectedSegment.characteristics.economics.monthly_budget.min != null
+                            ? `৳${selectedSegment.characteristics.economics.monthly_budget.min}`
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className="bg-[var(--bg-card)] border border-teal-500/40 p-3 rounded-lg">
+                        <span className="text-[10px] text-teal-400 font-semibold block">Median Budget</span>
+                        <span className="text-base font-bold text-teal-300 font-mono">
+                          {selectedSegment.characteristics.economics.monthly_budget.median != null
+                            ? `৳${selectedSegment.characteristics.economics.monthly_budget.median}`
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg">
+                        <span className="text-[10px] text-[var(--text-secondary)] block">Max Budget</span>
+                        <span className="text-sm font-bold text-[var(--text-primary)] font-mono">
+                          {selectedSegment.characteristics.economics.monthly_budget.max != null
+                            ? `৳${selectedSegment.characteristics.economics.monthly_budget.max}`
+                            : '—'}
+                        </span>
+                      </div>
                     </div>
-                    <div className="bg-[var(--bg-card)] border border-teal-500/40 p-3 rounded-lg">
-                      <span className="text-[10px] text-teal-400 font-semibold block">Median Budget</span>
-                      <span className="text-base font-bold text-teal-300 font-mono">
-                        ৳{selectedSegment.characteristics?.economics?.monthly_budget?.median || 400}
-                      </span>
-                    </div>
-                    <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg">
-                      <span className="text-[10px] text-[var(--text-secondary)] block">Max Budget</span>
-                      <span className="text-sm font-bold text-[var(--text-primary)] font-mono">
-                        ৳{selectedSegment.characteristics?.economics?.monthly_budget?.max || 600}
-                      </span>
-                    </div>
-                  </div>
+                  ) : (
+                    <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg text-[var(--text-secondary)] text-center">
+                      No budget data extracted for this segment yet.
+                    </p>
+                  )}
 
                   <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-4 rounded-lg leading-relaxed">
                     <span className="text-[10px] text-[var(--text-secondary)] block uppercase font-bold mb-1">
                       Willingness-to-Pay Analysis
                     </span>
-                    <p className="text-[var(--text-secondary)]">
-                      Price threshold analysis indicates sensitivity above the median budget of{' '}
-                      <span className="text-teal-400 font-semibold">
-                        ৳{selectedSegment.characteristics?.economics?.monthly_budget?.median || 400}/mo
-                      </span>
-                      . Micro-billing and mobile wallet integrations (bKash/Nagad) maximize conversion.
-                    </p>
+                    {selectedSegment.characteristics?.economics?.monthly_budget?.median != null ? (
+                      <p className="text-[var(--text-secondary)]">
+                        Price threshold analysis indicates sensitivity above the median budget of{' '}
+                        <span className="text-teal-400 font-semibold">
+                          ৳{selectedSegment.characteristics.economics.monthly_budget.median}/mo
+                        </span>
+                        . General market guidance, not a finding from this study: micro-billing and mobile
+                        wallet integrations (bKash/Nagad) tend to maximize conversion.
+                      </p>
+                    ) : (
+                      <p className="text-[var(--text-secondary)]">
+                        Not enough pricing data to analyse willingness to pay.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

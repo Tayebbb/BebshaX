@@ -15,6 +15,7 @@ from sqlalchemy import delete, false as sa_false, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
+from bebshax.config import get_settings
 from bebshax.db.models import DatasetPersonaRuns, DatasetSources, Personas, _utcnow
 from bebshax.datasets.parser import parse_dataset_bytes
 from bebshax.datasets.profiler import profile_dataset
@@ -27,7 +28,10 @@ from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
 from bebshax.tenancy import PUBLIC_OWNER_IDS
 
-UPLOAD_DIR = Path("data/uploads")
+
+def _upload_dir() -> Path:
+    """Configured upload root (BEBSHAX_UPLOAD_DIR / BEBSHAX_DATA_DIR), resolved at call time."""
+    return get_settings().upload_dir_path
 
 
 def _parse_json_object(text: str) -> dict:
@@ -45,7 +49,7 @@ class DatasetService:
     ) -> None:
         self._sessionmaker = sessionmaker_
         self._llm = llm
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        _upload_dir().mkdir(parents=True, exist_ok=True)
 
     @property
     def sessionmaker(self) -> sessionmaker[AsyncSession]:
@@ -71,7 +75,7 @@ class DatasetService:
 
         ds_id = f"ds_{uuid.uuid4().hex[:16]}"
         # Store structured records on disk for fast querying and preview
-        file_path = str(UPLOAD_DIR / f"{ds_id}.json")
+        file_path = str(_upload_dir() / f"{ds_id}.json")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(rows, f)
 
@@ -120,7 +124,7 @@ class DatasetService:
         segments = discover_segments(columns, rows, schema_metadata, stats)
 
         ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-        file_path = str(UPLOAD_DIR / f"{ds_id}.json")
+        file_path = str(_upload_dir() / f"{ds_id}.json")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(rows, f)
 
@@ -169,7 +173,7 @@ class DatasetService:
         segments = discover_segments(columns, rows, schema_metadata, stats)
 
         ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-        file_path = str(UPLOAD_DIR / f"{ds_id}.json")
+        file_path = str(_upload_dir() / f"{ds_id}.json")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(rows, f)
 

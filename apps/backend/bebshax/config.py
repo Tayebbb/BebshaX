@@ -26,6 +26,22 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     demo_mode: bool = False
+    log_level: str = "INFO"
+
+    # Filesystem roots for uploaded/processed datasets. Relative paths resolve
+    # against the process CWD (dev: repo root -> data/). Containers set
+    # BEBSHAX_DATA_DIR to a writable, volume-backed absolute path.
+    data_dir: str = "data"
+    upload_dir: str | None = None  # default: <data_dir>/uploads
+    processed_dir: str | None = None  # default: <data_dir>/processed
+
+    @property
+    def upload_dir_path(self) -> Path:
+        return Path(self.upload_dir) if self.upload_dir else Path(self.data_dir) / "uploads"
+
+    @property
+    def processed_dir_path(self) -> Path:
+        return Path(self.processed_dir) if self.processed_dir else Path(self.data_dir) / "processed"
 
     # M6: explicit origins — wildcard + allow_credentials is invalid per the
     # Fetch spec and unsafe. Comma-separated; override via BEBSHAX_CORS_ORIGINS.
@@ -36,7 +52,9 @@ class Settings(BaseSettings):
     cors_origin_regex: str = r"http://localhost:\d+|http://127\.0\.0\.1:\d+"
     frontend_base_url: str = "http://localhost:5173"
     resend_api_key: str | None = None
-    email_from_address: str = "bebshax.official@gmail.com"
+    # No default sender: Resend refuses unverified domains, so a shipped
+    # literal only produces silent delivery failures. Required in prod/staging.
+    email_from_address: str = ""
     smtp_host: str = "smtp-relay.brevo.com"
     smtp_port: int = 587
     smtp_username: str | None = None
@@ -49,6 +67,9 @@ class Settings(BaseSettings):
     stripe_secret_key: str | None = None
     stripe_publishable_key: str | None = None
     stripe_webhook_secret: str | None = None
+    # Optional Stripe Dashboard price ids; unset keeps the inline price_data path.
+    stripe_price_id_pro: str | None = None
+    stripe_price_id_enterprise: str | None = None
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -56,6 +77,8 @@ class Settings(BaseSettings):
 
 
     database_url: str = "postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax"
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
 
     @property
     def sync_database_url(self) -> str:
@@ -88,7 +111,10 @@ class Settings(BaseSettings):
     # new table, a migration and a check on every request.
     jwt_expire_days: int = 1
 
-    neon_auth_url: str = "https://ep-cold-star-azazjakq.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth"
+    # Empty = federated Neon sign-in disabled; /api/auth/sync answers 503.
+    # Never default to a live tenant URL — that silently binds every deploy
+    # to one personal Neon project.
+    neon_auth_url: str = ""
 
     require_email_verification: bool | None = None
 
@@ -124,6 +150,32 @@ class Settings(BaseSettings):
             raise ValueError(
                 "BEBSHAX_RESEND_API_KEY is required in production/staging environments. "
                 "Register at resend.com and configure BEBSHAX_RESEND_API_KEY."
+            )
+        return v
+
+    @field_validator("demo_mode")
+    @classmethod
+    def demo_mode_forbidden_in_hosted_envs(cls, v: bool, info) -> bool:
+        env = info.data.get("environment", "development")
+        if v and env in ("production", "staging"):
+            raise ValueError(
+                "BEBSHAX_DEMO_MODE=true seeds well-known demo credentials "
+                "(founder@bebshax.ai) and must never run with "
+                "BEBSHAX_ENVIRONMENT=production/staging. Unset BEBSHAX_DEMO_MODE, "
+                "or keep the default development environment for the "
+                "demo/exhibition profile (docs/DEMO.md \u00a77)."
+            )
+        return v
+
+    @field_validator("email_from_address")
+    @classmethod
+    def email_from_required_in_hosted_envs(cls, v: str, info) -> str:
+        env = info.data.get("environment", "development")
+        if env in ("production", "staging") and not v.strip():
+            raise ValueError(
+                "BEBSHAX_EMAIL_FROM_ADDRESS is required in production/staging "
+                "environments. Set it to a sender on a domain verified with your "
+                "email provider (Resend refuses unverified domains)."
             )
         return v
 

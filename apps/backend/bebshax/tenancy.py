@@ -16,7 +16,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-PUBLIC_OWNER_IDS = ("usr_system_holder", "usr_default", "anonymous")
+# Sentinel identity stamped on rows created by unauthenticated callers.
+# Import this instead of re-typing the literal at call sites.
+ANONYMOUS_OWNER_ID = "usr_default"
+
+PUBLIC_OWNER_IDS = ("usr_system_holder", ANONYMOUS_OWNER_ID, "anonymous")
 
 # Study-access delta: anonymous callers reach the anonymous tenant but NOT
 # system-holder studies (demo visibility is governed by Studies.is_demo).

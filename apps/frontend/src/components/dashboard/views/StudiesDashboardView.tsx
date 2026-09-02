@@ -293,7 +293,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
 
                   <div className="sd-row-right">
                     {rowStatus(study)}
-                    <div className="sd-row-type">{TYPE_LABELS[study.type] ?? 'Interviews'}</div>
+                    <div className="sd-row-type">{TYPE_LABELS[study.type] ?? study.type}</div>
                     <span className="sd-row-open" aria-hidden="true">
                       Open
                       <ArrowUpRight size={14} />

@@ -269,4 +269,60 @@ describe('SegmentationView Component', () => {
     expect(screen.queryByText('Budget-Conscious Students (৳350/mo)')).not.toBeInTheDocument();
     expect(screen.getByText('Exam-Driven Achievers (৳750/mo)')).toBeInTheDocument();
   });
+
+  it('renders no invented numbers or labels when a segment has all optional fields absent', async () => {
+    const bareSegment: MarketSegment = {
+      id: 'seg_bare',
+      study_id: 'study_123',
+      segmentation_run_id: 'segrun_01',
+      name: 'Sparse Cluster',
+      cluster_label: 'cluster_9',
+      description: 'Cluster with no optional characteristics extracted.',
+      population_count: 120,
+      population_percentage: 10.0,
+      confidence_score: 0.51,
+      status: 'inference_assisted',
+      characteristics: {},
+      variable_distributions: {},
+      evidence_citations: [],
+      created_at: '2026-08-25T10:00:00Z',
+    };
+    (api.listStudySegments as any).mockResolvedValue([bareSegment]);
+
+    render(<SegmentationView studyId="study_123" />);
+
+    // Card grid: no fabricated age cohort / tech familiarity.
+    await screen.findByText('Sparse Cluster');
+    expect(screen.queryByText(/18–24 yrs/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Medium')).not.toBeInTheDocument();
+    expect(screen.getByText('Not stated')).toBeInTheDocument();
+
+    // Overview: differentiation omitted, honest needs empty state.
+    fireEvent.click(screen.getByTestId('deep-dive-btn-seg_bare'));
+    await screen.findByTestId('segment-detail-modal');
+    expect(screen.queryByText(/Key Differentiation Rationale/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Distinct behavior and economic limits/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Affordable and distraction-free experience/i)).not.toBeInTheDocument();
+    expect(screen.getByText('No needs identified from the data yet.')).toBeInTheDocument();
+
+    // Demographics: no fabricated age / occupation / study intensity.
+    fireEvent.click(screen.getByTestId('modal-tab-demographics'));
+    const demoTab = await screen.findByTestId('tab-content-demographics');
+    expect(demoTab.textContent).not.toContain('18 – 24 years');
+    expect(demoTab.textContent).not.toContain('21 years old');
+    expect(demoTab.textContent).not.toContain('Undergraduate Student / Candidate');
+    expect(demoTab.textContent).not.toContain('4.5 hours');
+    expect(demoTab.textContent).toContain('Not stated');
+
+    // Economics: no invented ৳ amounts, honest empty + WTP lines, no bKash claim.
+    fireEvent.click(screen.getByTestId('modal-tab-economics'));
+    const econTab = await screen.findByTestId('tab-content-economics');
+    expect(econTab.textContent).not.toContain('250');
+    expect(econTab.textContent).not.toContain('400');
+    expect(econTab.textContent).not.toContain('600');
+    expect(econTab.textContent).not.toContain('৳');
+    expect(econTab.textContent).not.toContain('bKash');
+    expect(screen.getByText('No budget data extracted for this segment yet.')).toBeInTheDocument();
+    expect(screen.getByText('Not enough pricing data to analyse willingness to pay.')).toBeInTheDocument();
+  });
 });

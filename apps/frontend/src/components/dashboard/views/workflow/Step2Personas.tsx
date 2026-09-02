@@ -2,7 +2,7 @@ import React from 'react';
 import { ArrowRight, FlaskConical, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { Persona, PersonaRoleSuggestion } from '../../../../types';
 import { EvidenceBadge, TemplateBadge, countEvidenceBacked } from '../../../../utils/personaEvidence';
-import { READ_ONLY_TITLE } from './types';
+import { DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE } from './types';
 
 /** Step 2 — persona library. Pure JSX extraction from
  * StudyWorkflowView: generation state/handlers stay in the parent; the modal
@@ -225,7 +225,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 personas.length === 0 &&
                 Array.from({
                   length:
-                    suggestedRoles.filter((r) => r.selected && r.count > 0).reduce((sum, r) => sum + r.count, 0) || 6,
+                    suggestedRoles.filter((r) => r.selected && r.count > 0).reduce((sum, r) => sum + r.count, 0) ||
+                    DEFAULT_PERSONA_COUNT,
                 }).map((_, i) => (
                   <div
                     key={`persona_skeleton_${i}`}

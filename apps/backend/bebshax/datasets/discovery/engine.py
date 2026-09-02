@@ -29,9 +29,13 @@ import json
 from bebshax.datasets.parser import parse_dataset_bytes
 from bebshax.datasets.profiler import profile_dataset
 from bebshax.datasets.segmenter import discover_segments
+from bebshax.config import get_settings
 from bebshax.db.models import _utcnow
 
-UPLOAD_DIR = Path("data/uploads")
+
+def _upload_dir() -> Path:
+    """Configured upload root (BEBSHAX_UPLOAD_DIR / BEBSHAX_DATA_DIR), resolved at call time."""
+    return get_settings().upload_dir_path
 
 
 class DatasetDiscoveryEngine:
@@ -48,7 +52,7 @@ class DatasetDiscoveryEngine:
             KaggleOpenDataAdapter(),
         ]
         self.evaluator = evaluator or DatasetEvaluator(max_auto_select=4)
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        _upload_dir().mkdir(parents=True, exist_ok=True)
 
     async def discover_and_process_datasets(
         self,
@@ -119,7 +123,7 @@ class DatasetDiscoveryEngine:
                     segments = discover_segments(columns, rows, schema_metadata, stats)
 
                     ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-                    file_path = str(UPLOAD_DIR / f"{ds_id}.json")
+                    file_path = str(_upload_dir() / f"{ds_id}.json")
                     with open(file_path, "w", encoding="utf-8") as f:
                         json.dump(rows, f)
 

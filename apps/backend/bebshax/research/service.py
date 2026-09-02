@@ -49,8 +49,13 @@ from bebshax.research.search_provider import (
     SearchProvider,
 )
 from bebshax.research.vector_search import VectorSearchEngine
+from bebshax.config import get_settings
+from bebshax.tenancy import ANONYMOUS_OWNER_ID
 
-UPLOAD_DIR = Path("data/uploads")
+
+def _upload_dir() -> Path:
+    """Configured upload root (BEBSHAX_UPLOAD_DIR / BEBSHAX_DATA_DIR), resolved at call time."""
+    return get_settings().upload_dir_path
 
 
 class ResearchEngineService:
@@ -67,7 +72,7 @@ class ResearchEngineService:
         self.vector_engine = vector_engine or VectorSearchEngine()
         self.llm_service = llm_service
         self.discovery_engine = discovery_engine or DatasetDiscoveryEngine()
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        _upload_dir().mkdir(parents=True, exist_ok=True)
 
     async def run_study_research(
         self,
@@ -76,7 +81,7 @@ class ResearchEngineService:
         user_id: Optional[str] = None,
     ) -> ResearchRuns:
         """Execute an autonomous research run for a study, generating research plans, evidence, and discovered datasets."""
-        effective_user_id = user_id or study.user_id or "usr_default"
+        effective_user_id = user_id or study.user_id or ANONYMOUS_OWNER_ID
         run_id = f"run_{uuid.uuid4().hex[:16]}"
         prompt = study.prompt or study.title
 
@@ -411,7 +416,7 @@ class ResearchEngineService:
         segments = discover_segments(columns, rows, schema_metadata, stats)
 
         ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-        file_path = str(UPLOAD_DIR / f"{ds_id}.json")
+        file_path = str(_upload_dir() / f"{ds_id}.json")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(rows, f)
 

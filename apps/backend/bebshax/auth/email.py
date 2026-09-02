@@ -47,13 +47,15 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
     settings = get_settings()
 
     # 1. Try SMTP if configured
-    smtp_user = getattr(settings, "smtp_username", None)
-    smtp_pass = getattr(settings, "active_smtp_password", None)
+    smtp_user = settings.smtp_username
+    smtp_pass = settings.active_smtp_password
     if smtp_user and smtp_pass:
         try:
-            from_addr = getattr(settings, "email_from_address", smtp_user)
-            smtp_host = getattr(settings, "smtp_host", "smtp.gmail.com")
-            smtp_port = getattr(settings, "smtp_port", 587)
+            # No literal fallbacks: sender/host come from Settings only. The
+            # authenticated account is the sender when no from-address is set.
+            from_addr = settings.email_from_address or smtp_user
+            smtp_host = settings.smtp_host
+            smtp_port = settings.smtp_port
             await asyncio.to_thread(
                 _send_smtp_sync,
                 smtp_host,
@@ -75,28 +77,35 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
             )
 
     # 2. Fallback to Resend API
-    api_key = getattr(settings, "resend_api_key", None)
+    api_key = settings.resend_api_key
     if api_key:
-        try:
-            from_addr = getattr(settings, "email_from_address", "bebshax.official@gmail.com")
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(
-                    RESEND_API_URL,
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    json={
-                        "from": from_addr,
-                        "to": [to_email],
-                        "subject": subject,
-                        "html": html_body,
-                    },
-                )
-            if resp.status_code < 400:
-                logger.info("Sent email to %s via Resend API", to_email)
-                return True
-            else:
-                logger.error("Resend API failed: %d %s", resp.status_code, resp.text)
-        except Exception as exc:
-            logger.error("Resend API exception: %s", exc)
+        from_addr = settings.email_from_address
+        if not from_addr:
+            logger.warning(
+                "BEBSHAX_EMAIL_FROM_ADDRESS is not set — Resend requires a verified "
+                "sender; skipping Resend delivery to %s.",
+                to_email,
+            )
+        else:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(
+                        RESEND_API_URL,
+                        headers={"Authorization": f"Bearer {api_key}"},
+                        json={
+                            "from": from_addr,
+                            "to": [to_email],
+                            "subject": subject,
+                            "html": html_body,
+                        },
+                    )
+                if resp.status_code < 400:
+                    logger.info("Sent email to %s via Resend API", to_email)
+                    return True
+                else:
+                    logger.error("Resend API failed: %d %s", resp.status_code, resp.text)
+            except Exception as exc:
+                logger.error("Resend API exception: %s", exc)
 
     logger.warning("No working email credentials configured. Email to %s skipped.", to_email)
     return False

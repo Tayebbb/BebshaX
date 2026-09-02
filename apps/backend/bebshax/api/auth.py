@@ -399,6 +399,11 @@ async def verify_neon_token(token: str) -> dict:
     """Calls Neon's session-verification endpoint server-side.
     Identity comes only from Neon's verified response — never from client claims."""
     settings = get_settings()
+    if not settings.neon_auth_url.strip():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Neon authentication is not configured",
+        )
     base_url = settings.neon_auth_url.rstrip("/")
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:

@@ -29,6 +29,15 @@ DEFAULT_MODELS = [
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 
 
+def _configured_models() -> list[str]:
+    """Model list — BEBSHAX_OPENROUTER_MODELS (comma-separated) overrides the
+    defaults above. Free-tier catalogs drift; operators repoint without a
+    release. Adapter-local env read, same pattern as OLLAMA_API_BASE (R1)."""
+    raw = os.environ.get("BEBSHAX_OPENROUTER_MODELS", "")
+    models = [m.strip() for m in raw.split(",") if m.strip()]
+    return models or list(DEFAULT_MODELS)
+
+
 def _map_http_status(status: int | None) -> FailureKind:
     if status == 429:
         return FailureKind.RATE_LIMITED
@@ -83,7 +92,7 @@ class OpenRouterAdapter(ProviderAdapter):
                 supports_json=True,
                 supports_tools=False,
             )
-            for m in DEFAULT_MODELS
+            for m in _configured_models()
         ]
 
     async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:

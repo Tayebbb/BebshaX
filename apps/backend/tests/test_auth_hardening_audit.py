@@ -104,6 +104,9 @@ def test_email_verification_enforced_by_environment(environment, expected):
         environment=environment,
         jwt_secret="test_secret_at_least_32_characters_long_12345",
         resend_api_key="re_test_key",
+        # Hosted envs now also require a verified sender (production-readiness
+        # audit); this test's subject is verification enforcement, not sender config.
+        email_from_address="noreply@example.com",
     )
     assert settings.email_verification_enforced is expected
 

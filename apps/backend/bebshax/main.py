@@ -20,6 +20,15 @@ _parents = Path(__file__).resolve().parents
 _REPO_PROVIDERS_TOML = _parents[3] / "providers.toml" if len(_parents) > 3 else _parents[-1] / "providers.toml"
 if _REPO_PROVIDERS_TOML.exists():
     os.environ.setdefault("FREELLMPOOL_CONFIG", str(_REPO_PROVIDERS_TOML))
+elif not os.environ.get("FREELLMPOOL_CONFIG"):
+    # In containers the repo layout is gone — the image must ship the file and
+    # set FREELLMPOOL_CONFIG (apps/backend/Dockerfile does). Loud, not silent.
+    logging.getLogger(__name__).warning(
+        "providers.toml not found at %s and FREELLMPOOL_CONFIG is unset — "
+        "freellmpool will run on its built-in catalog (provider overrides ignored). "
+        "Set FREELLMPOOL_CONFIG to the providers.toml path.",
+        _REPO_PROVIDERS_TOML,
+    )
 
 
 
@@ -249,7 +258,16 @@ async def _lifespan(app: FastAPI):
     # evolution (see docs/DATABASE_MIGRATION.md). Demo seed is opt-in (H3/M8).
     try:
         await init_database(db_engine, sessionmaker_, seed=settings.demo_mode)
-    except Exception:
+    except Exception as exc:
+        if settings.environment in ("production", "staging"):
+            # A hosted deploy with an unreachable/misconfigured DB must not
+            # come up "healthy" and 500 on every real request.
+            logger.critical("init_database failed at startup", exc_info=True)
+            raise SystemExit(
+                "FATAL: database initialization failed in "
+                f"{settings.environment} (cause: {exc!r}). Check BEBSHAX_DATABASE_URL "
+                "and that the database is reachable, then restart."
+            ) from exc
         logger.warning("init_database failed at startup (offline/cold DB?)", exc_info=True)
 
     yield
@@ -261,6 +279,10 @@ async def _lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    # Apply the configured level only when nothing else owns logging (uvicorn's
+    # log-config, pytest, or an embedding process win when they installed handlers).
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=_lifespan)
 
     app.state.limiter = limiter

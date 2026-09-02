@@ -9,6 +9,10 @@
 export const READ_ONLY_TITLE =
   'Example study — read-only. Create your own study to run this step.';
 
+/** Fallback persona count when no interview roles carry a count — shared by
+ * StudyWorkflowView (generation request) and Step2Personas (skeleton grid). */
+export const DEFAULT_PERSONA_COUNT = 6;
+
 export interface CopilotMessage {
   id: string;
   role: 'user' | 'assistant';

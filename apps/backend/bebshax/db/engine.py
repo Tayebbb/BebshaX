@@ -89,8 +89,8 @@ def create_engine(settings: Settings, url_override: Optional[str] = None) -> Asy
     return create_async_engine(
         db_url,
         echo=False,
-        pool_size=5,
-        max_overflow=5,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
         pool_pre_ping=True,
         pool_recycle=1800,
     )

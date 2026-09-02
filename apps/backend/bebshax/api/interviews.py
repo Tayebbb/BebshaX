@@ -28,6 +28,7 @@ from bebshax.db.models import Personas, Studies
 from bebshax.interview.engine import ConversationNotFound, InterviewEngine, InterviewFinished, PersonaNotFound
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
+from bebshax.tenancy import ANONYMOUS_OWNER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -777,7 +778,7 @@ async def batch_run_study_interviews(
 ) -> dict[str, Any]:
     """Start a background batch-interview job across study personas; poll its status endpoint."""
     study = await _get_study_and_verify_access(session, study_id, current_user, write=True)
-    effective_user_id = (current_user.id if current_user else None) or study.user_id or "usr_default"
+    effective_user_id = (current_user.id if current_user else None) or study.user_id or ANONYMOUS_OWNER_ID
 
     # 1. Resolve personas
     target_persona_ids = payload.persona_ids if payload and payload.persona_ids else []

@@ -19,11 +19,17 @@ services:
       timeout: 3s
       retries: 10
 
-  # ── Production profile (docs/DEMO.md §7) ──────────────────────────────────
+  # ── Demo/exhibition profile (docs/DEMO.md §7) ─────────────────────────────
+  # NOT a production-hardening profile: it seeds well-known demo credentials
+  # by default (BEBSHAX_DEMO_MODE). Config refuses demo_mode in
+  # production/staging environments.
   # docker compose --profile full up --build -d
   # Plain `docker compose up -d db` / scripts/dev.js are unaffected.
   app:
-    build: ./apps/backend
+    build:
+      # Repo-root context so the image can COPY the repo-level providers.toml.
+      context: .
+      dockerfile: apps/backend/Dockerfile
     container_name: bebshax-app
     profiles: ["full"]
     depends_on:
@@ -38,8 +44,15 @@ services:
       # Compose-local dev credentials — not secrets (same values as `db` above).
       BEBSHAX_DATABASE_URL: postgresql+asyncpg://bebshax:bebshax@db:5432/bebshax
       BEBSHAX_DEMO_MODE: ${BEBSHAX_DEMO_MODE:-true}
+      # nginx (web service) fronts the API and sets X-Forwarded-For — without
+      # this every client shares the proxy's IP for rate limiting.
+      BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR: "true"
       # The local/emergency Ollama pools live on the host machine.
       OLLAMA_API_BASE: http://host.docker.internal:11434
+    volumes:
+      # Uploads/processed datasets must survive container rebuilds
+      # (BEBSHAX_DATA_DIR=/app/data is baked into the image).
+      - bebshax_appdata:/app/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -56,3 +69,4 @@ services:
 
 volumes:
   bebshax_pgdata:
+  bebshax_appdata:
