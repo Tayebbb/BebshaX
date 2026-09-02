@@ -276,7 +276,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   /** Step 1's `not_run` state can start the evidence run directly — same
    * trigger + probe plumbing handleApproveGoal already uses. */
   const handleRunEvidenceResearch = () => {
-    if (!studyId) return;
+    // Guard the one-frame window before re-render unmounts the button.
+    if (!studyId || evidenceProbe.state !== 'not_run') return;
     setEvidenceProbe({ state: 'searching' });
     api
       .triggerStudyResearch(studyId)

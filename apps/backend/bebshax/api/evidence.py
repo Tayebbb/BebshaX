@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import get_session, require_study_access, user_owns_study
+from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import (
     DatasetCandidates,
@@ -102,6 +103,7 @@ def _serialize_claim(c: EvidenceClaims) -> dict[str, Any]:
 
 
 @router.post("/{study_id}/research", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def start_study_research(
     study_id: str,
     request: Request,

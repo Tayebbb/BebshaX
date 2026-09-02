@@ -67,6 +67,7 @@ def _workflow_persona_payload(profile: PersonaProfile, study_id: str) -> dict:
         "country_name": "United States",
         "status": profile.status,
         "version": profile.version,
+        "archetype": profile.occupation,
         "generation_model": profile.generation_model,
         "data_source": DATA_SOURCE_CACHED,
         "demographics": {

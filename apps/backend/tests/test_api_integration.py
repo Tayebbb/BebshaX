@@ -235,12 +235,13 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     unauth_studies = api_test_app.get("/api/studies?user_id=usr_alice").json()
     assert not any(s["id"] in (s1["id"], s2["id"]) for s in unauth_studies)
 
-    # 6. Anonymous update of Alice's study → 403 (payload user_id cannot vouch)
+    # 6. Anonymous update of Alice's study → 404 (unreadable studies must not
+    #    be confirmed to exist by a 403 on the write path)
     patch_resp = api_test_app.patch(
         f"/api/studies/{s1['id']}",
         json={"status": "in_progress", "step": 3, "user_id": "usr_alice"},
     )
-    assert patch_resp.status_code == 403
+    assert patch_resp.status_code == 404
 
     # 7. Anonymous auto-create lands in the anonymous tenant (usr_default),
     #    never a client-claimed identity
@@ -253,9 +254,10 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     assert patch2_resp.json()["step"] == 2
     assert patch2_resp.json()["user_id"] == "usr_default"
 
-    # 8. Anonymous delete of Bob's study — blocked
+    # 8. Anonymous delete of Bob's study — blocked with 404 (never confirms
+    #    the hidden study exists)
     del_resp = api_test_app.delete(f"/api/studies/{s2['id']}")
-    assert del_resp.status_code == 403
+    assert del_resp.status_code == 404
 
     # 9. Bob's study still exists (delete was blocked)
     check = api_test_app.get("/api/studies", headers=bob).json()

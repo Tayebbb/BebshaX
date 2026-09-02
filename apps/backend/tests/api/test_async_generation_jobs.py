@@ -280,6 +280,7 @@ async def test_job_ids_are_scoped_to_study_and_kind(jobs_app, monkeypatch):
 async def test_report_job_is_owner_gated(jobs_app):
     app, _ = jobs_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # anonymous cannot start a job on an owned study
+        # anonymous cannot start a job on an owned study — 404-first: the
+        # study is unreadable to the caller, so its existence must not leak
         res = await client.post("/api/studies/std_j/reports/generate/jobs", json={})
-        assert res.status_code == 403
+        assert res.status_code == 404

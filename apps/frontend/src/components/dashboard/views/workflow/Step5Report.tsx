@@ -81,12 +81,12 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                 </h1>
                 <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
                   {report
-                    ? `Synthesized from ${personas.length} synthetic personas${
+                    ? `Synthesized from ${personas.length} synthetic persona${personas.length === 1 ? '' : 's'}${
                         claimCount > 0
                           ? ` and ${claimCount} retrieved research claim${claimCount === 1 ? '' : 's'}`
                           : ''
                       }.`
-                    : `Will be synthesized from your study data — ${personas.length} synthetic personas and any research claims you have collected.`}
+                    : `Will be synthesized from your study data — ${personas.length} synthetic persona${personas.length === 1 ? '' : 's'} and any research claims you have collected.`}
                 </p>
               </div>
 

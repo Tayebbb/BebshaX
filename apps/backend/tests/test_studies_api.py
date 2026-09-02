@@ -128,20 +128,21 @@ async def test_study_user_isolation_and_authorization():
         )
         assert res_get_bob.status_code == 404
 
-        # Bob cannot modify Alice's study (403 Forbidden)
+        # Bob cannot modify Alice's study — 404, matching the read above:
+        # a 403 here would confirm the hidden study exists.
         res_patch_bob = await client.patch(
             f"/api/studies/{alice_study_id}",
             headers={"Authorization": f"Bearer {token_bob}"},
             json={"title": "Hacked Title"},
         )
-        assert res_patch_bob.status_code == 403
+        assert res_patch_bob.status_code == 404
 
-        # Bob cannot delete Alice's study (403 Forbidden)
+        # Bob cannot delete Alice's study — 404 for the same reason
         res_del_bob = await client.delete(
             f"/api/studies/{alice_study_id}",
             headers={"Authorization": f"Bearer {token_bob}"},
         )
-        assert res_del_bob.status_code == 403
+        assert res_del_bob.status_code == 404
 
         # Alice's study list contains her study
         list_alice = await client.get(

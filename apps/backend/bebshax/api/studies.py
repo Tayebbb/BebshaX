@@ -16,7 +16,7 @@ from bebshax.api.deps import (
     get_session,
     owner_accessible,
     owner_can_write,
-    user_can_write_study,
+    require_study_access,
     user_owns_study,
 )
 from bebshax.api.limiter import limiter
@@ -274,7 +274,9 @@ async def create_study(
         suggested_roles=payload.suggested_roles,
         script_questions=payload.script_questions,
         findings=payload.findings,
-        is_demo=payload.is_demo,
+        # Never from the client: is_demo makes a study (and its personas)
+        # world-readable, so only the seed may flag it.
+        is_demo=False,
         duration_text=payload.duration_text,
         copilot_messages=payload.copilot_messages,
         personas_data=payload.personas_data,
@@ -331,13 +333,9 @@ async def update_study(
         )
         session.add(study)
     else:
-        # Ownership guard: return 403 Forbidden when trying to update another user's study
-        # (write gate — the is_demo read allowance must not grant overwrites)
-        if not user_can_write_study(study, current_user):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to modify this study",
-            )
+        # 404-first via the shared gate: a foreign non-demo study must not be
+        # confirmed to exist by a 403 (the write check runs only for readers).
+        require_study_access(study, current_user, write=True)
         # Backfill user_id if it was missing (e.g. created anonymously, now logged in).
         # Only from the verified token — payload.user_id would let anonymous
         # callers attach unowned studies to an arbitrary tenant.
@@ -351,9 +349,11 @@ async def update_study(
         update_data["type"] = update_data["study_type"]
 
     # Identity/PK fields are never mass-assignable — a payload user_id would
-    # re-attach the study to an arbitrary tenant (spoofing).
+    # re-attach the study to an arbitrary tenant (spoofing), and is_demo would
+    # make it world-readable.
     update_data.pop("id", None)
     update_data.pop("user_id", None)
+    update_data.pop("is_demo", None)
 
     for field, val in update_data.items():
         if val is not None and hasattr(study, field):
@@ -371,15 +371,11 @@ async def delete_study(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Delete a research study and all dependent records. Returns 403 if not owned by caller, 404 if not found."""
+    """Delete a research study and all dependent records. 404 when missing or unreadable; 403 for readable-but-not-writable."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not user_can_write_study(study, current_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this study",
-        )
+    require_study_access(
+        study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
+    )
     # Cascade cleanup of dependent study records
     await session.execute(delete(ResearchPlans).where(ResearchPlans.study_id == study_id))
     await session.execute(delete(DatasetCandidates).where(DatasetCandidates.study_id == study_id))
@@ -489,12 +485,11 @@ async def generate_script_questions(
 ) -> dict[str, Any]:
     """Generate dynamic, context-specific interview script questions for a study."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    # Write gate, not the read gate: this overwrites study.script_questions,
-    # so the is_demo read allowance must not apply.
-    if not user_can_write_study(study, current_user):
-        raise HTTPException(status_code=403, detail="Not authorized for this study")
+    # 404-first write gate: this overwrites study.script_questions, and a 403
+    # on a foreign non-demo study would confirm its existence.
+    require_study_access(
+        study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
+    )
 
     prompt = (payload and payload.prompt) or study.prompt or study.title or "Business Idea"
     target_aud = study.target_audience or "Target User"
@@ -583,11 +578,10 @@ async def trigger_study_research(
 ) -> dict[str, Any]:
     """Trigger autonomous research and dataset discovery for a study in background."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    # Write gate: a research run writes evidence rows and spends LLM budget.
-    if not user_can_write_study(study, current_user):
-        raise HTTPException(status_code=403, detail="Not authorized for this study")
+    # 404-first write gate: a research run writes evidence rows and spends LLM budget.
+    require_study_access(
+        study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
+    )
 
     research_engine = getattr(request.app.state, "research_engine", None) if request else None
     if not research_engine:
@@ -685,11 +679,10 @@ async def generate_study_report(
 ) -> dict[str, Any]:
     """Synthesize and persist a comprehensive research report for the study."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    # Write gate: this persists a StudyReports row and spends LLM budget.
-    if not user_can_write_study(study, current_user):
-        raise HTTPException(status_code=403, detail="Not authorized for this study")
+    # 404-first write gate: this persists a StudyReports row and spends LLM budget.
+    require_study_access(
+        study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
+    )
 
     llm_service = getattr(request.app.state, "llm_service", None) if request else None
     report_service = StudyReportService(session=session, llm_service=llm_service)
@@ -723,11 +716,10 @@ async def start_report_generation_job(
 ) -> dict[str, Any]:
     """Start report synthesis in the background; poll the job endpoint."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    # Write gate: the job persists a StudyReports row and spends LLM budget.
-    if not user_can_write_study(study, current_user):
-        raise HTTPException(status_code=403, detail="Not authorized for this study")
+    # 404-first write gate: the job persists a StudyReports row and spends LLM budget.
+    require_study_access(
+        study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
+    )
 
     app = request.app
     sessionmaker_ = getattr(app.state, "db_sessionmaker", None)
