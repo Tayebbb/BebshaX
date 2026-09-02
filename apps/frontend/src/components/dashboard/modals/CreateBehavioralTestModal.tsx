@@ -683,7 +683,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   Select Target Population
                 </h3>
                 <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  Run this behavioral scenario against your grounded synthetic customer population.
+                  Run this behavioral scenario against your synthetic customer population.
                 </p>
               </div>
 
@@ -738,7 +738,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Specific Market Segment</div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                      Target only personas within a specific grounded customer segment.
+                      Target only personas within a specific customer segment.
                     </div>
                   </div>
                 </label>

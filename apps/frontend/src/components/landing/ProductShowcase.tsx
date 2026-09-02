@@ -225,7 +225,7 @@ export const ProductShowcase: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '28px' }}>
                 {[
                   'Every LLM call declares an explicit task type',
-                  'Grounded in preprocessed public research datasets',
+                  'Retrieval over preprocessed public research datasets',
                   'Context is never truncated to fit a smaller model',
                 ].map((item, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

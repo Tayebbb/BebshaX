@@ -145,6 +145,19 @@ async def _verify_study_access(
     return study
 
 
+async def _verify_study_access_via_service(
+    study_id: str,
+    current_user: Optional[Users],
+    service: DatasetService,
+    *,
+    write: bool = False,
+) -> None:
+    """Same gate for the un-nested routes, which take the study id from the
+    body/query and have no request-scoped session of their own."""
+    async with service.sessionmaker() as session:
+        await _verify_study_access(study_id, current_user, session, write=write)
+
+
 # ============================================================================
 # Global User-Scoped Dataset Endpoints
 # ============================================================================
@@ -156,6 +169,8 @@ async def list_datasets(
     service: DatasetService = Depends(_get_dataset_service),
 ) -> list[dict[str, Any]]:
     """List all available datasets scoped to the authenticated user."""
+    if study_id:
+        await _verify_study_access_via_service(study_id, current_user, service)
     user_id = current_user.id if current_user else None
     datasets = await service.list_datasets(user_id=user_id, study_id=study_id)
     return [_serialize_dataset(ds) for ds in datasets]
@@ -168,6 +183,10 @@ async def ingest_dataset_url(
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
     """Fetch external dataset from URL with SSRF validation, parse, profile, and derive segments."""
+    # A study id in the BODY is exactly as sensitive as one in the path: without
+    # this gate the route was an unauthenticated cross-tenant write.
+    if payload.study_id:
+        await _verify_study_access_via_service(payload.study_id, current_user, service, write=True)
     user_id = current_user.id if current_user else None
     try:
         ds = await service.ingest_from_url(
@@ -203,6 +222,10 @@ async def upload_dataset_file(
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
     """Upload a dataset file (CSV, JSON, TSV, XLSX) to profile and derive segments."""
+    # Same gate as the path-based upload route — a form-supplied study id must
+    # not be a way around it.
+    if study_id:
+        await _verify_study_access_via_service(study_id, current_user, service, write=True)
     content = await _read_upload_or_413(file, request)
 
     user_id = current_user.id if current_user else None
@@ -330,6 +353,10 @@ async def generate_personas_from_dataset(
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
     """Generate synthetic personas strictly grounded in dataset segment distributions and constraints."""
+    # Body-supplied study id: personas are persisted against it, so it needs
+    # the write gate the path-based routes apply.
+    if payload.study_id:
+        await _verify_study_access_via_service(payload.study_id, current_user, service, write=True)
     user_id = current_user.id if current_user else None
     ds = await service.get_dataset(dataset_id, user_id=user_id)
     if not ds:
@@ -510,7 +537,7 @@ async def get_study_dataset(
     await _verify_study_access(study_id, current_user, session)
     user_id = current_user.id if current_user else None
     ds = await service.get_dataset(dataset_id, user_id=user_id)
-    if not ds or (ds.study_id and ds.study_id != study_id):
+    if not ds or ds.study_id != study_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
     return _serialize_dataset(ds)
 
@@ -529,7 +556,7 @@ async def get_study_dataset_preview(
     await _verify_study_access(study_id, current_user, session)
     user_id = current_user.id if current_user else None
     ds = await service.get_dataset(dataset_id, user_id=user_id)
-    if not ds or (ds.study_id and ds.study_id != study_id):
+    if not ds or ds.study_id != study_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
     return await service.get_dataset_preview(dataset_id=dataset_id, offset=offset, limit=limit, user_id=user_id)
 
@@ -545,6 +572,11 @@ async def refresh_study_dataset(
     """Re-fetch URL dataset in a study and refresh statistics only if changed."""
     await _verify_study_access(study_id, current_user, session, write=True)
     user_id = current_user.id if current_user else None
+    # Child-parent check: passing the gate for THIS study must not let a caller
+    # refresh a dataset that hangs off another one.
+    existing = await service.get_dataset(dataset_id, user_id=user_id)
+    if not existing or existing.study_id != study_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
     ds, changed = await service.refresh_dataset(dataset_id, user_id=user_id)
     if not ds:
         raise HTTPException(
@@ -567,6 +599,11 @@ async def delete_study_dataset(
     """Delete a dataset from a study."""
     await _verify_study_access(study_id, current_user, session, write=True)
     user_id = current_user.id if current_user else None
+    # Child-parent check: the study gate says nothing about which study this
+    # dataset actually belongs to.
+    existing = await service.get_dataset(dataset_id, user_id=user_id)
+    if not existing or existing.study_id != study_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
     ok = await service.delete_dataset(dataset_id, user_id=user_id)
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")

@@ -646,6 +646,23 @@ async def retry_failed_simulations(
     """Retry only failed persona simulations in a run."""
     await _get_study_and_verify_access(study_id, session, user, write=True)
 
+    # Child-parent check: the engine loads the run by id alone, so without this
+    # a caller who legitimately owns `study_id` could re-execute — and
+    # overwrite — another tenant's run.
+    owned_run = (
+        await session.execute(
+            select(BehavioralTestRuns).where(
+                BehavioralTestRuns.id == run_id,
+                BehavioralTestRuns.study_id == study_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not owned_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Behavioral test run '{run_id}' not found.",
+        )
+
     engine: Optional[BehavioralSimulationEngine] = getattr(request.app.state, "behavioral_engine", None)
     if engine is None:
         llm = getattr(request.app.state, "llm_router", None)
@@ -660,7 +677,7 @@ async def retry_failed_simulations(
         )
 
     try:
-        updated_run = await engine.retry_failed_simulations(run_id)
+        updated_run = await engine.retry_failed_simulations(run_id, study_id=study_id)
         return await get_behavioral_run_status(study_id, run_id, session, user)
     except Exception:
         logger.error("behavioral retry failed for run %s", run_id, exc_info=True)

@@ -441,7 +441,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               </span>
             </div>
             <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', margin: '8px 0 0 0' }}>
-              Claims citing verified chunks from collected sources
+              Claims citing retrieved chunks from collected sources
             </p>
           </div>
 
@@ -925,7 +925,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <ShieldCheck size={18} color="var(--accent-cyan)" />
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)', textTransform: 'uppercase' }}>
-                  Empirical Provenance Inspection
+                  Claim Provenance Inspection
                 </span>
               </div>
               <button
@@ -963,14 +963,14 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               </div>
               <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
                 {selectedClaimDetail.rationale ||
-                  'Extracted through semantic matching of domain research sources and verified against student survey distributions.'}
+                  'No rationale was recorded for this claim.'}
               </p>
             </div>
 
             {/* Supporting Sources */}
             <div style={{ marginBottom: '20px' }}>
               <h4 style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '10px' }}>
-                Supporting Empirical Citations ({selectedClaimDetail.supporting_sources.length})
+                Supporting Citations ({selectedClaimDetail.supporting_sources.length})
               </h4>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

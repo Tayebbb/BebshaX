@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import get_session, owner_accessible, user_can_write_study, user_owns_study
+from bebshax.api.deps import (
+    get_session,
+    owner_accessible,
+    owner_can_write,
+    user_can_write_study,
+    user_owns_study,
+)
 from bebshax.api.limiter import limiter
 from bebshax.api.jobs import get_job, start_job
 from bebshax.db.models import (
@@ -423,6 +429,12 @@ async def save_audience(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Save an audience to the Persona Library."""
+    # Body-supplied study id: a caller must at least be allowed to see the
+    # study they are filing an audience under.
+    if payload.study_id:
+        linked_study = await session.get(Studies, payload.study_id)
+        if not linked_study or not user_owns_study(linked_study, current_user):
+            raise HTTPException(status_code=404, detail=f"Study '{payload.study_id}' not found")
     audience_id = payload.id or f"aud_{uuid.uuid4().hex[:16]}"
     # Identity from the token only (never payload.user_id — spoofing).
     aud_user_id = current_user.id if current_user else "usr_default"
@@ -452,7 +464,9 @@ async def delete_audience(
     audience = await session.get(SavedAudiences, audience_id)
     if not audience:
         raise HTTPException(status_code=404, detail=f"Audience '{audience_id}' not found")
-    if not _owner_accessible(audience.user_id, current_user):
+    # Destroying a row is not a read: the shared pool is readable by everyone
+    # but deletable only by the row's own owner (bebshax/tenancy.owner_can_write).
+    if not owner_can_write(audience.user_id, current_user):
         # 404 (not 403) — do not confirm the row exists to non-owners.
         raise HTTPException(status_code=404, detail=f"Audience '{audience_id}' not found")
     await session.delete(audience)

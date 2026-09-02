@@ -982,12 +982,19 @@ class BehavioralSimulationEngine:
     # Retry Failed Simulations
     # -----------------------------------------------------------------------
 
-    async def retry_failed_simulations(self, run_id: str) -> BehavioralTestRuns:
-        """Retry only failed persona simulations in a run without restarting successful ones."""
+    async def retry_failed_simulations(
+        self, run_id: str, study_id: Optional[str] = None
+    ) -> BehavioralTestRuns:
+        """Retry only failed persona simulations in a run without restarting successful ones.
+
+        ``study_id`` scopes the lookup so a caller authorised for one study can
+        never re-execute another study's run (defence in depth behind the API gate).
+        """
         async with self.sessionmaker() as session:
-            res_run = await session.execute(
-                select(BehavioralTestRuns).where(BehavioralTestRuns.id == run_id)
-            )
+            stmt = select(BehavioralTestRuns).where(BehavioralTestRuns.id == run_id)
+            if study_id is not None:
+                stmt = stmt.where(BehavioralTestRuns.study_id == study_id)
+            res_run = await session.execute(stmt)
             run = res_run.scalar_one_or_none()
             if not run:
                 raise BehavioralRunNotFound(f"Run {run_id} not found")

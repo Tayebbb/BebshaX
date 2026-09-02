@@ -18,6 +18,7 @@ import { Step3Script } from './workflow/Step3Script';
 import { Step4Interviews } from './workflow/Step4Interviews';
 import { Step5Report } from './workflow/Step5Report';
 import { PersonaDetailModal } from './workflow/PersonaDetailModal';
+import { EvidenceProbe, RESEARCH_IN_FLIGHT } from './workflow/evidenceProbe';
 
 interface StudyWorkflowViewProps {
   studyId?: string;
@@ -86,6 +87,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [availableReports, setAvailableReports] = useState<StudyReport[]>([]);
   const [copiedToast, setCopiedToast] = useState(false);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+
+  // Step 1: state of the supporting-evidence attempt for this study. Read from
+  // the evidence summary the Evidence Laboratory already serves — no new
+  // endpoint, and it never blocks the copilot path.
+  const [evidenceProbe, setEvidenceProbe] = useState<EvidenceProbe>({ state: 'checking' });
+  const evidenceProbeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const evidenceProbeAliveRef = useRef<boolean>(true);
 
   const copilotMessagesRef = useRef<CopilotMessage[]>([]);
   const isFetchingCopilotRef = useRef<boolean>(false);
@@ -219,6 +227,52 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studyId]);
+
+  // Report on the evidence attempt itself so step 2 never arrives unexplained.
+  // A single GET; while a run is in flight it re-checks a bounded number of
+  // times so "Looking for…" can actually resolve without a page reload.
+  const probeEvidence = React.useCallback(
+    async (attemptsLeft = 8) => {
+      if (!studyId) {
+        setEvidenceProbe({ state: 'not_run' });
+        return;
+      }
+      try {
+        const summary = await api.getEvidenceSummary(studyId);
+        if (!evidenceProbeAliveRef.current) return;
+        const run = summary?.latest_run;
+        if ((summary?.total_claims ?? 0) > 0) {
+          setEvidenceProbe({
+            state: 'found',
+            claims: summary.total_claims,
+            sources: summary.total_sources ?? 0,
+          });
+          return;
+        }
+        if (run && RESEARCH_IN_FLIGHT.includes(run.status)) {
+          setEvidenceProbe({ state: 'searching' });
+          if (attemptsLeft > 0) {
+            evidenceProbeTimerRef.current = setTimeout(() => probeEvidence(attemptsLeft - 1), 6000);
+          }
+          return;
+        }
+        setEvidenceProbe({ state: run ? 'empty' : 'not_run' });
+      } catch {
+        if (evidenceProbeAliveRef.current) setEvidenceProbe({ state: 'unavailable' });
+      }
+    },
+    [studyId],
+  );
+
+  useEffect(() => {
+    evidenceProbeAliveRef.current = true;
+    setEvidenceProbe({ state: 'checking' });
+    probeEvidence();
+    return () => {
+      evidenceProbeAliveRef.current = false;
+      if (evidenceProbeTimerRef.current) clearTimeout(evidenceProbeTimerRef.current);
+    };
+  }, [probeEvidence]);
 
   const fetchCopilotTurn = async (history: { role: 'user' | 'assistant'; content: string }[]) => {
     if (isFetchingCopilotRef.current) return;
@@ -367,7 +421,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
     // 1. Trigger background autonomous research and dataset discovery
     if (studyId) {
-      api.triggerStudyResearch(studyId).catch(() => {});
+      setEvidenceProbe({ state: 'searching' });
+      api
+        .triggerStudyResearch(studyId)
+        .catch(() => {})
+        .finally(() => probeEvidence());
     }
 
     // 2. Fetch suggested roles only when the copilot didn't already supply them,
@@ -937,12 +995,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               handleToggleRole={handleToggleRole}
               handleIncrementRole={handleIncrementRole}
               handleDecrementRole={handleDecrementRole}
+              evidenceProbe={evidenceProbe}
+              onNavigateToEvidence={studyId ? () => navigate(`/research/${studyId}/evidence`) : undefined}
             />
           </div>
         )}
 
         {/* ============================================================
-            STEP 2: GROUNDED SYNTHETIC PERSONAS
+            STEP 2: SYNTHETIC PERSONAS
            ============================================================ */}
         {currentStep === 2 && (
           <div ref={stepViewRef} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

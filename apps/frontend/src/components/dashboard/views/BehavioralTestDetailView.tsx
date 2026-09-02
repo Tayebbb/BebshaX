@@ -303,7 +303,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
             <ShieldCheck size={14} className="text-teal-400" />
-            <span>Synthetic Simulation Grounded on Part 2 Evidence & Part 6 Interviews</span>
+            <span>Synthetic simulation over this study&apos;s personas and collected evidence</span>
           </div>
         </div>
 
@@ -311,7 +311,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
           {test.name}
         </h1>
         <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'var(--text-secondary)', maxWidth: '900px' }}>
-          {test.description || 'Behavioral evaluation scenario against grounded population.'}
+          {test.description || 'Behavioral evaluation scenario against this study\u2019s synthetic population.'}
         </p>
 
         {/* Parameters Snapshot Row */}
@@ -682,7 +682,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                   Individual Persona Simulations ({activeRun.results?.length || 0})
                 </h3>
                 <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Click any persona to inspect full reasoning chains, decision factors, and grounded context signals.
+                  Click any persona to inspect full reasoning chains, decision factors, and the context signals used.
                 </p>
               </div>
             </div>
@@ -896,7 +896,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                 </div>
               </div>
 
-              {/* Grounded Signals Used */}
+              {/* Interview Signals Used */}
               {selectedPersonaResult.interview_signals_used && selectedPersonaResult.interview_signals_used.length > 0 && (
                 <div>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Study } from '../../../types';
 import { api } from '../../../services/api';
+import { findExampleStudy, EXAMPLE_STUDY_STEP } from '../../../utils/exampleStudy';
 import './studies.css';
 
 interface StudiesDashboardViewProps {
@@ -103,7 +104,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
     return true;
   });
 
-  const demoStudy = studies.find((s) => s.is_demo);
+  const demoStudy = findExampleStudy(studies);
   const regularStudies = filteredStudies.filter((s) => !s.is_demo);
 
   // Honest totals derived from the loaded list only. "In flight" matches the
@@ -200,12 +201,12 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
             className="sd-demo"
             role="button"
             tabIndex={0}
-            onClick={() => openRow(demoStudy.id)}
+            onClick={() => onOpenStudy(demoStudy.id, EXAMPLE_STUDY_STEP)}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return;
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                openRow(demoStudy.id);
+                onOpenStudy(demoStudy.id, EXAMPLE_STUDY_STEP);
               }
             }}
           >
@@ -239,7 +240,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
               <div className="sd-empty-sub">
                 {searchQuery || selectedFilter !== 'all'
                   ? 'Try a different name or status, or clear the filters.'
-                  : 'Describe a business idea and interview grounded synthetic personas about it.'}
+                  : 'Describe a business idea and interview synthetic personas about it.'}
               </div>
               <button type="button" className="sd-empty-cta" onClick={onCreateStudy}>
                 <Plus size={15} strokeWidth={2.5} />

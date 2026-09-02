@@ -243,7 +243,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
                       { title: 'Define your goal', desc: 'A plain-English chat with the Study Design Copilot', icon: <Search size={14} color="var(--lp-blue)" /> },
-                      { title: 'Generate personas', desc: 'Grounded, with a label on every attribute', icon: <Lightbulb size={14} color="var(--lp-blue)" /> },
+                      { title: 'Generate personas', desc: 'With a label on every attribute', icon: <Lightbulb size={14} color="var(--lp-blue)" /> },
                       { title: 'Interview, then decide', desc: 'Multi-turn interviews, then a decision report', icon: <Zap size={14} color="var(--lp-blue)" /> },
                     ].map((item, i) => (
                       <div

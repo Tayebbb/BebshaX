@@ -124,9 +124,13 @@ async def test_anonymous_cannot_see_or_delete_owned_audience(scoped_app):
 
         assert (await client.delete("/api/audiences/aud_owned")).status_code == 404
         assert (await client.delete("/api/audiences/aud_owned", headers=_owner_headers())).status_code == 200
-        assert (await client.delete("/api/audiences/aud_shared")).status_code == 200
+        # Shared-pool rows are READABLE by everyone but destroyable by nobody:
+        # an anonymous caller deleting them is exactly the cross-user
+        # destruction the write gate exists to stop.
+        assert (await client.delete("/api/audiences/aud_shared")).status_code == 404
     async with maker() as session:
         assert await session.get(SavedAudiences, "aud_owned") is None
+        assert await session.get(SavedAudiences, "aud_shared") is not None
 
 
 @pytest.mark.asyncio

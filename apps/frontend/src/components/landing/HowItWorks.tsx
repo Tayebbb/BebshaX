@@ -26,7 +26,7 @@ export const HowItWorks: React.FC = () => {
     {
       num: '02',
       title: 'Generate your personas',
-      subtitle: 'Grounded, and labelled',
+      subtitle: 'Labelled by how each attribute is known',
       description:
         'BebshaX retrieves supporting records from public research datasets, builds the personas, and labels every attribute with how it is known — cited evidence, reasoned inference, or an explicit assumption. Consistency rules run before anything is saved.',
       icon: <BrainCircuit size={22} color="var(--lp-gold)" />,

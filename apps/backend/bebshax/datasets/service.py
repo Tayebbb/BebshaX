@@ -11,7 +11,7 @@ import statistics
 import uuid
 from typing import Any, Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, false as sa_false, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -46,6 +46,12 @@ class DatasetService:
         self._sessionmaker = sessionmaker_
         self._llm = llm
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def sessionmaker(self) -> sessionmaker[AsyncSession]:
+        """Session factory this service was built with (falls back to a
+        freshly created engine when the app has none wired)."""
+        return self._sessionmaker
 
     async def ingest_from_url(
         self,
@@ -207,6 +213,17 @@ class DatasetService:
             return (DatasetSources.user_id == user_id) | shared
         return shared
 
+    @staticmethod
+    def _tenant_write_filter(user_id: Optional[str]):
+        """Tenant scope for DESTRUCTIVE queries. The shared pool is a read
+        pool, never a write pool: inheriting `_tenant_filter` here let any
+        anonymous visitor (and any signed-in user) delete or overwrite a
+        dataset that belongs to someone else. Owner's own token required."""
+        if not user_id:
+            # Impossible predicate: anonymous callers own nothing.
+            return sa_false()
+        return DatasetSources.user_id == user_id
+
     async def list_datasets(
         self, user_id: Optional[str] = None, study_id: Optional[str] = None
     ) -> list[DatasetSources]:
@@ -233,7 +250,7 @@ class DatasetService:
     async def delete_dataset(self, dataset_id: str, user_id: Optional[str] = None) -> bool:
         async with self._sessionmaker() as session:
             query = select(DatasetSources).filter_by(id=dataset_id)
-            query = query.filter(self._tenant_filter(user_id))
+            query = query.filter(self._tenant_write_filter(user_id))
             res = await session.execute(query)
             ds = res.scalar_one_or_none()
             if not ds:
@@ -257,7 +274,7 @@ class DatasetService:
         """
         async with self._sessionmaker() as session:
             query = select(DatasetSources).filter_by(id=dataset_id)
-            query = query.filter(self._tenant_filter(user_id))
+            query = query.filter(self._tenant_write_filter(user_id))
             res = await session.execute(query)
             ds = res.scalar_one_or_none()
             if not ds or ds.source_type != "url" or not ds.source_url:

@@ -71,7 +71,7 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--accent-teal-bright)' }}>
             <ShieldCheck size={16} />
-            <span>Synthetic Grounded Runs</span>
+            <span>Synthetic Simulation Runs</span>
           </div>
         </div>
       </div>

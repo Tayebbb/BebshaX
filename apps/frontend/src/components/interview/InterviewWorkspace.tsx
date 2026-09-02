@@ -461,7 +461,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
               <h1 className="iv-empty-title">{personaName}</h1>
               <p className="iv-empty-sub">
                 Your simulated customer is ready to talk. Every answer is generated live and
-                grounded in this persona's evidence — nothing is scripted.
+                drawn from this persona's profile and any evidence it cites — nothing is scripted.
               </p>
               {suggested.length > 0 && (
                 <div className="iv-suggestions">

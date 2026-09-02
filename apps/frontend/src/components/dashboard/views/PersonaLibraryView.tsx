@@ -61,7 +61,7 @@ export const ProvenanceChip: React.FC<{ label?: string }> = ({ label }) => {
     <span
       title={
         label === 'OBSERVED'
-          ? 'Cited to a verified evidence claim shown during generation'
+          ? 'Cited to a retrieved evidence claim shown during generation'
           : label === 'INFERRED'
           ? 'Reasoned from business context or evidence — no direct citation'
           : 'Plausible assumption — no evidence grounding'
@@ -439,7 +439,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           </div>
           <div>
             <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}><CountUp value={metrics.readyCount} /> / <CountUp value={metrics.total} /></div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>Verified & Ready</div>
+            <div
+              title="Passed the generator's structural completeness checks (all required fields present). This says nothing about evidence support."
+              style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}
+            >
+              Complete profiles
+            </div>
           </div>
         </div>
       </div>
@@ -523,7 +528,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             }}
           >
             <option value="all">All Statuses</option>
-            <option value="ready">Ready / Verified</option>
+            <option value="ready">Complete</option>
             <option value="needs_review">Needs Review</option>
           </select>
 
@@ -655,7 +660,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           </h3>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 20px', lineHeight: 1.5 }}>
             {personas.length === 0
-              ? 'Generate synthetic consumer simulation agents grounded in your study market segments, pricing quartiles, and research claims.'
+              ? 'Generate synthetic consumer simulation agents from your study market segments, pricing quartiles, and any research claims you have collected.'
               : 'Try clearing your search query or adjusting segment and status filters to see available personas.'}
           </p>
           {personas.length === 0 ? (
@@ -797,6 +802,11 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
                     {/* Status Badge */}
                     <span
+                      title={
+                        isReady
+                          ? "Passed the generator's structural completeness checks — every required field is present. Evidence support is shown separately."
+                          : 'The generator flagged missing or inconsistent fields on this profile.'
+                      }
                       style={{
                         fontSize: '0.72rem',
                         fontWeight: 600,
@@ -808,7 +818,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {isReady ? 'Verified' : 'Needs Review'}
+                      {isReady ? 'Complete' : 'Needs Review'}
                     </span>
                   </div>
 
@@ -1055,7 +1065,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                       v{inspectingPersona.version}
                     </span>
                     <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: inspectingPersona.status === 'ready' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)', color: inspectingPersona.status === 'ready' ? 'var(--accent-emerald)' : '#F59E0B', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-                      {inspectingPersona.status === 'ready' ? 'Passed checks' : 'Needs Review'}
+                      {inspectingPersona.status === 'ready' ? 'Complete' : 'Needs Review'}
                     </span>
                   </div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
@@ -1693,7 +1703,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   Generate Synthetic Personas
                 </h2>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  Synthesize data-grounded simulation agents across market segments.
+                  Synthesize simulation agents across market segments.
                 </p>
               </div>
               {!isGenerating && (

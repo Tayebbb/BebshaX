@@ -55,7 +55,7 @@ describe('EvidenceLaboratoryView Component', () => {
     });
   });
 
-  it('opens and closes the empirical provenance inspection modal', async () => {
+  it('opens and closes the claim provenance inspection modal', async () => {
     render(<EvidenceLaboratoryView studyId="study_test_1" />);
 
     await waitFor(() => {
@@ -66,7 +66,7 @@ describe('EvidenceLaboratoryView Component', () => {
     fireEvent.click(inspectButtons[0]);
 
     await waitFor(() => {
-      expect(screen.getByText(/Empirical Provenance Inspection/i)).toBeInTheDocument();
+      expect(screen.getByText(/Claim Provenance Inspection/i)).toBeInTheDocument();
       expect(screen.getByText(/Why does BebshaX evaluate this as/i)).toBeInTheDocument();
     });
 
@@ -74,7 +74,7 @@ describe('EvidenceLaboratoryView Component', () => {
     fireEvent.click(closeBtn);
 
     await waitFor(() => {
-      expect(screen.queryByText(/Empirical Provenance Inspection/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Claim Provenance Inspection/i)).not.toBeInTheDocument();
     });
   });
 

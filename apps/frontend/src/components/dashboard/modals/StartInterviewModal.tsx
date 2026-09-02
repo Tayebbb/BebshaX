@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { SyntheticPersona, InterviewLengthTier } from '../../../types';
 import { api } from '../../../services/api';
+import { isEvidenceBacked } from '../../../utils/personaEvidence';
 
 interface StartInterviewModalProps {
   isOpen: boolean;
@@ -65,9 +66,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // The grounding claim is only made when the persona actually carries one.
-  const isEvidenceBacked =
-    (persona.grounding_score ?? 0) > 0 &&
-    (persona as SyntheticPersona & { grounding_basis?: string }).grounding_basis !== 'no_evidence_retrieved';
+  const evidenceBacked = isEvidenceBacked(persona);
 
   if (!isOpen) return null;
 
@@ -98,9 +97,15 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
     }
   };
 
+  // Never invent a detail the persona does not carry — an absent field is
+  // simply not shown.
   const commProfile = persona.commercial_profile || {};
-  const monthlyBudget =
-    commProfile.monthly_budget_bdt || commProfile.budget_bdt || '300–600';
+  const monthlyBudget = commProfile.monthly_budget_bdt || commProfile.budget_bdt;
+  const summaryParts = [
+    persona.demographics?.occupation || persona.archetype,
+    persona.demographics?.location,
+    monthlyBudget ? `Budget: ৳${monthlyBudget}/mo` : undefined,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--scrim)] animate-fade-in bx-backdrop">
@@ -129,10 +134,11 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
                   Synthetic Persona
                 </span>
               </div>
-              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                {persona.demographics?.occupation || 'Customer Archetype'} •{' '}
-                {persona.demographics?.location || 'Bangladesh'} • Budget: ৳{monthlyBudget}/mo
-              </p>
+              {summaryParts.length > 0 && (
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  {summaryParts.join(' • ')}
+                </p>
+              )}
             </div>
           </div>
           <button
@@ -150,7 +156,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
             <Sparkles className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
             <div className="text-xs leading-relaxed text-[var(--text-label)]">
               <span className="font-semibold text-[var(--text-main)]">Adaptive Anti-Sycophantic Agent: </span>
-              {isEvidenceBacked ? (
+              {evidenceBacked ? (
                 <>
                   This persona&apos;s profile is backed by retrieved evidence, and it will realistically
                   push back on expensive pricing or irrelevant solutions. Answers represent synthetic

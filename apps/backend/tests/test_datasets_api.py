@@ -57,6 +57,8 @@ async def test_datasets_upload_profiling_and_persona_generation_flow():
         assert "distribution" in gen_data
         assert "validation_summary" in gen_data
 
-        # 5. Delete dataset
+        # 5. Deleting is a write: the shared pool is readable by everyone but
+        # destroyable only by the row's authenticated owner, so this anonymous
+        # upload can no longer be deleted by the next anonymous visitor.
         del_res = await client.delete(f"/api/datasets/{ds_id}")
-        assert del_res.status_code == 200
+        assert del_res.status_code == 404

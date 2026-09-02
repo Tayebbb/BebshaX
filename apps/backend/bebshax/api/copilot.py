@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import user_can_write_study
+from bebshax.api.deps import user_can_write_study, user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import EvidenceClaims, Personas, Studies
@@ -402,8 +402,22 @@ def _make_roles(role_specs: list[tuple]) -> list[PersonaRoleSuggestion]:
 
 @router.post("/study/copilot", response_model=CopilotResponse)
 @limiter.limit("30/minute")
-async def study_design_copilot(body: CopilotRequest, request: Request) -> CopilotResponse:
+async def study_design_copilot(
+    body: CopilotRequest,
+    request: Request,
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+) -> CopilotResponse:
     """Conversational study design copilot running through FreeLLMpool/OpenRouter with fallback."""
+    # A study id in the body is a tenant-owned reference: read gate (this route
+    # writes nothing, so the demo's public read allowance still applies).
+    if body.study_id:
+        gate_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
+        if gate_sessionmaker:
+            async with gate_sessionmaker() as gate_session:
+                study_row = await gate_session.get(Studies, body.study_id)
+                if study_row is None or not user_owns_study(study_row, current_user):
+                    raise HTTPException(status_code=404, detail="study not found")
+
     llm_router = getattr(request.app.state, "llm_router", None)
 
     if llm_router is not None:
@@ -661,7 +675,7 @@ async def generate_study_personas(
         if gate_sessionmaker:
             async with gate_sessionmaker() as gate_session:
                 study_row = await gate_session.get(Studies, body.study_id)
-                if study_row is not None and not user_can_write_study(study_row, current_user):
+                if study_row is None or not user_can_write_study(study_row, current_user):
                     raise HTTPException(status_code=404, detail="study not found")
                 # Grounding must be measured, not assumed: show the study's own
                 # claims so citations can be verified below.

@@ -26,7 +26,7 @@ describe('NewStudyView Component', () => {
 
     expect(screen.getByText('User Interviews')).toBeInTheDocument();
     expect(
-      screen.getByText(/Simulate in-depth discovery interviews with grounded personas/i)
+      screen.getByText(/Simulate in-depth discovery interviews with synthetic personas/i)
     ).toBeInTheDocument();
 
     expect(screen.getByText('Concept & Demand')).toBeInTheDocument();

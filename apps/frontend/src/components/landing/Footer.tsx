@@ -176,7 +176,7 @@ export const Footer: React.FC = () => {
             color: 'var(--lp-text-ghost)',
           }}
         >
-          <div>© {new Date().getFullYear()} BebshaX. Evidence-grounded synthetic personas, interviewed over routed free LLM tiers.</div>
+          <div>© {new Date().getFullYear()} BebshaX. Synthetic personas with every attribute labelled by how it is known, interviewed over routed free LLM tiers.</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--lp-green)' }} />
             <span style={{ color: 'var(--lp-text-faint)' }}>Local model as final fallback</span>

@@ -85,7 +85,7 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpen
       iconBg: 'var(--accent-subtle)',
       iconColor: 'var(--accent-teal)',
       title: 'User Interviews',
-      description: 'Simulate in-depth discovery interviews with grounded personas to reveal daily workflows and unarticulated pain points.',
+      description: 'Simulate in-depth discovery interviews with synthetic personas to reveal daily workflows and unarticulated pain points.',
     },
     {
       type: 'landing_page_test',
@@ -109,7 +109,7 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpen
       iconBg: 'rgba(34, 211, 238, 0.15)',
       iconColor: 'var(--accent-cyan)',
       title: 'Pricing & WTP',
-      description: 'Validate price elasticity, subscription ceilings, and tier packaging against grounded budget constraints.',
+      description: 'Validate price elasticity, subscription ceilings, and tier packaging against each persona\u2019s stated budget constraints.',
     },
   ];
 

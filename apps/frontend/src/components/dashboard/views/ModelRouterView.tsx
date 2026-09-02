@@ -345,7 +345,7 @@ export const ModelRouterView: React.FC = () => {
             </h2>
           </div>
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            Every LLM request produces 14-field verified provenance
+            Every LLM request produces 14-field provenance
           </span>
         </div>
 

@@ -97,7 +97,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
           {type === 'terms' ? (
             <div>
               <p style={{ marginTop: 0 }}>
-                <strong>1. Acceptance of Terms:</strong> By accessing or using the BebshaX synthetic persona research platform, you agree to be bound by these terms. BebshaX provides empirical evidence-grounded synthetic customer interviews and product-market fit simulations.
+                <strong>1. Acceptance of Terms:</strong> By accessing or using the BebshaX synthetic persona research platform, you agree to be bound by these terms. BebshaX provides synthetic customer interviews and product-market fit simulations in which every persona attribute is labelled by how it was derived.
               </p>
               <p>
                 <strong>2. Legitimate Free-Tier & Zero API Budget Protocol:</strong> BebshaX operates with a strict zero-API-budget routing architecture. Users must not attempt to evade provider rate limits, automate abusive request flooding, or create duplicate accounts.
@@ -115,7 +115,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
                 <strong>1. Data Collection:</strong> BebshaX collects your account email, name, and the research study descriptions you provide to synthesize relevant target personas and simulate user interviews.
               </p>
               <p>
-                <strong>2. Grounded Dataset Provenance:</strong> Persona attributes are tagged with strict provenance classifications (<code style={{ color: 'var(--status-warn-text)' }}>OBSERVED</code>, <code style={{ color: 'var(--status-warn-text)' }}>INFERRED</code>, <code style={{ color: 'var(--status-warn-text)' }}>SYNTHETIC</code>) and grounded against open behavioral corpora.
+                <strong>2. Dataset Provenance:</strong> Persona attributes are tagged with strict provenance classifications (<code style={{ color: 'var(--status-warn-text)' }}>OBSERVED</code>, <code style={{ color: 'var(--status-warn-text)' }}>INFERRED</code>, <code style={{ color: 'var(--status-warn-text)' }}>SYNTHETIC</code>), where OBSERVED means the attribute cites a retrieved record from an open behavioral corpus.
               </p>
               <p>
                 <strong>3. Privacy & Zero PII Leakage:</strong> We never share your proprietary study concepts with third-party advertisers. All LLM inferences are routed through stateless free model pools with complete 14-field provenance tracking.

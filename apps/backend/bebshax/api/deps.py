@@ -19,6 +19,7 @@ from bebshax.auth.models import Users
 from bebshax.db.models import Studies
 from bebshax.tenancy import STUDY_ANON_OWNER_IDS
 from bebshax.tenancy import owner_accessible as _tenancy_owner_accessible
+from bebshax.tenancy import owner_can_write as _tenancy_owner_can_write
 
 
 def user_owns_study(study: Studies, current_user: Optional[Users]) -> bool:
@@ -54,6 +55,12 @@ def owner_accessible(owner_id: Optional[str], current_user: Optional[Users]) -> 
     `user_owns_study`: studies use the `is_demo` flag and do not grant
     authenticated users the anonymous tenant — see bebshax/tenancy.py."""
     return _tenancy_owner_accessible(owner_id, current_user.id if current_user else None)
+
+
+def owner_can_write(owner_id: Optional[str], current_user: Optional[Users]) -> bool:
+    """Write/destroy gate for owner-stamped rows: the shared pool is readable
+    by everyone but writable by nobody but its owner (see bebshax/tenancy.py)."""
+    return _tenancy_owner_can_write(owner_id, current_user.id if current_user else None)
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:

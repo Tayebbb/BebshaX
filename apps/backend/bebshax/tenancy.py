@@ -29,8 +29,22 @@ def allowed_owner_ids(current_user_id: Optional[str]) -> list[str]:
 
 
 def owner_accessible(owner_id: Optional[str], current_user_id: Optional[str]) -> bool:
-    """Row-level access rule for owner-stamped rows (audiences, businesses,
-    personas, conversations, datasets)."""
+    """READ rule for owner-stamped rows (audiences, businesses, personas,
+    conversations, datasets). The shared pool is world-readable."""
     if owner_id is None or owner_id in PUBLIC_OWNER_IDS:
         return True
+    return current_user_id is not None and owner_id == current_user_id
+
+
+def owner_can_write(owner_id: Optional[str], current_user_id: Optional[str]) -> bool:
+    """WRITE/DESTROY rule for owner-stamped rows.
+
+    Deliberately NOT `owner_accessible`: a shared-pool row being world-readable
+    must never make it a world-writable target. Every unauthenticated caller
+    shares one anonymous identity, so letting them mutate the shared pool lets
+    any visitor destroy another visitor's dataset, audience or conversation —
+    and letting an authenticated user inherit the pool lets them destroy rows
+    that are not theirs. Mirrors `api.deps.user_can_write_study` for studies:
+    mutations require the owner's own token.
+    """
     return current_user_id is not None and owner_id == current_user_id

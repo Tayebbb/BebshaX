@@ -291,7 +291,7 @@ describe('Blocker 5 — step 2 points at the evidence laboratory', () => {
   });
 });
 
-describe('Major 6 — the interviews list can show failure', () => {
+describe('Major 6 — the interviews list only shows states the backend can produce', () => {
   const interview = (overrides: Partial<Interview>): Interview =>
     ({
       id: 'itv_1',
@@ -324,11 +324,22 @@ describe('Major 6 — the interviews list can show failure', () => {
     );
   };
 
-  it('renders a Failed badge rather than pulsing "Active" forever', async () => {
-    renderList([interview({ status: 'failed' })]);
+  // The interview engine only ever writes "active" or "completed" — there is no
+  // code path that produces a failed conversation, so the list must not offer a
+  // Failed filter or badge that can never render.
+  it('offers no Failed status filter', async () => {
+    renderList([interview({ status: 'active' })]);
 
-    await waitFor(() => expect(screen.getByText('Failed', { selector: 'span' })).toBeInTheDocument());
-    expect(screen.queryByText('Active', { selector: 'span' })).toBeNull();
+    await waitFor(() => expect(screen.getByText('Active', { selector: 'span' })).toBeInTheDocument());
+    expect(screen.queryByRole('option', { name: 'Failed' })).toBeNull();
+  });
+
+  it('shows a completed interview as Completed', async () => {
+    renderList([interview({ status: 'completed' })]);
+
+    await waitFor(() =>
+      expect(screen.getByText('Completed', { selector: 'span' })).toBeInTheDocument()
+    );
   });
 
   it('still shows a running interview as Active', async () => {

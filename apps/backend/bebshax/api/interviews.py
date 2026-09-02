@@ -16,7 +16,13 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import get_session, owner_accessible, user_can_write_study, user_owns_study
+from bebshax.api.deps import (
+    get_session,
+    owner_accessible,
+    owner_can_write,
+    user_can_write_study,
+    user_owns_study,
+)
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
 from bebshax.interview.engine import ConversationNotFound, InterviewEngine, InterviewFinished, PersonaNotFound
@@ -553,15 +559,20 @@ async def _guard_legacy_persona(
 
 
 async def _guard_legacy_conversation(
-    request: Request, conversation_id: str, current_user: Optional[Users]
+    request: Request, conversation_id: str, current_user: Optional[Users], *, write: bool = False
 ) -> None:
     """Owner gate for conversation-id-addressed legacy endpoints — checks the
-    conversation's own tenant stamp, then its persona's owner."""
+    conversation's own tenant stamp, then its persona's owner.
+
+    ``write=True`` uses the stricter write predicate: appending turns to a
+    shared-pool conversation is a mutation, and the shared pool is a read pool
+    only — otherwise any caller could hijack another visitor's transcript."""
+    predicate = owner_can_write if write else owner_accessible
     async with request.app.state.db_sessionmaker() as session:
         conv = await session.get(Conversations, conversation_id)
         if conv is None:
             return  # engine raises ConversationNotFound canonically
-        if conv.user_id and not owner_accessible(conv.user_id, current_user):
+        if not predicate(conv.user_id, current_user):
             raise HTTPException(status_code=404, detail="conversation not found")
         if conv.persona_id:
             p_row = await session.get(Personas, conv.persona_id)
@@ -630,7 +641,7 @@ async def post_message(
     text = body.content or body.message
     if not text or not text.strip():
         raise HTTPException(status_code=422, detail="message content cannot be empty")
-    await _guard_legacy_conversation(request, conversation_id, current_user)
+    await _guard_legacy_conversation(request, conversation_id, current_user, write=True)
 
     now_iso = datetime.now(timezone.utc).isoformat()
     try:

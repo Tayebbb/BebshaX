@@ -534,7 +534,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                     {test.name}
                   </h3>
                   <p style={{ margin: '0 0 16px 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4, minHeight: '36px' }}>
-                    {test.description || 'Behavioral evaluation scenario against grounded population.'}
+                    {test.description || 'Behavioral evaluation scenario against this study\u2019s synthetic population.'}
                   </p>
                 </div>
 

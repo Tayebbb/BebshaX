@@ -3,7 +3,7 @@ import { ArrowRight, FlaskConical, RefreshCw, Sparkles, Trash2 } from 'lucide-re
 import { Persona, PersonaRoleSuggestion } from '../../../../types';
 import { EvidenceBadge, TemplateBadge, countEvidenceBacked } from '../../../../utils/personaEvidence';
 
-/** Step 2 — grounded persona library. Pure JSX extraction from
+/** Step 2 — persona library. Pure JSX extraction from
  * StudyWorkflowView: generation state/handlers stay in the parent; the modal
  * trigger ref is written here so the parent can return focus on close. */
 interface Step2PersonasProps {
@@ -54,7 +54,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>
                 <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
-                  Grounded Persona Library
+                  Persona Library
                 </h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
                   <span>Total Personas</span>
@@ -152,12 +152,13 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 }}
               >
                 <Sparkles size={16} className="animate-spin" />
-                Generating grounded personas from evidence datasets — this can take a minute on free-tier routes...
+                Generating personas — any retrieved evidence is cited per claim. This can take a minute on free-tier routes...
               </div>
             )}
 
-            {/* No evidence retrieved for any persona — say so, and say where to get it. */}
-            {!isGeneratingPersonas && personas.length > 0 && evidenceBackedCount === 0 && (
+            {/* Evidence status for the whole panel — shown whether or not any
+                persona is backed, so the Evidence Laboratory is always one click away. */}
+            {!isGeneratingPersonas && personas.length > 0 && (
               <div
                 style={{
                   display: 'flex',
@@ -172,11 +173,14 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 <FlaskConical size={17} color="var(--accent-cyan)" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                    No research evidence has been gathered for this study yet
+                    {evidenceBackedCount === 0
+                      ? 'No research evidence has been gathered for this study yet'
+                      : `${evidenceBackedCount} of ${personas.length} personas cite retrieved evidence`}
                   </div>
                   <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    Every persona above is inferred from your description alone. Run research in the Evidence
-                    Laboratory to collect claims, then regenerate personas to have them cite that evidence.
+                    {evidenceBackedCount === 0
+                      ? 'Every persona above is inferred from your description alone. Run research in the Evidence Laboratory to collect claims, then regenerate personas to have them cite that evidence.'
+                      : 'The rest are inferred from your description. Collect more claims in the Evidence Laboratory, then regenerate to widen the coverage.'}
                   </div>
                   {onNavigateToEvidence && (
                     <button
@@ -201,9 +205,11 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                       <ArrowRight size={13} />
                     </button>
                   )}
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                    You can continue without it — the personas stay usable, they just aren&apos;t evidence-backed.
-                  </div>
+                  {evidenceBackedCount === 0 && (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      You can continue without it — the personas stay usable, they just aren&apos;t evidence-backed.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -375,7 +381,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 <Sparkles size={28} className="text-teal-400" />
                 <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>No personas yet</div>
                 <div style={{ fontSize: '0.85rem', maxWidth: '420px' }}>
-                  Generate grounded personas from your approved research goal and selected roles.
+                  Generate personas from your approved research goal and selected roles.
                 </div>
                 <button
                   type="button"

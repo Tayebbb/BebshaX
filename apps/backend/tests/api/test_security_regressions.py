@@ -194,6 +194,11 @@ def test_signup_limits_survive_a_shared_nat_venue():
 
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
+# A gate must answer with an auth/authorisation verdict. 422 means the probe
+# never reached the gate (schema validation rejected it first), which is how a
+# wide-open route used to sneak through a "not 2xx" assertion.
+_REFUSAL_CODES = {401, 403, 404}
+
 
 def _seed(rows) -> None:
     import asyncio
@@ -207,6 +212,91 @@ def _seed(rows) -> None:
     asyncio.run(run())
 
 
+def _components() -> dict:
+    return app.openapi().get("components", {}).get("schemas", {})
+
+
+def _resolve(schema: dict, components: dict) -> dict:
+    while "$ref" in schema:
+        schema = components[schema["$ref"].rsplit("/", 1)[-1]]
+    return schema
+
+
+def _first_pattern_alternative(pattern: str) -> str:
+    body = pattern.strip("^$")
+    if body.startswith("(") and body.endswith(")"):
+        body = body[1:-1]
+    return body.split("|")[0]
+
+
+def _example_for(schema: dict, components: dict, name: str = ""):
+    """Smallest value that satisfies a schema, so probes are schema-VALID and
+    actually reach the endpoint's authorisation gate."""
+    schema = _resolve(schema, components)
+    if schema.get("enum"):
+        return schema["enum"][0]
+    if schema.get("const") is not None:
+        return schema["const"]
+    for key in ("anyOf", "oneOf"):
+        for sub in schema.get(key, []):
+            if _resolve(sub, components).get("type") != "null":
+                return _example_for(sub, components, name)
+    kind = schema.get("type")
+    if kind == "array":
+        item = schema.get("items", {"type": "string"})
+        return [_example_for(item, components, name) for _ in range(max(1, schema.get("minItems", 1)))]
+    if kind == "object":
+        return _object_example(schema, components)
+    if kind == "integer":
+        return int(schema.get("minimum", 1)) or 1
+    if kind == "number":
+        return float(schema.get("minimum", 1) or 1)
+    if kind == "boolean":
+        return False
+    if schema.get("pattern"):
+        return _first_pattern_alternative(schema["pattern"])
+    if schema.get("format") in {"uri", "url"} or name.endswith("url"):
+        return "https://example.invalid/probe.csv"
+    return "probe" * max(1, -(-int(schema.get("minLength", 1)) // 5))
+
+
+def _object_example(schema: dict, components: dict) -> dict:
+    schema = _resolve(schema, components)
+    props = schema.get("properties", {})
+    return {
+        field: _example_for(sub, components, field)
+        for field, sub in props.items()
+        if field in set(schema.get("required", []))
+    }
+
+
+def _probe_payload(operation: dict, overrides: dict) -> dict:
+    """kwargs for TestClient.request that satisfy the operation's schema."""
+    body = operation.get("requestBody")
+    if not body:
+        return {}
+    components = _components()
+    content = body["content"]
+    if "application/json" in content:
+        payload = _object_example(content["application/json"]["schema"], components)
+        payload.update(overrides)
+        return {"json": payload}
+    if "multipart/form-data" in content:
+        media = _resolve(content["multipart/form-data"]["schema"], components)
+        required = set(media.get("required", []))
+        data, files = {}, {}
+        for field, sub in media.get("properties", {}).items():
+            resolved = _resolve(sub, components)
+            is_file = resolved.get("format") == "binary" or "contentMediaType" in resolved
+            if is_file:
+                files[field] = ("probe.csv", b"a,b\n1,2\n", "text/csv")
+            elif field in required:
+                data[field] = _example_for(sub, components, field)
+        data.update({k: v for k, v in overrides.items() if v is not None})
+        return {"data": data, "files": files or None}
+    return {}
+
+
 def _study_scoped_mutating_routes():
     """Every registered study-scoped route with a mutating method, read from the
     live OpenAPI schema so newly added endpoints are picked up automatically."""
@@ -214,15 +304,63 @@ def _study_scoped_mutating_routes():
     for path, operations in schema["paths"].items():
         if "{study_id}" not in path:
             continue
-        methods = sorted(_MUTATING_METHODS & {m.upper() for m in operations})
-        if methods:
-            yield path, methods
+        for method, operation in operations.items():
+            if method.upper() in _MUTATING_METHODS:
+                yield path, method.upper(), operation
+
+
+def _body_study_id_routes():
+    """Routes that take a study id in the BODY/FORM instead of the path. These
+    are invisible to a `{study_id}`-path walk, which is how an unauthenticated
+    cross-tenant dataset write survived the previous version of this test."""
+    schema = app.openapi()
+    components = _components()
+    for path, operations in schema["paths"].items():
+        if "{study_id}" in path:
+            continue
+        for method, operation in operations.items():
+            if method.upper() not in _MUTATING_METHODS:
+                continue
+            body = operation.get("requestBody")
+            if not body:
+                continue
+            for media in body["content"].values():
+                if "study_id" in _resolve(media["schema"], components).get("properties", {}):
+                    yield path, method.upper(), operation
+                    break
+
+
+def _fill_path(path: str, study_id: str) -> str:
+    url = path.replace("{study_id}", study_id)
+    while "{" in url:
+        head, _, rest = url.partition("{")
+        _, _, tail = rest.partition("}")
+        url = f"{head}probe{tail}"
+    return url
+
+
+def _refusals(client, routes, study_id: str, *, headers=None, in_body=False) -> list[str]:
+    failures = []
+    for path, method, operation in routes:
+        url = _fill_path(path, study_id)
+        overrides = {"study_id": study_id} if in_body else {}
+        kwargs = _probe_payload(operation, overrides)
+        resp = client.request(method, url, headers=headers, **kwargs)
+        if resp.status_code == 422:
+            failures.append(
+                f"{method} {url} -> 422 (probe never reached the gate; a hole here would be invisible)"
+            )
+        elif resp.status_code not in _REFUSAL_CODES:
+            failures.append(f"{method} {url} -> {resp.status_code}")
+    return failures
 
 
 def test_every_study_scoped_mutation_is_closed_to_anonymous_callers(client):
     """Walks the live route table so a newly added mutating endpoint is covered
     automatically. `is_demo` is a READ allowance: no anonymous POST/PUT/PATCH/
-    DELETE against the shared demo study may ever succeed."""
+    DELETE against the shared demo study may ever succeed. Probes carry
+    schema-valid bodies and must be answered with 401/403/404 — a 422 is a
+    failure, not a pass."""
     from bebshax.db.models import Studies
 
     study_id = "std_demo_route_walk"
@@ -240,28 +378,35 @@ def test_every_study_scoped_mutation_is_closed_to_anonymous_callers(client):
     routes = list(_study_scoped_mutating_routes())
     assert routes, "route walk found nothing — the filter is broken, not the app"
 
-    failures = []
-    for path, methods in routes:
-        url = path.replace("{study_id}", study_id)
-        # Any other path parameter only has to be well-formed; the gate runs first.
-        while "{" in url:
-            head, _, rest = url.partition("{")
-            _, _, tail = rest.partition("}")
-            url = f"{head}probe{tail}"
-        for method in methods:
-            if url.endswith("/upload"):
-                resp = client.request(
-                    method,
-                    url,
-                    files={"file": ("probe.csv", b"a,b\n1,2\n", "text/csv")},
-                    data={"name": "probe"},
-                )
-            else:
-                resp = client.request(method, url, json={})
-            if 200 <= resp.status_code < 300:
-                failures.append(f"{method} {url} -> {resp.status_code}")
-
+    failures = _refusals(client, routes, study_id)
     assert not failures, "anonymous callers reached study mutations: " + "; ".join(failures)
+
+
+def test_body_supplied_study_id_routes_enforce_the_same_gate(client):
+    """`POST /datasets/upload` and friends take the study id in the body, so the
+    path-based walk never saw them — and one of them was a fully
+    unauthenticated cross-tenant write."""
+    from bebshax.auth.models import Users
+    from bebshax.db.models import Studies
+
+    _seed([
+        Users(
+            id="usr_body_victim",
+            email="body-victim@example.com",
+            full_name="Body Victim",
+            hashed_password="hash",
+            is_active=True,
+            is_verified=True,
+        ),
+        Studies(id="std_body_victim", user_id="usr_body_victim", title="Victim", status="draft"),
+    ])
+
+    routes = list(_body_study_id_routes())
+    assert routes, "no body-supplied study_id routes found — the discovery filter is broken"
+
+    failures = _refusals(client, routes, "std_body_victim", in_body=True)
+    assert not failures, "body-supplied study_id bypassed the gate: " + "; ".join(failures)
+
 
 
 def test_demo_study_stays_readable_while_writes_are_closed(client):
@@ -382,6 +527,92 @@ def test_batch_interview_rejects_personas_from_another_study(client):
         headers=headers,
     )
     assert resp.status_code == 400
+
+
+def test_authenticated_user_cannot_mutate_another_tenants_resources(client):
+    """A signed-in caller is not a free pass: every child resource (run,
+    dataset, persona, audience) must be re-checked against the study — and the
+    tenant — being authorised, not just resolved by id."""
+    import asyncio
+
+    from bebshax.behavioral.orm import BehavioralTestRuns, BehavioralTests
+    from bebshax.db.models import DatasetSources, SavedAudiences, Studies
+
+    headers = _seed_two_tenants("xten")
+    _seed([
+        BehavioralTests(
+            id="bt_vic_xten",
+            study_id="std_vic_xten",
+            user_id="usr_vic_xten",
+            name="Victim Test",
+            test_type="pricing_test",
+        ),
+        BehavioralTestRuns(
+            id="btr_vic_xten",
+            behavioral_test_id="bt_vic_xten",
+            study_id="std_vic_xten",
+            user_id="usr_vic_xten",
+            status="completed",
+            persona_count=1,
+        ),
+        DatasetSources(
+            id="ds_vic_xten",
+            user_id="usr_vic_xten",
+            study_id="std_vic_xten",
+            name="Victim Dataset",
+            status="ready",
+            source_type="url",
+            source_url="https://example.invalid/victim.csv",
+        ),
+        SavedAudiences(id="aud_vic_xten", user_id="usr_vic_xten", name="Victim Audience"),
+    ])
+
+    probes = [
+        # Direct study mutation.
+        ("PATCH", "/api/studies/std_vic_xten", {"json": {"title": "Defaced"}}),
+        ("DELETE", "/api/studies/std_vic_xten", {}),
+        # Child resources reached through a study the attacker DOES own.
+        ("POST", "/api/studies/std_att_xten/behavioral-tests/runs/btr_vic_xten/retry-failed", {}),
+        ("DELETE", "/api/studies/std_att_xten/datasets/ds_vic_xten", {}),
+        ("POST", "/api/studies/std_att_xten/datasets/ds_vic_xten/refresh", {}),
+        ("GET", "/api/studies/std_att_xten/datasets/ds_vic_xten", {}),
+        ("POST", "/api/studies/std_att_xten/personas/per_vic_xten/regenerate", {}),
+        # Child resources addressed directly.
+        ("DELETE", "/api/datasets/ds_vic_xten", {}),
+        ("POST", "/api/datasets/ds_vic_xten/refresh", {}),
+        ("DELETE", "/api/audiences/aud_vic_xten", {}),
+        # Tenant id smuggled through the body.
+        (
+            "POST",
+            "/api/datasets/url",
+            {"json": {"url": "https://example.invalid/x.csv", "name": "p", "study_id": "std_vic_xten"}},
+        ),
+        (
+            "POST",
+            "/api/copilot/study/generate-personas",
+            {"json": {"study_id": "std_vic_xten", "study_prompt": "probe", "roles": []}},
+        ),
+        ("POST", "/api/audiences", {"json": {"name": "probe", "study_id": "std_vic_xten"}}),
+    ]
+
+    failures = []
+    for method, url, kwargs in probes:
+        resp = client.request(method, url, headers=headers, **kwargs)
+        if resp.status_code not in _REFUSAL_CODES:
+            failures.append(f"{method} {url} -> {resp.status_code}")
+    assert not failures, "cross-tenant access as an authenticated user: " + "; ".join(failures)
+
+    async def victim_rows_intact():
+        sm = app.state.db_sessionmaker
+        async with sm() as session:
+            study = await session.get(Studies, "std_vic_xten")
+            assert study is not None and study.title == "Victim Study"
+            assert await session.get(DatasetSources, "ds_vic_xten") is not None
+            assert await session.get(SavedAudiences, "aud_vic_xten") is not None
+            run = await session.get(BehavioralTestRuns, "btr_vic_xten")
+            assert run is not None and run.status == "completed"
+
+    asyncio.run(victim_rows_intact())
 
 
 # ---------------------------------------------------------------------------

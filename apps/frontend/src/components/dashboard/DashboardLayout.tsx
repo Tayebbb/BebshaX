@@ -38,6 +38,7 @@ import { BehavioralComparisonView } from './views/BehavioralComparisonView';
 import { StartInterviewModal } from './modals/StartInterviewModal';
 import { CreateBehavioralTestModal } from './modals/CreateBehavioralTestModal';
 import { StudyType, Study, SyntheticPersona } from '../../types';
+import { findExampleStudy, EXAMPLE_STUDY_STEP } from '../../utils/exampleStudy';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
 
@@ -296,7 +297,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       try {
         const data = await api.getStudies();
         setRecentStudies(data.slice(0, 5));
-        setDemoStudy(data.find((s) => s.is_demo) || null);
+        setDemoStudy(findExampleStudy(data));
       } catch {
         // fallback
       } finally {
@@ -1306,7 +1307,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           <NewStudyView
             onStartStudy={handleStartStudy}
             onOpenExampleStudy={
-              demoStudy ? () => handleOpenStudy(demoStudy.id, demoStudy.step || 5) : undefined
+              demoStudy ? () => handleOpenStudy(demoStudy.id, EXAMPLE_STUDY_STEP) : undefined
             }
           />
         )}

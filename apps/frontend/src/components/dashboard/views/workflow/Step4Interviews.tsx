@@ -149,7 +149,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                 <MessageSquare size={26} className="text-teal-400" />
                 <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>No personas to interview yet</div>
                 <div style={{ fontSize: '0.85rem', maxWidth: '420px' }}>
-                  Generate grounded personas in the Personas step first — then run interviews here.
+                  Generate personas in the Personas step first — then run interviews here.
                 </div>
                 <button
                   type="button"
@@ -326,7 +326,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
               {isSimulating && (
                 <div style={{ alignSelf: 'flex-start', color: 'var(--text-secondary)', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Sparkles size={14} className="text-teal-400 animate-spin" />
-                  Generating grounded synthetic response...
+                  Generating synthetic response...
                 </div>
               )}
             </div>

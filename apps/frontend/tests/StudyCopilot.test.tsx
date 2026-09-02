@@ -401,7 +401,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     fireEvent.click(screen.getByRole('button', { name: /^Generate Personas$/i }));
 
     // In-flight: status banner + shimmering skeleton cards, no empty state
-    expect(screen.getByText(/Generating grounded personas/i)).toBeInTheDocument();
+    expect(screen.getByText(/Generating personas/i)).toBeInTheDocument();
     expect(container.querySelectorAll('.bx-skeleton').length).toBeGreaterThan(0);
     expect(screen.queryByText('No personas yet')).not.toBeInTheDocument();
 
@@ -418,7 +418,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     // Resolved: skeletons and banner replaced by the persona card
     await waitFor(() => {
       expect(screen.getByText('Test Persona')).toBeInTheDocument();
-      expect(screen.queryByText(/Generating grounded personas/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Generating personas/i)).not.toBeInTheDocument();
       expect(container.querySelectorAll('.bx-skeleton').length).toBe(0);
     });
   });
@@ -528,7 +528,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     expect(screen.queryByText('Professional')).not.toBeInTheDocument();
 
     // Missing claims render the honest empty state, not invented claims
-    expect(screen.getByText(/No verified claims recorded for this persona yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No labelled claims recorded for this persona yet/i)).toBeInTheDocument();
     expect(screen.queryByText('Streamline daily tasks')).not.toBeInTheDocument();
     expect(screen.queryByText('High recurring cost')).not.toBeInTheDocument();
 
@@ -656,7 +656,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
 
     // URL says step 2 (initialStep=2 > 1) → should stay on step 2, not override to DB step 4
     await waitFor(() => {
-      expect(screen.getByText('Grounded Persona Library')).toBeInTheDocument();
+      expect(screen.getByText('Persona Library')).toBeInTheDocument();
     });
   });
 

@@ -231,7 +231,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
               <div>
                 <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Market Segmentation</h1>
                 <p className="text-sm text-[var(--text-secondary)]">
-                  Evidence + Dataset Profiles + Business Context → Data-Grounded Market Segments
+                  Evidence + Dataset Profiles + Business Context → Market Segments
                 </p>
               </div>
             </div>
@@ -240,7 +240,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           {/* Quick Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-lg">
-              <span className="text-xs text-[var(--text-secondary)] block font-medium">Empirical Cohort</span>
+              <span className="text-xs text-[var(--text-secondary)] block font-medium">Dataset Cohort</span>
               <span className="text-lg font-bold text-teal-400 font-mono">
                 {totalSurveyed.toLocaleString()} <span className="text-xs text-[var(--text-secondary)] font-normal">records</span>
               </span>
@@ -510,7 +510,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           <PieChart className="w-12 h-12 text-[var(--text-secondary)]/40 mx-auto mb-3" />
           <h3 className="text-base font-semibold text-[var(--text-primary)]">No Market Segments Available</h3>
           <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto mt-1 mb-5">
-            Run segmentation above or upload empirical study data to discover meaningful customer clusters.
+            Run segmentation above or upload your own study data to discover meaningful customer clusters.
           </p>
           <div className="flex items-center justify-center gap-3">
             {onNavigateToEvidence && (
@@ -702,7 +702,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 <div>
                   <h3 className="text-lg font-bold text-[var(--text-primary)]">Side-by-Side Segment Comparison</h3>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    Comparing {comparisonResult.compared_count} segments on empirical dimensions
+                    Comparing {comparisonResult.compared_count} segments on shared dimensions
                   </p>
                 </div>
               </div>
@@ -779,7 +779,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     <td className="p-3 text-[var(--text-secondary)] font-medium">Evidence Citations</td>
                     {comparisonResult.comparison_matrix.map((c) => (
                       <td key={c.segment_id} className="p-3 text-emerald-400 font-semibold">
-                        {c.evidence_citations_count} claims verified
+                        {c.evidence_citations_count} claims cited
                       </td>
                     ))}
                   </tr>
@@ -833,7 +833,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     </span>
                   </div>
                   <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                    {selectedSegment.population_percentage}% population • {selectedSegment.population_count.toLocaleString()} empirical records
+                    {selectedSegment.population_percentage}% population • {selectedSegment.population_count.toLocaleString()} dataset records
                   </p>
                 </div>
               </div>
@@ -888,7 +888,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                       Key Differentiation Rationale
                     </h4>
                     <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg leading-relaxed text-teal-300">
-                      {selectedSegment.differentiation_summary || 'Distinct empirical behavior and economic limits.'}
+                      {selectedSegment.differentiation_summary || 'Distinct behavior and economic limits.'}
                     </p>
                   </div>
 

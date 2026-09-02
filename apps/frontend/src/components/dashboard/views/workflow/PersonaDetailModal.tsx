@@ -184,10 +184,10 @@ export const PersonaDetailModal: React.FC<PersonaDetailModalProps> = ({
               </div>
             )}
 
-            {/* Grounded Claims & Provenance */}
+            {/* Behavioral Claims & Provenance */}
             <div>
               <div
-                title="Grounded behavioral claims & provenance — each claim is labeled by how it was derived"
+                title="Behavioral claims & provenance — each claim is labeled by how it was derived"
                 style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.04em', marginBottom: '8px' }}
               >
                 What this persona claims — and how we know
@@ -222,7 +222,7 @@ export const PersonaDetailModal: React.FC<PersonaDetailModalProps> = ({
               ) : (
                 /* Honest empty state — never fabricate claims. */
                 <div style={{ background: 'var(--bg-secondary)', border: '1px dashed var(--border-subtle)', borderRadius: '8px', padding: '14px', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                  No verified claims recorded for this persona yet.
+                  No labelled claims recorded for this persona yet.
                 </div>
               )}
             </div>

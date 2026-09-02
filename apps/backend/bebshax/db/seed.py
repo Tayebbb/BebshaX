@@ -12,7 +12,14 @@ from sqlalchemy.orm import sessionmaker
 
 from bebshax.auth.models import Users
 from bebshax.auth.security import hash_password
-from bebshax.db.models import DATA_SOURCE_CACHED, Businesses, Personas, LLMRequests, Studies
+from bebshax.db.models import (
+    DATA_SOURCE_CACHED,
+    Businesses,
+    Personas,
+    LLMRequests,
+    Studies,
+    StudyReports,
+)
 from bebshax.persona.schema import (
     EvidenceItem,
     PersonaAttribute,
@@ -166,7 +173,7 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
                 step=4,
                 persona_count=4,
                 persona_ids=["per_sarah_01"],
-                is_demo=True,
+                is_demo=False,
                 duration_text="In Progress • Step 4 Interviews",
             ),
             Studies(
@@ -180,7 +187,7 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
                 step=2,
                 persona_count=2,
                 persona_ids=["per_sarah_01"],
-                is_demo=True,
+                is_demo=False,
                 duration_text="In Progress • Step 2 Personas",
             ),
             Studies(
@@ -194,12 +201,51 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
                 step=1,
                 persona_count=0,
                 persona_ids=[],
-                is_demo=True,
+                is_demo=False,
                 duration_text="Just created • Step 1 Context",
             ),
         ]
         for s in demo_studies:
             session.add(s)
+
+        # The "finished example study" affordance points at study_demo_01, so it
+        # must actually own a report. Content is explicitly labelled simulated.
+        session.add(
+            StudyReports(
+                id="rep_seed_demo_01",
+                study_id="study_demo_01",
+                user_id="usr_sarah_founder",
+                version=1,
+                title="Customer Discovery Study — Decision Report",
+                executive_summary=(
+                    "[Simulated demo data] Three synthetic personas were interviewed about a "
+                    "student academic planner with automated study-group scheduling. Every number "
+                    "below is model-estimated from those synthetic transcripts, not measured with "
+                    "real customers."
+                ),
+                key_findings=[
+                    "Schedule fragmentation across class, work and study-group commitments was the "
+                    "most repeated friction point.",
+                    "Willingness to pay clustered at the low end; personas expected a free tier "
+                    "before committing to a monthly fee.",
+                    "Automated group scheduling only landed once personas were shown it would not "
+                    "expose their calendar to classmates.",
+                ],
+                major_risks=[
+                    "Findings come from synthetic interviews and must be re-tested with real students.",
+                ],
+                recommendations=[
+                    "Validate the scheduling friction with a short survey of real students before building.",
+                    "Lead onboarding with the privacy boundary, not the automation.",
+                ],
+                limitations=(
+                    "Simulated demo content seeded for the walkthrough. No real respondents were "
+                    "interviewed and no claim here is evidence-backed."
+                ),
+                metrics={"total_personas": 3, "total_interviews": 3},
+                is_synthetic=True,
+            )
+        )
 
         await session.commit()
 

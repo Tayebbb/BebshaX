@@ -106,9 +106,9 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
       icon: Sparkles,
       features: [
         'Unlimited active research studies',
-        '50 grounded synthetic personas per study',
-        'Empirical evidence grounding (public research datasets)',
-        'Evidence panel: inspect the records behind grounded attributes',
+        '50 synthetic personas per study',
+        'Evidence retrieval over public research datasets',
+        'Evidence panel: inspect the records behind evidence-backed attributes',
         'Priority high-capacity reasoning model routes',
         'Multi-segment behavioral simulations',
         'Decision reports with the provenance trail behind every finding',
@@ -356,7 +356,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
                   {isSelectedLoading ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      <span>Connecting to Stripe...</span>
+                      <span>Working…</span>
                     </>
                   ) : (
                     <>

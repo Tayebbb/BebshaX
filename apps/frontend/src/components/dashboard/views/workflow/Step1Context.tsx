@@ -1,7 +1,8 @@
 import React from 'react';
-import { Check, CheckCircle2, Minus, Plus, Send, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Send, Sparkles } from 'lucide-react';
 import { PersonaRoleSuggestion } from '../../../../types';
 import { CopilotMessage } from './types';
+import { EvidenceProbe } from './evidenceProbe';
 
 /** Step 1 — conversational context gathering + role selection drawer. Pure
  * JSX extraction from StudyWorkflowView: copilot state, persistence, and the
@@ -27,6 +28,8 @@ interface Step1ContextProps {
   handleToggleRole: (roleId: string) => void;
   handleIncrementRole: (roleId: string, e: React.MouseEvent) => void;
   handleDecrementRole: (roleId: string, e: React.MouseEvent) => void;
+  evidenceProbe: EvidenceProbe;
+  onNavigateToEvidence?: () => void;
 }
 
 export const Step1Context: React.FC<Step1ContextProps> = ({
@@ -50,7 +53,26 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
   handleToggleRole,
   handleIncrementRole,
   handleDecrementRole,
+  evidenceProbe,
+  onNavigateToEvidence,
 }) => {
+  const busy = evidenceProbe.state === 'checking' || evidenceProbe.state === 'searching';
+  const evidenceLine =
+    evidenceProbe.state === 'checking'
+      ? 'Checking for supporting evidence…'
+      : evidenceProbe.state === 'searching'
+      ? 'Looking for supporting evidence…'
+      : evidenceProbe.state === 'found'
+      ? `Found ${evidenceProbe.claims} supporting claim${evidenceProbe.claims === 1 ? '' : 's'}` +
+        (evidenceProbe.sources > 0
+          ? ` from ${evidenceProbe.sources} source${evidenceProbe.sources === 1 ? '' : 's'}`
+          : '') +
+        ' — personas can cite them.'
+      : evidenceProbe.state === 'empty'
+      ? 'No evidence found — personas will be inferred from your description.'
+      : evidenceProbe.state === 'not_run'
+      ? 'No evidence run yet for this study — personas will be inferred from your description.'
+      : 'Could not check for supporting evidence right now.';
   return (
     <>
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
@@ -58,8 +80,56 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                 Design your user interviews
               </h1>
               <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
-                Enter your product idea. BebshaX will refine your research objective, discover market evidence, and build grounded personas.
+                Enter your product idea. BebshaX will refine your research objective, look for supporting
+                market evidence, and build personas — labelling which parts that evidence actually backs.
               </p>
+            </div>
+
+            {/* Evidence attempt status — says what was looked for and what came back,
+                so step 2's per-persona labels are never a surprise. */}
+            <div
+              role="status"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                background: 'var(--fill-soft)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '10px',
+                padding: '8px 14px',
+                fontSize: '0.82rem',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" color="var(--accent-cyan)" />
+              ) : (
+                <FlaskConical size={14} color="var(--accent-cyan)" />
+              )}
+              <span>{evidenceLine}</span>
+              {onNavigateToEvidence && !busy && (
+                <button
+                  type="button"
+                  onClick={onNavigateToEvidence}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    color: 'var(--accent-cyan)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Open Evidence Laboratory
+                  <ArrowRight size={12} />
+                </button>
+              )}
             </div>
 
             {/* Chat Transcript Area */}

@@ -8,11 +8,17 @@ from sqlalchemy.orm import sessionmaker
 import bebshax.interview.orm  # noqa: F401
 import bebshax.memory.orm  # noqa: F401
 import bebshax.persona.orm  # noqa: F401
+from bebshax.auth.models import Users
+from bebshax.auth.security import create_access_token
 from bebshax.config import get_settings
 from bebshax.db.models import Base
 from bebshax.interview.engine import InterviewEngine
 from bebshax.persona.schema import PersonaAttribute, PersonaProfile
 from bebshax.persona.store import create_business, save_persona
+
+# Continuing a conversation is an owner-only write (shared-pool rows are
+# readable by everyone, writable by nobody), so the legacy flow signs in.
+_HEADERS = {"Authorization": f"Bearer {create_access_token({'sub': 'usr_interviewer'})}"}
 
 
 @pytest.fixture
@@ -26,6 +32,14 @@ async def app_client(tmp_path, monkeypatch, llm_factory):
         await conn.run_sync(Base.metadata.create_all)
     maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with maker() as session:
+        session.add(
+            Users(
+                id="usr_interviewer",
+                email="interviewer@example.com",
+                full_name="Interviewer",
+                hashed_password="x",
+            )
+        )
         business = await create_business(session, "QuickBite", "food delivery", owner_id="usr_system_holder")
         profile = PersonaProfile(
             business_id=business.id,
@@ -57,13 +71,17 @@ async def test_interview_http_flow(app_client) -> None:
     client, persona_id = app_client
 
     started = client.post(
-        f"/api/personas/{persona_id}/conversations", json={"objective": "pain points"}
+        f"/api/personas/{persona_id}/conversations",
+        json={"objective": "pain points"},
+        headers=_HEADERS,
     )
     assert started.status_code == 201
     conversation_id = started.json()["id"]
 
     first = client.post(
-        f"/api/conversations/{conversation_id}/messages", json={"message": "Who are you?"}
+        f"/api/conversations/{conversation_id}/messages",
+        json={"message": "Who are you?"},
+        headers=_HEADERS,
     )
     assert first.status_code == 200
     assert "Rina" in first.json()["reply"]
@@ -71,10 +89,11 @@ async def test_interview_http_flow(app_client) -> None:
     second = client.post(
         f"/api/conversations/{conversation_id}/messages",
         json={"message": "What bothers you about delivery apps?"},
+        headers=_HEADERS,
     )
     assert second.status_code == 200
 
-    transcript = client.get(f"/api/conversations/{conversation_id}")
+    transcript = client.get(f"/api/conversations/{conversation_id}", headers=_HEADERS)
     assert transcript.status_code == 200
     turns = transcript.json()["turns"]
     assert len(turns) == 4
@@ -84,9 +103,15 @@ async def test_interview_http_flow(app_client) -> None:
 async def test_unknown_ids_return_404(app_client) -> None:
     client, _ = app_client
     assert (
-        client.post("/api/personas/nope/conversations", json={"objective": "x"}).status_code == 404
+        client.post(
+            "/api/personas/nope/conversations", json={"objective": "x"}, headers=_HEADERS
+        ).status_code
+        == 404
     )
     assert (
-        client.post("/api/conversations/nope/messages", json={"message": "x"}).status_code == 404
+        client.post(
+            "/api/conversations/nope/messages", json={"message": "x"}, headers=_HEADERS
+        ).status_code
+        == 404
     )
-    assert client.get("/api/conversations/nope").status_code == 404
+    assert client.get("/api/conversations/nope", headers=_HEADERS).status_code == 404
