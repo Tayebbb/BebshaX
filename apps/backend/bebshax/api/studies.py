@@ -311,7 +311,8 @@ async def update_study(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Update a research study. Creates it if missing (for seamless workflow init).
-    Returns 403 if the study exists but belongs to a different user.
+    404 when the study exists but the caller cannot read it (existence never
+    leaks); 403 only when it is readable but not writable (e.g. the demo).
     """
     study = await session.get(Studies, study_id)
     if not study:
