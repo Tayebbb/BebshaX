@@ -567,13 +567,19 @@ class StudyReportService:
             # Grounded in stored evidence claims only — empty when none exist.
             # Canned "Hypothesis: …" strings were invented business claims.
             "key_findings": [c.claim_text for c in evidence_claims[:3]],
+            # Derived from the study's own inputs only — the template path must
+            # not invent engagement/price-sensitivity/motivator characteristics.
             "target_market_summary": (
-                f"The target market comprises {target_aud}, characterized by high digital engagement "
-                f"and moderate-to-high price sensitivity."
+                f"The target market comprises {target_aud}. No measured market"
+                f" characteristics are available on this template path."
             ),
             "market_context_summary": (
-                f"Sampled signals suggest active searching for alternatives to manual solutions; convenience "
-                f"and speed recur as purchasing motivators in the collected material."
+                (
+                    f"Context drawn from {len(evidence_claims)} stored research claim(s); "
+                    f"see the evidence findings below."
+                )
+                if evidence_claims
+                else "No research evidence collected yet — market context not assessed."
             ),
             "evidence_findings": evidence_findings,
             "dataset_findings": [

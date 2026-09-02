@@ -60,6 +60,10 @@ services:
     build:
       context: .
       dockerfile: deploy/web.Dockerfile
+      args:
+        # Empty default keeps federated sign-in disabled unless the operator
+        # provides a tenant URL at build time.
+        VITE_NEON_AUTH_URL: "${VITE_NEON_AUTH_URL:-}"
     container_name: bebshax-web
     profiles: ["full"]
     depends_on:

@@ -27,7 +27,7 @@ describe('Google Social Authentication & Dashboard Redirect', () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        url: 'https://ep-cold-star-azazjakq.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth/sign-in/social/init?token=test_token',
+        url: 'https://auth.example.test/neondb/auth/sign-in/social/init?token=test_token',
         redirect: true,
       }),
     });

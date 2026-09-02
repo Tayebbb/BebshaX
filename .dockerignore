@@ -1,4 +1,6 @@
-# Build-context filter for images built from the repo root (deploy/web.Dockerfile).
+# Build-context filter for images built from the repo root
+# (deploy/web.Dockerfile AND apps/backend/Dockerfile — the backend build
+# context moved to the root so providers.toml can be copied in).
 # Keeps the context small and keeps host installs/secrets out of images (R4).
 .git
 .venv
@@ -6,6 +8,9 @@
 **/dist
 **/__pycache__
 **/*.pyc
+**/.pytest_cache
+**/*.egg-info
+apps/backend/tests/
 data/
 .env
 .env.*
