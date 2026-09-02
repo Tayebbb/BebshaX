@@ -201,16 +201,19 @@ describe('Blocker 3 — step 5 agrees with step 2', () => {
     expect(screen.getByText('1 of 2 evidence-backed')).toBeInTheDocument();
   });
 
-  it('does not claim empirical research claims when none exist', () => {
+  it('does not claim research claims when none exist', () => {
     renderStep5([workflowPersona({ grounding_ratio: 0 })], bareReport);
 
-    expect(screen.queryByText(/empirical research claims/i)).toBeNull();
+    expect(screen.queryByText(/research claims?\./i)).toBeNull();
   });
 
-  it('mentions research claims only when the report actually has them', () => {
+  // The word "empirical" overstated LLM-extracted web claims, and the count was
+  // hidden; the line now names the number it actually has.
+  it('mentions the claim count only when the report actually has them', () => {
     renderStep5([workflowPersona({ grounding_ratio: 0.7 })], { ...bareReport, metrics: { total_claims: 12 } });
 
-    expect(screen.getByText(/and empirical research claims/i)).toBeInTheDocument();
+    expect(screen.getByText(/and 12 retrieved research claims/i)).toBeInTheDocument();
+    expect(screen.queryByText(/empirical/i)).toBeNull();
   });
 });
 

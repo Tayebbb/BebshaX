@@ -142,7 +142,9 @@ async def test_sse_endpoint_emits_error_event_with_kind(
                 )
             )
             await session.commit()
-        conversation = await engine.start(stored_persona.id, "err check", study_id="std_sse_err")
+        conversation = await engine.start(
+            stored_persona.id, "err check", study_id="std_sse_err", user_id=_SSE_OWNER_ID
+        )
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -199,7 +201,9 @@ async def test_sse_endpoint_emits_delta_then_done(
             )
             await session.commit()
 
-        conversation = await engine.start(stored_persona.id, "sse check", study_id="std_sse")
+        conversation = await engine.start(
+            stored_persona.id, "sse check", study_id="std_sse", user_id=_SSE_OWNER_ID
+        )
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:

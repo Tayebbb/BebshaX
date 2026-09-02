@@ -107,6 +107,20 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   const demoStudy = findExampleStudy(studies);
   const regularStudies = filteredStudies.filter((s) => !s.is_demo);
 
+  // The blurb may only name what the demo study actually carries: the report is
+  // guaranteed by findExampleStudy, personas and interviews are not.
+  const demoOffers = demoStudy
+    ? [
+        'a finished decision report',
+        demoStudy.persona_count > 0
+          ? `${demoStudy.persona_count} persona${demoStudy.persona_count === 1 ? '' : 's'}`
+          : null,
+        demoStudy.interviews && demoStudy.interviews.length > 0
+          ? `${demoStudy.interviews.length} interview${demoStudy.interviews.length === 1 ? '' : 's'}`
+          : null,
+      ].filter(Boolean)
+    : [];
+
   // Honest totals derived from the loaded list only. "In flight" matches the
   // In Progress tab bucket (drafts included) so the two never disagree.
   const own = studies.filter((s) => !s.is_demo);
@@ -216,7 +230,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                 <span className="sd-demo-badge">DEMO STUDY</span>
               </div>
               <div className="sd-demo-sub">
-                Sample study — explore a finished report and pre-generated interviews
+                Sample study — explore {demoOffers.join(', ')}
               </div>
             </div>
             <div className="sd-demo-open">

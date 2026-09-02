@@ -5,12 +5,36 @@ from __future__ import annotations
 import csv
 import io
 import json
+import zipfile
 from typing import Any
+
+# Shape caps. The 25 MB byte ceiling bounds the *input*, not what parsing
+# expands it into: a tiny file can still describe millions of rows or thousands
+# of columns, and every downstream profiler/segmenter pass is O(rows x columns).
+# Exceeding a cap is an explicit error, never a silent truncation.
+MAX_DATASET_ROWS = 200_000
+MAX_DATASET_COLUMNS = 512
+
+# XLSX is a zip archive, so a few hundred KB can declare gigabytes of sheet XML.
+MAX_XLSX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
+MAX_XLSX_COMPRESSION_RATIO = 200
 
 
 class DatasetParseError(Exception):
     """Raised when dataset content cannot be parsed."""
     pass
+
+
+def _enforce_shape_caps(columns: list[str], rows: list[dict[str, Any]]) -> None:
+    if len(columns) > MAX_DATASET_COLUMNS:
+        raise DatasetParseError(
+            f"Dataset has {len(columns)} columns, above the {MAX_DATASET_COLUMNS}-column limit."
+        )
+    if len(rows) > MAX_DATASET_ROWS:
+        raise DatasetParseError(
+            f"Dataset has more than {MAX_DATASET_ROWS:,} rows. "
+            "Split it or sample it before uploading."
+        )
 
 
 def detect_format(content: bytes, filename: str = "", content_type: str = "") -> str:
@@ -58,19 +82,22 @@ def parse_dataset_bytes(
 
     try:
         if detected_type == "json":
-            return _parse_json(content)
+            columns, rows = _parse_json(content)
         elif detected_type == "jsonl":
-            return _parse_jsonl(content)
+            columns, rows = _parse_jsonl(content)
         elif detected_type == "tsv":
-            return _parse_delimited(content, delimiter="\t")
+            columns, rows = _parse_delimited(content, delimiter="\t")
         elif detected_type == "xlsx":
-            return _parse_xlsx(content)
+            columns, rows = _parse_xlsx(content)
         else:
-            return _parse_delimited(content, delimiter=",")
+            columns, rows = _parse_delimited(content, delimiter=",")
     except Exception as exc:
         if isinstance(exc, DatasetParseError):
             raise
         raise DatasetParseError(f"Failed to parse {detected_type.upper()} dataset: {exc}") from exc
+
+    _enforce_shape_caps(columns, rows)
+    return columns, rows
 
 
 def _parse_delimited(content: bytes, delimiter: str = ",") -> tuple[list[str], list[dict[str, Any]]]:
@@ -104,6 +131,10 @@ def _parse_delimited(content: bytes, delimiter: str = ",") -> tuple[list[str], l
             val = row.get(col)
             clean_row[col] = _cast_value(val)
         rows.append(clean_row)
+        # One over the cap is enough for _enforce_shape_caps to reject; keep
+        # reading and the caller pays for the whole expansion first.
+        if len(rows) > MAX_DATASET_ROWS:
+            break
 
     if not rows:
         raise DatasetParseError("Dataset contains headers but 0 data rows.")
@@ -165,6 +196,8 @@ def _parse_jsonl(content: bytes) -> tuple[list[str], list[dict[str, Any]]]:
                 for k in item.keys():
                     cols_set[str(k).strip()] = None
                 rows.append(item)
+                if len(rows) > MAX_DATASET_ROWS:
+                    break
         except json.JSONDecodeError:
             continue
 
@@ -176,7 +209,31 @@ def _parse_jsonl(content: bytes) -> tuple[list[str], list[dict[str, Any]]]:
     return columns, normalized_rows
 
 
+def _assert_xlsx_is_not_a_zip_bomb(content: bytes) -> None:
+    """Reject an .xlsx whose archive declares an implausible expansion.
+
+    Declared sizes can lie, but combined with the 25 MB input ceiling this stops
+    the cheap attack: a small upload that expands to gigabytes of sheet XML the
+    moment openpyxl reads it. Legacy binary .xls is not a zip — left to pandas.
+    """
+    if not zipfile.is_zipfile(io.BytesIO(content)):
+        return
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            uncompressed = sum(info.file_size for info in zf.infolist())
+    except zipfile.BadZipFile as exc:
+        raise DatasetParseError(f"Spreadsheet archive is corrupt: {exc}") from exc
+
+    if uncompressed > MAX_XLSX_UNCOMPRESSED_BYTES or (
+        content and uncompressed / len(content) > MAX_XLSX_COMPRESSION_RATIO
+    ):
+        raise DatasetParseError(
+            "Spreadsheet expands far beyond its file size and was rejected as unsafe."
+        )
+
+
 def _parse_xlsx(content: bytes) -> tuple[list[str], list[dict[str, Any]]]:
+    _assert_xlsx_is_not_a_zip_bomb(content)
     try:
         import pandas as pd
         df = pd.read_excel(io.BytesIO(content))

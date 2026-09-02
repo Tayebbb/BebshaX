@@ -285,6 +285,14 @@ def create_app() -> FastAPI:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        # HSTS is inert over plain HTTP, so it is safe for local/demo runs and
+        # active the moment the API is served over TLS. CSP is deliberately NOT
+        # set here: the built frontend is served by a separate nginx origin and
+        # its inline/style surface is unverified from this process, so a policy
+        # written blind would risk blanking the UI at the exhibition.
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
         return response
 
 

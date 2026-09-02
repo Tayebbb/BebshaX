@@ -135,8 +135,16 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       try {
         const studyList = await api.getStudies();
         setStudies(studyList);
-        if (!activeStudyId && studyList.length > 0) {
-          setActiveStudyId(studyList[0].id);
+        if (!activeStudyId) {
+          // Never auto-open the seeded demo: showing someone else's personas as
+          // "your library" is worse than showing an explicit picker.
+          const own = studyList.filter((s) => !s.is_demo);
+          const mostRecent = [...own].sort(
+            (a, b) =>
+              new Date(b.updated_at || b.created_at || 0).getTime() -
+              new Date(a.updated_at || a.created_at || 0).getTime(),
+          )[0];
+          if (mostRecent) setActiveStudyId(mostRecent.id);
         }
       } catch {
         // fallback
@@ -154,13 +162,20 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
   // Load personas, segments, and runs when activeStudyId changes
   const loadStudyData = async () => {
+    if (!activeStudyId) {
+      setPersonas([]);
+      setSegments([]);
+      setRuns([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       const [personasRes, segmentsRes, runsRes] = await Promise.allSettled([
-        api.getStudyPersonas(activeStudyId || 'default'),
-        activeStudyId ? api.getMarketSegments(activeStudyId) : Promise.resolve([]),
-        activeStudyId ? api.listStudyPersonaRuns(activeStudyId) : Promise.resolve({ runs: [] }),
+        api.getStudyPersonas(activeStudyId),
+        api.getMarketSegments(activeStudyId),
+        api.listStudyPersonaRuns(activeStudyId),
       ]);
 
       if (personasRes.status === 'fulfilled') {
@@ -182,13 +197,20 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
+      if (!activeStudyId) {
+        setPersonas([]);
+        setSegments([]);
+        setRuns([]);
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
       setError(null);
       try {
         const [personasRes, segmentsRes, runsRes] = await Promise.allSettled([
-          api.getStudyPersonas(activeStudyId || 'default'),
-          activeStudyId ? api.getMarketSegments(activeStudyId) : Promise.resolve([]),
-          activeStudyId ? api.listStudyPersonaRuns(activeStudyId) : Promise.resolve({ runs: [] }),
+          api.getStudyPersonas(activeStudyId),
+          api.getMarketSegments(activeStudyId),
+          api.listStudyPersonaRuns(activeStudyId),
         ]);
         if (cancelled) return;
         if (personasRes.status === 'fulfilled') setPersonas(personasRes.value.personas);
@@ -341,9 +363,10 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Study Context Selector if multiple studies exist */}
-          {studies.length > 1 && (
+          {/* Study Context Selector — shown whenever there is something to pick */}
+          {studies.length > 0 && (
             <select
+              aria-label="Active study"
               value={activeStudyId}
               onChange={(e) => setActiveStudyId(e.target.value)}
               style={{
@@ -357,6 +380,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                 cursor: 'pointer',
               }}
             >
+              {!activeStudyId && <option value="">Choose a study…</option>}
               {studies.map((s) => (
                 <option key={s.id} value={s.id}>
                   Study: {s.title || s.id}
@@ -368,6 +392,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           <button
             type="button"
             onClick={() => setShowGenerateModal(true)}
+            disabled={!activeStudyId}
+            title={activeStudyId ? undefined : 'Choose a study first — personas are generated inside one'}
             style={{
               background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
               color: 'var(--text-on-accent)',
@@ -379,7 +405,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              cursor: 'pointer',
+              cursor: activeStudyId ? 'pointer' : 'not-allowed',
+              opacity: activeStudyId ? 1 : 0.55,
               boxShadow: '0 4px 14px var(--accent-glow)',
               transition: 'all 0.16s ease',
             }}
@@ -393,6 +420,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       {/* =========================================================================
           2. METRICS BANNER
          ========================================================================= */}
+      {activeStudyId && (
       <div
         style={{
           display: 'grid',
@@ -448,10 +476,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* =========================================================================
           3. FILTER & SEARCH BAR
          ========================================================================= */}
+      {activeStudyId && (
       <div
         style={{
           display: 'flex',
@@ -597,6 +627,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* =========================================================================
           4. PERSONA CARDS GRID / SKELETON / EMPTY STATE
@@ -630,7 +661,21 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         </div>
       )}
 
-      {isLoading ? (
+      {!activeStudyId ? (
+        <div style={{ background: 'var(--bg-secondary)', border: '1px dashed var(--border-subtle)', borderRadius: '18px', padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--accent-teal)' }}>
+            <Layers size={26} />
+          </div>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px 0' }}>
+            Pick a study
+          </h3>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto', lineHeight: 1.5 }}>
+            {studies.length > 0
+              ? 'Personas belong to a study. Choose one above to see its library.'
+              : 'You have no studies yet. Start a study first — personas are generated inside one.'}
+          </p>
+        </div>
+      ) : isLoading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: '20px' }}>
           {[1, 2, 3, 4, 5, 6].map((idx) => (
             <div key={idx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px', height: '320px', animation: 'pulse 1.5s infinite' }}>

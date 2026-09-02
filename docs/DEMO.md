@@ -37,18 +37,24 @@ When `BEBSHAX_DEMO_MODE=true` and the database is unpopulated (or when `seed_dem
 
 2. **Demo Business:**
    - **ID:** `biz_fintech_01`
-   - **Name:** `Apex Courier Finance`
-   - **Industry:** `Fintech & Gig Economy`
-   - **Target Market:** `Urban delivery couriers & independent logistics contractors`
-   - **Description:** Real-time earnings advance and micro-insurance platform for gig couriers.
+   - **Name:** `NovaFlow Financial`
+   - **Industry:** `Fintech / Personal Finance`
+   - **Target Market:** `Independent contractors, rideshare drivers`
+   - **Description:** Next-generation budgeting and micro-investment app for gig workers and freelancers.
 
-3. **Grounded Personas & Evidence:**
-   - **Persona:** `Tariq Ahmed (Delivery Fleet Lead)`
-   - **Demographics:** Age 34, Dhaka & Chittagong logistics corridor
-   - **Evidence Grounding:** Real courier survey excerpts and customer dialogue citations (`PersonaHub (Financial Segment)`, `EmpatheticDialogues`).
+3. **Grounded Persona & Evidence (one persona, `per_sarah_01`):**
+   - **Persona:** `Sarah Chen` — full-time rideshare & grocery courier, age 29, Austin TX
+   - **Attached to:** `study_demo_01`, labelled `data_source: "cached"`
+   - **Evidence Grounding:** three attributes across OBSERVED / INFERRED / SYNTHETIC with two evidence items (`PersonaHub (Financial Segment)`, `EmpatheticDialogues & Customer Reviews`).
 
-4. **Sample Studies & Conversation Logs:**
-   - Sample interview sessions with pre-populated turn histories and provenance records.
+4. **Sample Studies & Decision Report:**
+   - Four studies (`study_demo_01` … `study_demo_04`) at steps 5 / 4 / 2 / 1. Only
+     `study_demo_01` is `is_demo=true` — that is the "finished example study" a
+     visitor is steered to, and it owns report `rep_seed_demo_01`.
+   - One provenance record (`req_seed_demo_01`).
+   - **No conversations or interview turns are seeded.** The demo study's report
+     says so explicitly; nothing in the seed claims an interview that did not
+     happen.
 
 ---
 
@@ -81,7 +87,7 @@ Run each step in order from the repo root on the demo machine. Steps 1–4 are o
 4. **Confirm seeding**: `GET http://localhost:8000/api/health` reports `"demo_mode": true`; startup logs show the demo seed ran (skipped when the tables already hold data).
 5. **Sign in** at `http://localhost:5173` with the seeded demo fixture `founder@bebshax.ai` / `Password123!` (a flag-gated demo credential defined in `db/seed.py`, not a secret). Do **not** use "Continue with Google" at the offline venue — it needs the internet. To disable the button (greyed out with an explanatory tooltip), set `VITE_NEON_AUTH_URL=` (explicitly empty) in the **repo-root `.env`** (Vite reads it there via `envDir` in `apps/frontend/vite.config.ts`; `.env.demo` already ships this line) and restart the frontend.
 6. **Persona Library** — the seeded grounded persona renders with the `CACHED` badge; open the Deep-Dive inspector: profile, Big-Five, evidence citations, provenance classes (OBSERVED / INFERRED / SYNTHETIC) all populate from the seed.
-7. **Studies / workflow** — open the seeded study: copilot transcript, roles, and script restore from the database; stepper navigates all 5 steps.
+7. **Studies / workflow** — open the seeded study: copilot transcript, roles, and script restore from the database; stepper navigates all 5 steps. `study_demo_01` ends on a real decision report; it seeds no interviews and its report says so.
 8. **Live generation (network available)** — create a new study and generate personas: routed through the free-tier pools, results labeled `data_source: "live"`, provenance visible under Model Router.
 9. **Model Router view** — per-request provenance (candidates, failures, served_by, latency, tokens) proves nothing is hidden behind the demo.
 
@@ -89,7 +95,7 @@ Run each step in order from the repo root on the demo machine. Steps 1–4 are o
 
 What keeps working with **no internet**:
 
-- **Everything seeded** — cached personas, studies, transcripts, and evidence render from Postgres; the UI labels them `CACHED`. Steps 5–7 and 9 of the walkthrough run unchanged.
+- **Everything seeded** — the cached persona, the four studies, the decision report and its evidence render from Postgres; the UI labels them `CACHED`. Steps 5–7 and 9 of the walkthrough run unchanged. (No interview transcripts are seeded — those come from a live run.)
 - **Live generation** falls back through the routing ladder: remote pools fail fast (connection errors → cooldowns) and the `local` / `emergency` pools serve via **Ollama** (`llama3.2:3b` primary, `qwen3:4b` secondary — both fit the 4 GB dev GPU). Requires the Ollama daemon: `ollama serve`, verify with `ollama list`.
 - **Without Ollama**, live generation fails **explicitly** (`AllCandidatesFailed` surfaced as an error turn in the chat UI) — never silently, and cached content is unaffected. Low quality or unavailability is reported, not masked (R2).
 

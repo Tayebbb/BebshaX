@@ -83,7 +83,10 @@ class Settings(BaseSettings):
     jwt_issuer: str = "bebshax-api"
     jwt_audience: str = "bebshax-client"
     jwt_algorithm: str = "HS256"
-    jwt_expire_days: int = 7
+    # 1 day, not 7: there is no revocation list, so a leaked token is valid
+    # until it expires. Chosen over jti-based revocation because that needs a
+    # new table, a migration and a check on every request.
+    jwt_expire_days: int = 1
 
     neon_auth_url: str = "https://ep-cold-star-azazjakq.neonauth.c-3.ap-southeast-1.aws.neon.tech/neondb/auth"
 

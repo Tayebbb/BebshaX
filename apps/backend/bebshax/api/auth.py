@@ -249,6 +249,10 @@ def _is_dt_expired(expires_at: datetime) -> bool:
 
 class VerifyEmailRequest(BaseModel):
     token: str
+    # Binds the 6-digit OTP to the account it was issued for. Optional because
+    # the shipped client posts the code alone; when supplied, a code guessed
+    # for one account can no longer verify a different one.
+    email: Optional[str] = None
 
 
 @auth_router.post("/verify-email")
@@ -284,6 +288,14 @@ async def verify_email(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found.",
+        )
+
+    if payload.email and payload.email.strip().lower() != (user.email or "").lower():
+        # Same reply as an unknown code: never confirm that a code is live for
+        # some *other* account.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification token.",
         )
 
     user.is_verified = True

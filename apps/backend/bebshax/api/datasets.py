@@ -11,7 +11,7 @@ from pydantic import BaseModel, HttpUrl
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from bebshax.api.auth import get_optional_current_user
+from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.deps import user_can_write_study, user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
@@ -177,17 +177,24 @@ async def list_datasets(
 
 
 @router.post("/datasets/url", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/hour")
 async def ingest_dataset_url(
+    request: Request,
     payload: IngestUrlRequest,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
-    """Fetch external dataset from URL with SSRF validation, parse, profile, and derive segments."""
+    """Fetch external dataset from URL with SSRF validation, parse, profile, and derive segments.
+
+    Authenticated only: an anonymously ingested dataset was stamped with the
+    shared anonymous tenant, which is a world-readable pool — so one visitor's
+    upload became every other visitor's to read.
+    """
     # A study id in the BODY is exactly as sensitive as one in the path: without
     # this gate the route was an unauthenticated cross-tenant write.
     if payload.study_id:
         await _verify_study_access_via_service(payload.study_id, current_user, service, write=True)
-    user_id = current_user.id if current_user else None
+    user_id = current_user.id
     try:
         ds = await service.ingest_from_url(
             url=payload.url,
@@ -218,17 +225,20 @@ async def upload_dataset_file(
     description: Optional[str] = Form(None),
     study_id: Optional[str] = Form(None),
     file_type: Optional[str] = Form(None),
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
-    """Upload a dataset file (CSV, JSON, TSV, XLSX) to profile and derive segments."""
+    """Upload a dataset file (CSV, JSON, TSV, XLSX) to profile and derive segments.
+
+    Authenticated only — see ``ingest_dataset_url`` for why.
+    """
     # Same gate as the path-based upload route — a form-supplied study id must
     # not be a way around it.
     if study_id:
         await _verify_study_access_via_service(study_id, current_user, service, write=True)
     content = await _read_upload_or_413(file, request)
 
-    user_id = current_user.id if current_user else None
+    user_id = current_user.id
     try:
         ds = await service.ingest_from_upload(
             content=content,
@@ -399,16 +409,18 @@ async def list_study_datasets(
 
 
 @router.post("/studies/{study_id}/datasets/url", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/hour")
 async def ingest_study_dataset_url(
     study_id: str,
+    request: Request,
     payload: IngestUrlRequest,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     session: AsyncSession = Depends(_get_session),
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
     """Ingest external dataset URL directly into a specific study."""
     await _verify_study_access(study_id, current_user, session, write=True)
-    user_id = current_user.id if current_user else None
+    user_id = current_user.id
     try:
         ds = await service.ingest_from_url(
             url=payload.url,
@@ -438,7 +450,7 @@ async def upload_study_dataset_file(
     name: str = Form(...),
     description: Optional[str] = Form(None),
     file_type: Optional[str] = Form(None),
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     session: AsyncSession = Depends(_get_session),
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
@@ -446,7 +458,7 @@ async def upload_study_dataset_file(
     await _verify_study_access(study_id, current_user, session, write=True)
     content = await _read_upload_or_413(file, request)
 
-    user_id = current_user.id if current_user else None
+    user_id = current_user.id
     try:
         ds = await service.ingest_from_upload(
             content=content,

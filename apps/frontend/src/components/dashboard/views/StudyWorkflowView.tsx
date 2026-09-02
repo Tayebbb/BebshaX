@@ -18,7 +18,7 @@ import { Step3Script } from './workflow/Step3Script';
 import { Step4Interviews } from './workflow/Step4Interviews';
 import { Step5Report } from './workflow/Step5Report';
 import { PersonaDetailModal } from './workflow/PersonaDetailModal';
-import { EvidenceProbe, RESEARCH_IN_FLIGHT } from './workflow/evidenceProbe';
+import { EvidenceProbe, nextEvidenceProbe } from './workflow/evidenceProbe';
 
 interface StudyWorkflowViewProps {
   studyId?: string;
@@ -240,23 +240,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       try {
         const summary = await api.getEvidenceSummary(studyId);
         if (!evidenceProbeAliveRef.current) return;
-        const run = summary?.latest_run;
-        if ((summary?.total_claims ?? 0) > 0) {
-          setEvidenceProbe({
-            state: 'found',
-            claims: summary.total_claims,
-            sources: summary.total_sources ?? 0,
-          });
-          return;
+        const next = nextEvidenceProbe(summary, attemptsLeft);
+        setEvidenceProbe(next);
+        if (next.state === 'searching') {
+          evidenceProbeTimerRef.current = setTimeout(() => probeEvidence(attemptsLeft - 1), 6000);
         }
-        if (run && RESEARCH_IN_FLIGHT.includes(run.status)) {
-          setEvidenceProbe({ state: 'searching' });
-          if (attemptsLeft > 0) {
-            evidenceProbeTimerRef.current = setTimeout(() => probeEvidence(attemptsLeft - 1), 6000);
-          }
-          return;
-        }
-        setEvidenceProbe({ state: run ? 'empty' : 'not_run' });
       } catch {
         if (evidenceProbeAliveRef.current) setEvidenceProbe({ state: 'unavailable' });
       }

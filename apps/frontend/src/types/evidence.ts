@@ -8,14 +8,19 @@ export type EvidenceCategory =
   | 'complaints'
   | 'general';
 
+/** Exactly the values the backend can put on a research run.
+ * `idle` is synthesised by GET /evidence/summary when no run exists; the rest
+ * come from ResearchRuns.status (bebshax/db/models.py) as written by
+ * ResearchEngineService.run_full_research (bebshax/research/service.py). */
 export type ResearchStatus =
   | 'idle'
   | 'pending'
-  | 'planning'
+  | 'understanding_idea'
+  | 'building_research_plan'
+  | 'searching_evidence'
   | 'discovering_datasets'
-  | 'generating_queries'
-  | 'collecting_sources'
-  | 'processing_chunks'
+  | 'evaluating_datasets'
+  | 'importing_datasets'
   | 'extracting_evidence'
   | 'completed'
   | 'failed';

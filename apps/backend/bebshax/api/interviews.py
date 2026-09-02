@@ -169,6 +169,31 @@ async def _get_study_and_verify_access(
     return study
 
 
+def _require_interview_in_study(
+    conversation: Optional[Conversations],
+    study_id: str,
+    current_user: Optional[Users],
+    *,
+    write: bool = False,
+) -> Conversations:
+    """Scope an interview row to its study.
+
+    The parent comparison is UNCONDITIONAL. It used to be guarded by
+    ``conversation.study_id and ...``, so a row with a NULL/empty ``study_id``
+    skipped the check entirely and was accepted under *any* study id.
+
+    ``write=True`` additionally applies the strict write predicate to the row's
+    own tenant stamp, mirroring ``_guard_legacy_conversation``.
+    """
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    if conversation.study_id != study_id:
+        raise HTTPException(status_code=403, detail="Interview does not belong to this study")
+    if write and not owner_can_write(conversation.user_id, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to modify this interview")
+    return conversation
+
+
 # ============================================================================
 # Study-Scoped Interview Endpoints
 # ============================================================================
@@ -188,8 +213,11 @@ async def start_study_persona_interview(
     persona = await session.get(Personas, persona_id)
     if not persona:
         raise HTTPException(status_code=404, detail="Persona not found")
-    if persona.study_id and persona.study_id != study_id:
+    # Unconditional: a NULL study_id must not read as "belongs to every study".
+    if persona.study_id != study_id:
         raise HTTPException(status_code=403, detail="Persona does not belong to this study")
+    if not owner_can_write(persona.owner_id, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to interview this persona")
 
     user_id = current_user.id if current_user else None
     try:
@@ -307,11 +335,9 @@ async def get_study_interview_detail(
     """Get full interview detail including transcript, topics, and structured insights."""
     await _get_study_and_verify_access(session, study_id, current_user)
 
-    conversation = await session.get(Conversations, interview_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    if conversation.study_id and conversation.study_id != study_id:
-        raise HTTPException(status_code=403, detail="Interview does not belong to this study")
+    conversation = _require_interview_in_study(
+        await session.get(Conversations, interview_id), study_id, current_user
+    )
 
     persona = await session.get(Personas, conversation.persona_id)
 
@@ -353,11 +379,9 @@ async def post_study_interview_message(
     """Submit a researcher question and receive the adaptive persona response."""
     await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
-    conversation = await session.get(Conversations, interview_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    if conversation.study_id and conversation.study_id != study_id:
-        raise HTTPException(status_code=403, detail="Interview does not belong to this study")
+    _require_interview_in_study(
+        await session.get(Conversations, interview_id), study_id, current_user, write=True
+    )
 
     text = body.content or body.message
     if not text or not text.strip():
@@ -432,11 +456,9 @@ async def post_study_interview_message_stream(
     reply + provenance). Errors after headers are sent arrive as `error` events."""
     await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
-    conversation = await session.get(Conversations, interview_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    if conversation.study_id and conversation.study_id != study_id:
-        raise HTTPException(status_code=403, detail="Interview does not belong to this study")
+    _require_interview_in_study(
+        await session.get(Conversations, interview_id), study_id, current_user, write=True
+    )
 
     text = body.content or body.message
     if not text or not text.strip():
@@ -507,11 +529,9 @@ async def complete_study_interview(
     """Finish the interview, extract structured insights with turn provenance, and generate executive summary."""
     await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
-    conversation = await session.get(Conversations, interview_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    if conversation.study_id and conversation.study_id != study_id:
-        raise HTTPException(status_code=403, detail="Interview does not belong to this study")
+    _require_interview_in_study(
+        await session.get(Conversations, interview_id), study_id, current_user, write=True
+    )
 
     try:
         synthesis = await request.app.state.interview_engine.complete(interview_id)
@@ -531,11 +551,9 @@ async def get_study_interview_insights(
     """List structured insights extracted from this interview."""
     await _get_study_and_verify_access(session, study_id, current_user)
 
-    conversation = await session.get(Conversations, interview_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    if conversation.study_id and conversation.study_id != study_id:
-        raise HTTPException(status_code=403, detail="Interview does not belong to this study")
+    _require_interview_in_study(
+        await session.get(Conversations, interview_id), study_id, current_user
+    )
 
     stmt = select(InterviewInsights).where(InterviewInsights.interview_id == interview_id)
     insights = list((await session.execute(stmt)).scalars())

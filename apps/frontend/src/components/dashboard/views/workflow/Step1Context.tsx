@@ -68,6 +68,12 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
           ? ` from ${evidenceProbe.sources} source${evidenceProbe.sources === 1 ? '' : 's'}`
           : '') +
         ' — personas can cite them.'
+      : evidenceProbe.state === 'failed'
+      ? `The evidence research run failed${
+          evidenceProbe.message ? ` (${evidenceProbe.message})` : ''
+        } — nothing was collected, so personas will be inferred from your description. Retry it in the Evidence Laboratory.`
+      : evidenceProbe.state === 'timeout'
+      ? 'Still searching — this can take a few minutes. Check the Evidence Laboratory.'
       : evidenceProbe.state === 'empty'
       ? 'No evidence found — personas will be inferred from your description.'
       : evidenceProbe.state === 'not_run'

@@ -34,6 +34,34 @@ def client():
     return TestClient(app)
 
 
+def _seeded_user_headers(user_id: str) -> dict[str, str]:
+    """Insert a user and return its bearer header — dataset ingestion is
+    authenticated now, so size/shape probes need a real token."""
+    import asyncio
+
+    from bebshax.auth.models import Users
+    from bebshax.auth.security import create_access_token
+
+    async def run():
+        sm = app.state.db_sessionmaker
+        async with sm() as session:
+            if await session.get(Users, user_id) is None:
+                session.add(
+                    Users(
+                        id=user_id,
+                        email=f"{user_id}@example.com",
+                        full_name=user_id,
+                        auth_provider="email",
+                        is_active=True,
+                        is_verified=True,
+                    )
+                )
+                await session.commit()
+
+    asyncio.run(run())
+    return {"Authorization": f"Bearer {create_access_token({'sub': user_id})}"}
+
+
 def test_user_enumeration_endpoint_is_gone(client):
     """GET /api/auth/users used to return every account's email to any logged-in user."""
     assert client.get("/api/auth/users").status_code == 404
@@ -146,6 +174,29 @@ def test_demo_studies_are_readable_but_not_writable_by_anonymous_callers(client)
     asyncio.run(unchanged())
 
 
+def test_dataset_ingestion_requires_authentication(client):
+    """Anonymous uploads were stamped with the shared anonymous tenant, whose
+    rows are world-readable — one visitor's file became every visitor's."""
+    anon_upload = client.post(
+        "/api/datasets/upload",
+        files={"file": ("x.csv", b"a,b\n1,2\n", "text/csv")},
+        data={"name": "Anon"},
+    )
+    assert anon_upload.status_code == 401
+    anon_url = client.post(
+        "/api/datasets/url",
+        json={"url": "https://example.invalid/x.csv", "name": "Anon"},
+    )
+    assert anon_url.status_code == 401
+
+
+def test_unauthenticated_llm_spend_endpoints_require_a_token(client):
+    """suggest-roles makes a real LLM call; anonymous access was free spend."""
+    assert client.post(
+        "/api/study/suggest-roles", json={"study_prompt": "probe"}
+    ).status_code == 401
+
+
 def test_dataset_upload_enforces_the_shared_size_ceiling(client):
     """The 25 MB cap used on the URL-fetch path must also bound raw uploads."""
     from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
@@ -156,14 +207,18 @@ def test_dataset_upload_enforces_the_shared_size_ceiling(client):
         "/api/datasets/upload",
         files={"file": ("big.csv", oversized, "text/csv")},
         data={"name": "Oversized"},
+        headers=_seeded_user_headers("usr_size_ceiling"),
     )
     assert resp.status_code == 413
 
 
 def test_unauthenticated_llm_and_upload_endpoints_are_rate_limited():
-    """These accept anonymous callers and either spend LLM budget or accept
-    bulk bytes — each must carry an explicit limit like its siblings."""
+    """These either spend LLM budget or accept bulk bytes / make outbound
+    fetches — each must carry an explicit limit like its siblings."""
     from bebshax.api.limiter import limiter
+
+    def _limit_str(qualified: str) -> str:
+        return str(limiter._route_limits[qualified][0].limit)
 
     for qualified in (
         "bebshax.api.copilot.generate_study_personas",
@@ -171,6 +226,14 @@ def test_unauthenticated_llm_and_upload_endpoints_are_rate_limited():
         "bebshax.api.datasets.upload_study_dataset_file",
     ):
         assert limiter._route_limits.get(qualified), f"{qualified} must be rate-limited"
+
+    # URL ingestion performs an outbound fetch, so it is at least as expensive
+    # as an upload and is pinned to the same budget.
+    assert "10 per 1 hour" in _limit_str("bebshax.api.datasets.ingest_dataset_url")
+    assert "10 per 1 hour" in _limit_str("bebshax.api.datasets.ingest_study_dataset_url")
+    assert "10 per 1 hour" in _limit_str("bebshax.api.datasets.upload_dataset_file")
+    assert "10 per 1 hour" in _limit_str("bebshax.api.datasets.upload_study_dataset_file")
+    assert "30 per 1 minute" in _limit_str("bebshax.api.copilot.suggest_persona_roles")
 
 
 def test_signup_limits_survive_a_shared_nat_venue():

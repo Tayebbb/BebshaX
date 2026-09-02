@@ -153,13 +153,15 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
                 prompt="Student academic planner with automated study group scheduling",
                 status="completed",
                 step=5,
-                persona_count=3,
+                # Only per_sarah_01 is seeded, and no conversation rows exist —
+                # the walkthrough study must not claim personas or interviews
+                # that a judge can then fail to find.
+                persona_count=1,
                 persona_ids=["per_sarah_01"],
                 is_demo=True,
-                duration_text="Completed • 3 Personas interviewed",
+                duration_text="Completed • Decision report ready",
                 findings={
-                    "executive_summary": "[Simulated demo data] Study script ran on synthetic personas; numbers are illustrative, not measured.",
-                    "demand_signal": "High",
+                    "executive_summary": "[Simulated demo data] Decision report written from the seeded demo persona; no interviews were run and no number here is measured.",
                 },
             ),
             Studies(
@@ -218,31 +220,31 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
                 version=1,
                 title="Customer Discovery Study — Decision Report",
                 executive_summary=(
-                    "[Simulated demo data] Three synthetic personas were interviewed about a "
-                    "student academic planner with automated study-group scheduling. Every number "
-                    "below is model-estimated from those synthetic transcripts, not measured with "
-                    "real customers."
+                    "[Simulated demo data] A decision report for a student academic planner with "
+                    "automated study-group scheduling, written from the one seeded demo persona. "
+                    "No interviews were conducted for this study and nothing below is measured — "
+                    "it exists so the report view can be walked through end to end."
                 ),
                 key_findings=[
-                    "Schedule fragmentation across class, work and study-group commitments was the "
-                    "most repeated friction point.",
-                    "Willingness to pay clustered at the low end; personas expected a free tier "
-                    "before committing to a monthly fee.",
-                    "Automated group scheduling only landed once personas were shown it would not "
-                    "expose their calendar to classmates.",
+                    "Schedule fragmentation across class, work and study-group commitments is the "
+                    "friction this study set out to explore.",
+                    "Pricing expectations are untested: no willingness-to-pay evidence was collected.",
+                    "Calendar privacy is an open question that the seeded persona raises but does "
+                    "not answer.",
                 ],
                 major_risks=[
-                    "Findings come from synthetic interviews and must be re-tested with real students.",
+                    "Nothing here has been tested with real students, or with synthetic interviews — "
+                    "this is seeded walkthrough content only.",
                 ],
                 recommendations=[
+                    "Run the study for real: generate personas, interview them, then regenerate this report.",
                     "Validate the scheduling friction with a short survey of real students before building.",
-                    "Lead onboarding with the privacy boundary, not the automation.",
                 ],
                 limitations=(
-                    "Simulated demo content seeded for the walkthrough. No real respondents were "
-                    "interviewed and no claim here is evidence-backed."
+                    "Simulated demo content seeded for the walkthrough. No respondents — real or "
+                    "synthetic — were interviewed and no claim here is evidence-backed."
                 ),
-                metrics={"total_personas": 3, "total_interviews": 3},
+                metrics={"total_personas": 1, "total_interviews": 0},
                 is_synthetic=True,
             )
         )
@@ -316,6 +318,15 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
             data_source=DATA_SOURCE_CACHED,
             # H3 piece 2: seeded demo content must never present as live output.
         )
+        # study_demo_01 lists persona_ids=[per_sarah_01]; the persona row has to
+        # actually carry that study id or the study-scoped list returns nothing
+        # and the study's own persona_count becomes an unsupported claim.
+        # owner_id stays with the system holder so the demo stays world-readable.
+        seeded = await session.get(Personas, profile.id)
+        if seeded is not None:
+            seeded.study_id = "study_demo_01"
+            seeded.user_id = "usr_sarah_founder"
+            await session.commit()
         logger.info("Demo persona seed complete.")
     return True
 

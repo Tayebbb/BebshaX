@@ -1,14 +1,13 @@
 """End-to-end integration tests for Dataset Sources API and grounded persona generation."""
 
-import io
-import pytest
-from httpx import ASGITransport, AsyncClient
-
-from bebshax.main import app
+from fastapi.testclient import TestClient
 
 
-@pytest.mark.asyncio
-async def test_datasets_upload_profiling_and_persona_generation_flow():
+def test_datasets_upload_profiling_and_persona_generation_flow(
+    api_test_app: TestClient, auth_headers
+):
+    """Ingestion is authenticated now: an anonymous upload used to be stamped
+    with the shared anonymous tenant, which every other visitor can read."""
     csv_bytes = b"""student_id,name,role,age,monthly_budget,tech_level
 1,Rahim,Student,21,350,Medium
 2,Karim,Student,22,400,High
@@ -16,49 +15,60 @@ async def test_datasets_upload_profiling_and_persona_generation_flow():
 4,Tariq,Professional,28,1200,High
 5,Farzana,Professional,32,1500,High
 """
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # 1. Upload dataset
-        files = {"file": ("students.csv", csv_bytes, "text/csv")}
-        data = {"name": "Bangladesh Student & Pro Survey 2026", "description": "Student budget validation survey"}
-        res = await client.post("/api/datasets/upload", files=files, data=data)
-        assert res.status_code == 201
-        created = res.json()
-        ds_id = created["id"]
-        assert created["name"] == "Bangladesh Student & Pro Survey 2026"
-        assert created["row_count"] == 5
-        assert created["column_count"] == 6
-        assert len(created["segments"]) >= 1
+    # 0. Anonymous ingestion is refused outright.
+    anon = api_test_app.post(
+        "/api/datasets/upload",
+        files={"file": ("students.csv", csv_bytes, "text/csv")},
+        data={"name": "Anonymous attempt"},
+    )
+    assert anon.status_code == 401
 
-        # 2. Get dataset by ID
-        res = await client.get(f"/api/datasets/{ds_id}")
-        assert res.status_code == 200
-        fetched = res.json()
-        assert fetched["id"] == ds_id
-        assert "schema_metadata" in fetched
-        assert "statistics" in fetched
-        assert "segments" in fetched
+    # 1. Upload dataset
+    files = {"file": ("students.csv", csv_bytes, "text/csv")}
+    data = {"name": "Bangladesh Student & Pro Survey 2026", "description": "Student budget validation survey"}
+    res = api_test_app.post("/api/datasets/upload", files=files, data=data, headers=auth_headers)
+    assert res.status_code == 201
+    created = res.json()
+    ds_id = created["id"]
+    assert created["name"] == "Bangladesh Student & Pro Survey 2026"
+    assert created["row_count"] == 5
+    assert created["column_count"] == 6
+    assert len(created["segments"]) >= 1
 
-        # 3. List datasets
-        res = await client.get("/api/datasets")
-        assert res.status_code == 200
-        all_ds = res.json()
-        assert any(d["id"] == ds_id for d in all_ds)
+    # 2. Get dataset by ID
+    res = api_test_app.get(f"/api/datasets/{ds_id}", headers=auth_headers)
+    assert res.status_code == 200
+    fetched = res.json()
+    assert fetched["id"] == ds_id
+    assert "schema_metadata" in fetched
+    assert "statistics" in fetched
+    assert "segments" in fetched
 
-        # 4. Generate grounded personas from dataset
-        gen_res = await client.post(
-            f"/api/datasets/{ds_id}/generate-personas",
-            json={"requested_count": 4, "business_name": "Price Tracker"},
-        )
-        assert gen_res.status_code == 200
-        gen_data = gen_res.json()
-        assert gen_data["requested_count"] == 4
-        assert gen_data["generated_count"] == 4
-        assert len(gen_data["personas"]) == 4
-        assert "distribution" in gen_data
-        assert "validation_summary" in gen_data
+    # 3. List datasets
+    res = api_test_app.get("/api/datasets", headers=auth_headers)
+    assert res.status_code == 200
+    assert any(d["id"] == ds_id for d in res.json())
 
-        # 5. Deleting is a write: the shared pool is readable by everyone but
-        # destroyable only by the row's authenticated owner, so this anonymous
-        # upload can no longer be deleted by the next anonymous visitor.
-        del_res = await client.delete(f"/api/datasets/{ds_id}")
-        assert del_res.status_code == 404
+    # 3b. The uploader's dataset is NOT in the anonymous shared read pool.
+    anon_list = api_test_app.get("/api/datasets")
+    assert anon_list.status_code == 200
+    assert all(d["id"] != ds_id for d in anon_list.json())
+    assert api_test_app.get(f"/api/datasets/{ds_id}").status_code == 404
+
+    # 4. Generate grounded personas from dataset
+    gen_res = api_test_app.post(
+        f"/api/datasets/{ds_id}/generate-personas",
+        json={"requested_count": 4, "business_name": "Price Tracker"},
+        headers=auth_headers,
+    )
+    assert gen_res.status_code == 200
+    gen_data = gen_res.json()
+    assert gen_data["requested_count"] == 4
+    assert gen_data["generated_count"] == 4
+    assert len(gen_data["personas"]) == 4
+    assert "distribution" in gen_data
+    assert "validation_summary" in gen_data
+
+    # 5. Deleting is a write: only the row's authenticated owner may destroy it.
+    assert api_test_app.delete(f"/api/datasets/{ds_id}").status_code == 404
+    assert api_test_app.delete(f"/api/datasets/{ds_id}", headers=auth_headers).status_code == 200

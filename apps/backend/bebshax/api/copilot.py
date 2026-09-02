@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from bebshax.api.auth import get_optional_current_user
+from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.deps import user_can_write_study, user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
@@ -489,8 +489,16 @@ async def study_design_copilot(
 
 @router.post("/study/suggest-roles", response_model=list[PersonaRoleSuggestion])
 @limiter.limit("30/minute")
-async def suggest_persona_roles(body: SuggestRolesRequest, request: Request) -> list[PersonaRoleSuggestion]:
-    """Generates suggested persona roles for any research study context via LLM."""
+async def suggest_persona_roles(
+    body: SuggestRolesRequest,
+    request: Request,
+    current_user: Users = Depends(get_current_user),
+) -> list[PersonaRoleSuggestion]:
+    """Generates suggested persona roles for any research study context via LLM.
+
+    Authenticated only: this spends real LLM budget and is only ever reached
+    from the signed-in study workflow, so anonymous access was pure exposure.
+    """
     llm_router = getattr(request.app.state, "llm_router", None)
 
     if llm_router is not None:

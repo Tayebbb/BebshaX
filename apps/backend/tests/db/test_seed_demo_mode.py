@@ -85,3 +85,63 @@ async def test_ensure_shared_tenant_users_is_idempotent(memory_sessionmaker):
             )
         ).scalar_one()
         assert count == len(PUBLIC_OWNER_IDS)
+
+
+@pytest.mark.asyncio
+async def test_demo_study_claims_match_the_rows_actually_seeded(monkeypatch, memory_sessionmaker):
+    """study_demo_01 is what the "see a finished example study" link opens.
+
+    It used to advertise "3 Personas interviewed" and metrics of 3 interviews
+    while no conversation row existed for it — the honesty thesis broken on the
+    product's own demo fixture.
+    """
+    from bebshax.config import Settings
+    from bebshax.db.models import Personas, Studies, StudyReports
+    from bebshax.interview.orm import Conversations
+
+    monkeypatch.setattr(
+        "bebshax.config.get_settings",
+        lambda: Settings(demo_mode=True, jwt_secret="test_secret_at_least_32_characters_long_12345"),
+    )
+    assert await seed_demo_data(memory_sessionmaker) is True
+
+    async with memory_sessionmaker() as session:
+        study = await session.get(Studies, "study_demo_01")
+        personas = list(
+            (
+                await session.execute(
+                    select(Personas).where(Personas.study_id == "study_demo_01")
+                )
+            ).scalars()
+        )
+        interviews = (
+            await session.execute(
+                select(func.count())
+                .select_from(Conversations)
+                .where(Conversations.study_id == "study_demo_01")
+            )
+        ).scalar() or 0
+        report = (
+            await session.execute(
+                select(StudyReports).where(StudyReports.study_id == "study_demo_01")
+            )
+        ).scalars().first()
+
+    assert study is not None and study.is_demo is True
+    assert study.persona_count == len(personas)
+    assert sorted(study.persona_ids or []) == sorted(p.id for p in personas)
+    assert report is not None
+    assert report.metrics["total_personas"] == len(personas)
+    assert report.metrics["total_interviews"] == interviews
+
+    prose = " ".join(
+        [
+            study.duration_text or "",
+            (study.findings or {}).get("executive_summary", ""),
+            report.executive_summary or "",
+            *(report.key_findings or []),
+        ]
+    ).lower()
+    if interviews == 0:
+        assert "interviewed" not in prose
+        assert "were interviewed" not in prose

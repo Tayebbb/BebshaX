@@ -169,3 +169,69 @@ async def test_interview_metrics_aggregation_matches_counting(tmp_path, monkeypa
     assert data["completed_interviews"] == 3
 
 
+@pytest.mark.asyncio
+async def test_parentless_rows_are_rejected_not_silently_accepted(tmp_path, monkeypatch):
+    """The study-scoping guards used to read ``if row.study_id and row.study_id != study_id``.
+
+    A row whose ``study_id`` is NULL skipped the comparison entirely and was
+    therefore accepted under ANY study id — read *and* write. These fixtures are
+    exactly that shape.
+    """
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'null_parent.db'}"
+    monkeypatch.setenv("BEBSHAX_DATABASE_URL", db_url)
+    get_settings.cache_clear()
+
+    engine = create_async_engine(db_url)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with maker() as session:
+        session.add_all([
+            Users(id="usr_np", email="np@example.com", hashed_password="pw", full_name="NP"),
+            Studies(id="std_np", user_id="usr_np", title="Own Study", status="in_progress"),
+            # Both children are parentless: study_id is NULL.
+            Personas(id="per_np", study_id=None, user_id="usr_np", owner_id="usr_np",
+                     name="Orphan Persona", version=1),
+            Conversations(id="conv_np", study_id=None, user_id="usr_np", persona_id="per_np",
+                          objective="Orphan", status="active"),
+            # Positive control: correctly parented, same owner.
+            Personas(id="per_ok", study_id="std_np", user_id="usr_np", owner_id="usr_np",
+                     name="Parented Persona", version=1),
+        ])
+        await session.commit()
+    await engine.dispose()
+
+    from bebshax.main import create_app
+    app = create_app()
+    headers = {"Authorization": f"Bearer {create_access_token({'sub': 'usr_np', 'email': 'np@example.com'})}"}
+
+    adapter = FakeAdapter([FakeRoute(candidate=RouteCandidate(provider="fake", model="m1"), replies=["Hi"])])
+    app.state.db_sessionmaker = maker
+    app.state.interview_engine = InterviewEngine(SingleAdapterLLMService(adapter), maker, memory=None)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Reads: the orphan must not surface under a study it has no link to.
+        assert (await client.get("/api/studies/std_np/interviews/conv_np", headers=headers)).status_code == 403
+        assert (await client.get("/api/studies/std_np/interviews/conv_np/insights", headers=headers)).status_code == 403
+        # Writes: and it must certainly not be mutable through one.
+        assert (await client.post(
+            "/api/studies/std_np/interviews/conv_np/messages",
+            json={"content": "probe"}, headers=headers,
+        )).status_code == 403
+        assert (await client.post(
+            "/api/studies/std_np/interviews/conv_np/complete", headers=headers,
+        )).status_code == 403
+        assert (await client.post(
+            "/api/studies/std_np/personas/per_np/interviews",
+            json={"objective": "probe"}, headers=headers,
+        )).status_code == 403
+
+        # The owner's own, correctly parented persona still works end to end.
+        start = await client.post(
+            "/api/studies/std_np/personas/per_ok/interviews",
+            json={"objective": "probe"}, headers=headers,
+        )
+        assert start.status_code == 201
+
+
