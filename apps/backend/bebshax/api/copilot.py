@@ -405,7 +405,7 @@ def _make_roles(role_specs: list[tuple]) -> list[PersonaRoleSuggestion]:
 async def study_design_copilot(
     body: CopilotRequest,
     request: Request,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
 ) -> CopilotResponse:
     """Conversational study design copilot running through FreeLLMpool/OpenRouter with fallback."""
     # A study id in the body is a tenant-owned reference: read gate (this route
@@ -672,7 +672,7 @@ async def _generate_persona_via_llm(
 async def generate_study_personas(
     body: GeneratePersonasRequest,
     request: Request,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
     """Generates and grounds synthetic personas conditioned on study prompt and selected roles via LLM."""
     # Ownership gate BEFORE any LLM spend or writes: a client-supplied

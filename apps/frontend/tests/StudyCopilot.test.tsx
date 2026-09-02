@@ -5,9 +5,11 @@ import { StudyWorkflowView } from '../src/components/dashboard/views/StudyWorkfl
 import { api } from '../src/services/api';
 
 describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Generation', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     api.setMockMode(true);
-    api.resetMockStore();
+    // resetMockStore defers the store reset behind a dynamic import — not awaiting
+    // it lets the previous test's data leak into this one under parallel load.
+    await api.resetMockStore();
     vi.restoreAllMocks();
   });
 

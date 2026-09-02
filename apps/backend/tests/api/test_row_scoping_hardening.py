@@ -229,7 +229,9 @@ async def test_copilot_generate_personas_refuses_foreign_study(scoped_app):
             "/api/study/generate-personas",
             json={"study_prompt": "probe", "roles": [], "study_id": "std_owned"},
         )
-        assert res.status_code == 404
+        # 401: the endpoint now requires a token, so an anonymous caller is
+        # refused before the ownership gate is even reached.
+        assert res.status_code in (401, 403, 404)
     async with maker() as session:
         rows = (await session.execute(select(Personas).where(Personas.study_id == "std_owned"))).scalars().all()
         assert [p.id for p in rows] == ["per_owned"]  # nothing injected
