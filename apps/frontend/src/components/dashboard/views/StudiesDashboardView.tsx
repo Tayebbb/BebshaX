@@ -108,15 +108,13 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   const regularStudies = filteredStudies.filter((s) => !s.is_demo);
 
   // The blurb may only name what the demo study actually carries: the report is
-  // guaranteed by findExampleStudy, personas and interviews are not.
+  // guaranteed by findExampleStudy, personas are not. (The study list never
+  // serializes interviews, so they are never advertised.)
   const demoOffers = demoStudy
     ? [
         'a finished decision report',
         demoStudy.persona_count > 0
           ? `${demoStudy.persona_count} persona${demoStudy.persona_count === 1 ? '' : 's'}`
-          : null,
-        demoStudy.interviews && demoStudy.interviews.length > 0
-          ? `${demoStudy.interviews.length} interview${demoStudy.interviews.length === 1 ? '' : 's'}`
           : null,
       ].filter(Boolean)
     : [];

@@ -32,6 +32,64 @@ from bebshax.tenancy import PUBLIC_OWNER_IDS
 logger = logging.getLogger(__name__)
 
 
+def _workflow_persona_payload(profile: PersonaProfile, study_id: str) -> dict:
+    """Serialize the seeded persona into the shape ``Studies.personas_data``
+    carries — the JSON the 5-step workflow reads (the same contract
+    ``api/copilot.py`` persists after ``_apply_evidence_grounding``).
+
+    Honesty mirrors the copilot pipeline with zero retrieved study evidence:
+    nothing may claim OBSERVED (downgrade-only; SYNTHETIC is never upgraded)
+    and grounding is 0.0 with the ``no_evidence_retrieved`` basis.
+    """
+    attributes = []
+    for attr in profile.attributes:
+        title, _, rest = attr.value.partition(": ")
+        attributes.append(
+            {
+                "category": attr.key,
+                "title": title,
+                "description": rest or attr.value,
+                "provenance_class": (
+                    "SYNTHETIC"
+                    if attr.provenance_class is ProvenanceClass.SYNTHETIC
+                    else "INFERRED"
+                ),
+                "evidence": None,
+            }
+        )
+    return {
+        "id": profile.id,
+        "business_id": profile.business_id,
+        "study_id": study_id,
+        "name": profile.name,
+        "initials": "".join(p[0].upper() for p in profile.name.split()[:2]),
+        "country_code": "US",
+        "country_name": "United States",
+        "status": profile.status,
+        "version": profile.version,
+        "generation_model": profile.generation_model,
+        "data_source": DATA_SOURCE_CACHED,
+        "demographics": {
+            "age": profile.age,
+            "occupation": profile.occupation,
+            "location": profile.location,
+            "income_bracket": profile.income_range,
+            "education": profile.education,
+        },
+        "description": profile.description,
+        "attributes": attributes,
+        "consistency_score": 0.0,
+        "grounding_ratio": 0.0,
+        "grounding_basis": "no_evidence_retrieved",
+        "evidence_claim_count": 0,
+        "critic_notes": (
+            "Seeded demo persona — cached walkthrough content; "
+            "no study evidence was retrieved."
+        ),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 async def ensure_shared_tenant_users(sessionmaker_: sessionmaker[AsyncSession]) -> None:
     """Guarantee a users row for every shared owner id in PUBLIC_OWNER_IDS.
 
@@ -173,8 +231,10 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
                 prompt="Testing 250 BDT/month vs 500 BDT/month tier elasticity",
                 status="in_progress",
                 step=4,
-                persona_count=4,
-                persona_ids=["per_sarah_01"],
+                # per_sarah_01 is stamped study_id=study_demo_01, so THIS study
+                # has zero seeded persona rows — its counts must say so.
+                persona_count=0,
+                persona_ids=[],
                 is_demo=False,
                 duration_text="In Progress • Step 4 Interviews",
             ),
@@ -187,8 +247,9 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
                 prompt="Evaluating calendar sync vs exam deadline notifications",
                 status="in_progress",
                 step=2,
-                persona_count=2,
-                persona_ids=["per_sarah_01"],
+                # Same as demo_02: no persona rows are seeded for this study.
+                persona_count=0,
+                persona_ids=[],
                 is_demo=False,
                 duration_text="In Progress • Step 2 Personas",
             ),
@@ -241,8 +302,8 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
                     "Validate the scheduling friction with a short survey of real students before building.",
                 ],
                 limitations=(
-                    "Simulated demo content seeded for the walkthrough. No respondents — real or "
-                    "synthetic — were interviewed and no claim here is evidence-backed."
+                    "Simulated demo content seeded for the walkthrough. No interviews were run — "
+                    "with real or synthetic respondents — and no claim here is evidence-backed."
                 ),
                 metrics={"total_personas": 1, "total_interviews": 0},
                 is_synthetic=True,
@@ -326,6 +387,14 @@ async def seed_demo_data(sessionmaker_: sessionmaker[AsyncSession], force: bool 
         if seeded is not None:
             seeded.study_id = "study_demo_01"
             seeded.user_id = "usr_sarah_founder"
+            # The workflow view reads Studies.personas_data (no DB fallback);
+            # leaving it empty made Step 5 read "Synthesized from 0 synthetic
+            # personas" while the study card promised 1.
+            demo_study = await session.get(Studies, "study_demo_01")
+            if demo_study is not None:
+                demo_study.personas_data = [
+                    _workflow_persona_payload(profile, "study_demo_01")
+                ]
             await session.commit()
         logger.info("Demo persona seed complete.")
     return True

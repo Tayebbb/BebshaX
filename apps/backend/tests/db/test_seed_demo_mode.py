@@ -96,7 +96,7 @@ async def test_demo_study_claims_match_the_rows_actually_seeded(monkeypatch, mem
     product's own demo fixture.
     """
     from bebshax.config import Settings
-    from bebshax.db.models import Personas, Studies, StudyReports
+    from bebshax.db.models import EvidenceClaims, Personas, Studies, StudyReports
     from bebshax.interview.orm import Conversations
 
     monkeypatch.setattr(
@@ -121,15 +121,57 @@ async def test_demo_study_claims_match_the_rows_actually_seeded(monkeypatch, mem
                 .where(Conversations.study_id == "study_demo_01")
             )
         ).scalar() or 0
+        claim_count = (
+            await session.execute(
+                select(func.count())
+                .select_from(EvidenceClaims)
+                .where(EvidenceClaims.study_id == "study_demo_01")
+            )
+        ).scalar() or 0
         report = (
             await session.execute(
                 select(StudyReports).where(StudyReports.study_id == "study_demo_01")
             )
         ).scalars().first()
+        all_studies = list((await session.execute(select(Studies))).scalars())
+        persona_rows_by_study: dict[str, list[str]] = {}
+        for s in all_studies:
+            rows = list(
+                (
+                    await session.execute(
+                        select(Personas.id).where(Personas.study_id == s.id)
+                    )
+                ).scalars()
+            )
+            persona_rows_by_study[s.id] = rows
 
     assert study is not None and study.is_demo is True
     assert study.persona_count == len(personas)
     assert sorted(study.persona_ids or []) == sorted(p.id for p in personas)
+    # The workflow view renders Studies.personas_data (no DB fallback) — it
+    # must carry exactly the personas the card claims, or Step 5 reads
+    # "Synthesized from 0 synthetic personas" against a card promising 1.
+    assert len(study.personas_data or []) == study.persona_count
+    assert sorted(p["id"] for p in study.personas_data or []) == sorted(study.persona_ids or [])
+    # Honesty of the serialized payload: the demo study retrieved no evidence
+    # claims, so nothing in personas_data may claim measured grounding.
+    assert claim_count == 0
+    for entry in study.personas_data or []:
+        assert entry["grounding_ratio"] == 0.0
+        assert entry["grounding_basis"] == "no_evidence_retrieved"
+        assert all(
+            a["provenance_class"] != "OBSERVED" and a["evidence"] is None
+            for a in entry["attributes"]
+        )
+
+    # EVERY seeded study's claimed counts must match the rows actually seeded
+    # for it — demo_02/03 used to advertise 4+2 personas against 0 rows each.
+    for s in all_studies:
+        rows = persona_rows_by_study[s.id]
+        assert s.persona_count == len(rows), f"{s.id} claims {s.persona_count} personas, seeded {len(rows)}"
+        assert sorted(s.persona_ids or []) == sorted(rows), f"{s.id} persona_ids do not match seeded rows"
+        assert len(s.personas_data or []) <= s.persona_count
+
     assert report is not None
     assert report.metrics["total_personas"] == len(personas)
     assert report.metrics["total_interviews"] == interviews
@@ -140,6 +182,9 @@ async def test_demo_study_claims_match_the_rows_actually_seeded(monkeypatch, mem
             (study.findings or {}).get("executive_summary", ""),
             report.executive_summary or "",
             *(report.key_findings or []),
+            *(report.recommendations or []),
+            report.limitations or "",
+            *(report.major_risks or []),
         ]
     ).lower()
     if interviews == 0:

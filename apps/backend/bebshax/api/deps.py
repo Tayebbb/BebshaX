@@ -63,6 +63,33 @@ def owner_can_write(owner_id: Optional[str], current_user: Optional[Users]) -> b
     return _tenancy_owner_can_write(owner_id, current_user.id if current_user else None)
 
 
+READ_ONLY_STUDY_DETAIL = (
+    "This is a read-only example study — create your own study to make changes."
+)
+
+
+def require_study_access(
+    study: Optional[Studies],
+    current_user: Optional[Users],
+    *,
+    write: bool = False,
+    not_found_detail: str = "study not found",
+    read_only_detail: str = READ_ONLY_STUDY_DETAIL,
+) -> Studies:
+    """Shared study gate: 404 when the study is missing or the caller cannot
+    read it (existence never leaks); 403 when the caller can read it but may
+    not mutate it. A reader backtracking into a write action on the shared
+    demo must see "read-only", never a false "not found"."""
+    if study is None or not user_owns_study(study, current_user):
+        raise HTTPException(status_code=404, detail=not_found_detail)
+    if write and not user_can_write_study(study, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail=read_only_detail if study.is_demo else "Not authorized to modify this study",
+        )
+    return study
+
+
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
     if not sessionmaker:

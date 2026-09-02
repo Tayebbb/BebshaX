@@ -489,6 +489,64 @@ def test_demo_study_stays_readable_while_writes_are_closed(client):
     assert client.get("/api/studies/std_demo_read_ok/reports").status_code == 200
 
 
+def test_readable_demo_mutations_get_an_honest_403_not_a_false_404(client):
+    """A caller who is READING the demo and clicks a write action must be told
+    the study is read-only — "study not found" is factually wrong for a study
+    on their screen. Studies the caller cannot read at all stay 404 so
+    existence never leaks."""
+    from bebshax.auth.models import Users
+    from bebshax.db.models import Studies
+
+    _seed([
+        Users(
+            id="usr_ro_owner",
+            email="ro-owner@example.com",
+            full_name="Hidden Owner",
+            hashed_password="hash",
+            is_active=True,
+            is_verified=True,
+        ),
+        Studies(
+            id="std_demo_ro",
+            user_id="usr_system_holder",
+            title="Read-Only Demo",
+            status="completed",
+            is_demo=True,
+        ),
+        Studies(id="std_hidden_ro", user_id="usr_ro_owner", title="Hidden", status="draft"),
+    ])
+    headers = _seeded_user_headers("usr_ro_reader")
+
+    # Copilot generate-personas: the judge's backtrack-to-step-2 path.
+    demo_gen = client.post(
+        "/api/study/generate-personas",
+        json={"study_id": "std_demo_ro", "study_prompt": "probe", "roles": []},
+        headers=headers,
+    )
+    assert demo_gen.status_code == 403
+    assert "read-only example study" in demo_gen.json()["detail"]
+
+    # Study-scoped write gates converted to the same pattern.
+    demo_run = client.post(
+        "/api/studies/std_demo_ro/personas/generate",
+        json={"target_count": 1, "distribution_strategy": "equal"},
+        headers=headers,
+    )
+    assert demo_run.status_code == 403
+    assert "read-only example study" in demo_run.json()["detail"]
+
+    demo_research = client.post("/api/studies/std_demo_ro/research", headers=headers)
+    assert demo_research.status_code == 403
+
+    # A study the caller cannot read at all must stay a 404 (no existence leak).
+    hidden = client.post(
+        "/api/study/generate-personas",
+        json={"study_id": "std_hidden_ro", "study_prompt": "probe", "roles": []},
+        headers=headers,
+    )
+    assert hidden.status_code == 404
+
+
 def test_owner_keeps_full_write_access_to_their_own_study(client):
     """The tightened predicate must not lock legitimate owners out."""
     from bebshax.auth.models import Users

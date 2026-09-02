@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowRight, Check, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Send, Sparkles } from 'lucide-react';
 import { PersonaRoleSuggestion } from '../../../../types';
-import { CopilotMessage } from './types';
+import { CopilotMessage, READ_ONLY_TITLE } from './types';
 import { EvidenceProbe } from './evidenceProbe';
 
 /** Step 1 — conversational context gathering + role selection drawer. Pure
@@ -30,6 +30,11 @@ interface Step1ContextProps {
   handleDecrementRole: (roleId: string, e: React.MouseEvent) => void;
   evidenceProbe: EvidenceProbe;
   onNavigateToEvidence?: () => void;
+  /** Starts the evidence research run from the `not_run` state. The parent
+   * withholds it for read-only studies. */
+  onRunEvidence?: () => void;
+  /** Example (demo) studies are viewable but never mutable from here. */
+  isReadOnly?: boolean;
 }
 
 export const Step1Context: React.FC<Step1ContextProps> = ({
@@ -55,6 +60,8 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
   handleDecrementRole,
   evidenceProbe,
   onNavigateToEvidence,
+  onRunEvidence,
+  isReadOnly = false,
 }) => {
   const busy = evidenceProbe.state === 'checking' || evidenceProbe.state === 'searching';
   const evidenceLine =
@@ -115,6 +122,28 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                 <FlaskConical size={14} color="var(--accent-cyan)" />
               )}
               <span>{evidenceLine}</span>
+              {evidenceProbe.state === 'not_run' && onRunEvidence && (
+                <button
+                  type="button"
+                  onClick={onRunEvidence}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'var(--accent-subtle)',
+                    border: '1px solid var(--accent-teal)',
+                    borderRadius: '6px',
+                    padding: '3px 10px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: 'var(--accent-teal-bright)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <FlaskConical size={12} />
+                  Run evidence research
+                </button>
+              )}
               {onNavigateToEvidence && !busy && (
                 <button
                   type="button"
@@ -232,6 +261,8 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                       <button
                         type="button"
                         onClick={() => handleApproveGoal(msg.goalCardData?.summary)}
+                        disabled={isReadOnly}
+                        title={isReadOnly ? READ_ONLY_TITLE : undefined}
                         style={{
                           marginTop: '14px',
                           width: '100%',
@@ -244,7 +275,8 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                           color: showRoleSelection ? 'var(--accent-teal-bright)' : 'var(--bg-pure)',
                           fontWeight: 700,
                           fontSize: '0.85rem',
-                          cursor: 'pointer',
+                          cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                          opacity: isReadOnly ? 0.55 : 1,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -285,7 +317,13 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                 type="text"
                 value={step1Prompt}
                 onChange={(e) => setStep1Prompt(e.target.value)}
-                placeholder="Type here to answer or give more context..."
+                placeholder={
+                  isReadOnly
+                    ? 'Example study — read-only. Create your own study to chat with the copilot.'
+                    : 'Type here to answer or give more context...'
+                }
+                disabled={isReadOnly}
+                title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
                   flex: 1,
                   background: 'var(--bg-card)',
@@ -295,12 +333,14 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                   color: 'var(--text-main)',
                   fontSize: '0.9rem',
                   outline: 'none',
+                  opacity: isReadOnly ? 0.6 : 1,
                 }}
               />
               <button
                 type="submit"
                 aria-label="Send prompt"
-                disabled={isCopilotTyping || !step1Prompt.trim()}
+                disabled={isCopilotTyping || !step1Prompt.trim() || isReadOnly}
+                title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
                   background: '#14B8A6',
                   border: 'none',
@@ -309,7 +349,8 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                   color: 'var(--text-on-accent)',
                   fontWeight: 700,
                   fontSize: '0.9rem',
-                  cursor: isCopilotTyping || !step1Prompt.trim() ? 'not-allowed' : 'pointer',
+                  cursor: isCopilotTyping || !step1Prompt.trim() || isReadOnly ? 'not-allowed' : 'pointer',
+                  opacity: isReadOnly ? 0.55 : 1,
                 }}
               >
                 <Send size={16} />
@@ -332,8 +373,14 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                   <button
                     type="button"
                     onClick={handleGeneratePersonas}
-                    disabled={isGeneratingPersonas || suggestedRoles.length === 0}
-                    title={suggestedRoles.length === 0 ? 'Pick at least one role first' : undefined}
+                    disabled={isGeneratingPersonas || suggestedRoles.length === 0 || isReadOnly}
+                    title={
+                      isReadOnly
+                        ? READ_ONLY_TITLE
+                        : suggestedRoles.length === 0
+                        ? 'Pick at least one role first'
+                        : undefined
+                    }
                     style={{
                       background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                       border: 'none',
@@ -342,7 +389,8 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                       color: 'var(--text-on-accent)',
                       fontWeight: 700,
                       fontSize: '0.88rem',
-                      cursor: isGeneratingPersonas ? 'not-allowed' : 'pointer',
+                      cursor: isGeneratingPersonas || isReadOnly ? 'not-allowed' : 'pointer',
+                      opacity: isReadOnly ? 0.55 : 1,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Lock } from 'lucide-react';
 import {
   Study,
   StudyType,
@@ -11,7 +11,7 @@ import {
 import { api } from '../../../services/api';
 import { useNavigation } from '../../../context/NavigationContext';
 import { useViewMotion } from '../../../motion/useViewMotion';
-import { CopilotMessage } from './workflow/types';
+import { CopilotMessage, READ_ONLY_TITLE } from './workflow/types';
 import { Step1Context } from './workflow/Step1Context';
 import { Step2Personas } from './workflow/Step2Personas';
 import { Step3Script } from './workflow/Step3Script';
@@ -41,6 +41,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const { navigate } = useNavigation();
   const stepViewRef = useViewMotion<HTMLDivElement>([currentStep]);
   const [study, setStudy] = useState<Study | null>(null);
+  // Example studies are readable by everyone but writable by no one — the UI
+  // must never offer a CTA the backend's write gate will refuse.
+  const isReadOnly = study?.is_demo === true;
+  // A 403 from a write endpoint is the read-only gate, not a failure — its
+  // message renders as a calm notice instead of an alarming error.
+  const [readOnlyNotice, setReadOnlyNotice] = useState<string | null>(null);
+  const readOnlyRefusal = (err: unknown): string | null =>
+    (err as { status?: number })?.status === 403
+      ? (err as Error)?.message || READ_ONLY_TITLE
+      : null;
   const [promptInput, setPromptInput] = useState<string>(initialPrompt);
   // Seeded starter questions are a template, never generated output. The flag
   // flips only after the generator actually returns questions.
@@ -155,7 +165,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     const clamped = Math.max(1, Math.min(newStep, 5));
     setCurrentStep(clamped);
     onStepChange?.(clamped);
-    if (studyId) {
+    // Read-only example studies never PATCH — the write gate would refuse.
+    if (studyId && !isReadOnly) {
       // 'completed' is earned by a generated report — never by visiting step 5.
       const reportExists = opts?.reportReady || report !== null || availableReports.length > 0;
       api
@@ -262,6 +273,17 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     };
   }, [probeEvidence]);
 
+  /** Step 1's `not_run` state can start the evidence run directly — same
+   * trigger + probe plumbing handleApproveGoal already uses. */
+  const handleRunEvidenceResearch = () => {
+    if (!studyId) return;
+    setEvidenceProbe({ state: 'searching' });
+    api
+      .triggerStudyResearch(studyId)
+      .catch(() => {})
+      .finally(() => probeEvidence());
+  };
+
   const fetchCopilotTurn = async (history: { role: 'user' | 'assistant'; content: string }[]) => {
     if (isFetchingCopilotRef.current) return;
     isFetchingCopilotRef.current = true;
@@ -291,22 +313,37 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       if (res.suggested_roles && res.suggested_roles.length > 0) {
         setSuggestedRoles(res.suggested_roles);
       }
-    } catch {
-      // Never synthesise a goal card on error — that would present a fabrication as AI success.
-      const lastUserMsg = history.filter((m) => m.role === 'user').pop();
-      const errorMsg: CopilotMessage = {
-        id: `msg_a_${Date.now()}`,
-        role: 'assistant',
-        content: `I couldn't process that — the AI providers may be busy. Please try again.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
-        isRetryPrompt: true,
-        retryContent: lastUserMsg?.content,
-      };
-      const updated = [...copilotMessagesRef.current, errorMsg];
-      copilotMessagesRef.current = updated;
-      setCopilotMessages(updated);
-      if (studyId) {
-        api.updateStudy(studyId, { copilot_messages: updated as any }).catch(() => {});
+    } catch (err) {
+      const refusal = readOnlyRefusal(err);
+      if (refusal) {
+        // Read-only refusal: relay the backend's message as a plain reply — no
+        // retry prompt, no persistence (the write would be refused again).
+        const noticeMsg: CopilotMessage = {
+          id: `msg_a_${Date.now()}`,
+          role: 'assistant',
+          content: refusal,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+        };
+        const updated = [...copilotMessagesRef.current, noticeMsg];
+        copilotMessagesRef.current = updated;
+        setCopilotMessages(updated);
+      } else {
+        // Never synthesise a goal card on error — that would present a fabrication as AI success.
+        const lastUserMsg = history.filter((m) => m.role === 'user').pop();
+        const errorMsg: CopilotMessage = {
+          id: `msg_a_${Date.now()}`,
+          role: 'assistant',
+          content: `I couldn't process that — the AI providers may be busy. Please try again.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+          isRetryPrompt: true,
+          retryContent: lastUserMsg?.content,
+        };
+        const updated = [...copilotMessagesRef.current, errorMsg];
+        copilotMessagesRef.current = updated;
+        setCopilotMessages(updated);
+        if (studyId) {
+          api.updateStudy(studyId, { copilot_messages: updated as any }).catch(() => {});
+        }
       }
     } finally {
       setIsCopilotTyping(false);
@@ -513,9 +550,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         });
       }
     } catch (err: any) {
-      setPersonaGenError(
-        err?.message || 'Persona generation failed. Please try again.'
-      );
+      const refusal = readOnlyRefusal(err);
+      if (refusal) {
+        setReadOnlyNotice(refusal);
+      } else {
+        setPersonaGenError(
+          err?.message || 'Persona generation failed. Please try again.'
+        );
+      }
     } finally {
       setIsGeneratingPersonas(false);
     }
@@ -554,11 +596,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setScriptError('The generator returned no questions. Your existing script is unchanged — try again.');
       }
     } catch (err: any) {
-      // Silently swallowing this left the user staring at unchanged questions
-      // after a 30-120s wait with no explanation.
-      setScriptError(
-        `${err?.message || 'The question generator did not respond.'} Your existing script is unchanged.`
-      );
+      const refusal = readOnlyRefusal(err);
+      if (refusal) {
+        setReadOnlyNotice(refusal);
+      } else {
+        // Silently swallowing this left the user staring at unchanged questions
+        // after a 30-120s wait with no explanation.
+        setScriptError(
+          `${err?.message || 'The question generator did not respond.'} Your existing script is unchanged.`
+        );
+      }
     } finally {
       setIsGeneratingScript(false);
     }
@@ -622,12 +669,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       }
       await api.listStudyInterviews(studyId).catch(() => []);
     } catch (err: any) {
-      // Whole-batch failure: everything selected is failed. Nothing "completed".
-      const failedMap: Record<string, 'pending' | 'failed'> = {};
-      personas.forEach((p) => {
-        failedMap[p.id] = selectedPersonaIds.includes(p.id) ? 'failed' : 'pending';
-      });
-      setInterviewStatusMap(failedMap);
+      const refusal = readOnlyRefusal(err);
+      if (refusal) {
+        setReadOnlyNotice(refusal);
+        setInterviewStatusMap({});
+      } else {
+        // Whole-batch failure: everything selected is failed. Nothing "completed".
+        const failedMap: Record<string, 'pending' | 'failed'> = {};
+        personas.forEach((p) => {
+          failedMap[p.id] = selectedPersonaIds.includes(p.id) ? 'failed' : 'pending';
+        });
+        setInterviewStatusMap(failedMap);
+      }
     } finally {
       setIsBatchRunning(false);
     }
@@ -662,17 +715,22 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setChatMessages((prev) => [...prev, res.assistantTurn]);
       }
     } catch (err: any) {
-      // Honest failure: show the error in the transcript instead of silently
-      // dropping the turn (the user otherwise watches their question vanish).
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: `turn_err_${Date.now()}`,
-          role: 'assistant',
-          content: `⚠ Interview turn failed: ${err?.message || 'request timed out'}. Your question was not answered — please retry.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
-        },
-      ]);
+      const refusal = readOnlyRefusal(err);
+      if (refusal) {
+        setReadOnlyNotice(refusal);
+      } else {
+        // Honest failure: show the error in the transcript instead of silently
+        // dropping the turn (the user otherwise watches their question vanish).
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: `turn_err_${Date.now()}`,
+            role: 'assistant',
+            content: `⚠ Interview turn failed: ${err?.message || 'request timed out'}. Your question was not answered — please retry.`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
+          },
+        ]);
+      }
     } finally {
       setIsSimulating(false);
     }
@@ -694,8 +752,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       // The freshly-generated report is what earns 'completed' status.
       handleStepChange(5, { reportReady: true });
     } catch (err: any) {
-      // Honest failure: the error is shown on the report step with a retry.
-      setReportError(err?.message || 'Report generation failed. Please retry.');
+      const refusal = readOnlyRefusal(err);
+      if (refusal) {
+        setReadOnlyNotice(refusal);
+      } else {
+        // Honest failure: the error is shown on the report step with a retry.
+        setReportError(err?.message || 'Report generation failed. Please retry.');
+      }
     } finally {
       setIsGeneratingReport(false);
     }
@@ -953,10 +1016,54 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             );
           })}
         </div>
+
+        {isReadOnly && (
+          <div
+            role="note"
+            style={{
+              flexBasis: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'var(--fill-soft)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <Lock size={13} color="var(--accent-cyan)" aria-hidden="true" />
+            <span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Example study — read-only.</span>{' '}
+              Create your own study to run these steps.
+            </span>
+          </div>
+        )}
       </header>
 
       {/* Main Workflow Container */}
       <main style={{ flex: 1, padding: '28px clamp(14px, 4vw, 40px)', maxWidth: '1280px', width: '100%', margin: '0 auto' }}>
+        {readOnlyNotice && (
+          <div
+            role="status"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'var(--fill-soft)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '10px',
+              padding: '10px 14px',
+              marginBottom: '20px',
+              fontSize: '0.84rem',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <Lock size={14} color="var(--accent-cyan)" aria-hidden="true" />
+            <span>{readOnlyNotice}</span>
+          </div>
+        )}
         {/* ============================================================
             STEP 1: CONTEXT & ASSUMPTION GATHERING
            ============================================================ */}
@@ -985,6 +1092,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               handleDecrementRole={handleDecrementRole}
               evidenceProbe={evidenceProbe}
               onNavigateToEvidence={studyId ? () => navigate(`/research/${studyId}/evidence`) : undefined}
+              onRunEvidence={studyId && !isReadOnly ? handleRunEvidenceResearch : undefined}
+              isReadOnly={isReadOnly}
             />
           </div>
         )}
@@ -1006,6 +1115,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               setViewingPersona={setViewingPersona}
               isStepUnlocked={isStepUnlocked}
               onNavigateToEvidence={studyId ? () => navigate(`/research/${studyId}/evidence`) : undefined}
+              isReadOnly={isReadOnly}
             />
           </div>
         )}
@@ -1026,6 +1136,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               scriptError={scriptError}
               scriptGenerated={scriptGenerated}
               handleStepChange={handleStepChange}
+              isReadOnly={isReadOnly}
             />
           </div>
         )}
@@ -1054,6 +1165,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               handleSendInterviewMessage={handleSendInterviewMessage}
               userInputMessage={userInputMessage}
               setUserInputMessage={setUserInputMessage}
+              isReadOnly={isReadOnly}
             />
           </div>
         )}
@@ -1075,6 +1187,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               exportReportMarkdown={exportReportMarkdown}
               handleGenerateFinalReport={handleGenerateFinalReport}
               verificationAssumptions={verificationAssumptions}
+              isReadOnly={isReadOnly}
             />
           </div>
         )}

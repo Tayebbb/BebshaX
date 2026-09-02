@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowRight, FlaskConical, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { Persona, PersonaRoleSuggestion } from '../../../../types';
 import { EvidenceBadge, TemplateBadge, countEvidenceBacked } from '../../../../utils/personaEvidence';
+import { READ_ONLY_TITLE } from './types';
 
 /** Step 2 — persona library. Pure JSX extraction from
  * StudyWorkflowView: generation state/handlers stay in the parent; the modal
@@ -18,6 +19,8 @@ interface Step2PersonasProps {
   setViewingPersona: React.Dispatch<React.SetStateAction<Persona | null>>;
   isStepUnlocked: (step: number) => boolean;
   onNavigateToEvidence?: () => void;
+  /** Example (demo) studies are viewable but never mutable from here. */
+  isReadOnly?: boolean;
 }
 
 export const Step2Personas: React.FC<Step2PersonasProps> = ({
@@ -32,6 +35,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
   setViewingPersona,
   isStepUnlocked,
   onNavigateToEvidence,
+  isReadOnly = false,
 }) => {
   const evidenceBackedCount = countEvidenceBacked(personas);
   return (
@@ -71,7 +75,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 <button
                   type="button"
                   onClick={handleGeneratePersonas}
-                  disabled={isGeneratingPersonas}
+                  disabled={isGeneratingPersonas || isReadOnly}
+                  title={isReadOnly ? READ_ONLY_TITLE : undefined}
                   style={{
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border-subtle)',
@@ -80,8 +85,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                     padding: '8px 16px',
                     fontSize: '0.84rem',
                     fontWeight: 600,
-                    cursor: isGeneratingPersonas ? 'not-allowed' : 'pointer',
-                    opacity: isGeneratingPersonas ? 0.6 : 1,
+                    cursor: isGeneratingPersonas || isReadOnly ? 'not-allowed' : 'pointer',
+                    opacity: isGeneratingPersonas || isReadOnly ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
@@ -305,7 +310,9 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleRemovePersona(p.id, e)}
-                      style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: 'pointer' }}
+                      disabled={isReadOnly}
+                      title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: isReadOnly ? 'not-allowed' : 'pointer', opacity: isReadOnly ? 0.5 : 1 }}
                     >
                       <Trash2 size={15} />
                     </button>
@@ -386,6 +393,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 <button
                   type="button"
                   onClick={handleGeneratePersonas}
+                  disabled={isReadOnly}
+                  title={isReadOnly ? READ_ONLY_TITLE : undefined}
                   style={{
                     marginTop: '6px',
                     background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
@@ -395,7 +404,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                     color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '0.85rem',
-                    cursor: 'pointer',
+                    cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                    opacity: isReadOnly ? 0.55 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',

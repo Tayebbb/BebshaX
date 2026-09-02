@@ -3,6 +3,7 @@ import { Copy, Download, FileText } from 'lucide-react';
 import { Persona, Study, StudyReport } from '../../../../types';
 import { ProvenanceChip } from '../PersonaLibraryView';
 import { countEvidenceBacked } from '../../../../utils/personaEvidence';
+import { READ_ONLY_TITLE } from './types';
 
 /** Step 5 — final decision report. Pure JSX extraction from StudyWorkflowView;
  * `verificationAssumptions` is derived in the parent from persona provenance. */
@@ -18,6 +19,8 @@ interface Step5ReportProps {
   exportReportMarkdown: () => void;
   handleGenerateFinalReport: () => Promise<void>;
   verificationAssumptions: { value: string; provenance: string; personaName: string }[];
+  /** Example (demo) studies are viewable but never mutable from here. */
+  isReadOnly?: boolean;
 }
 
 export const Step5Report: React.FC<Step5ReportProps> = ({
@@ -32,6 +35,7 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
   exportReportMarkdown,
   handleGenerateFinalReport,
   verificationAssumptions,
+  isReadOnly = false,
 }) => {
   const evidenceBackedCount = countEvidenceBacked(personas);
   const claimCount = report?.metrics?.total_claims ?? report?.evidence_findings?.length ?? 0;
@@ -257,7 +261,8 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                 <button
                   type="button"
                   onClick={handleGenerateFinalReport}
-                  disabled={isGeneratingReport}
+                  disabled={isGeneratingReport || isReadOnly}
+                  title={isReadOnly ? READ_ONLY_TITLE : undefined}
                   style={{
                     marginTop: '6px',
                     background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
@@ -267,8 +272,8 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                     color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '0.85rem',
-                    cursor: isGeneratingReport ? 'not-allowed' : 'pointer',
-                    opacity: isGeneratingReport ? 0.6 : 1,
+                    cursor: isGeneratingReport || isReadOnly ? 'not-allowed' : 'pointer',
+                    opacity: isGeneratingReport || isReadOnly ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',

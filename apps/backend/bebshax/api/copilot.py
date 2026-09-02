@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from bebshax.api.auth import get_current_user, get_optional_current_user
-from bebshax.api.deps import user_can_write_study, user_owns_study
+from bebshax.api.deps import require_study_access, user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import EvidenceClaims, Personas, Studies
@@ -683,8 +683,18 @@ async def generate_study_personas(
         if gate_sessionmaker:
             async with gate_sessionmaker() as gate_session:
                 study_row = await gate_session.get(Studies, body.study_id)
-                if study_row is None or not user_can_write_study(study_row, current_user):
-                    raise HTTPException(status_code=404, detail="study not found")
+                # Readable-but-not-writable (the shared demo) is a 403 with an
+                # honest message — a study the caller is currently READING must
+                # never be reported as "not found".
+                require_study_access(
+                    study_row,
+                    current_user,
+                    write=True,
+                    read_only_detail=(
+                        "This is a read-only example study — "
+                        "create your own study to generate personas."
+                    ),
+                )
                 # Grounding must be measured, not assumed: show the study's own
                 # claims so citations can be verified below.
                 claim_rows = (

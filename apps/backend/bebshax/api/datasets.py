@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from bebshax.api.auth import get_current_user, get_optional_current_user
-from bebshax.api.deps import user_can_write_study, user_owns_study
+from bebshax.api.deps import require_study_access
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
@@ -137,12 +137,12 @@ async def _verify_study_access(
     """Canonical study gate (`user_owns_study`) — anonymous callers only
     pass for demo / anonymous-tenant studies, never any owned study.
     ``write=True`` selects the strict write predicate, so the demo's read
-    allowance never grants mutations."""
+    allowance never grants mutations (readable but not writable is an honest
+    403, never a false 404)."""
     study = await session.get(Studies, study_id)
-    predicate = user_can_write_study if write else user_owns_study
-    if not study or not predicate(study, current_user):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Study '{study_id}' not found")
-    return study
+    return require_study_access(
+        study, current_user, write=write, not_found_detail=f"Study '{study_id}' not found"
+    )
 
 
 async def _verify_study_access_via_service(

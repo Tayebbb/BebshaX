@@ -83,3 +83,44 @@ describe('Blocker 2 — live auth never fabricates a session', () => {
     expect(api.getAuthToken()).toBe('real_token');
   });
 });
+
+/** Fix 1 (round 5): the backend's OTP user-binding gate only engages when the
+ * email is posted alongside the token — the client used to drop it. */
+describe('verify-email posts the email with the OTP so the binding gate engages', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    api.setMockMode(false);
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    api.setMockMode(true);
+  });
+
+  it('includes both token and email in the verify-email body', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    await api.verifyEmailOtp('user@example.com', ' 123456 ');
+
+    const call = fetchSpy.mock.calls.find(([url]) => String(url).includes('/auth/verify-email'));
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body).toEqual({ token: '123456', email: 'user@example.com' });
+  });
+
+  it('omits the email key entirely when no email is available', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    await api.verifyEmailOtp('   ', '654321');
+
+    const call = fetchSpy.mock.calls.find(([url]) => String(url).includes('/auth/verify-email'));
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body).toEqual({ token: '654321' });
+    expect('email' in body).toBe(false);
+  });
+});

@@ -207,7 +207,7 @@ describe('Blocker 3 — demo study blurb is data-driven', () => {
     expect(screen.queryByText(/pre-generated interviews/i)).toBeNull();
   });
 
-  it('names personas and interviews only when the study actually has them', async () => {
+  it('names personas when the study has them — and never advertises interviews (the list never serializes them)', async () => {
     (api.getStudies as any).mockResolvedValue([
       study({
         id: 'demo_done',
@@ -216,6 +216,9 @@ describe('Blocker 3 — demo study blurb is data-driven', () => {
         status: 'completed',
         step: 5,
         persona_count: 3,
+        // Even a hypothetical interviews payload must not be advertised: the
+        // backend never puts interviews on the study list, so the clause was
+        // dead in production and has been removed.
         interviews: [{ id: 'iv_1' }, { id: 'iv_2' }] as any,
       }),
     ]);
@@ -224,8 +227,9 @@ describe('Blocker 3 — demo study blurb is data-driven', () => {
 
     await waitFor(() => expect(screen.getByText('DEMO STUDY')).toBeInTheDocument());
     expect(
-      screen.getByText('Sample study — explore a finished decision report, 3 personas, 2 interviews'),
+      screen.getByText('Sample study — explore a finished decision report, 3 personas'),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/2 interviews/)).toBeNull();
   });
 });
 

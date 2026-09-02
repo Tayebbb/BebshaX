@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.jobs import get_job, start_job
-from bebshax.api.deps import get_session, owner_accessible, user_can_write_study, user_owns_study
+from bebshax.api.deps import get_session, owner_accessible, require_study_access
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
@@ -137,15 +137,12 @@ async def _verify_study_access(
     study_id: str, current_user: Optional[Users], session: AsyncSession, *, write: bool = False
 ) -> Studies:
     """``write=True`` selects the strict write predicate: the ``is_demo`` read
-    allowance must never let a non-owner mutate the shared demo."""
+    allowance must never let a non-owner mutate the shared demo (readable but
+    not writable is an honest 403, never a false 404)."""
     study = await session.get(Studies, study_id)
-    predicate = user_can_write_study if write else user_owns_study
-    if not study or not predicate(study, current_user):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Study '{study_id}' not found.",
-        )
-    return study
+    return require_study_access(
+        study, current_user, write=write, not_found_detail=f"Study '{study_id}' not found."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -165,12 +162,15 @@ async def list_study_personas_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """List synthetic customer personas for a study with segment mapping and grounding stats."""
-    await _verify_study_access(study_id, current_user, session)
+    study = await _verify_study_access(study_id, current_user, session)
     service = PersonaGenerationService(session)
 
     personas = await service.list_personas(
         study_id=study_id,
-        user_id=current_user.id if current_user else None,
+        # The demo is public-readable by design and its rows are stamped with
+        # the seeded owner's user_id — scoping by the READER's id hid the demo
+        # persona from every signed-in non-owner (card said 1, list said 0).
+        user_id=None if study.is_demo else (current_user.id if current_user else None),
         segment_id=segment_id,
         status=status_filter,
         generation_run_id=generation_run_id,
@@ -336,13 +336,14 @@ async def get_study_persona_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Get a detailed synthetic persona profile with citations and dataset links."""
-    await _verify_study_access(study_id, current_user, session)
+    study = await _verify_study_access(study_id, current_user, session)
     service = PersonaGenerationService(session)
 
     persona = await service.get_persona(
         study_id=study_id,
         persona_id=persona_id,
-        user_id=current_user.id if current_user else None,
+        # Same demo read allowance as the list endpoint above.
+        user_id=None if study.is_demo else (current_user.id if current_user else None),
     )
     if not persona:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Persona not found.")

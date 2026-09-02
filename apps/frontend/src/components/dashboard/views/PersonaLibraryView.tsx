@@ -384,6 +384,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {studies.map((s) => (
                 <option key={s.id} value={s.id}>
                   Study: {s.title || s.id}
+                  {s.is_demo ? ' — demo' : ''}
                 </option>
               ))}
             </select>

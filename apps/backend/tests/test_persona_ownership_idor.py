@@ -123,3 +123,72 @@ async def test_persona_endpoints_idor_protection():
         data = r_legit.json()
         assert data["total"] == 1
         assert data["personas"][0]["name"] == "Tanvir Ahmed"
+
+
+@pytest.mark.asyncio
+async def test_demo_study_personas_are_listed_for_every_reader():
+    """The seeded demo persona is stamped with the demo owner's user_id; the
+    list endpoint used to also scope by the READER's id, so a judge signed in
+    under their own account saw 0 personas in a demo whose card claims 1."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    app.state.db_sessionmaker = session_maker
+
+    async with session_maker() as session:
+        session.add_all(
+            [
+                Users(
+                    id="usr_demo_owner",
+                    email="demo-owner@bebshax.ai",
+                    full_name="Demo Owner",
+                    hashed_password="hash",
+                ),
+                Users(
+                    id="usr_demo_reader",
+                    email="demo-reader@bebshax.ai",
+                    full_name="Demo Reader",
+                    hashed_password="hash",
+                ),
+                Studies(
+                    id="std_demo_pub",
+                    user_id="usr_demo_owner",
+                    title="Public Demo Study",
+                    status="completed",
+                    is_demo=True,
+                    persona_count=1,
+                    persona_ids=["per_demo_pub"],
+                ),
+                Personas(
+                    id="per_demo_pub",
+                    study_id="std_demo_pub",
+                    user_id="usr_demo_owner",
+                    owner_id="usr_demo_owner",
+                    name="Demo Persona",
+                ),
+            ]
+        )
+        await session.commit()
+
+    reader_headers = {
+        "Authorization": f"Bearer {create_access_token({'sub': 'usr_demo_reader'})}"
+    }
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # A signed-in NON-owner and an anonymous caller both see the demo persona.
+        for headers in (reader_headers, None):
+            r_list = await ac.get("/api/studies/std_demo_pub/personas", headers=headers)
+            assert r_list.status_code == 200
+            body = r_list.json()
+            assert body["total"] == 1
+            assert [p["id"] for p in body["personas"]] == ["per_demo_pub"]
+
+            r_get = await ac.get(
+                "/api/studies/std_demo_pub/personas/per_demo_pub", headers=headers
+            )
+            assert r_get.status_code == 200
+            assert r_get.json()["id"] == "per_demo_pub"
+
+    await engine.dispose()

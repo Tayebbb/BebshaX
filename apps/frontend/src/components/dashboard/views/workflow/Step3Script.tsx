@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, Trash2 } from 'lucide-react';
 import { api } from '../../../../services/api';
+import { READ_ONLY_TITLE } from './types';
 
 /** Step 3 — interview script & questions. Pure JSX extraction from
  * StudyWorkflowView: all state stays in the parent; inline persistence
@@ -17,6 +18,8 @@ interface Step3ScriptProps {
   /** False until the generator has actually returned questions for this study. */
   scriptGenerated?: boolean;
   handleStepChange: (newStep: number, opts?: { reportReady?: boolean }) => void;
+  /** Example (demo) studies are viewable but never mutable from here. */
+  isReadOnly?: boolean;
 }
 
 export const Step3Script: React.FC<Step3ScriptProps> = ({
@@ -30,6 +33,7 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
   scriptError,
   scriptGenerated = false,
   handleStepChange,
+  isReadOnly = false,
 }) => {
   return (
     <>
@@ -53,14 +57,15 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 <button
                   type="button"
                   onClick={handleGenerateScript}
-                  disabled={isGeneratingScript}
+                  disabled={isGeneratingScript || isReadOnly}
+                  title={isReadOnly ? READ_ONLY_TITLE : undefined}
                   style={{
                     background: 'transparent',
                     border: '1px solid currentColor',
                     borderRadius: '6px',
                     padding: '4px 12px',
                     color: 'inherit',
-                    cursor: isGeneratingScript ? 'not-allowed' : 'pointer',
+                    cursor: isGeneratingScript || isReadOnly ? 'not-allowed' : 'pointer',
                     fontWeight: 600,
                     fontSize: '0.82rem',
                     whiteSpace: 'nowrap',
@@ -86,7 +91,8 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 <button
                   type="button"
                   onClick={handleGenerateScript}
-                  disabled={isGeneratingScript}
+                  disabled={isGeneratingScript || isReadOnly}
+                  title={isReadOnly ? READ_ONLY_TITLE : undefined}
                   style={{
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border-subtle)',
@@ -95,8 +101,8 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                     padding: '8px 16px',
                     fontSize: '0.84rem',
                     fontWeight: 600,
-                    cursor: isGeneratingScript ? 'not-allowed' : 'pointer',
-                    opacity: isGeneratingScript ? 0.6 : 1,
+                    cursor: isGeneratingScript || isReadOnly ? 'not-allowed' : 'pointer',
+                    opacity: isGeneratingScript || isReadOnly ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
@@ -197,6 +203,8 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                   <input
                     type="text"
                     value={q}
+                    disabled={isReadOnly}
+                    title={isReadOnly ? READ_ONLY_TITLE : undefined}
                     onChange={(e) => {
                       const updated = [...questions];
                       updated[idx] = e.target.value;
@@ -210,6 +218,7 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                       color: 'var(--text-main)',
                       fontSize: '0.9rem',
                       outline: 'none',
+                      opacity: isReadOnly ? 0.75 : 1,
                     }}
                     onFocus={(e) => { (e.currentTarget as HTMLInputElement).style.boxShadow = '0 0 0 2px var(--accent-teal)'; }}
                     onBlur={(e) => { (e.currentTarget as HTMLInputElement).style.boxShadow = 'none'; }}
@@ -221,7 +230,9 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                       setQuestions(nextQ);
                       if (studyId) api.updateStudy(studyId, { script_questions: nextQ }).catch(() => {});
                     }}
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: 'pointer' }}
+                    disabled={isReadOnly}
+                    title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: isReadOnly ? 'not-allowed' : 'pointer', opacity: isReadOnly ? 0.5 : 1 }}
                   >
                     <Trash2 size={15} />
                   </button>
@@ -236,6 +247,8 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 value={newQuestion}
                 onChange={(e) => setNewQuestion(e.target.value)}
                 placeholder="Add another interview question..."
+                disabled={isReadOnly}
+                title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
                   flex: 1,
                   background: 'var(--bg-card)',
@@ -245,6 +258,7 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                   color: 'var(--text-main)',
                   fontSize: '0.88rem',
                   outline: 'none',
+                  opacity: isReadOnly ? 0.6 : 1,
                 }}
               />
               <button
@@ -257,6 +271,8 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                     if (studyId) api.updateStudy(studyId, { script_questions: nextQ }).catch(() => {});
                   }
                 }}
+                disabled={isReadOnly}
+                title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
                   background: 'var(--accent-subtle)',
                   border: '1px solid var(--border-hover)',
@@ -265,7 +281,8 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                   padding: '0 20px',
                   fontWeight: 600,
                   fontSize: '0.88rem',
-                  cursor: 'pointer',
+                  cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                  opacity: isReadOnly ? 0.55 : 1,
                 }}
               >
                 Add Question

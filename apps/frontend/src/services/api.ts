@@ -558,7 +558,9 @@ export const api = {
         }
         lastKnownLive = false;
         const errorData = await res.json().catch(() => ({ detail: `Failed to start conversation (${res.status})` }));
-        throw new Error(errorData.detail || errorData.message || 'Failed to start conversation');
+        const e = new Error(errorData.detail || errorData.message || 'Failed to start conversation') as Error & { status?: number };
+        e.status = res.status;
+        throw e;
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -621,7 +623,9 @@ export const api = {
         }
         lastKnownLive = false;
         const errorData = await res.json().catch(() => ({ detail: `Interview message failed with status ${res.status}` }));
-        throw new Error(errorData.detail || errorData.message || 'Interview message failed');
+        const e = new Error(errorData.detail || errorData.message || 'Interview message failed') as Error & { status?: number };
+        e.status = res.status;
+        throw e;
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -1069,10 +1073,15 @@ export const api = {
   ): Promise<{ user: User; token?: string | null }> {
     if (!this.isMockMode()) {
       try {
+        // The backend's user-binding gate only engages when email is posted.
+        const trimmedEmail = email.trim();
         await fetch(`${API_BASE}/auth/verify-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: otp.trim() }),
+          body: JSON.stringify({
+            token: otp.trim(),
+            ...(trimmedEmail ? { email: trimmedEmail } : {}),
+          }),
           signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
       } catch {
@@ -1451,7 +1460,9 @@ export const api = {
         }
         lastKnownLive = false;
         const err = await res.json().catch(() => ({ detail: 'Copilot turn failed' }));
-        throw new Error(err.detail || `Copilot turn failed (HTTP ${res.status})`);
+        const e = new Error(err.detail || `Copilot turn failed (HTTP ${res.status})`) as Error & { status?: number };
+        e.status = res.status;
+        throw e;
       } catch (err) {
         // Live mode never falls back to the local canned engine — a fabricated
         // "LLM reply" is worse than a visible failure.
@@ -1513,7 +1524,9 @@ export const api = {
       if (!res.ok) {
         lastKnownLive = false;
         const err = await res.json().catch(() => ({ detail: 'Persona generation failed' }));
-        throw new Error(err.detail || 'Persona generation failed');
+        const e = new Error(err.detail || 'Persona generation failed') as Error & { status?: number };
+        e.status = res.status;
+        throw e;
       }
       lastKnownLive = true;
       const data = await res.json();
@@ -3678,10 +3691,14 @@ export const api = {
             return await res.json();
           }
           const err = await res.json().catch(() => ({ detail: 'Report generation failed' }));
-          throw new Error(err.detail || 'Report generation failed');
+          const e = new Error(err.detail || 'Report generation failed') as Error & { status?: number };
+          e.status = res.status;
+          throw e;
         }
         const err = await jobRes.json().catch(() => ({ detail: 'Report generation failed' }));
-        throw new Error(err.detail || 'Report generation failed');
+        const e = new Error(err.detail || 'Report generation failed') as Error & { status?: number };
+        e.status = jobRes.status;
+        throw e;
       } catch (e) {
         // Honest job failures mean the backend responded fine — only genuine
         // connectivity loss should mark it dead.
@@ -3711,7 +3728,9 @@ export const api = {
         }
         lastKnownLive = false;
         const err = await res.json().catch(() => ({ detail: 'Script generation failed' }));
-        throw new Error(err.detail || `Script generation failed (HTTP ${res.status})`);
+        const e = new Error(err.detail || `Script generation failed (HTTP ${res.status})`) as Error & { status?: number };
+        e.status = res.status;
+        throw e;
       } catch (err) {
         // Canned questions must never impersonate LLM output in live mode.
         lastKnownLive = false;
@@ -3750,7 +3769,9 @@ export const api = {
           return await res.json();
         }
         const err = await res.json().catch(() => ({ detail: 'Batch interview run failed' }));
-        throw new Error(err.detail || 'Batch interview run failed');
+        const e = new Error(err.detail || 'Batch interview run failed') as Error & { status?: number };
+        e.status = res.status;
+        throw e;
       } catch (e) {
         lastKnownLive = false;
         throw e;

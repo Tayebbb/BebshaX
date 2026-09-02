@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import get_session, user_can_write_study, user_owns_study
+from bebshax.api.deps import get_session, require_study_access
 from bebshax.auth.models import Users
 from bebshax.db.models import (
     DatasetSources,
@@ -84,17 +84,14 @@ async def _verify_study_access(
     Delegates to the canonical `user_owns_study` rule — anonymous callers
     only pass for demo / anonymous-tenant studies (never any owned study).
     ``write=True`` selects the strict write predicate instead, so the demo's
-    read allowance never grants mutations.
+    read allowance never grants mutations (readable but not writable is an
+    honest 403, never a false 404).
     """
     study_res = await session.execute(select(Studies).where(Studies.id == study_id))
     study = study_res.scalars().first()
-    predicate = user_can_write_study if write else user_owns_study
-    if not study or not predicate(study, current_user):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Study '{study_id}' not found.",
-        )
-    return study
+    return require_study_access(
+        study, current_user, write=write, not_found_detail=f"Study '{study_id}' not found."
+    )
 
 
 @router.get("/{study_id}/segmentation/readiness")

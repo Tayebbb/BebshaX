@@ -11,7 +11,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.deps import get_session, user_can_write_study, user_owns_study
+from bebshax.api.deps import get_session, require_study_access, user_owns_study
 from bebshax.auth.models import Users
 from bebshax.db.models import (
     DatasetCandidates,
@@ -110,12 +110,11 @@ async def start_study_research(
 ) -> dict[str, Any]:
     """Trigger a new autonomous evidence and dataset research run for a study."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
     # Write gate: this run persists evidence rows and spends LLM budget, so the
-    # `is_demo` read allowance must not apply (it duplicates studies/research/run).
-    if not user_can_write_study(study, current_user):
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    # `is_demo` read allowance must not apply (readable-but-not-writable -> 403).
+    require_study_access(
+        study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
+    )
 
     llm_service = getattr(request.app.state, "llm_service", None)
     service = ResearchEngineService(llm_service=llm_service)
@@ -349,9 +348,11 @@ async def semantic_search_evidence(
 ) -> list[dict[str, Any]]:
     """Perform semantic vector retrieval against a study's evidence chunks."""
     study = await session.get(Studies, study_id)
-    # Embedding a caller-supplied query costs compute: owner token required.
-    if not study or not user_can_write_study(study, current_user):
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
+    # Embedding a caller-supplied query costs compute: owner token required
+    # (readable-but-not-writable, e.g. the shared demo, gets an honest 403).
+    require_study_access(
+        study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
+    )
 
     engine = VectorSearchEngine()
     results = await engine.search_chunks(session, study_id, payload.query, top_k=payload.top_k)

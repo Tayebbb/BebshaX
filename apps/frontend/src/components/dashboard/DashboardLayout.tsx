@@ -1474,7 +1474,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 studyId={activeStudyId}
                 onNavigateToEvidence={() => navigate(`/research/${activeStudyId}/evidence`)}
                 onProceedToPersonas={() => {
-                  navigate(`/research/${activeStudyId}/step3`);
+                  navigate(`/research/${activeStudyId}/step2`);
                 }}
               />
             </div>

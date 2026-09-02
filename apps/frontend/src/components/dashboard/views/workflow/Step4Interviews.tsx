@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, MessageSquare, Send, Sparkles, Zap } from 'lucide-react';
 import { ConversationTurn, Persona } from '../../../../types';
+import { READ_ONLY_TITLE } from './types';
 
 /** Step 4 — synthetic interviews & live simulation. Pure JSX extraction from
  * StudyWorkflowView: batch/polling/chat state and handlers stay in the parent;
@@ -24,6 +25,8 @@ interface Step4InterviewsProps {
   handleSendInterviewMessage: (e: React.FormEvent) => Promise<void>;
   userInputMessage: string;
   setUserInputMessage: React.Dispatch<React.SetStateAction<string>>;
+  /** Example (demo) studies are viewable but never mutable from here. */
+  isReadOnly?: boolean;
 }
 
 export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
@@ -45,6 +48,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
   handleSendInterviewMessage,
   userInputMessage,
   setUserInputMessage,
+  isReadOnly = false,
 }) => {
   return (
     <>
@@ -63,7 +67,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   <button
                     type="button"
                     onClick={handleRunBatchInterviews}
-                    disabled={isBatchRunning}
+                    disabled={isBatchRunning || isReadOnly}
+                    title={isReadOnly ? READ_ONLY_TITLE : undefined}
                     style={{
                       background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                       border: 'none',
@@ -72,8 +77,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                       color: 'var(--text-on-accent)',
                       fontWeight: 700,
                       fontSize: '0.88rem',
-                      cursor: isBatchRunning ? 'not-allowed' : 'pointer',
-                      opacity: isBatchRunning ? 0.6 : 1,
+                      cursor: isBatchRunning || isReadOnly ? 'not-allowed' : 'pointer',
+                      opacity: isBatchRunning || isReadOnly ? 0.6 : 1,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
@@ -103,7 +108,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   <button
                     type="button"
                     onClick={handleGenerateFinalReport}
-                    disabled={isGeneratingReport}
+                    disabled={isGeneratingReport || isReadOnly}
+                    title={isReadOnly ? READ_ONLY_TITLE : undefined}
                     style={{
                       background: 'var(--bg-card)',
                       border: '1px solid var(--accent-teal)',
@@ -112,8 +118,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                       padding: '10px 20px',
                       fontSize: '0.88rem',
                       fontWeight: 700,
-                      cursor: isGeneratingReport ? 'not-allowed' : 'pointer',
-                      opacity: isGeneratingReport ? 0.6 : 1,
+                      cursor: isGeneratingReport || isReadOnly ? 'not-allowed' : 'pointer',
+                      opacity: isGeneratingReport || isReadOnly ? 0.6 : 1,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
@@ -235,8 +241,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                     <button
                       type="button"
                       onClick={handleRunBatchInterviews}
-                      disabled={isBatchRunning}
-                      title={`Re-runs the interviews for every persona — ${p.name}'s did not finish`}
+                      disabled={isBatchRunning || isReadOnly}
+                      title={isReadOnly ? READ_ONLY_TITLE : `Re-runs the interviews for every persona — ${p.name}'s did not finish`}
                       style={{
                         background: 'transparent',
                         border: '1px solid var(--border-subtle)',
@@ -245,8 +251,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                         padding: '5px 10px',
                         fontSize: '0.75rem',
                         fontWeight: 600,
-                        cursor: isBatchRunning ? 'not-allowed' : 'pointer',
-                        opacity: isBatchRunning ? 0.5 : 1,
+                        cursor: isBatchRunning || isReadOnly ? 'not-allowed' : 'pointer',
+                        opacity: isBatchRunning || isReadOnly ? 0.5 : 1,
                       }}
                     >
                       Re-run all
@@ -337,8 +343,14 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                 type="text"
                 value={userInputMessage}
                 onChange={(e) => setUserInputMessage(e.target.value)}
-                placeholder="Ask a follow-up interview question..."
+                placeholder={
+                  isReadOnly
+                    ? 'Example study — read-only. Create your own study to run interviews.'
+                    : 'Ask a follow-up interview question...'
+                }
                 aria-label="Follow-up interview question"
+                disabled={isReadOnly}
+                title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
                   flex: 1,
                   background: 'var(--bg-card)',
@@ -348,11 +360,13 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   color: 'var(--text-main)',
                   fontSize: '0.88rem',
                   outline: 'none',
+                  opacity: isReadOnly ? 0.6 : 1,
                 }}
               />
               <button
                 type="submit"
-                disabled={isSimulating || !userInputMessage.trim()}
+                disabled={isSimulating || !userInputMessage.trim() || isReadOnly}
+                title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
                   background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
                   border: 'none',
@@ -360,7 +374,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   borderRadius: '12px',
                   padding: '0 20px',
                   fontWeight: 700,
-                  cursor: isSimulating || !userInputMessage.trim() ? 'not-allowed' : 'pointer',
+                  cursor: isSimulating || !userInputMessage.trim() || isReadOnly ? 'not-allowed' : 'pointer',
+                  opacity: isReadOnly ? 0.55 : 1,
                 }}
               >
                 <Send size={16} />
