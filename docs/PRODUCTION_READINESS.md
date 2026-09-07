@@ -89,7 +89,7 @@
 
 | Item                                                                                                                                       | Status | Evidence                                             |
 | ------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ---------------------------------------------------- |
-| Backend unit suite green                                                                                                                   | ✅     | 860+ passed / 3 deselected (integration)             |
+| Backend unit suite green                                                                                                                   | ✅     | 865 passed / 3 deselected (integration)             |
 | Frontend suite + tsc build + theme drift gate                                                                                              | ✅     | 247 passed / 32 files; build 0 errors; theme 0 files |
 | Integration (pgvector)                                                                                                                     | ✅     | 3 passed on migrated DB                              |
 | Lint (`ruff` backend + scripts)                                                                                                            | ✅     | clean                                                |

@@ -40,7 +40,7 @@ Custom BebshaX logic: persona engine + `coerce_provenance` (downgrade-only), `pe
 | **Interview engine**                 | ✅     | 20-turn attack tournament, concurrency lock, transcript-as-JSON, drift/contradiction exposed on payloads and reloaded turns                                      |
 | **Evaluation**                       | 🟡     | metrics endpoint + Evaluation card real; cross-route metric real but n = 16; offline replay withdrawn as unusable; judge disjointness enforced                   |
 | **Security**                         | 🟡     | see PRODUCTION_READINESS §5 — pre-hijack/OTP/SSRF/limits/envelope fixed; PBKDF2 cost + history secrets open                                                      |
-| **Testing**                          | ✅     | backend 860+ / frontend 247 / lint clean / tournaments A–H + chaos                                                                                               |
+| **Testing**                          | ✅     | backend 865 / frontend 247 / lint clean / tournaments A–H + chaos                                                                                               |
 | **CI/CD**                            | ✅     | lint · coverage floor · alembic from zero + head count · pgvector integration · frontend test/build/theme · gitleaks · compose validation · pip-audit (advisory) |
 | **Deployment**                       | 🟡     | compose `full` validated (healthchecks, restart, migrations, data mounts, CSP); image build rehearsal not run in this pass                                       |
 | **Observability**                    | 🟡     | request ids end-to-end, access log, health depth, readiness; no JSON logs / metrics endpoint (deferred by design)                                                |
@@ -63,7 +63,7 @@ Custom BebshaX logic: persona engine + `coerce_provenance` (downgrade-only), `pe
 
 | Check                                                                                         | Result                                                                             |
 | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `pytest apps/backend/tests -q`                                                                | ✅ 860+ passed, 3 deselected (integration) — exact count in the implementation log |
+| `pytest apps/backend/tests -q`                                                                | ✅ 865 passed, 3 deselected (integration) |
 | `pytest -m integration` (scratch pgvector)                                                    | ✅ 3 passed                                                                        |
 | `alembic upgrade head` from zero + `heads`                                                    | ✅ one head `e1f2a3b4c5d6`                                                         |
 | `ruff check apps/backend scripts`                                                             | ✅ clean                                                                           |

@@ -20,7 +20,7 @@ BebshaX is a real, tested, evidence-grounded system with an unusually honest fai
 | Persona & Evidence Quality          | 15      | 10     | Grounding gate is lexical; demo persona's OBSERVED evidence is US office-product reviews labelled as such (`EVIDENCE_SCOPE_NOTE`); no repetition/diversity metric                                                                                                  |
 | Routing / Infrastructure Innovation | 10      | 8      | Closed taxonomy, provider-scope cooldowns, script-aware estimator, `INTERNAL_ERROR` surfacing, estimate/params/ranker markers in provenance; still no persisted provenance from the eval script, quota table has two sources of truth (providers.toml vs quota.py) |
 | Research / Evaluation Validity      | 10      | 6      | Real artifact exists ([RESEARCH_EVIDENCE.md](RESEARCH_EVIDENCE.md)) but n = 2 personas × 4 questions; CIs overlap; offline benchmark replay found unusable and withdrawn; three judged-gate runs at n = 1                                                          |
-| Software Engineering                | 10      | 9      | 860+ backend tests / 247 frontend tests / migrations from zero verified on pgvector / lint clean / error envelope with request ids; pyright debt (79 errors, advisory)                                                                                             |
+| Software Engineering                | 10      | 9      | 865 backend tests / 247 frontend tests / migrations from zero verified on pgvector / lint clean / error envelope with request ids; pyright debt (79 errors, advisory)                                                                                             |
 | Security & Reliability              | 10      | 7      | Pre-hijack, OTP, SSRF-rebind, body cap, limits, redaction fixed; **remaining:** PBKDF2 at 100k iterations (test-pinned), in-process lockouts/locks, leaked secrets in history awaiting rotation, `pip-audit` advisory only (baseline 0 vulns)                      |
 | UX / Demo Quality                   | 5       | 4      | Judge Lab, provenance timeline, evaluation card, memory disclosure, template labels shipped; not re-verified in a browser during this pass (tests + build only)                                                                                                    |
 | Presentation / Explainability       | 5       | 4      | Docs now match code; volume is large — a jury needs the 5-minute path (below), not the corpus                                                                                                                                                                      |
@@ -107,7 +107,7 @@ Envelope checks: 404 and 422 bodies carried `error_code` + `request_id` = `X-Req
 
 ## Fixed issues (counts)
 
-- Backend: 6 implementation groups + integration fixes; **~120 changed files**, new migration `e1f2a3b4c5d6`, +~330 backend tests (548 → 860+), +62 frontend tests (185 → 247).
+- Backend: 6 implementation groups + integration fixes; **~180 changed files**, new migration `e1f2a3b4c5d6`, +317 backend tests (548 → 865), +62 frontend tests (185 → 247).
 - Documentation drift corrected in 14 docs (provider counts, model names, withdrawn claims, all three gate runs).
 
 ## Remaining issues (prioritised)
