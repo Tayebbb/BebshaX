@@ -13,18 +13,18 @@ BebshaX is a real, tested, evidence-grounded system with an unusually honest fai
 
 ## Score (every deduction cited)
 
-| Category | Weight | Score | Why not full marks |
-| --- | --- | --- | --- |
-| Problem & Innovation | 15 | 11 | Problem is sharp (zero-budget synthetic research); innovation is a rigorous **combination** (provenance enforcement + honest routing + judge lab), not a new algorithm |
-| AI/ML Technical Depth | 20 | 14 | Enforced provenance classes, source-labelled memory, deterministic drift/contradiction/conflict detectors, cross-route metric — but default embeddings are hash-based (`local-hash-384`), no learned component, LLM judging limited to one gate |
-| Persona & Evidence Quality | 15 | 10 | Grounding gate is lexical; demo persona's OBSERVED evidence is US office-product reviews labelled as such (`EVIDENCE_SCOPE_NOTE`); no repetition/diversity metric |
-| Routing / Infrastructure Innovation | 10 | 8 | Closed taxonomy, provider-scope cooldowns, script-aware estimator, `INTERNAL_ERROR` surfacing, estimate/params/ranker markers in provenance; still no persisted provenance from the eval script, quota table has two sources of truth (providers.toml vs quota.py) |
-| Research / Evaluation Validity | 10 | 6 | Real artifact exists ([RESEARCH_EVIDENCE.md](RESEARCH_EVIDENCE.md)) but n = 2 personas × 4 questions; CIs overlap; offline benchmark replay found unusable and withdrawn; three judged-gate runs at n = 1 |
-| Software Engineering | 10 | 9 | 860+ backend tests / 247 frontend tests / migrations from zero verified on pgvector / lint clean / error envelope with request ids; pyright debt (79 errors, advisory) |
-| Security & Reliability | 10 | 7 | Pre-hijack, OTP, SSRF-rebind, body cap, limits, redaction fixed; **remaining:** PBKDF2 at 100k iterations (test-pinned), in-process lockouts/locks, leaked secrets in history awaiting rotation, `pip-audit` advisory only (baseline 0 vulns) |
-| UX / Demo Quality | 5 | 4 | Judge Lab, provenance timeline, evaluation card, memory disclosure, template labels shipped; not re-verified in a browser during this pass (tests + build only) |
-| Presentation / Explainability | 5 | 4 | Docs now match code; volume is large — a jury needs the 5-minute path (below), not the corpus |
-| **Total** | **100** | **73** | |
+| Category                            | Weight  | Score  | Why not full marks                                                                                                                                                                                                                                                 |
+| ----------------------------------- | ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Problem & Innovation                | 15      | 11     | Problem is sharp (zero-budget synthetic research); innovation is a rigorous **combination** (provenance enforcement + honest routing + judge lab), not a new algorithm                                                                                             |
+| AI/ML Technical Depth               | 20      | 14     | Enforced provenance classes, source-labelled memory, deterministic drift/contradiction/conflict detectors, cross-route metric — but default embeddings are hash-based (`local-hash-384`), no learned component, LLM judging limited to one gate                    |
+| Persona & Evidence Quality          | 15      | 10     | Grounding gate is lexical; demo persona's OBSERVED evidence is US office-product reviews labelled as such (`EVIDENCE_SCOPE_NOTE`); no repetition/diversity metric                                                                                                  |
+| Routing / Infrastructure Innovation | 10      | 8      | Closed taxonomy, provider-scope cooldowns, script-aware estimator, `INTERNAL_ERROR` surfacing, estimate/params/ranker markers in provenance; still no persisted provenance from the eval script, quota table has two sources of truth (providers.toml vs quota.py) |
+| Research / Evaluation Validity      | 10      | 6      | Real artifact exists ([RESEARCH_EVIDENCE.md](RESEARCH_EVIDENCE.md)) but n = 2 personas × 4 questions; CIs overlap; offline benchmark replay found unusable and withdrawn; three judged-gate runs at n = 1                                                          |
+| Software Engineering                | 10      | 9      | 860+ backend tests / 247 frontend tests / migrations from zero verified on pgvector / lint clean / error envelope with request ids; pyright debt (79 errors, advisory)                                                                                             |
+| Security & Reliability              | 10      | 7      | Pre-hijack, OTP, SSRF-rebind, body cap, limits, redaction fixed; **remaining:** PBKDF2 at 100k iterations (test-pinned), in-process lockouts/locks, leaked secrets in history awaiting rotation, `pip-audit` advisory only (baseline 0 vulns)                      |
+| UX / Demo Quality                   | 5       | 4      | Judge Lab, provenance timeline, evaluation card, memory disclosure, template labels shipped; not re-verified in a browser during this pass (tests + build only)                                                                                                    |
+| Presentation / Explainability       | 5       | 4      | Docs now match code; volume is large — a jury needs the 5-minute path (below), not the corpus                                                                                                                                                                      |
+| **Total**                           | **100** | **73** |                                                                                                                                                                                                                                                                    |
 
 ## Top strengths
 
@@ -44,29 +44,29 @@ BebshaX is a real, tested, evidence-grounded system with an unusually honest fai
 
 ## Critical vulnerabilities found (all fixed unless marked)
 
-| Severity | Finding | Fix |
-| --- | --- | --- |
-| CRITICAL | Copilot keyword-template replies rendered as AI; a template goal card could be approved | `served_by`/`fallback_reason` read; amber "Template reply" chip; approval disabled |
-| HIGH | Interview system prompt interpolated study goal/objective/segment **undelimited** → identity override via a study field | every field in `<UNTRUSTED_*>` blocks + identity rule (prompt_safety) |
-| HIGH | Interviewer messages stored as persona memory (poisoning + forgery) | `source` column, filtered retrieval/reflection/listing, dedupe, floor |
-| HIGH | Account pre-hijack: signup unverified → victim's Neon sign-in linked to attacker's password | password revoked on link |
-| HIGH | Concurrent turns duplicated turn numbers | per-conversation lock + `MAX(turn_number)` + DB unique constraint |
-| HIGH | Estimator under-counted Bangla → local model silently dropped history (R2) | script-aware shared estimator; `num_ctx ≥ estimate` |
-| HIGH | Quota ranker demoted a provider after one request | bucketed demotion, local pinned |
-| HIGH | Anonymous GET spent real OpenRouter calls | config-only GET |
-| HIGH | `/behavioral-tests/compare` shadowed → feature dead | route order + generic shadow test |
-| HIGH | Seeded provenance row fabricated; demo case incoherent (US fintech persona in BDT study) | seed rewritten (ShomoySuchi / Nusrat Jahan), no `llm_requests` rows |
-| HIGH | No request id / error envelope; 500s leaked `text/plain` | envelope + middleware (inside CORS) |
-| HIGH | Study delete orphaned personas/conversations | metadata-driven cascade |
-| MEDIUM | OTP global lookup, no invalidation, no lockout | scoped, invalidated, 5-strike lockout |
-| MEDIUM | `INTERNAL_ERROR` never stamped; bugs became template personas | stamped + surfaced; generator re-raises |
-| MEDIUM | Offline benchmark "100 % alignment" was a tautology | evaluator reports `unusable`; docs withdrawn |
-| MEDIUM | Constant `avg_tokens_per_sec = 120.5` in eval artifacts | `null` |
-| MEDIUM | Judge model overlapped arm B | judge disjointness enforced |
-| MEDIUM | Contradiction detector false positives on restated budgets (found in the real run) | budget restatement excluded; regression test |
-| MEDIUM | Cross-route agreement paired by requested route (would count within-model repeatability) | pairs by served route; `None` when one route served |
-| **OPEN** | Leaked secrets in git history | **human: rotate Neon/Resend/Brevo/gmail creds** |
-| **OPEN** | PBKDF2 100 000 iterations | flip to 600 000 once `tests/test_auth.py` pin is relaxed |
+| Severity | Finding                                                                                                                 | Fix                                                                                |
+| -------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| CRITICAL | Copilot keyword-template replies rendered as AI; a template goal card could be approved                                 | `served_by`/`fallback_reason` read; amber "Template reply" chip; approval disabled |
+| HIGH     | Interview system prompt interpolated study goal/objective/segment **undelimited** → identity override via a study field | every field in `<UNTRUSTED_*>` blocks + identity rule (prompt_safety)              |
+| HIGH     | Interviewer messages stored as persona memory (poisoning + forgery)                                                     | `source` column, filtered retrieval/reflection/listing, dedupe, floor              |
+| HIGH     | Account pre-hijack: signup unverified → victim's Neon sign-in linked to attacker's password                             | password revoked on link                                                           |
+| HIGH     | Concurrent turns duplicated turn numbers                                                                                | per-conversation lock + `MAX(turn_number)` + DB unique constraint                  |
+| HIGH     | Estimator under-counted Bangla → local model silently dropped history (R2)                                              | script-aware shared estimator; `num_ctx ≥ estimate`                                |
+| HIGH     | Quota ranker demoted a provider after one request                                                                       | bucketed demotion, local pinned                                                    |
+| HIGH     | Anonymous GET spent real OpenRouter calls                                                                               | config-only GET                                                                    |
+| HIGH     | `/behavioral-tests/compare` shadowed → feature dead                                                                     | route order + generic shadow test                                                  |
+| HIGH     | Seeded provenance row fabricated; demo case incoherent (US fintech persona in BDT study)                                | seed rewritten (ShomoySuchi / Nusrat Jahan), no `llm_requests` rows                |
+| HIGH     | No request id / error envelope; 500s leaked `text/plain`                                                                | envelope + middleware (inside CORS)                                                |
+| HIGH     | Study delete orphaned personas/conversations                                                                            | metadata-driven cascade                                                            |
+| MEDIUM   | OTP global lookup, no invalidation, no lockout                                                                          | scoped, invalidated, 5-strike lockout                                              |
+| MEDIUM   | `INTERNAL_ERROR` never stamped; bugs became template personas                                                           | stamped + surfaced; generator re-raises                                            |
+| MEDIUM   | Offline benchmark "100 % alignment" was a tautology                                                                     | evaluator reports `unusable`; docs withdrawn                                       |
+| MEDIUM   | Constant `avg_tokens_per_sec = 120.5` in eval artifacts                                                                 | `null`                                                                             |
+| MEDIUM   | Judge model overlapped arm B                                                                                            | judge disjointness enforced                                                        |
+| MEDIUM   | Contradiction detector false positives on restated budgets (found in the real run)                                      | budget restatement excluded; regression test                                       |
+| MEDIUM   | Cross-route agreement paired by requested route (would count within-model repeatability)                                | pairs by served route; `None` when one route served                                |
+| **OPEN** | Leaked secrets in git history                                                                                           | **human: rotate Neon/Resend/Brevo/gmail creds**                                    |
+| **OPEN** | PBKDF2 100 000 iterations                                                                                               | flip to 600 000 once `tests/test_auth.py` pin is relaxed                           |
 
 ## AI quality findings
 
@@ -95,13 +95,13 @@ See [RESEARCH_EVIDENCE.md](RESEARCH_EVIDENCE.md). Verified: availability behavio
 
 ## Judge attack results (live smoke, demo mode, from-zero PostgreSQL)
 
-| Scenario | Outcome | error_code | Steps |
-| --- | --- | --- | --- |
-| all_providers_down | explicit_failure | all_candidates_failed | 4 |
-| context_overflow | explicit_failure | context_window_exceeded | 3 (all skipped pre-flight) |
-| provider_429_fallback | served_after_fallback | — | 2 |
-| prompt_injection | claims_downgraded | — | 1 |
-| evidence_conflict | claims_downgraded | — | 1 |
+| Scenario              | Outcome               | error_code              | Steps                      |
+| --------------------- | --------------------- | ----------------------- | -------------------------- |
+| all_providers_down    | explicit_failure      | all_candidates_failed   | 4                          |
+| context_overflow      | explicit_failure      | context_window_exceeded | 3 (all skipped pre-flight) |
+| provider_429_fallback | served_after_fallback | —                       | 2                          |
+| prompt_injection      | claims_downgraded     | —                       | 1                          |
+| evidence_conflict     | claims_downgraded     | —                       | 1                          |
 
 Envelope checks: 404 and 422 bodies carried `error_code` + `request_id` = `X-Request-ID`; `/api/health` reported `db=ok`; `GET /api/demo-lab/scenarios` without a token → 401.
 
@@ -126,10 +126,10 @@ Twenty-five hostile questions with implementation-grounded answers: [JUDGE_QA.md
 
 ## Recommended demo sequence (5 minutes)
 
-1. **0:00 — Problem (30 s).** Landing → "Synthetic user research with a $0 API budget": the pitch is capacity aggregation *without* quality degradation.
-2. **0:30 — Demo study.** Sign in (`founder@bebshax.ai`), open *Customer Discovery Study* (ShomoySuchi, BDT student planner). Show Nusrat Jahan's card: `CACHED`, grounding ratio, chips.
+1. **0:00 — Problem (30 s).** Landing → "Synthetic user research with a $0 API budget": the pitch is capacity aggregation _without_ quality degradation.
+2. **0:30 — Demo study.** Sign in (`founder@bebshax.ai`), open _Customer Discovery Study_ (ShomoySuchi, BDT student planner). Show Nusrat Jahan's card: `CACHED`, grounding ratio, chips.
 3. **1:00 — Evidence → claim.** Click an OBSERVED chip → the exact review record (US slice, labelled). Show an INFERRED one — no evidence, said so.
-4. **1:45 — Interview (live).** Ask one question; open *Recalled N memories* and *Route* under the reply; point at the consistency chips (none, hopefully — or one, honestly).
+4. **1:45 — Interview (live).** Ask one question; open _Recalled N memories_ and _Route_ under the reply; point at the consistency chips (none, hopefully — or one, honestly).
 5. **2:45 — Routing & Provenance.** Expand the latest trace: estimate marker, attempts, served-by, tokens. Evaluation card: "computed from N logged requests".
 6. **3:30 — Judge Lab.** Run `all_providers_down` (explicit failure, every attempt classified, nothing fabricated) then `context_overflow` (refused before any call — nothing truncated). Optionally `prompt_injection`.
 7. **4:30 — Honesty close.** Step 5 "Validate with real customers next" + the cross-route artifact: 16/16 identity retention across three real models, ratio 1.15, "n is small and we say so".

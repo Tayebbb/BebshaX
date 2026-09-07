@@ -13,6 +13,7 @@
 - **Mock Header:** Frontend sends `X-BebshaX-Mock: 1` when operating with mock fixtures or when `VITE_MOCK=1`.
 - **Request correlation:** every response carries `X-Request-ID` (a valid client-supplied `X-Request-ID` — ≤64 chars, `[A-Za-z0-9_-]` — is echoed, otherwise a uuid4 hex is generated). The same id is in every error body and in the one access-log line per request.
 - **Standard Error Response** (every non-2xx JSON body, 2026-09-06):
+
   ```json
   {
     "detail": "Descriptive error message",
@@ -20,20 +21,21 @@
     "request_id": "hex32"
   }
   ```
+
   `detail` stays a string for backwards compatibility (a pydantic list for 422, which then also carries `message` = "loc → msg" of the first error). `error_code` is snake_case:
 
-  | HTTP | error_code | Extra top-level fields |
-  | --- | --- | --- |
-  | 400 | `bad_request` | |
-  | 401 / 403 / 404 / 409 | `unauthorized` / `forbidden` / `not_found` / `conflict` | |
-  | 413 | `payload_too_large` | `max_bytes` (2 MiB JSON cap; dataset uploads exempt, own 25 MB cap) |
-  | 413 | `context_window_exceeded` | `estimated_tokens`, `largest_window` — raised BEFORE any provider call; nothing truncated (R2) |
-  | 422 | `validation_error` | `message` |
-  | 429 | `rate_limited` / `too_many_jobs` / `too_many_attempts` | `Retry-After`, `X-RateLimit-*` / `max_running_jobs` |
-  | 502 | `llm_error` | any other `LLMError` (e.g. `INTERNAL_ERROR` surfaced, never templated) |
-  | 503 | `all_candidates_failed` | `llm_request_id`, `attempts[{provider, model, failure_kind, fallback_reason}]`, `routing_path[]` |
-  | 503 | `database_unavailable` | request-time `OperationalError`/`InterfaceError`; also `GET /api/health/ready` |
-  | 500 | `internal_error` | body is always the generic envelope; details only in logs, keyed by `request_id` |
+  | HTTP                  | error_code                                              | Extra top-level fields                                                                           |
+  | --------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+  | 400                   | `bad_request`                                           |                                                                                                  |
+  | 401 / 403 / 404 / 409 | `unauthorized` / `forbidden` / `not_found` / `conflict` |                                                                                                  |
+  | 413                   | `payload_too_large`                                     | `max_bytes` (2 MiB JSON cap; dataset uploads exempt, own 25 MB cap)                              |
+  | 413                   | `context_window_exceeded`                               | `estimated_tokens`, `largest_window` — raised BEFORE any provider call; nothing truncated (R2)   |
+  | 422                   | `validation_error`                                      | `message`                                                                                        |
+  | 429                   | `rate_limited` / `too_many_jobs` / `too_many_attempts`  | `Retry-After`, `X-RateLimit-*` / `max_running_jobs`                                              |
+  | 502                   | `llm_error`                                             | any other `LLMError` (e.g. `INTERNAL_ERROR` surfaced, never templated)                           |
+  | 503                   | `all_candidates_failed`                                 | `llm_request_id`, `attempts[{provider, model, failure_kind, fallback_reason}]`, `routing_path[]` |
+  | 503                   | `database_unavailable`                                  | request-time `OperationalError`/`InterfaceError`; also `GET /api/health/ready`                   |
+  | 500                   | `internal_error`                                        | body is always the generic envelope; details only in logs, keyed by `request_id`                 |
 
   SSE streams (`…/messages/stream`) emit an `error` event with the same `error_code`, `request_id`, `llm_request_id`, `attempts` fields.
 
@@ -531,8 +533,18 @@ Available only when `BEBSHAX_DEMO_MODE=true` or `BEBSHAX_ENVIRONMENT` ∈ {`deve
 #### `GET /api/demo-lab/scenarios`
 
 ```json
-{ "enabled": true, "simulated": true,
-  "scenarios": [ { "name": "provider_429_fallback", "title": "…", "description": "…", "expected_outcome": "…" } ] }
+{
+  "enabled": true,
+  "simulated": true,
+  "scenarios": [
+    {
+      "name": "provider_429_fallback",
+      "title": "…",
+      "description": "…",
+      "expected_outcome": "…"
+    }
+  ]
+}
 ```
 
 Scenario names (a data table in `bebshax/api/demo_lab.py`): `provider_429_fallback`, `provider_5xx_fallback`, `all_providers_down`, `context_overflow`, `prompt_injection`, `evidence_conflict`, `insufficient_evidence`.
@@ -547,10 +559,56 @@ Scenario names (a data table in `bebshax/api/demo_lab.py`): `provider_429_fallba
   "outcome": "served_after_fallback",
   "error_code": null,
   "explanation": "Route A answered HTTP 429 (RATE_LIMITED) … cooled route is excluded from selection for 60s.",
-  "provenance": { "request_id": "…", "task": "PERSONA_GENERATION", "pool": "reasoning", "routing_path": ["[context estimate ~1148 tokens incl. max_output 1024 (default)]", "openrouter/…", "groq/…", "ollama/llama3.2:3b"], "attempts": [ { "attempt_number": 1, "provider": "openrouter", "model": "…", "success": false, "failure_kind": "RATE_LIMITED", "fallback_reason": "advancing after RATE_LIMITED" }, { "attempt_number": 2, "provider": "groq", "model": "…", "success": true } ], "estimated_tokens": 1148, "served_by_provider": "groq", "success": true },
-  "timeline": [ { "step": 1, "provider": "openrouter", "model": "…", "result": "failed", "failure_kind": "RATE_LIMITED", "fallback_reason": "advancing after RATE_LIMITED", "latency_ms": 0.01 },
-                { "step": 2, "provider": "groq", "model": "…", "result": "served", "failure_kind": null, "fallback_reason": null, "latency_ms": 0.01 } ],
-  "extra": { "reply": "…", "cooling_routes": ["openrouter/…"], "adapter_calls": { "openrouter": ["…"], "freellmpool": ["…"], "ollama": [] } }
+  "provenance": {
+    "request_id": "…",
+    "task": "PERSONA_GENERATION",
+    "pool": "reasoning",
+    "routing_path": [
+      "[context estimate ~1148 tokens incl. max_output 1024 (default)]",
+      "openrouter/…",
+      "groq/…",
+      "ollama/llama3.2:3b"
+    ],
+    "attempts": [
+      {
+        "attempt_number": 1,
+        "provider": "openrouter",
+        "model": "…",
+        "success": false,
+        "failure_kind": "RATE_LIMITED",
+        "fallback_reason": "advancing after RATE_LIMITED"
+      },
+      { "attempt_number": 2, "provider": "groq", "model": "…", "success": true }
+    ],
+    "estimated_tokens": 1148,
+    "served_by_provider": "groq",
+    "success": true
+  },
+  "timeline": [
+    {
+      "step": 1,
+      "provider": "openrouter",
+      "model": "…",
+      "result": "failed",
+      "failure_kind": "RATE_LIMITED",
+      "fallback_reason": "advancing after RATE_LIMITED",
+      "latency_ms": 0.01
+    },
+    {
+      "step": 2,
+      "provider": "groq",
+      "model": "…",
+      "result": "served",
+      "failure_kind": null,
+      "fallback_reason": null,
+      "latency_ms": 0.01
+    }
+  ],
+  "extra": {
+    "reply": "…",
+    "cooling_routes": ["openrouter/…"],
+    "adapter_calls": { "openrouter": ["…"], "freellmpool": ["…"], "ollama": [] }
+  }
 }
 ```
 

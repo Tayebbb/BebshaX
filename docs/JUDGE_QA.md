@@ -63,7 +63,7 @@ Only `bebshax/llm/adapters/` may import provider SDKs (AST-enforced). freellmpoo
 RAG retrieves; it does not decide what may be asserted. BebshaX enforces provenance classes on every claim, detects contested evidence, remembers only the persona's own statements, and evaluates consistency across models. RAG is one component (evidence retrieval), not the system.
 
 **21. Why is this better than a normal multi-model router?**
-A generic router optimises cost/latency and may truncate or retry on "bad output". Ours refuses to truncate, refuses to treat quality as a routing signal, cools down at the right scope, records estimate/params/ranker decisions in provenance, and exposes all of it — because the research question is about *preserving* persona quality, not just serving tokens.
+A generic router optimises cost/latency and may truncate or retry on "bad output". Ours refuses to truncate, refuses to treat quality as a routing signal, cools down at the right scope, records estimate/params/ranker decisions in provenance, and exposes all of it — because the research question is about _preserving_ persona quality, not just serving tokens.
 
 **22. Why should anyone trust a synthetic persona?**
 They shouldn't, blindly — and the product says so at Step 5. Trust is scoped: an OBSERVED claim links to the evidence record; INFERRED and SYNTHETIC are labelled; grounding is a ratio computed from real evidence, never a default. Personas are for generating hypotheses to test with real people.

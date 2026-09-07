@@ -6,34 +6,34 @@ Method: three independent code audits ([UI_UX_AUDIT.md](UI_UX_AUDIT.md)), live i
 
 ## Page scores
 
-| Page | Visual | UX | Product | A11y | Responsive | Overall |
-|------|:-----:|:--:|:-------:|:----:|:----------:|:-------:|
-| Console shell (sidebar · top bar · ⌘K) | 9 | 9 | 9 | 9 | 9 | **9.0** |
-| New Study (entry) | 9 | 9 | 8 | 8 | 9 | **8.6** |
-| Dashboard (Studies) | 9 | 8 | 8 | 7 | 9 | **8.2** |
-| Persona Library | 8 | 8 | 9 | 8 | 8 | **8.2** |
-| Study workflow — steps 1–5 | 8 | 8 | 9 | 7 | 8 | **8.0** |
-| Interview workspace | 8 | 8 | 9 | 8 | 8 | **8.2** |
-| Evidence Laboratory | 8 | 8 | 9 | 8 | 8 | **8.2** |
-| Routing & Provenance | 8 | 8 | 9 | 8 | 8 | **8.2** |
-| Behavioral testing | 7 | 7 | 8 | 6 | 8 | **7.2** |
-| Audience segments | 7 | 7 | 8 | 7 | 8 | **7.4** |
+| Page                                   | Visual | UX  | Product | A11y | Responsive | Overall |
+| -------------------------------------- | :----: | :-: | :-----: | :--: | :--------: | :-----: |
+| Console shell (sidebar · top bar · ⌘K) |   9    |  9  |    9    |  9   |     9      | **9.0** |
+| New Study (entry)                      |   9    |  9  |    8    |  8   |     9      | **8.6** |
+| Dashboard (Studies)                    |   9    |  8  |    8    |  7   |     9      | **8.2** |
+| Persona Library                        |   8    |  8  |    9    |  8   |     8      | **8.2** |
+| Study workflow — steps 1–5             |   8    |  8  |    9    |  7   |     8      | **8.0** |
+| Interview workspace                    |   8    |  8  |    9    |  8   |     8      | **8.2** |
+| Evidence Laboratory                    |   8    |  8  |    9    |  8   |     8      | **8.2** |
+| Routing & Provenance                   |   8    |  8  |    9    |  8   |     8      | **8.2** |
+| Behavioral testing                     |   7    |  7  |    8    |  6   |     8      | **7.2** |
+| Audience segments                      |   7    |  7  |    8    |  7   |     8      | **7.4** |
 
 Core workflow target was 9+; shell reached it, the study workflow and persona pages sit at 8.0–8.2. Behavioral testing and segments are below the 8 floor and are listed first in "what remains".
 
 ## Dimension scores (whole product)
 
-| Dimension | Score | Basis |
-|-----------|:-----:|-------|
-| Visual design | 8.5 | One token system, one CTA gradient, scales for type/space/radius; glass reserved for chrome. Residual literal colours in ~5 views. |
-| Information architecture | 9 | Workspace / Study / System grouping, active-study chip, breadcrumb, command menu. Labels unchanged (test contracts). |
-| User experience | 8.5 | Every empty state names the next action; study-less tabs explain *why* a study is needed; returning users resume via chip or ⌘K. |
-| Interaction design | 8.5 | ⌘K with full keyboard model; stepper "Step N of 5"; spring buttons; Escape stacking protocol shared by all dialogs. |
-| Accessibility | 8 | Skip link, single `main`, `aria-current`, labelled icon buttons, `role="meter"` bars, text-with-colour everywhere new. Chat bubbles and behavioral type cards still lack semantics. |
-| Responsive design | 8.5 | 390 px verified zero-overflow; drawer nav; grids use `min(Npx,100%)`; stepper collapses. Inspector's 8 tabs still scroll horizontally on phones. |
-| Performance | 8 | +1 CSS file (~12 KB raw) and ~6 KB of primitives; no new dependencies; dashboard chunk 469 KB (was 394 KB before earlier hardening — PersonaLibraryView split is the lever). |
-| Product differentiation | 9 | Evidence grounding, provenance, memory and routing are visible product features with progressive disclosure, not debug panels. |
-| Competition readiness | 8.5 | 10-second test: breadcrumb + eyebrow + title answer "what/where"; health pill answers "is it live"; ⌘K "routing" gets a judge to the technical story in one keystroke. |
+| Dimension                | Score | Basis                                                                                                                                                                               |
+| ------------------------ | :---: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Visual design            |  8.5  | One token system, one CTA gradient, scales for type/space/radius; glass reserved for chrome. Residual literal colours in ~5 views.                                                  |
+| Information architecture |   9   | Workspace / Study / System grouping, active-study chip, breadcrumb, command menu. Labels unchanged (test contracts).                                                                |
+| User experience          |  8.5  | Every empty state names the next action; study-less tabs explain _why_ a study is needed; returning users resume via chip or ⌘K.                                                    |
+| Interaction design       |  8.5  | ⌘K with full keyboard model; stepper "Step N of 5"; spring buttons; Escape stacking protocol shared by all dialogs.                                                                 |
+| Accessibility            |   8   | Skip link, single `main`, `aria-current`, labelled icon buttons, `role="meter"` bars, text-with-colour everywhere new. Chat bubbles and behavioral type cards still lack semantics. |
+| Responsive design        |  8.5  | 390 px verified zero-overflow; drawer nav; grids use `min(Npx,100%)`; stepper collapses. Inspector's 8 tabs still scroll horizontally on phones.                                    |
+| Performance              |   8   | +1 CSS file (~12 KB raw) and ~6 KB of primitives; no new dependencies; dashboard chunk 469 KB (was 394 KB before earlier hardening — PersonaLibraryView split is the lever).        |
+| Product differentiation  |   9   | Evidence grounding, provenance, memory and routing are visible product features with progressive disclosure, not debug panels.                                                      |
+| Competition readiness    |  8.5  | 10-second test: breadcrumb + eyebrow + title answer "what/where"; health pill answers "is it live"; ⌘K "routing" gets a judge to the technical story in one keystroke.              |
 
 **Overall: 8.5 / 10**
 

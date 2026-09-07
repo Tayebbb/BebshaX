@@ -2,7 +2,7 @@
 
 Final creative-direction pass on top of the premium UX transformation ([UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md)). Method: run the app in mock mode, look at every route at 1440 and 390 px in both themes, then apply the ten passes (architecture, hierarchy, interaction, content, responsive, accessibility, motion, performance, subtraction, final taste). The design-taste rulebook used for the landing page (eyebrow restraint, hero stack discipline, dash ban, tell inventory) was applied to the console only as a critique lens: the console is product UI, which that rulebook explicitly scopes out.
 
-Design read: *redesign-preserve of a dense research console plus its marketing landing, for judges and researchers, calm / editorial / technically credible, existing teal token system, dials 5 / 3 / 5.*
+Design read: _redesign-preserve of a dense research console plus its marketing landing, for judges and researchers, calm / editorial / technically credible, existing teal token system, dials 5 / 3 / 5._
 
 ## What was weak
 
