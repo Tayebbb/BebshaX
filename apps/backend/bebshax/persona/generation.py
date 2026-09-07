@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from bebshax.llm import ChatMessage, LLMRequest, LLMService, TaskType
 from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.persona.consistency import ConsistencyViolation, check_consistency
 from bebshax.persona.evidence import EvidenceStore
 from bebshax.persona.schema import (
@@ -54,7 +55,9 @@ Provenance rules (mandatory, will be machine-verified):
 - SYNTHETIC: plausible invention to complete the persona; evidence_ids empty.
 Never fabricate evidence ids. goals and pain_points need at least 2 claims each; \
 give at least 1 claim in every other group. Make the persona specific and internally consistent \
-(age vs occupation, income vs spending)."""
+(age vs occupation, income vs spending).
+
+""" + UNTRUSTED_RULE
 
 _SEED_BLOCK = """DIVERSITY SEED — a random persona sketch for perspective only. Do NOT copy its \
 identity, name, or occupation; use it to avoid generating a generic/stereotypical persona:
@@ -89,19 +92,35 @@ class PersonaEngine:
         seed: str | None,
         hints: str | None,
     ) -> list[ChatMessage]:
-        parts = [f"BUSINESS: {business_name}\n{business_description}"]
+        # Everything below the labels is researcher/dataset-supplied DATA and
+        # is wrapped so a record reading "SYSTEM OVERRIDE: ..." stays a record.
+        parts = [
+            "BUSINESS:\n"
+            + untrusted_block(
+                "BUSINESS", f"{business_name}\n{business_description}", source="business"
+            )
+        ]
         if evidence:
             lines = "\n".join(f"- [{e.id}] ({e.source}) {e.text}" for e in evidence)
-            parts.append(f"EVIDENCE ITEMS (cite ids for OBSERVED claims):\n{lines}")
+            parts.append(
+                "EVIDENCE ITEMS (cite ids for OBSERVED claims):\n"
+                + untrusted_block("EVIDENCE", lines, source="evidence_store")
+            )
         else:
             parts.append(
                 "EVIDENCE ITEMS: none available — do not mark any claim OBSERVED; "
                 "use INFERRED or SYNTHETIC honestly."
             )
         if seed:
-            parts.append(_SEED_BLOCK.format(seed=seed))
+            parts.append(
+                _SEED_BLOCK.format(
+                    seed=untrusted_block("SEED", seed, source="evidence_store.seed")
+                )
+            )
         if hints:
-            parts.append(f"RESEARCHER HINTS: {hints}")
+            parts.append(
+                "RESEARCHER HINTS:\n" + untrusted_block("HINTS", hints, source="researcher.hints")
+            )
         return [
             ChatMessage(role="system", content=_SYSTEM_PROMPT),
             ChatMessage(role="user", content="\n\n".join(parts)),
@@ -202,7 +221,8 @@ class PersonaEngine:
         if errors:
             raise PersonaGenerationFailed("consistency errors persist after refinement", errors)
 
-        warnings = [v.message for v in violations if v.severity == "warning"]
+        # provenance warnings (contested:<slot>) come from coerce_provenance
+        warnings = [*profile.warnings, *(v.message for v in violations if v.severity == "warning")]
 
         if self._critic:
             warnings.extend(await self._run_critic(profile, persona_id))

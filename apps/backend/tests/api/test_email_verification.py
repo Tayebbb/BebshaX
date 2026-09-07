@@ -95,7 +95,11 @@ def test_verify_email_with_valid_token_marks_user_verified(client):
         verification_url = mock_send.call_args[0][1]
         token_str = verification_url.split("token=")[1]
 
-    verify_resp = client.post("/api/auth/verify-email", json={"token": token_str})
+    # Verification is account-scoped: the code is only valid together with the
+    # email it was issued to.
+    verify_resp = client.post(
+        "/api/auth/verify-email", json={"token": token_str, "email": "verify_me@example.com"}
+    )
     assert verify_resp.status_code == 200
     assert verify_resp.json()["detail"] == "Email verified successfully."
 
@@ -122,17 +126,24 @@ def test_verify_email_rejects_already_used_token(client):
         token_str = mock_send.call_args[0][1].split("token=")[1]
 
     # First use succeeds
-    client.post("/api/auth/verify-email", json={"token": token_str})
+    client.post(
+        "/api/auth/verify-email", json={"token": token_str, "email": "reuse_token@example.com"}
+    )
 
     # Second use fails
-    resp = client.post("/api/auth/verify-email", json={"token": token_str})
+    resp = client.post(
+        "/api/auth/verify-email", json={"token": token_str, "email": "reuse_token@example.com"}
+    )
     assert resp.status_code == 400
     assert "Token already used" in resp.json()["detail"]
 
 
 def test_verify_email_rejects_invalid_token(client):
     """Stage 3: Unknown token returns 400."""
-    resp = client.post("/api/auth/verify-email", json={"token": "nonexistent_token_123"})
+    resp = client.post(
+        "/api/auth/verify-email",
+        json={"token": "nonexistent_token_123", "email": "nobody-here@example.com"},
+    )
     assert resp.status_code == 400
     assert "Invalid verification token" in resp.json()["detail"]
 
@@ -189,7 +200,9 @@ def test_verify_email_rejects_expired_token(client):
             )
     asyncio.run(expire())
 
-    resp = client.post("/api/auth/verify-email", json={"token": token_str})
+    resp = client.post(
+        "/api/auth/verify-email", json={"token": token_str, "email": "expired_tok@example.com"}
+    )
     assert resp.status_code == 400
     assert "Verification link expired" in resp.json()["detail"]
 

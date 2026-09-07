@@ -141,6 +141,8 @@ const MAP = [
   [/color:\s*'var\(--bg-pure\)'/g, "color: 'var(--text-on-accent)'"],
   // #042F2E (teal-950) used as TEXT on teal buttons — the subtle-wash token is bg-only
   [/color:\s*'var\(--accent-subtle\)'/g, "color: 'var(--text-on-accent)'"],
+  // The primary-action gradient exists once, as a token (light mode darkens it)
+  [/linear-gradient\(135deg,\s*#14B8A6\s+0%,\s*#0D9488\s+100%\)/gi, 'var(--accent-gradient)'],
 ];
 
 const checkOnly = process.argv.includes('--check');

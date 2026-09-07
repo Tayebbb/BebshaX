@@ -32,9 +32,30 @@ services:
       dockerfile: apps/backend/Dockerfile
     container_name: bebshax-app
     profiles: ["full"]
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+    # Migrate, then serve. The in-process drift guard (bebshax/main.py) only
+    # runs for localhost dev URLs with demo_mode off, so inside compose the
+    # schema would otherwise never be checked. alembic.ini + alembic/ ship in
+    # the image at /app (see apps/backend/Dockerfile); `exec` keeps uvicorn
+    # as PID 1 so `docker compose stop` delivers SIGTERM to it, not to sh.
+    command: >-
+      sh -c "python -m alembic upgrade head
+      && exec python -m uvicorn bebshax.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      # python:3.12-slim ships no curl/wget — use the stdlib instead.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health/ready', timeout=3).status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Migrations + demo seed run before the port opens.
+      start_period: 60s
     env_file:
       # Passes BEBSHAX_* through from the repo-root .env (JWT secret etc.).
       - path: .env
@@ -53,6 +74,13 @@ services:
       # Uploads/processed datasets must survive container rebuilds
       # (BEBSHAX_DATA_DIR=/app/data is baked into the image).
       - bebshax_appdata:/app/data
+      # .dockerignore deliberately excludes data/ from the build context, so
+      # without these read-only bind mounts the EvidenceStore is EMPTY inside
+      # the container (no grounding evidence, quality_gate: null). Populate
+      # the host side first: scripts/setup_datasets.py --profile minimal.
+      # Nested under the named volume above — Docker mounts deeper paths last.
+      - ./data/processed:/app/data/processed:ro
+      - ./data/metadata:/app/data/metadata:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -66,8 +94,18 @@ services:
         VITE_NEON_AUTH_URL: "${VITE_NEON_AUTH_URL:-}"
     container_name: bebshax-web
     profiles: ["full"]
+    restart: unless-stopped
     depends_on:
-      - app
+      app:
+        # nginx would otherwise start proxying to a backend still migrating.
+        condition: service_healthy
+    healthcheck:
+      # busybox wget is present in nginx:alpine; --spider = HEAD, no body.
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     ports:
       - "8080:80"
 

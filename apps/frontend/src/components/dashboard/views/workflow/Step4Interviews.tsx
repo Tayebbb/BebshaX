@@ -1,7 +1,9 @@
 import React from 'react';
-import { FileText, MessageSquare, Send, Sparkles, Zap } from 'lucide-react';
+import { AlertTriangle, FileText, MessageSquare, Send, Sparkles } from 'lucide-react';
 import { ConversationTurn, Persona } from '../../../../types';
 import { READ_ONLY_TITLE } from './types';
+import { MemoryDisclosure, RouteDisclosure } from '../../../common/MemoryDisclosure';
+import { RequestIdTag } from '../../../common/RequestIdTag';
 
 /** Step 4 — synthetic interviews & live simulation. Pure JSX extraction from
  * StudyWorkflowView: batch/polling/chat state and handlers stay in the parent;
@@ -15,6 +17,10 @@ interface Step4InterviewsProps {
   handleGenerateFinalReport: () => Promise<void>;
   handleStepChange: (newStep: number, opts?: { reportReady?: boolean }) => void;
   interviewStatusMap: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'>;
+  /** Backend-reported reason per failed persona interview (shown on the pill). */
+  interviewFailureReasons?: Record<string, string>;
+  /** Whole-batch failure (job never started / lost) with its request id. */
+  batchError?: { message: string; requestId: string | null } | null;
   activeInterviewPersonaId: string;
   setActiveInterviewPersonaId: React.Dispatch<React.SetStateAction<string>>;
   setChatMessages: React.Dispatch<React.SetStateAction<ConversationTurn[]>>;
@@ -38,6 +44,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
   handleGenerateFinalReport,
   handleStepChange,
   interviewStatusMap,
+  interviewFailureReasons = {},
+  batchError = null,
   activeInterviewPersonaId,
   setActiveInterviewPersonaId,
   setChatMessages,
@@ -70,7 +78,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                     disabled={isBatchRunning || isReadOnly}
                     title={isReadOnly ? READ_ONLY_TITLE : undefined}
                     style={{
-                      background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                      background: 'var(--accent-gradient)',
                       border: 'none',
                       borderRadius: '8px',
                       padding: '10px 20px',
@@ -138,6 +146,28 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
             </div>
 
             {/* Persona Selector Tabs */}
+            {batchError && (
+              <div
+                role="alert"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  color: 'var(--status-error-text)',
+                  fontSize: '0.86rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertTriangle size={15} aria-hidden="true" />
+                  <span>Batch interviews failed: {batchError.message}</span>
+                </div>
+                <RequestIdTag requestId={batchError.requestId} />
+              </div>
+            )}
             {personas.length === 0 ? (
               <div
                 style={{
@@ -162,7 +192,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   onClick={() => handleStepChange(2)}
                   style={{
                     marginTop: '6px',
-                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                    background: 'var(--accent-gradient)',
                     border: 'none',
                     borderRadius: '8px',
                     padding: '10px 20px',
@@ -180,10 +210,12 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
               {personas.map((p) => {
                 const status = interviewStatusMap[p.id] || 'pending';
                 const isActive = activeInterviewPersonaId === p.id;
+                const failureReason = status === 'failed' ? interviewFailureReasons[p.id] : undefined;
                 return (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   <button
                     type="button"
+                    title={failureReason ? `Failed: ${failureReason}` : undefined}
                     onClick={() => {
                       setActiveInterviewPersonaId(p.id);
                       setChatMessages([]);
@@ -212,15 +244,15 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                         borderRadius: '4px',
                         background:
                           status === 'completed'
-                            ? 'rgba(16, 185, 129, 0.15)'
+                            ? 'var(--status-success-bg)'
                             : status === 'in_progress'
-                            ? 'rgba(34, 211, 238, 0.15)'
+                            ? 'var(--status-info-bg)'
                             : status === 'failed'
-                            ? 'rgba(239, 68, 68, 0.12)'
+                            ? 'var(--status-error-bg)'
                             : 'var(--fill-soft)',
                         color:
                           status === 'completed'
-                            ? 'var(--accent-emerald)'
+                            ? 'var(--status-success-text)'
                             : status === 'in_progress'
                             ? 'var(--accent-cyan)'
                             : status === 'failed'
@@ -236,6 +268,21 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                         ? 'Failed'
                         : 'Pending'}
                     </span>
+                    {failureReason && (
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 500,
+                          color: 'var(--status-error-text)',
+                          maxWidth: '220px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {failureReason}
+                      </span>
+                    )}
                   </button>
                   {status === 'failed' && (
                     <button
@@ -305,7 +352,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                     background: isErrorTurn
                       ? 'rgba(239, 68, 68, 0.08)'
                       : msg.role === 'user'
-                      ? 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)'
+                      ? 'var(--accent-gradient)'
                       : 'var(--bg-card-hover)',
                     color: isErrorTurn ? 'var(--status-error-text)' : 'var(--text-main)',
                     padding: '14px 18px',
@@ -318,12 +365,11 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.content}</div>
-                  {msg.role !== 'user' && msg.served_by && (
-                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.72rem', color: 'var(--accent-cyan)' }}>
-                      <Zap size={11} />
-                      <span>Served by {msg.served_by}</span>
-                      {msg.latency_ms && <span>• {Math.round(msg.latency_ms)}ms</span>}
-                    </div>
+                  {msg.role !== 'user' && !isErrorTurn && (
+                    <>
+                      <MemoryDisclosure memories={msg.retrieved_memories} compact />
+                      <RouteDisclosure servedBy={msg.served_by} latencyMs={msg.latency_ms} compact />
+                    </>
                   )}
                 </div>
                 );
@@ -368,7 +414,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                 disabled={isSimulating || !userInputMessage.trim() || isReadOnly}
                 title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
-                  background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                  background: 'var(--accent-gradient)',
                   border: 'none',
                   color: 'var(--text-on-accent)',
                   borderRadius: '12px',

@@ -60,7 +60,7 @@ export const PersonaDetailModal: React.FC<PersonaDetailModalProps> = ({
                     width: '48px',
                     height: '48px',
                     borderRadius: '12px',
-                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                    background: 'var(--accent-gradient)',
                     color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '1.2rem',

@@ -65,7 +65,7 @@ npm run dev
 | Start only the backend     | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
 | Start only the frontend    | `cd apps/frontend && npm run dev`                                               |
 | Start the Postgres service | `docker compose up -d --wait db`                                                |
-| Apply migrations           | `cd apps/backend && ..\.venv\Scripts\python -m alembic upgrade head`            |
+| Apply migrations           | `cd apps/backend && ..\..\.venv\Scripts\python -m alembic upgrade head`         |
 | Run backend tests          | `.venv\Scripts\python -m pytest apps/backend/tests -q`                          |
 | Build frontend             | `cd apps/frontend && npm run build`                                             |
 
@@ -77,7 +77,7 @@ Configuration is environment-driven (`BEBSHAX_*` variables; see [.env.example](.
 
 - **`BEBSHAX_JWT_SECRET` is mandatory.** The app **fails fast on startup** without it (≥32 chars, and the burned git-history value is rejected outright — audit finding B4). Generate your own; never reuse a teammate's.
 - **Provider API keys are optional** — add whatever legitimate free-tier keys you personally own; keyless providers work with none.
-- **Run `alembic upgrade head` after every pull that touches `alembic/`.** Startup and CI both hard-fail on drift (audit finding H6), so a stale local DB now surfaces immediately instead of 500-ing at request time.
+- **Run `alembic upgrade head` after every pull that touches `alembic/`.** The drift guard is deliberately narrow: at startup the API compares the database revision with the code's head **only for local dev databases** (`BEBSHAX_ENVIRONMENT` development/local, `localhost` URL, demo mode off) and exits with a clear message on mismatch; CI applies the whole chain from zero and fails on drift or on more than one head. Cloud databases are never auto-checked. The compose `full` profile is the exception that self-heals: its `app` container runs `alembic upgrade head` before uvicorn on every start (see [docs/SETUP.md](docs/SETUP.md) § Deployment stories).
 
 ---
 

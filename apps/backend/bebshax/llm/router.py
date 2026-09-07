@@ -7,8 +7,10 @@ the local adapter; `emergency` starts there).
 
 Ranking is pool order by default; `ranker` is the injection point — production
 wires the §10 quota-aware ranker there. Cooldowns are in-memory
-`(provider, model) → deadline`, restored from and mirrored to
-`model_registry.cooldown_until` via bebshax.db.capacity_state.
+`(provider, model) → deadline` — or `(provider, "*")` when the failure policy
+scopes the cooldown to the whole provider (account-level signals such as 429)
+— restored from and mirrored to `model_registry.cooldown_until` via
+bebshax.db.capacity_state.
 """
 
 from __future__ import annotations
@@ -26,17 +28,36 @@ from bebshax.llm.adapters.base import (
 )
 from bebshax.llm.failures import (
     FAILURE_POLICIES,
-    AllCandidatesFailed,
     AttemptFailed,
     FailureKind,
     LLMError,
 )
 from bebshax.llm.pools import POOLS, TASK_POOL_MAP, PoolConfig
 from bebshax.llm.provenance import AttemptRecord, ProvenanceRecord
-from bebshax.llm.service import Entry, LLMService, attempt_candidates, filter_eligible
+from bebshax.llm.service import (
+    Entry,
+    LLMService,
+    attempt_candidates,
+    exhaustion_error,
+    filter_eligible,
+    stamp_internal_error,
+)
 from bebshax.llm.types import LLMRequest, LLMResult, TaskType
 
 DEFAULT_COOLDOWN_SECONDS = 60.0
+PROVIDER_WIDE = "*"  # model slot of a provider-scoped cooldown key
+
+
+def cooldown_key(cand: RouteCandidate, kind: FailureKind) -> tuple[str, str]:
+    """(provider, model) for route-scoped policies, (provider, "*") for
+    provider-scoped ones — the same key shape persists to model_registry."""
+    if FAILURE_POLICIES[kind].cooldown_scope == "provider":
+        return (cand.provider, PROVIDER_WIDE)
+    return (cand.provider, cand.model)
+
+
+def _compact_routes(entries: list[Entry]) -> str:
+    return ", ".join(f"{cand.provider}/{cand.model}" for _, cand in entries)
 
 
 def _apply_preference(
@@ -111,18 +132,21 @@ class PoolRouter(LLMService):
         }
 
     def _cooling_reason(self, cand: RouteCandidate) -> str | None:
-        until = self._cooldown_until.get((cand.provider, cand.model))
-        if until is not None and self._clock() < until:
-            return f"cooling down for {until - self._clock():.0f}s more"
+        now = self._clock()
+        for key in ((cand.provider, cand.model), (cand.provider, PROVIDER_WIDE)):
+            until = self._cooldown_until.get(key)
+            if until is not None and now < until:
+                scope = " (provider-wide)" if key[1] == PROVIDER_WIDE else ""
+                return f"cooling down for {until - now:.0f}s more{scope}"
         return None
 
     def _start_cooldown(self, cand: RouteCandidate, kind: FailureKind) -> None:
-        self._cooldown_until[(cand.provider, cand.model)] = (
-            self._clock() + self._cooldown_seconds
-        )
+        provider, model = cooldown_key(cand, kind)
+        self._cooldown_until[(provider, model)] = self._clock() + self._cooldown_seconds
         if self._on_cooldown_change is not None:
-            # fire-and-forget persistence — cooldown state must survive restarts
-            self._on_cooldown_change(cand.provider, cand.model, self._cooldown_seconds)
+            # fire-and-forget persistence — cooldown state must survive restarts;
+            # provider-scoped cooldowns persist with model "*" and load back as-is
+            self._on_cooldown_change(provider, model, self._cooldown_seconds)
 
     async def _eligible_entries(
         self, pool: PoolConfig, request: LLMRequest, provenance: ProvenanceRecord
@@ -135,7 +159,12 @@ class PoolRouter(LLMService):
             for cand in await adapter.candidates():
                 entries.append((adapter, cand))
         if self._ranker is not None:
-            entries = self._ranker(entries)
+            ranked = self._ranker(entries)
+            if [c for _, c in ranked] != [c for _, c in entries]:
+                provenance.routing_path.append(
+                    f"[ranker reordered: {_compact_routes(entries)} -> {_compact_routes(ranked)}]"
+                )
+            entries = ranked
         entries = _apply_preference(entries, request, provenance)
         return filter_eligible(
             entries, request, provenance, extra_skip_reason=self._cooling_reason
@@ -161,7 +190,11 @@ class PoolRouter(LLMService):
                 try:
                     eligible = await self._eligible_entries(pool, request, provenance)
                     return await attempt_candidates(
-                        eligible, request, provenance, on_cooldown=self._start_cooldown
+                        eligible,
+                        request,
+                        provenance,
+                        on_cooldown=self._start_cooldown,
+                        skip_reason=self._cooling_reason,
                     )
                 finally:
                     self._active_requests[pool_name] -= 1
@@ -200,6 +233,12 @@ class PoolRouter(LLMService):
 
                     attempt_no = 0
                     for adapter, cand in eligible:
+                        cooling = self._cooling_reason(cand)  # started mid-request?
+                        if cooling is not None:
+                            provenance.routing_path.append(
+                                f"{cand.provider}/{cand.model} [skipped: {cooling}]"
+                            )
+                            continue
                         same_route_retries = 0
                         while True:
                             attempt_no += 1
@@ -219,6 +258,11 @@ class PoolRouter(LLMService):
                                             completion = event.completion
                                             record.latency_ms = (time.perf_counter() - t0) * 1000
                                             record.success = True
+                                            if (completion.provider, completion.model) != (
+                                                cand.provider,
+                                                cand.model,
+                                            ):
+                                                record.via = f"{cand.provider}/{cand.model}"
                                             record.provider = completion.provider
                                             record.model = completion.model
                                             record.notes = list(completion.notes)
@@ -268,7 +312,9 @@ class PoolRouter(LLMService):
                                     continue
                                 record.fallback_reason = f"advancing after {failure.kind}"
                                 break
-                    raise AllCandidatesFailed(provenance)
+                            except Exception as exc:  # adapter bug — surface, never advance
+                                raise stamp_internal_error(record, exc, t0) from exc
+                    raise exhaustion_error(provenance, request)
                 finally:
                     self._active_requests[pool_name] -= 1
         finally:

@@ -27,4 +27,19 @@ export interface CopilotMessage {
   };
   isRetryPrompt?: boolean;
   retryContent?: string;
+  /** Route that produced an assistant reply (`provider/model` or the template engine). */
+  servedBy?: string;
+  /** Backend reason the LLM path was bypassed — present only on template replies. */
+  fallbackReason?: string | null;
+  /** True when the reply is a keyword template, not model output (see isTemplateReply). */
+  isTemplate?: boolean;
+  /** Failure copy + request id for error bubbles so a judge can trace the request. */
+  errorDetail?: string;
+  requestId?: string | null;
 }
+
+/** The backend's keyword-template copilot engine — a reply served by it is NOT AI output. */
+export const TEMPLATE_COPILOT_ROUTE = 'bebshax/copilot-engine';
+
+export const isTemplateReply = (r: { served_by?: string; fallback_reason?: string | null }): boolean =>
+  r.served_by === TEMPLATE_COPILOT_ROUTE || (typeof r.fallback_reason === 'string' && r.fallback_reason.length > 0);

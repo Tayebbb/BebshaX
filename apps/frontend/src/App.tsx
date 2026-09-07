@@ -71,7 +71,7 @@ const AppContent: React.FC = () => {
     // authenticated this user, verifying is a follow-up, not a gate.
     if (isAuthenticated && !currentPath.includes('/verify') && !currentPath.includes('/otp')) {
       return (
-        <DashboardLayout onOpenLandingPage={() => navigate('/')} />
+        <DashboardLayout onOpenLandingPage={() => navigate('/')} health={health} />
       );
     }
     return <AuthPage />;
@@ -136,7 +136,8 @@ const AppContent: React.FC = () => {
     }
     return (
       <>
-        {/* Screen-reader accessible identity */}
+        {/* Screen-reader accessible identity. Not a heading: every view supplies
+            its own h1, and two h1s per page confused the outline. */}
         <div
           style={{
             position: 'absolute',
@@ -150,20 +151,21 @@ const AppContent: React.FC = () => {
             borderWidth: 0,
           }}
         >
-          <h1>BebshaX</h1>
+          <p>BebshaX</p>
           <p>Synthetic Persona Research Platform</p>
           <div>Backend Status: {health?.status || 'Connecting...'}</div>
         </div>
 
         {/* Dashboard Shell Application */}
-        <DashboardLayout onOpenLandingPage={() => navigate('/')} />
+        <DashboardLayout onOpenLandingPage={() => navigate('/')} health={health} />
       </>
     );
   }
 
   return (
     <>
-      {/* Screen-reader / programmatic accessible platform identity container */}
+      {/* Screen-reader / programmatic platform identity. Not a heading — the
+          landing hero owns the page's single h1. */}
       <div
         style={{
           position: 'absolute',
@@ -177,7 +179,7 @@ const AppContent: React.FC = () => {
           borderWidth: 0,
         }}
       >
-        <h1>BebshaX</h1>
+        <p>BebshaX</p>
         <p>Synthetic Persona Research Platform</p>
         <div>Backend Status: {health?.status || 'Connecting...'}</div>
       </div>

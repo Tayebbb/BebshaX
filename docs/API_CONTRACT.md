@@ -11,20 +11,37 @@
 - **Content-Type:** `application/json`
 - **Time format:** ISO 8601 UTC (`YYYY-MM-DDTHH:mm:ss.sssZ`)
 - **Mock Header:** Frontend sends `X-BebshaX-Mock: 1` when operating with mock fixtures or when `VITE_MOCK=1`.
-- **Standard Error Response:**
+- **Request correlation:** every response carries `X-Request-ID` (a valid client-supplied `X-Request-ID` — ≤64 chars, `[A-Za-z0-9_-]` — is echoed, otherwise a uuid4 hex is generated). The same id is in every error body and in the one access-log line per request.
+- **Standard Error Response** (every non-2xx JSON body, 2026-09-06):
   ```json
   {
     "detail": "Descriptive error message",
-    "error_code": "CONTEXT_WINDOW_EXCEEDED",
+    "error_code": "not_found",
     "request_id": "hex32"
   }
   ```
+  `detail` stays a string for backwards compatibility (a pydantic list for 422, which then also carries `message` = "loc → msg" of the first error). `error_code` is snake_case:
+
+  | HTTP | error_code | Extra top-level fields |
+  | --- | --- | --- |
+  | 400 | `bad_request` | |
+  | 401 / 403 / 404 / 409 | `unauthorized` / `forbidden` / `not_found` / `conflict` | |
+  | 413 | `payload_too_large` | `max_bytes` (2 MiB JSON cap; dataset uploads exempt, own 25 MB cap) |
+  | 413 | `context_window_exceeded` | `estimated_tokens`, `largest_window` — raised BEFORE any provider call; nothing truncated (R2) |
+  | 422 | `validation_error` | `message` |
+  | 429 | `rate_limited` / `too_many_jobs` / `too_many_attempts` | `Retry-After`, `X-RateLimit-*` / `max_running_jobs` |
+  | 502 | `llm_error` | any other `LLMError` (e.g. `INTERNAL_ERROR` surfaced, never templated) |
+  | 503 | `all_candidates_failed` | `llm_request_id`, `attempts[{provider, model, failure_kind, fallback_reason}]`, `routing_path[]` |
+  | 503 | `database_unavailable` | request-time `OperationalError`/`InterfaceError`; also `GET /api/health/ready` |
+  | 500 | `internal_error` | body is always the generic envelope; details only in logs, keyed by `request_id` |
+
+  SSE streams (`…/messages/stream`) emit an `error` event with the same `error_code`, `request_id`, `llm_request_id`, `attempts` fields.
 
 ---
 
 ## 2. Enumerations
 
-### 2.1 TaskType (16 Fixed Tasks)
+### 2.1 TaskType (18 Fixed Tasks — mirrors `bebshax/llm/types.py`)
 
 ```typescript
 export type TaskType =
@@ -33,6 +50,8 @@ export type TaskType =
   | "PERSONA_VALIDATION"
   | "PERSONA_INTERVIEW"
   | "PERSONA_RESPONSE"
+  | "PERSONA_NARRATIVE"
+  | "BEHAVIORAL_SIMULATION"
   | "EVIDENCE_EXTRACTION"
   | "EVIDENCE_CLASSIFICATION"
   | "MEMORY_RETRIEVAL"
@@ -46,19 +65,22 @@ export type TaskType =
   | "EMERGENCY_FALLBACK";
 ```
 
-### 2.2 FailureKind
+### 2.2 FailureKind (closed taxonomy, 13 kinds — mirrors `bebshax/llm/failures.py`; quality is NOT a kind)
 
 ```typescript
 export type FailureKind =
-  | "RATE_LIMIT"
-  | "QUOTA_EXHAUSTED"
   | "TIMEOUT"
   | "CONNECTION"
+  | "RATE_LIMITED"
+  | "QUOTA_EXHAUSTED"
   | "SERVER_ERROR"
+  | "PROVIDER_UNAVAILABLE"
+  | "AUTH_INVALID"
   | "MODEL_UNAVAILABLE"
+  | "CONTEXT_WINDOW_EXCEEDED"
   | "CAPABILITY_UNSUPPORTED"
-  | "CONTEXT_OVERFLOW"
   | "MALFORMED_RESPONSE"
+  | "CONTENT_REFUSAL"
   | "INTERNAL_ERROR";
 ```
 
@@ -78,9 +100,9 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
 
 ## 3. Endpoints
 
-### 3.1 Health Check (Implemented in Phase 1)
+### 3.1 Health Check (Phase 1; deepened 2026-09-06)
 
-- **`GET /api/health`**
+- **`GET /api/health`** — liveness + a fail-soft snapshot
 - **Response `200 OK`:**
   ```json
   {
@@ -88,9 +110,14 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
     "app": "BebshaX",
     "version": "0.1.0",
     "environment": "development",
-    "demo_mode": false
+    "demo_mode": false,
+    "db": "ok",
+    "local_tier_up": true,
+    "sink": { "written": 120, "dropped": 0, "db_errors": 0 }
   }
   ```
+  `db` is `"ok"` or `"unreachable"` (`SELECT 1`, 2 s timeout); `local_tier_up` is the Ollama probe at boot (`null` when unknown); `sink` are the provenance writer counters.
+- **`GET /api/health/ready`** — readiness: `200` when the database answers, else `503 {"error_code": "database_unavailable"}`. This is the compose healthcheck target.
 
 ---
 
@@ -99,6 +126,8 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
 #### `GET /api/provenance`
 
 - **Query params:** `limit` (default 50), `task`, `pool`, `success` (boolean), `persona_id`
+- **Scope:** owner-scoped; rows the caller does not own (and all rows for anonymous callers) have `attempts[].failure_detail` redacted to `null` — provider error bodies can echo request fragments. `failure_kind` is always present.
+- **`routing_path` markers** (2026-09-06): besides candidate names and `[skipped: <reason>]` entries, each record carries `[context estimate ~N tokens incl. max_output M]`, `[params temperature=… max_output_tokens=… json_mode=…]` and, when the quota-aware ranker changed the order, `[ranker reordered: … -> …]`. `estimated_tokens` is also a top-level field of the in-memory `ProvenanceRecord`.
 - **Response `200 OK`:**
   ```json
   {
@@ -123,9 +152,9 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
             "started_at": "2026-08-22T08:00:00.000Z",
             "latency_ms": 142.5,
             "success": false,
-            "failure_kind": "RATE_LIMIT",
+            "failure_kind": "RATE_LIMITED",
             "failure_detail": "HTTP 429: TPM limit reached",
-            "fallback_reason": "Rate limited, falling back to next pool candidate",
+            "fallback_reason": "advancing after RATE_LIMITED",
             "notes": ["circuit cooldown triggered 30s"]
           },
           {
@@ -335,7 +364,8 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
 
 #### `GET /api/personas/{id}/memories`
 
-- **Query params:** `kind` (`semantic` | `episodic` | `reflection`), `limit`
+- **Query params:** `kind` (`semantic` | `episodic` | `reflection`), `limit`, `include_interviewer` (bool, default `false`)
+- **Source contract (2026-09-06):** every memory row carries `source` ∈ `persona | interviewer | system` and an optional `conversation_id`. By default only `persona` items (the persona's own statements) are listed — a researcher's question is context, never something the persona "remembers". `include_interviewer=true` also lists `interviewer` rows so the UI can label them "asked by researcher". Retrieval into prompts uses persona items only and drops items below a cosine relevance floor. `recency_weight`/`relevance_score` are `null` on listing (only computed at retrieval time — never fabricated).
 - **Response `200 OK`:**
   ```json
   [
@@ -345,8 +375,10 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
       "kind": "semantic",
       "text": "Drives a 2018 Honda Civic with 110,000 miles; highly sensitive to maintenance budget alerts.",
       "importance": 0.85,
-      "recency_weight": 0.92,
-      "relevance_score": 0.95,
+      "recency_weight": null,
+      "relevance_score": null,
+      "source": "persona",
+      "conversation_id": null,
       "created_at": "2026-08-22T08:20:00.000Z"
     },
     {
@@ -355,8 +387,10 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
       "kind": "episodic",
       "text": "Mentioned during onboarding interview that she tried Mint but abandoned it because weekly tips weren't categorized properly.",
       "importance": 0.72,
-      "recency_weight": 0.88,
-      "relevance_score": 0.84,
+      "recency_weight": null,
+      "relevance_score": null,
+      "source": "persona",
+      "conversation_id": "conv_201",
       "created_at": "2026-08-22T08:25:00.000Z"
     }
   ]
@@ -392,7 +426,22 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
 - **SSE variant** of the study-scoped message endpoint (same auth/ownership checks). `Content-Type: text/event-stream`. Events, in order:
   - `event: delta` · `data: {"text": "<raw chunk>"}` — repeated as the persona speaks (raw model output).
   - `event: done` · `data: {…}` — the canonical payload (same fields as the non-stream endpoint incl. `reply` [normalized, this is what was persisted], `turn_number`, `served_by`, `latency_ms`, `suggested_questions`, `topics_explored`, `is_finished`, plus `user_message`/`persona_reply` parity objects). Clients MUST replace their streamed buffer with `reply`.
-  - `event: error` · `data: {"kind": "finished|not_found|context_window|no_route|generic", "detail": "…"}` — failures after headers are sent; nothing was persisted for this turn unless `done` arrived.
+  - `event: error` · `data: {"kind": "finished|not_found|context_window|no_route|generic", "detail": "…", "error_code": "…", "request_id": "…", "llm_request_id": "…", "attempts": […], "routing_path": […]}` — failures after headers are sent; nothing was persisted for this turn unless `done` arrived. `kind` is legacy; `error_code` follows §1.
+
+#### Consistency signals on study-scoped turns (2026-09-06)
+
+The study-scoped message endpoint (`POST /api/studies/{study_id}/interviews/{interview_id}/messages`), its SSE `done` payload and every serialized turn (`turns[]` on interview detail) carry deterministic **quality** signals — never infrastructure failures, the turn was served normally:
+
+```json
+{
+  "identity_drift": false,
+  "drift_notes": [],
+  "contradiction_detected": true,
+  "contradiction_details": "৳2,500 exceeds stated monthly budget of ৳400"
+}
+```
+
+`identity_drift` compares age/name/occupation statements in the reply against the immutable identity card; `contradiction_detected` compares money amounts against the persona's stated budget (skipped when no budget was stated). Both are also stored in the turn's `metadata`. The completion endpoint (`POST …/complete`) returns `source: "llm" | "fallback_mechanical"` and `fallback_reason` so a mechanical summary is never mistaken for analysis.
 
 #### `POST /api/conversations/{id}/messages`
 
@@ -472,3 +521,37 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
   }
   ```
 - Field semantics: `schema_validity_rate` = share of `PERSONA_GENERATION` requests with no `MALFORMED_RESPONSE` attempt (R6 taxonomy), `null` when no generation requests exist. `consistency_pass_rate` = personas whose stored validation has zero warnings, over personas that have validation details; `null` when none are evaluable. `pools` lists only pools that actually served traffic; `fallback_rate` = share of multi-attempt requests; `local_serve_rate` = share served by the local `ollama` adapter. `quality_gate` = newest readable `data/metadata/local_3b_gate_*.json` (judge harness), else `null`.
+
+---
+
+### 3.8 Judge Lab — scripted failure drills through the real router (2026-09-06)
+
+Available only when `BEBSHAX_DEMO_MODE=true` or `BEBSHAX_ENVIRONMENT` ∈ {`development`, `local`}; everywhere else every route is `404` (not discoverable). Requires a bearer token; limited to 30/minute. Each run builds a **throwaway** `PoolRouter` over scripted `FakeAdapter` routes and calls the real `router.complete()` — the production eligibility filter, failure policies, cooldowns and provenance code — without touching `app.state.llm_router`, without contacting any provider, and without writing to the provenance sink. Every payload says `"simulated": true`.
+
+#### `GET /api/demo-lab/scenarios`
+
+```json
+{ "enabled": true, "simulated": true,
+  "scenarios": [ { "name": "provider_429_fallback", "title": "…", "description": "…", "expected_outcome": "…" } ] }
+```
+
+Scenario names (a data table in `bebshax/api/demo_lab.py`): `provider_429_fallback`, `provider_5xx_fallback`, `all_providers_down`, `context_overflow`, `prompt_injection`, `evidence_conflict`, `insufficient_evidence`.
+
+#### `POST /api/demo-lab/scenarios/{name}/run`
+
+```json
+{
+  "scenario": "provider_429_fallback",
+  "title": "Provider returns 429 → fallback serves",
+  "simulated": true,
+  "outcome": "served_after_fallback",
+  "error_code": null,
+  "explanation": "Route A answered HTTP 429 (RATE_LIMITED) … cooled route is excluded from selection for 60s.",
+  "provenance": { "request_id": "…", "task": "PERSONA_GENERATION", "pool": "reasoning", "routing_path": ["[context estimate ~1148 tokens incl. max_output 1024 (default)]", "openrouter/…", "groq/…", "ollama/llama3.2:3b"], "attempts": [ { "attempt_number": 1, "provider": "openrouter", "model": "…", "success": false, "failure_kind": "RATE_LIMITED", "fallback_reason": "advancing after RATE_LIMITED" }, { "attempt_number": 2, "provider": "groq", "model": "…", "success": true } ], "estimated_tokens": 1148, "served_by_provider": "groq", "success": true },
+  "timeline": [ { "step": 1, "provider": "openrouter", "model": "…", "result": "failed", "failure_kind": "RATE_LIMITED", "fallback_reason": "advancing after RATE_LIMITED", "latency_ms": 0.01 },
+                { "step": 2, "provider": "groq", "model": "…", "result": "served", "failure_kind": null, "fallback_reason": null, "latency_ms": 0.01 } ],
+  "extra": { "reply": "…", "cooling_routes": ["openrouter/…"], "adapter_calls": { "openrouter": ["…"], "freellmpool": ["…"], "ollama": [] } }
+}
+```
+
+`outcome` ∈ `served | served_after_fallback | explicit_failure | claims_downgraded | low_grounding`; `error_code` ∈ `null | all_candidates_failed | context_window_exceeded`. `context_overflow` returns `provenance` with only `[skipped: context …]` markers and `extra.adapter_calls` all empty — proof that nothing was sent or truncated. `prompt_injection`/`evidence_conflict` return the `<UNTRUSTED_EVIDENCE>` prompt excerpt and the before/after provenance class of each claim (`coerce_provenance` downgrades). Unknown scenario → `404 not_found`.

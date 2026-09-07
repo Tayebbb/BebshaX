@@ -26,14 +26,14 @@ flowchart TD
     B["LLMService.complete()<br/>THE only entry point"] --> C
     C["PoolRouter — BebshaX policy<br/>task → pool → candidates → filter → attempt → fallback"] --> D
     C --> E
-    D["FreellmpoolAdapter<br/>(remote, free tiers)"] --> F["freellmpool library<br/>~24 providers, 200+ routes<br/>keyless start supported"]
+    D["FreellmpoolAdapter<br/>(remote, free tiers)"] --> F["freellmpool library<br/>18 providers (0.11.4 catalog)<br/>keyless start supported"]
     E["OllamaAdapter<br/>(local, last resort)"] --> G["Ollama on this machine<br/>llama3.2:3b / qwen3:4b"]
     C --> H[("ProvenanceRecord →<br/>llm_requests table")]
 ```
 
 Two things do the heavy lifting, and they are **different jobs**:
 
-- **freellmpool** (a third-party MIT library) = the **aggregator**. It knows about ~24 free providers, rotates keys, tracks quotas, honours `Retry-After`, trips circuit breakers. We did **not** write this — rule R10 forbids rebuilding routers/gateways.
+- **freellmpool** (a third-party MIT library) = the **aggregator**. It knows about 18 free providers (the catalog bundled with the pinned 0.11.4 — verified 2026-08-28, re-verified 2026-09-06; earlier docs said ~24 providers / 222 routes, the figure from the 2026-08-22 audit of the upstream project, which the installed catalog does not match), rotates keys, tracks quotas, honours `Retry-After`, trips circuit breakers. We did **not** write this — rule R10 forbids rebuilding routers/gateways.
 - **`PoolRouter`** ([apps/backend/bebshax/llm/router.py](../apps/backend/bebshax/llm/router.py)) = **our policy**. It knows about _tasks_, _context budgets_, _capabilities_, _cooldowns_ and _provenance_ — things a generic aggregator can't know.
 
 To BebshaX, the entire remote world is a single virtual route called `freellmpool/auto`. The real provider/model that ended up serving (e.g. `llm7/codestral-latest`) is reported back and stored, so provenance never says "auto".
@@ -90,15 +90,15 @@ If **nothing** can fit the prompt, we raise `ContextWindowExceeded`. We **never*
 
 Configuration as **data**, so extending it = edit a table + add a test, never add a code branch.
 
-| Pool           | Order                              | Max concurrent | Tasks routed here                                                                                                                 |
-| -------------- | ---------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `reasoning`    | openrouter† → freellmpool → ollama | 2              | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
-| `conversation` | **ollama → freellmpool → openrouter** (judged gate 2026-08-26: local 3B 9.65/10, ~5 s/turn) | 5              | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                                                               |
-| `structured`   | openrouter† → freellmpool → ollama | 3              | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING                                      |
-| `fast`         | openrouter† → freellmpool → ollama | 5              | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                                                            |
-| `long_context` | openrouter† → freellmpool → ollama | 2              | REPORT_GENERATION                                                                                                                 |
-| `local`        | ollama only                        | 2              | reserved for explicit local-only work                                                                                             |
-| `emergency`    | **ollama → freellmpool**           | 2              | EMERGENCY_FALLBACK (local **first** — when the internet is the problem)                                                           |
+| Pool           | Order                                                                                                                                                                                 | Max concurrent | Tasks routed here                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `reasoning`    | openrouter† → freellmpool → ollama                                                                                                                                                    | 2              | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
+| `conversation` | **ollama → freellmpool → openrouter** (judged gate 2026-08-26/27, 3 runs: local 3B 9.65 / 9.05 / 9.2 vs cloud-fast 8.25 / 8.05 / 8.2; n = 1 persona × 5 questions; ~5–7 s/turn local) | 5              | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                                                               |
+| `structured`   | openrouter† → freellmpool → ollama                                                                                                                                                    | 3              | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING                                      |
+| `fast`         | openrouter† → freellmpool → ollama                                                                                                                                                    | 5              | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                                                            |
+| `long_context` | openrouter† → freellmpool → ollama                                                                                                                                                    | 2              | REPORT_GENERATION                                                                                                                 |
+| `local`        | ollama only                                                                                                                                                                           | 2              | reserved for explicit local-only work                                                                                             |
+| `emergency`    | **ollama → freellmpool**                                                                                                                                                              | 2              | EMERGENCY_FALLBACK (local **first** — when the internet is the problem)                                                           |
 
 † testing-only first preference — see the note in [§2](#2-the-layer-cake); keyless → contributes no routes.
 

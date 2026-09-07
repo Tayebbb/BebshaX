@@ -26,13 +26,14 @@ router = APIRouter(tags=["study_copilot"])
 
 class CopilotMessage(BaseModel):
     role: Literal["user", "assistant"]
-    content: str
+    content: str = Field(max_length=8000)
 
 
 class CopilotRequest(BaseModel):
-    messages: list[CopilotMessage] = Field(min_length=1)
-    study_type: Optional[str] = None
-    study_id: Optional[str] = None
+    # Every message is forwarded to the model: the caps bound prompt size.
+    messages: list[CopilotMessage] = Field(min_length=1, max_length=60)
+    study_type: Optional[str] = Field(default=None, max_length=64)
+    study_id: Optional[str] = Field(default=None, max_length=64)
 
 
 class ResearchGoalCard(BaseModel):
@@ -63,9 +64,9 @@ class CopilotResponse(BaseModel):
 
 
 class SuggestRolesRequest(BaseModel):
-    study_prompt: str
-    goal: Optional[str] = None
-    target_audience: Optional[str] = None
+    study_prompt: str = Field(max_length=8000)
+    goal: Optional[str] = Field(default=None, max_length=256)
+    target_audience: Optional[str] = Field(default=None, max_length=2000)
 
 
 SYSTEM_PROMPT = """You are BebshaX Study Design Copilot, an expert AI product researcher for synthetic persona validation.
@@ -552,10 +553,11 @@ async def suggest_persona_roles(
 
 
 class GeneratePersonasRequest(BaseModel):
-    study_id: Optional[str] = None
-    study_prompt: Optional[str] = None
-    study_title: Optional[str] = None
-    roles: list[PersonaRoleSuggestion] = Field(default_factory=list)
+    study_id: Optional[str] = Field(default=None, max_length=64)
+    study_prompt: Optional[str] = Field(default=None, max_length=8000)
+    study_title: Optional[str] = Field(default=None, max_length=256)
+    # One LLM call per selected role.
+    roles: list[PersonaRoleSuggestion] = Field(default_factory=list, max_length=10)
 
 
 def _get_initials(name: str) -> str:

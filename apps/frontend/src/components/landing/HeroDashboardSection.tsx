@@ -21,24 +21,6 @@ export const HeroDashboardSection: React.FC = () => {
       >
         {/* Section Header */}
         <div style={{ textAlign: 'center', maxWidth: '780px', margin: '0 auto 48px auto' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 16px',
-              borderRadius: '9999px',
-              background: 'rgba(var(--lp-fill-rgb), 0.05)',
-              color: 'var(--lp-gold)',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: '16px',
-            }}
-          >
-            The Console
-          </div>
 
           <h2
             style={{

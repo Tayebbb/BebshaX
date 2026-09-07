@@ -560,8 +560,13 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Likelihood</div>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--accent-teal-bright)' }}>
-                          {Math.round((test.latest_run?.average_likelihood || 0.5) * 100)}%
+                        <div
+                          style={{ fontSize: '0.95rem', fontWeight: 700, color: typeof test.latest_run?.average_likelihood === 'number' ? 'var(--accent-teal-bright)' : 'var(--text-muted)' }}
+                          title={typeof test.latest_run?.average_likelihood === 'number' ? undefined : 'Not measured yet for this run'}
+                        >
+                          {typeof test.latest_run?.average_likelihood === 'number'
+                            ? `${Math.round(test.latest_run.average_likelihood * 100)}%`
+                            : '—'}
                         </div>
                       </div>
                     </div>

@@ -15,6 +15,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from bebshax.persona.conflicts import contested_slots, shares_content_token
+
 
 def _uuid() -> str:
     return uuid.uuid4().hex
@@ -46,6 +48,9 @@ class PersonaAttribute(BaseModel):
     provenance_class: ProvenanceClass = ProvenanceClass.SYNTHETIC
     evidence_ids: list[str] = Field(default_factory=list)
     confidence: float | None = None
+    # Why a cited claim is NOT OBSERVED: "citation_only" (no lexical overlap
+    # with the cited text) or "contested_evidence" (cited items disagree).
+    grounding_basis: str | None = None
 
 
 # ---- LLM output contract (what PERSONA_GENERATION must return as JSON) ----
@@ -190,15 +195,40 @@ def coerce_provenance(
     """Convert model output into a PersonaProfile with ENFORCED provenance:
     - cited evidence ids must exist in the evidence actually shown → OBSERVED;
     - invalid/unknown citations are stripped and the claim downgrades to INFERRED;
+    - a valid citation still needs lexical grounding: the claim must share a
+      content token with a cited text, else INFERRED (grounding_basis
+      "citation_only");
+    - cited items that disagree on a numeric slot (age / price / count) make
+      the claim INFERRED (grounding_basis "contested_evidence") and add a
+      ``contested:<slot>`` warning to the profile;
     - unknown provenance labels downgrade to SYNTHETIC. Never upgraded."""
-    known_ids = {e.id for e in evidence}
+    known = {e.id: e for e in evidence}
     attributes: list[PersonaAttribute] = []
+    warnings: list[str] = []
     for group in CLAIM_GROUPS:
         for claim in getattr(generated, group):
-            valid_ids = [eid for eid in claim.evidence_ids if eid in known_ids]
+            valid_ids = [eid for eid in claim.evidence_ids if eid in known]
             label = claim.provenance.strip().upper()
+            basis: str | None = None
             if valid_ids:
-                prov = ProvenanceClass.OBSERVED
+                cited_texts = [known[eid].text for eid in valid_ids]
+                contested = (
+                    contested_slots(cited_texts, claim_text=claim.value)
+                    if len(valid_ids) >= 2
+                    else []
+                )
+                if contested:
+                    prov = ProvenanceClass.INFERRED
+                    basis = "contested_evidence"
+                    for slot in contested:
+                        warning = f"contested:{slot}"
+                        if warning not in warnings:
+                            warnings.append(warning)
+                elif not shares_content_token(claim.value, cited_texts):
+                    prov = ProvenanceClass.INFERRED
+                    basis = "citation_only"
+                else:
+                    prov = ProvenanceClass.OBSERVED
             elif label == "INFERRED":
                 prov = ProvenanceClass.INFERRED
             elif label == "OBSERVED":
@@ -212,6 +242,7 @@ def coerce_provenance(
                     value=claim.value,
                     provenance_class=prov,
                     evidence_ids=valid_ids,
+                    grounding_basis=basis,
                 )
             )
     return PersonaProfile(
@@ -231,6 +262,7 @@ def coerce_provenance(
         detailed_attributes=getattr(generated, "detailed_attributes", {}) or {},
         attributes=attributes,
         evidence=list(evidence),
+        warnings=warnings,
     )
 
 

@@ -1,14 +1,29 @@
-"""Dataset security: SSRF prevention, IP validation, and safe URL streaming fetch."""
+"""Dataset security: SSRF prevention, IP validation, and safe URL streaming fetch.
+
+DNS rebinding: validating the hostname's addresses and then letting the HTTP
+client resolve the name AGAIN leaves a window in which an attacker-controlled
+DNS server answers the second lookup with 127.0.0.1 or the cloud metadata IP.
+``safe_fetch_dataset_bytes`` therefore connects to the address it validated:
+the URL host is rewritten to that IP, the original hostname travels in the
+``Host`` header and as the TLS SNI/verification name (httpx ``sni_hostname``
+extension), so the server still sees a normal request and certificate checks
+still run against the real hostname. There is no second resolution to poison.
+"""
 
 from __future__ import annotations
 
 import ipaddress
 import socket
+from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlparse
 import httpx
 
 MAX_DATASET_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 REQUEST_TIMEOUT_SECONDS = 25.0
+
+# getaddrinfo-compatible: (host, port) -> addrinfo tuples. Injectable for tests.
+Resolver = Callable[[str, Any], list[tuple[Any, ...]]]
 
 # Disallowed private and special network ranges
 _DISALLOWED_NETWORKS = [
@@ -48,8 +63,12 @@ class DatasetSecurityError(Exception):
     pass
 
 
-def validate_url_security(url: str) -> None:
-    """Inspect URL and resolve IP addresses to block SSRF and internal infrastructure access."""
+def validate_url_security(url: str, *, resolver: Resolver = socket.getaddrinfo) -> list[str]:
+    """Inspect URL and resolve IP addresses to block SSRF and internal infrastructure access.
+
+    Returns the validated addresses (resolver order, de-duplicated) so the
+    caller can connect to exactly one of them instead of resolving again.
+    """
     if not url or not isinstance(url, str):
         raise DatasetSecurityError("Dataset URL is empty or invalid.")
 
@@ -67,10 +86,11 @@ def validate_url_security(url: str) -> None:
 
     # Resolve hostname to IP addresses
     try:
-        addr_infos = socket.getaddrinfo(hostname_clean, None)
+        addr_infos = resolver(hostname_clean, None)
     except socket.gaierror as exc:
         raise DatasetSecurityError(f"Unable to resolve hostname '{hostname}': {exc}")
 
+    validated: list[str] = []
     for addr_info in addr_infos:
         ip_str = addr_info[4][0]
         try:
@@ -88,17 +108,38 @@ def validate_url_security(url: str) -> None:
                 raise DatasetSecurityError(
                     f"URL resolves to disallowed IP range '{net}' ({ip_str}). Access blocked."
                 )
+        if ip_str not in validated:
+            validated.append(ip_str)
+
+    if not validated:
+        raise DatasetSecurityError(f"Hostname '{hostname}' resolved to no usable address.")
+    return validated
 
 
-async def safe_fetch_dataset_bytes(url: str, max_bytes: int = MAX_DATASET_FILE_SIZE_BYTES) -> tuple[bytes, str]:
+async def safe_fetch_dataset_bytes(
+    url: str,
+    max_bytes: int = MAX_DATASET_FILE_SIZE_BYTES,
+    *,
+    resolver: Resolver = socket.getaddrinfo,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> tuple[bytes, str]:
     """Safely fetch dataset bytes from an external URL with SSRF checks, timeout, and size limits.
-    
+
+    The connection is pinned to the first validated address (see module
+    docstring); ``resolver``/``transport`` are injection points for tests.
+
     Returns:
         (content_bytes, detected_content_type)
     """
-    validate_url_security(url)
+    validated_ips = validate_url_security(url, resolver=resolver)
+    original = httpx.URL(url.strip())
+    hostname = original.host
+    pinned_url = original.copy_with(host=validated_ips[0])
+    headers = {"User-Agent": "BebshaX-Dataset-Fetcher/1.0", "Host": hostname}
+    # TLS handshake + certificate check against the real name, not the IP.
+    extensions = {"sni_hostname": hostname} if original.scheme == "https" else {}
 
-    transport = httpx.AsyncHTTPTransport(retries=1)
+    transport = transport or httpx.AsyncHTTPTransport(retries=1)
     async with httpx.AsyncClient(
         transport=transport,
         timeout=httpx.Timeout(REQUEST_TIMEOUT_SECONDS, connect=10.0),
@@ -108,7 +149,7 @@ async def safe_fetch_dataset_bytes(url: str, max_bytes: int = MAX_DATASET_FILE_S
     ) as client:
         # Pre-flight or GET with stream to prevent memory exhaustion
         try:
-            async with client.stream("GET", url, headers={"User-Agent": "BebshaX-Dataset-Fetcher/1.0"}) as resp:
+            async with client.stream("GET", pinned_url, headers=headers, extensions=extensions) as resp:
                 if resp.status_code in (301, 302, 303, 307, 308):
                     location = resp.headers.get("location", "")
                     raise DatasetSecurityError(

@@ -364,7 +364,7 @@ describe('Blocker 5 — grounding is stated conditionally or not at all', () => 
   it('titles step 2 without asserting grounding', () => {
     renderStep2([workflowPersona()]);
 
-    expect(screen.getByText('Persona Library')).toBeInTheDocument();
+    expect(screen.getByText('Study Personas')).toBeInTheDocument();
     expect(screen.queryByText(/Grounded Persona Library/i)).toBeNull();
   });
 

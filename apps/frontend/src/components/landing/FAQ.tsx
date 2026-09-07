@@ -7,7 +7,7 @@ export const FAQ: React.FC = () => {
   const faqs = [
     {
       q: 'What is a synthetic persona in BebshaX?',
-      a: 'It is a generated profile of a plausible customer for an idea you describe — name, age, occupation, location and behavioural attributes — that you can then interview in a multi-turn conversation. The persona is never rebuilt between turns: the identity card is byte-identical on every turn, and a test enforces that.',
+      a: 'It is a generated profile of a plausible customer for an idea you describe (name, age, occupation, location and behavioural attributes) that you can then interview in a multi-turn conversation. The persona is never rebuilt between turns: the identity card is byte-identical on every turn, and a test enforces that.',
     },
     {
       q: 'What does “evidence-grounded” actually mean here?',
@@ -15,15 +15,15 @@ export const FAQ: React.FC = () => {
     },
     {
       q: 'What happens when a provider fails or a context is too large?',
-      a: 'Failures are classified into a closed set of 13 kinds, each with one policy: retry the same route once, advance to the next candidate, or put the route on a 60-second cooldown per provider and model. Context is never truncated to fit a smaller model — if nothing in the pool can hold the request, it fails explicitly with ContextWindowExceeded. Low answer quality is never treated as an infrastructure failure; quality belongs to the evaluation layer.',
+      a: 'Failures are classified into a closed set of 13 kinds, each with one policy: retry the same route once, advance to the next candidate, or put the route on a 60-second cooldown per provider and model. Context is never truncated to fit a smaller model. If nothing in the pool can hold the request, it fails explicitly with ContextWindowExceeded. Low answer quality is never treated as an infrastructure failure; quality belongs to the evaluation layer.',
     },
     {
       q: 'What does using BebshaX actually look like?',
-      a: 'Five guided steps. You start by telling the Study Design Copilot what you want to find out, in plain English — it asks follow-up questions and turns that into a research objective and a set of customer roles. Then BebshaX generates the personas, drafts an interview script you can edit, runs the interviews as multi-turn conversations, and synthesises a decision report at the end. You never connect any of your own data.',
+      a: 'Five guided steps. You start by telling the Study Design Copilot what you want to find out, in plain English. It asks follow-up questions and turns that into a research objective and a set of customer roles. Then BebshaX generates the personas, drafts an interview script you can edit, runs the interviews as multi-turn conversations, and synthesises a decision report at the end. You never connect any of your own data.',
     },
     {
       q: 'Are models fine-tuned on the datasets?',
-      a: 'No, never. Datasets are used for grounding and evaluation only — that is an explicit project rule. The real datasets include PersonaHub, Google Synthetic-Persona-Chat, EmpatheticDialogues, an Amazon Reviews slice, MMLU and GSM8K micro slices, RouterArena and xRouteBench. Setup is one command, idempotent, checksummed and license-verified.',
+      a: 'No, never. Datasets are used for grounding and evaluation only; that is an explicit project rule. The real datasets include PersonaHub, Google Synthetic-Persona-Chat, EmpatheticDialogues, an Amazon Reviews slice, MMLU and GSM8K micro slices, RouterArena and xRouteBench. Setup is one command, idempotent, checksummed and license-verified.',
     },
     {
       q: 'What does it cost to run?',
@@ -54,27 +54,6 @@ export const FAQ: React.FC = () => {
       >
         {/* Section Header */}
         <div style={{ textAlign: 'center', marginBottom: '56px' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 16px',
-              borderRadius: '9999px',
-              background: 'rgba(var(--lp-fill-rgb), 0.05)',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--lp-text)',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: '16px',
-            }}
-          >
-            Frequently Asked Questions
-          </div>
-
           <h2
             style={{
               fontSize: 'clamp(2rem, 3.8vw, 3rem)',

@@ -7,10 +7,12 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select, or_
+from sqlalchemy import MetaData, Table, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import ColumnElement
 
 from bebshax.auth.models import Users
+from bebshax.auth.security import decode_access_token
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import (
     get_session,
@@ -21,18 +23,7 @@ from bebshax.api.deps import (
 )
 from bebshax.api.limiter import limiter
 from bebshax.api.jobs import get_job, start_job
-from bebshax.db.models import (
-    DatasetCandidates,
-    DatasetSources,
-    EvidenceChunks,
-    EvidenceClaims,
-    EvidenceSources,
-    ResearchPlans,
-    ResearchRuns,
-    SavedAudiences,
-    Studies,
-    StudyReports,
-)
+from bebshax.db.models import Base, SavedAudiences, Studies, StudyReports
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.tenancy import ANONYMOUS_OWNER_ID
@@ -52,63 +43,81 @@ router = APIRouter(tags=["studies"])
 _user_owns_study = user_owns_study
 _owner_accessible = owner_accessible
 
+# Column widths from db/models.py Studies; oversized values used to surface as
+# a PG DataError 500 (invisible on the sqlite test DB).
+_SHORT = 64  # type / goal / status
+_TITLE = 256
+_DURATION = 128
+_LONG_TEXT = 20_000  # Text columns: prompt / target_audience / pricing_hypothesis
+
 
 class StudyCreateRequest(BaseModel):
-    id: Optional[str] = None
-    user_id: Optional[str] = None
-    title: Optional[str] = None
-    type: str = "interviews"
-    study_type: Optional[str] = None
-    goal: str = "demand_validation"
-    prompt: Optional[str] = None
-    product_idea: Optional[str] = None
-    target_audience: Optional[str] = None
-    pricing_hypothesis: Optional[str] = None
-    status: str = "draft"
-    step: int = 1
-    persona_count: int = 0
+    # Accepted for API compatibility only — the server always generates the id.
+    id: Optional[str] = Field(default=None, max_length=_SHORT)
+    user_id: Optional[str] = Field(default=None, max_length=_SHORT)
+    title: Optional[str] = Field(default=None, max_length=_TITLE)
+    type: str = Field(default="interviews", max_length=_SHORT)
+    study_type: Optional[str] = Field(default=None, max_length=_SHORT)
+    goal: str = Field(default="demand_validation", max_length=_SHORT)
+    prompt: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
+    product_idea: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
+    target_audience: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
+    pricing_hypothesis: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
+    status: str = Field(default="draft", max_length=_SHORT)
+    step: int = Field(default=1, ge=0, le=100)
+    persona_count: int = Field(default=0, ge=0)
     persona_ids: list[str] = Field(default_factory=list)
     suggested_roles: list[dict[str, Any]] = Field(default_factory=list)
     script_questions: list[str] = Field(default_factory=list)
     findings: Optional[dict[str, Any]] = None
     is_demo: bool = False
-    duration_text: Optional[str] = None
+    duration_text: Optional[str] = Field(default=None, max_length=_DURATION)
     copilot_messages: Optional[list[dict[str, Any]]] = None
     personas_data: Optional[list[dict[str, Any]]] = None
 
 
 class StudyUpdateRequest(BaseModel):
-    user_id: Optional[str] = None
-    title: Optional[str] = None
-    type: Optional[str] = None
-    study_type: Optional[str] = None
-    goal: Optional[str] = None
-    prompt: Optional[str] = None
-    product_idea: Optional[str] = None
-    target_audience: Optional[str] = None
-    pricing_hypothesis: Optional[str] = None
-    status: Optional[str] = None
-    step: Optional[int] = None
-    persona_count: Optional[int] = None
+    user_id: Optional[str] = Field(default=None, max_length=_SHORT)
+    title: Optional[str] = Field(default=None, max_length=_TITLE)
+    type: Optional[str] = Field(default=None, max_length=_SHORT)
+    study_type: Optional[str] = Field(default=None, max_length=_SHORT)
+    goal: Optional[str] = Field(default=None, max_length=_SHORT)
+    prompt: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
+    product_idea: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
+    target_audience: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
+    pricing_hypothesis: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
+    status: Optional[str] = Field(default=None, max_length=_SHORT)
+    step: Optional[int] = Field(default=None, ge=0, le=100)
+    persona_count: Optional[int] = Field(default=None, ge=0)
     persona_ids: Optional[list[str]] = None
     suggested_roles: Optional[list[dict[str, Any]]] = None
     script_questions: Optional[list[str]] = None
     findings: Optional[dict[str, Any]] = None
     is_demo: Optional[bool] = None
-    duration_text: Optional[str] = None
+    duration_text: Optional[str] = Field(default=None, max_length=_DURATION)
     copilot_messages: Optional[list[dict[str, Any]]] = None
     personas_data: Optional[list[dict[str, Any]]] = None
 
 
 class AudienceCreateRequest(BaseModel):
-    id: Optional[str] = None
-    user_id: Optional[str] = None
-    study_id: Optional[str] = None
+    id: Optional[str] = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    user_id: Optional[str] = Field(default=None, max_length=_SHORT)
+    study_id: Optional[str] = Field(default=None, max_length=_SHORT)
     name: str = Field(..., min_length=1, max_length=256)
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
     persona_ids: list[str] = Field(default_factory=list)
     personas_payload: list[dict[str, Any]] = Field(default_factory=list)
     role_distribution: dict[str, Any] = Field(default_factory=dict)
+
+
+def _has_valid_bearer_token(request: Request) -> bool:
+    """slowapi ``exempt_when``: signed-in callers are exempt from the anonymous
+    study-creation limit. A signature check (no DB) is enough here — a garbage
+    token is not a way out of the anonymous bucket."""
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer "):
+        return False
+    return decode_access_token(auth.split(" ", 1)[1].strip()) is not None
 
 
 def _serialize_study(s: Studies) -> dict[str, Any]:
@@ -231,7 +240,11 @@ async def list_studies(
 
 
 @router.post("/studies", status_code=status.HTTP_201_CREATED)
+# Anonymous creates share one tenant (`usr_default`), so they are the only
+# ones that can flood it; signed-in callers are exempt (see the predicate).
+@limiter.limit("30/hour", exempt_when=_has_valid_bearer_token)
 async def create_study(
+    request: Request,
     payload: StudyCreateRequest,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
@@ -254,7 +267,10 @@ async def create_study(
     else:
         title = generate_deterministic_study_title(effective_prompt, study_type)
 
-    study_id = payload.id or f"study_{uuid.uuid4().hex[:16]}"
+    # The primary key is never client-chosen: a caller-picked id let one
+    # visitor collide with (or probe for) another's study. The frontend never
+    # sends one on create.
+    study_id = f"study_{uuid.uuid4().hex[:16]}"
     # Identity comes from the token only — payload.user_id would let any
     # caller attach rows to another tenant (spoofing).
     study_user_id = current_user.id if current_user else ANONYMOUS_OWNER_ID
@@ -367,6 +383,58 @@ async def update_study(
     return _serialize_study(study)
 
 
+def study_scoped_tables(metadata: MetaData = Base.metadata) -> dict[str, Table]:
+    """Every table a study delete must empty: all tables with a ``study_id``
+    column, plus (transitively) every table whose foreign key points at one of
+    those — persona details/attributes/evidence and memories hang off
+    ``personas``, turns and insights off ``conversations``, scenarios/results
+    off behavioral tests/runs. Computed from the live metadata so a new table
+    is covered the moment it is declared, never by a hand-kept list.
+    ``llm_requests`` (provenance) has no FKs by design and is kept."""
+    studies = metadata.tables["studies"]
+    scoped: dict[str, Table] = {
+        t.name: t for t in metadata.sorted_tables if t is not studies and "study_id" in t.c
+    }
+    changed = True
+    while changed:
+        changed = False
+        for t in metadata.sorted_tables:
+            if t is studies or t.name in scoped:
+                continue
+            if any(fk.column.table.name in scoped for fk in t.foreign_keys):
+                scoped[t.name] = t
+                changed = True
+    return scoped
+
+
+def _scoped_rows(
+    table: Table, study_id: str, scoped: dict[str, Table], seen: frozenset[str] = frozenset()
+) -> ColumnElement[bool]:
+    """Rows of ``table`` that belong to the study directly (``study_id``) or
+    through a foreign key into another scoped table (``fk IN (SELECT parent.id
+    WHERE <parent belongs to the study>)``)."""
+    clauses: list[ColumnElement[bool]] = []
+    if "study_id" in table.c:
+        clauses.append(table.c.study_id == study_id)
+    for fk in table.foreign_keys:
+        parent = fk.column.table
+        if parent.name in scoped and parent is not table and parent.name not in seen:
+            parent_rows = _scoped_rows(parent, study_id, scoped, seen | {table.name})
+            clauses.append(fk.parent.in_(select(fk.column).where(parent_rows)))
+    return or_(*clauses)
+
+
+def study_cascade_deletes(study_id: str, metadata: MetaData = Base.metadata) -> list[Any]:
+    """Ordered DELETE statements (children first) that remove everything owned
+    by ``study_id`` except the ``studies`` row itself."""
+    scoped = study_scoped_tables(metadata)
+    return [
+        delete(t).where(_scoped_rows(t, study_id, scoped))
+        for t in reversed(metadata.sorted_tables)
+        if t.name in scoped
+    ]
+
+
 @router.delete("/studies/{study_id}")
 async def delete_study(
     study_id: str,
@@ -378,15 +446,11 @@ async def delete_study(
     require_study_access(
         study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
     )
-    # Cascade cleanup of dependent study records
-    await session.execute(delete(ResearchPlans).where(ResearchPlans.study_id == study_id))
-    await session.execute(delete(DatasetCandidates).where(DatasetCandidates.study_id == study_id))
-    await session.execute(delete(EvidenceClaims).where(EvidenceClaims.study_id == study_id))
-    await session.execute(delete(EvidenceChunks).where(EvidenceChunks.study_id == study_id))
-    await session.execute(delete(EvidenceSources).where(EvidenceSources.study_id == study_id))
-    await session.execute(delete(ResearchRuns).where(ResearchRuns.study_id == study_id))
-    await session.execute(delete(DatasetSources).where(DatasetSources.study_id == study_id))
-    await session.execute(delete(SavedAudiences).where(SavedAudiences.study_id == study_id))
+    # Metadata-driven cascade: a hand-written list used to cover 8 tables and
+    # left personas, conversations, runs, reports and behavioral rows orphaned
+    # (and still readable).
+    for stmt in study_cascade_deletes(study_id):
+        await session.execute(stmt)
 
     await session.delete(study)
     await session.commit()
@@ -672,6 +736,7 @@ async def get_study_report_by_id(
 
 
 @router.post("/studies/{study_id}/reports/generate", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def generate_study_report(
     study_id: str,
     payload: Optional[GenerateReportRequest] = None,
@@ -709,6 +774,7 @@ async def generate_study_report(
 # ---------------------------------------------------------------------------
 
 @router.post("/studies/{study_id}/reports/generate/jobs", status_code=202)
+@limiter.limit("10/minute")
 async def start_report_generation_job(
     study_id: str,
     payload: Optional[GenerateReportRequest] = None,
@@ -747,6 +813,7 @@ async def start_report_generation_job(
         kind="report_generation",
         scope_id=study_id,
         runner=_runner,
+        user_id=effective_user_id,
         # Honest domain failures (R2/R6) pass their message through.
         user_safe_exceptions=(ContextWindowExceeded, AllCandidatesFailed),
     )

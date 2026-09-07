@@ -55,12 +55,14 @@ def test_ranker_demotes_capped_provider_and_keeps_pool_order_otherwise() -> None
         (None, RouteCandidate(provider="ollama", model="m")),
     ]
     rank = quota_aware_ranker(ledger)
-    # Untouched quotas: stable sort preserves configured pool order.
+    # Untouched quotas: configured pool order is preserved.
     assert [c.provider for _, c in rank(entries)] == ["openrouter", "freellmpool", "ollama"]
-    # Exhaust openrouter → it sinks below the others.
+    # Exhaust openrouter → it sinks behind the healthy REMOTE routes; the local
+    # tier keeps its configured (terminal-fallback) position — quota never
+    # promotes Ollama ahead of a remote route the pool ordered first.
     for _ in range(PROVIDER_QUOTAS["openrouter"].rpd):
         ledger.record(_prov("openrouter", tokens=1))
-    assert [c.provider for _, c in rank(entries)] == ["freellmpool", "ollama", "openrouter"]
+    assert [c.provider for _, c in rank(entries)] == ["freellmpool", "openrouter", "ollama"]
 
 
 @pytest.mark.asyncio
@@ -127,7 +129,20 @@ async def test_router_persists_cooldowns_via_callback() -> None:
     await router.complete(
         LLMRequest(task=TaskType.PERSONA_GENERATION, messages=[ChatMessage(role="user", content="hi")])
     )
-    assert persisted == [("freellmpool", "auto", 60.0)]
+    # RATE_LIMITED is an account-level signal: its policy cools the whole
+    # provider, persisted with the provider-wide model marker "*".
+    assert persisted == [("freellmpool", "*", 60.0)]
+
+
+@pytest.mark.asyncio
+async def test_provider_wide_cooldown_round_trips_through_store(async_engine) -> None:
+    """The (provider, "*") key persists and loads back unchanged, so a
+    provider-wide cooldown survives a restart with the same semantics."""
+    maker = sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    store = CooldownStore(maker)
+    await store._persist_async("openrouter", "*", 120.0)
+    loaded = await store.load_active()
+    assert ("openrouter", "*") in loaded
 
 
 @pytest.mark.asyncio

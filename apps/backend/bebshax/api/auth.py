@@ -1,19 +1,21 @@
 import asyncio
 import logging
 import secrets
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users, EmailVerificationToken
 from bebshax.auth.email import send_verification_email
 from bebshax.auth.security import create_access_token, decode_access_token
 from bebshax.auth.service import authenticate_user, create_user, get_user_by_email, get_user_by_id
+from bebshax.api.errors import APIError
 from bebshax.api.limiter import limiter
 from bebshax.config import get_settings
 
@@ -248,11 +250,43 @@ def _is_dt_expired(expires_at: datetime) -> bool:
 
 
 class VerifyEmailRequest(BaseModel):
-    token: str
-    # Binds the 6-digit OTP to the account it was issued for. Optional because
-    # the shipped client posts the code alone; when supplied, a code guessed
-    # for one account can no longer verify a different one.
-    email: Optional[str] = None
+    token: str = Field(..., min_length=1, max_length=64)
+    # Binds the 6-digit OTP to the account it was issued for: the lookup is
+    # scoped to THIS user's tokens, so a code issued to one account can never
+    # verify another, and guessing is per-account rather than global.
+    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+# Per-account failed-attempt counter for OTP verification: 6-digit codes are
+# guessable at ~1e6, so 5 misses lock the account's verification for 15 min.
+# In-process by design (single worker); a multi-process deployment needs a
+# `verification_failures`/`locked_until` column on users instead of this dict.
+VERIFY_MAX_FAILURES = 5
+VERIFY_LOCKOUT_SECONDS = 15 * 60
+_verify_failures: dict[str, tuple[int, float]] = {}  # user_id -> (failures, locked_until)
+
+
+def _verification_locked(user_id: str, now: Optional[float] = None) -> bool:
+    now = time.monotonic() if now is None else now
+    failures, locked_until = _verify_failures.get(user_id, (0, 0.0))
+    if failures >= VERIFY_MAX_FAILURES:
+        if now < locked_until:
+            return True
+        _verify_failures.pop(user_id, None)  # lockout elapsed
+    return False
+
+
+def _record_verification_failure(user_id: str) -> None:
+    failures, _ = _verify_failures.get(user_id, (0, 0.0))
+    failures += 1
+    locked_until = time.monotonic() + VERIFY_LOCKOUT_SECONDS if failures >= VERIFY_MAX_FAILURES else 0.0
+    _verify_failures[user_id] = (failures, locked_until)
+
+
+def _invalid_token() -> HTTPException:
+    # One reply for unknown email, foreign token, wrong code: never confirm
+    # which part was right.
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification token.")
 
 
 @auth_router.post("/verify-email")
@@ -262,15 +296,25 @@ async def verify_email(
     payload: VerifyEmailRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    """Verify user email with a token."""
-    stmt = select(EmailVerificationToken).where(EmailVerificationToken.token == payload.token)
-    result = await session.execute(stmt)
-    record = result.scalar_one_or_none()
-    if not record:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid verification token.",
+    """Verify a user's email with the OTP issued to that account."""
+    user = await get_user_by_email(session, payload.email)
+    if not user:
+        raise _invalid_token()
+    if _verification_locked(user.id):
+        raise APIError(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Too many verification attempts. Request a new code and try again in 15 minutes.",
+            error_code="too_many_attempts",
         )
+
+    stmt = select(EmailVerificationToken).where(
+        EmailVerificationToken.token == payload.token,
+        EmailVerificationToken.user_id == user.id,
+    )
+    record = (await session.execute(stmt)).scalar_one_or_none()
+    if not record:
+        _record_verification_failure(user.id)
+        raise _invalid_token()
     if record.used_at is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -282,25 +326,10 @@ async def verify_email(
             detail="Verification link expired.",
         )
 
-
-    user = await get_user_by_id(session, record.user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
-        )
-
-    if payload.email and payload.email.strip().lower() != (user.email or "").lower():
-        # Same reply as an unknown code: never confirm that a code is live for
-        # some *other* account.
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid verification token.",
-        )
-
     user.is_verified = True
     record.used_at = datetime.now(timezone.utc)
     await session.commit()
+    _verify_failures.pop(user.id, None)
     return {"detail": "Email verified successfully."}
 
 
@@ -329,13 +358,26 @@ async def resend_verification(
     if not target_user or target_user.is_verified:
         return uniform_response
 
+    # A resend supersedes every code still outstanding for this account, so an
+    # attacker cannot keep guessing an older code after the user asked for a
+    # fresh one.
+    now = datetime.now(timezone.utc)
+    await session.execute(
+        update(EmailVerificationToken)
+        .where(
+            EmailVerificationToken.user_id == target_user.id,
+            EmailVerificationToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+
     otp_code = f"{secrets.randbelow(900000) + 100000}"
     token_value = otp_code
     verification_token = EmailVerificationToken(
         id=str(uuid.uuid4()),
         user_id=target_user.id,
         token=token_value,
-        created_at=datetime.now(timezone.utc),
+        created_at=now,
         expires_at=EmailVerificationToken.generate_expiry(hours=24),
     )
     session.add(verification_token)
@@ -481,6 +523,17 @@ async def sync_user(
         )
 
     updated = False
+    if user.auth_provider == "email" and not user.is_verified and user.hashed_password:
+        # Pre-hijack defence: someone may have signed up with THIS address
+        # (never proving they own it) and set a password. Linking the verified
+        # Neon identity to that row must not leave their password as a
+        # second key to the real owner's account.
+        user.hashed_password = None
+        updated = True
+        logger.warning(
+            "auth sync: revoked unverified local password for user %s on identity link",
+            user.id,
+        )
     # Neon proved emailVerified server-side above — persist that fact so
     # backend email/password signins pass the H9 gate from now on.
     if not user.is_verified:

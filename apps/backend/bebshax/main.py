@@ -8,9 +8,14 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from bebshax.api.errors import (
+    REQUEST_ID_HEADER,
+    BodySizeLimitMiddleware,
+    RequestContextMiddleware,
+    UnhandledExceptionEnvelopeMiddleware,
+    register_exception_handlers,
+)
 from bebshax.api.limiter import limiter
 
 # freellmpool reads its user catalog from $FREELLMPOOL_CONFIG; without this the
@@ -286,8 +291,15 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=_lifespan)
 
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # One envelope for every error body ({detail, error_code, request_id, ...});
+    # this also replaces slowapi's default 429 handler.
+    register_exception_handlers(app)
     app.add_middleware(SlowAPIMiddleware)
+    # Inside CORS so a browser can read the 500 envelope (request_id included)
+    # instead of an opaque network error; the Starlette handler stays as backstop.
+    app.add_middleware(UnhandledExceptionEnvelopeMiddleware)
+    # Inside CORS so a browser can still read the 413 envelope.
+    app.add_middleware(BodySizeLimitMiddleware)
 
     app.add_middleware(
         CORSMiddleware,
@@ -299,6 +311,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[REQUEST_ID_HEADER],
     )
 
     @app.middleware("http")
@@ -317,6 +330,9 @@ def create_app() -> FastAPI:
         )
         return response
 
+    # Outermost user middleware: every response (CORS preflights included)
+    # carries X-Request-ID and produces exactly one access-log line.
+    app.add_middleware(RequestContextMiddleware)
 
     app.include_router(health_router, prefix="/api")
     app.include_router(auth_router)
@@ -331,6 +347,7 @@ def create_app() -> FastAPI:
 
     # OpenRouter health verification & Dataset Sources
     from bebshax.api.datasets import router as datasets_router
+    from bebshax.api.demo_lab import router as demo_lab_router
     from bebshax.api.openrouter_health import router as openrouter_health_router
     from bebshax.api.evidence import router as evidence_router
     from bebshax.api.segmentation import router as segmentation_router
@@ -341,6 +358,9 @@ def create_app() -> FastAPI:
     app.include_router(evidence_router, prefix="/api")
     app.include_router(segmentation_router, prefix="/api")
     app.include_router(payments_router, prefix="/api")
+    # Judge Lab: always mounted, but every route 404s unless demo_mode or a
+    # development environment (see demo_lab.require_demo_lab) — not discoverable in prod.
+    app.include_router(demo_lab_router, prefix="/api")
     return app
 
 

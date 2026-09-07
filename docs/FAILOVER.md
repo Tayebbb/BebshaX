@@ -16,7 +16,7 @@ Order inside a pool = preference order. Bold = local-first.
 | local        | ollama                                | 2               |
 | emergency    | **ollama** → freellmpool              | 2               |
 
-`conversation` is local-first by measurement, not ideology: the 2026-08-26 gate scored `llama3.2:3b` 9.65/10 on interview quality at ~6 s/turn versus ~53 s on free cloud tiers.
+`conversation` is local-first by measurement, not ideology: the 2026-08-26/27 gate (three runs, n = 1 persona × 5 questions) scored `llama3.2:3b` 9.65 / 9.05 / 9.2 on interview quality at ~5–7 s/turn versus 8.25 / 8.05 / 8.2 for the cloud-fast route at ~53 s / 2.5 s / 56 s — full table and caveats in [ROUTING.md](ROUTING.md).
 
 ## Task → pool map (18 task types)
 
@@ -35,21 +35,21 @@ Both tables are data, not branches — extending them means adding a row plus a 
 
 13 kinds. **Low answer quality is deliberately not a failure kind** — it belongs to the quality/eval layer, never to routing (owner rule, 2026-08-22). New kinds require enum + policy + tests in one commit (R6).
 
-| FailureKind             | retry same once |              try next              |         cooldown         |
-| ----------------------- | :-------------: | :--------------------------------: | :----------------------: |
-| TIMEOUT                 |        —        |                 ✓                  |            —             |
-| CONNECTION              |        ✓        |                 ✓                  |            —             |
-| RATE_LIMITED            |        —        |                 ✓                  |            ✓             |
-| QUOTA_EXHAUSTED         |        —        |                 ✓                  |            ✓             |
-| SERVER_ERROR            |        —        |                 ✓                  |            ✓             |
-| PROVIDER_UNAVAILABLE    |        —        |                 ✓                  |            ✓             |
-| AUTH_INVALID            |        —        |                 ✓                  |            ✓             |
-| MODEL_UNAVAILABLE       |        —        |                 ✓                  |            ✓             |
-| CONTEXT_WINDOW_EXCEEDED |        —        | ✓ (larger-context candidates only) |            —             |
-| CAPABILITY_UNSUPPORTED  |        —        |                 ✓                  |            —             |
-| MALFORMED_RESPONSE      |        ✓        |                 ✓                  |            —             |
-| CONTENT_REFUSAL         |        —        |                 ✓                  |            —             |
-| INTERNAL_ERROR          |        —        |                 —                  | — (surfaces immediately) |
+| FailureKind             | retry same once |              try next              |         cooldown         | cooldown scope |
+| ----------------------- | :-------------: | :--------------------------------: | :----------------------: | :------------: |
+| TIMEOUT                 |        —        |                 ✓                  |            —             |       —        |
+| CONNECTION              |        ✓        |                 ✓                  |            —             |       —        |
+| RATE_LIMITED            |        —        |                 ✓                  |            ✓             |  **provider**  |
+| QUOTA_EXHAUSTED         |        —        |                 ✓                  |            ✓             |  **provider**  |
+| SERVER_ERROR            |        —        |                 ✓                  |            ✓             |     route      |
+| PROVIDER_UNAVAILABLE    |        —        |                 ✓                  |            ✓             |     route      |
+| AUTH_INVALID            |        —        |                 ✓                  |            ✓             |  **provider**  |
+| MODEL_UNAVAILABLE       |        —        |                 ✓                  |            ✓             |     route      |
+| CONTEXT_WINDOW_EXCEEDED |        —        | ✓ (larger-context candidates only) |            —             |       —        |
+| CAPABILITY_UNSUPPORTED  |        —        |                 ✓                  |            —             |       —        |
+| MALFORMED_RESPONSE      |        ✓        |                 ✓                  |            —             |       —        |
+| CONTENT_REFUSAL         |        —        |                 ✓                  |            —             |       —        |
+| INTERNAL_ERROR          |        —        |                 —                  | — (surfaces immediately) |       —        |
 
 Exceptions: `AttemptFailed` (one attempt), `ContextWindowExceeded` (nothing fits — content is **never truncated**, R2), `AllCandidatesFailed` (chain exhausted; carries the full provenance trail).
 
@@ -65,7 +65,13 @@ For one `LLMRequest`:
 
 ## Cooldowns
 
-Default 60 s per `(provider, model)`, monotonic-clock based with an injectable clock for tests. Cooldowns are **persisted** (`model_registry.cooldown_until` via `CooldownStore`) and restored at startup, so a restart doesn't hammer a provider that was rate-limiting us seconds ago.
+Default 60 s, monotonic-clock based with an injectable clock for tests. Cooldowns are **persisted** (`model_registry.cooldown_until` via `CooldownStore`) and restored at startup, so a restart doesn't hammer a provider that was rate-limiting us seconds ago.
+
+**Scope (added 2026-09-06):** each cooling policy carries a `cooldown_scope`. `route` cools one `(provider, model)`; `provider` cools every model of that provider under the key `(provider, "*")`, because RATE_LIMITED / QUOTA_EXHAUSTED / AUTH_INVALID are account-level signals — sibling models share the same key and the same fate, so advancing to `provider/other-model` would only burn another attempt. SERVER_ERROR / PROVIDER_UNAVAILABLE / MODEL_UNAVAILABLE stay route-scoped (a 5xx on one model says nothing about its siblings). Provider-wide cooldowns show up in `routing_path` as `cooling down for Ns more (provider-wide)` and persist/load with model `*`.
+
+## Attempt budgets vs. freellmpool's internal failover (added 2026-09-06)
+
+freellmpool applies its `timeout` argument **per inner target**: when `freellmpool/auto` fails over internally across N providers, one BebshaX "attempt" could stretch to N × budget and starve the interactive path. `FreellmpoolAdapter.complete()` therefore wraps `pool.achat()` in `asyncio.wait_for(..., timeout=attempt_timeout_s(task))` so the per-task budget ([Latency budgets](#latency-budgets-llmlatencypy)) bounds the attempt as a whole; expiry maps to `TIMEOUT` (advance, no cooldown) with `"attempt budget exceeded"` in the attempt record.
 
 ## Context budgeting (`llm/estimator.py`)
 

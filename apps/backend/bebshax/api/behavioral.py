@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import get_session, user_can_write_study, user_owns_study
+from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.behavioral.engine import BehavioralRunNotFound, BehavioralSimulationEngine, BehavioralTestNotFound
 from bebshax.behavioral.orm import (
@@ -25,10 +26,32 @@ from bebshax.behavioral.orm import (
     BehavioralTests,
 )
 from bebshax.db.models import Personas, Studies
+from bebshax.llm.failures import LLMError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["behavioral-testing"])
+
+# asyncio only keeps weak references to tasks: an un-referenced run task could
+# be garbage-collected mid-simulation. Strong refs live here until done.
+_RUN_TASKS: set[asyncio.Task] = set()
+
+
+def _track_run_task(task: asyncio.Task, run_id: str) -> None:
+    _RUN_TASKS.add(task)
+
+    def _done(t: asyncio.Task) -> None:
+        _RUN_TASKS.discard(t)
+        if t.cancelled():
+            logger.warning("behavioral run %s task cancelled", run_id)
+            return
+        exc = t.exception()
+        if exc is not None:
+            # The engine already persisted the failure and logged the traceback;
+            # this is the one-line marker that the task itself ended in error.
+            logger.error("behavioral run %s task failed: %s", run_id, type(exc).__name__)
+
+    task.add_done_callback(_done)
 
 
 def _utcnow() -> datetime:
@@ -344,6 +367,49 @@ async def get_behavioral_metrics(
     }
 
 
+# Registered BEFORE `/behavioral-tests/{test_id}`: Starlette matches routes in
+# declaration order, so a literal segment declared after a sibling `{param}`
+# route is unreachable (this one used to 404 as "test 'compare' not found").
+@router.get("/studies/{study_id}/behavioral-tests/compare")
+async def compare_behavioral_runs(
+    study_id: str,
+    run_ids: str = Query(default="", description="Comma-separated run IDs to compare"),
+    session: AsyncSession = Depends(get_session),
+    user: Optional[Users] = Depends(get_optional_current_user),
+) -> dict[str, Any]:
+    """Compare multiple historical simulation runs side-by-side."""
+    await _get_study_and_verify_access(study_id, session, user)
+
+    ids = [i.strip() for i in run_ids.split(",") if i.strip()]
+    if not ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one run_id must be provided for comparison.",
+        )
+
+    res = await session.execute(
+        select(BehavioralTestRuns).where(
+            BehavioralTestRuns.id.in_(ids),
+            BehavioralTestRuns.study_id == study_id,
+        )
+    )
+    runs = res.scalars().all()
+
+    compared_runs: list[dict[str, Any]] = []
+    for r in runs:
+        res_results = await session.execute(
+            select(BehavioralTestResults).where(BehavioralTestResults.test_run_id == r.id)
+        )
+        results = res_results.scalars().all()
+        compared_runs.append(_serialize_run(r, results=results))
+
+    return {
+        "study_id": study_id,
+        "compared_run_count": len(compared_runs),
+        "runs": compared_runs,
+    }
+
+
 @router.get("/studies/{study_id}/behavioral-tests/{test_id}")
 async def get_behavioral_test_detail(
     study_id: str,
@@ -469,6 +535,7 @@ async def delete_behavioral_test(
 # ---------------------------------------------------------------------------
 
 @router.post("/studies/{study_id}/behavioral-tests/{test_id}/runs", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def trigger_behavioral_test_run(
     study_id: str,
     test_id: str,
@@ -557,7 +624,12 @@ async def trigger_behavioral_test_run(
             engine = BehavioralSimulationEngine(llm, sm)
 
     if engine:
-        asyncio.create_task(engine.execute_test_run(run_id=run_id, user_id=user.id if user else None))
+        _track_run_task(
+            asyncio.create_task(
+                engine.execute_test_run(run_id=run_id, user_id=user.id if user else None)
+            ),
+            run_id,
+        )
 
     return _serialize_run(run)
 
@@ -636,6 +708,7 @@ async def get_behavioral_run_results(
 
 
 @router.post("/studies/{study_id}/behavioral-tests/runs/{run_id}/retry-failed")
+@limiter.limit("10/minute")
 async def retry_failed_simulations(
     study_id: str,
     run_id: str,
@@ -679,49 +752,13 @@ async def retry_failed_simulations(
     try:
         updated_run = await engine.retry_failed_simulations(run_id, study_id=study_id)
         return await get_behavioral_run_status(study_id, run_id, session, user)
+    except LLMError:
+        # Routing failures keep their classified envelope (503 all_candidates_failed /
+        # 413 context_window_exceeded with attempts) via the global handlers.
+        raise
     except Exception:
         logger.error("behavioral retry failed for run %s", run_id, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Retry failed. Please try again.",
         )
-
-
-@router.get("/studies/{study_id}/behavioral-tests/compare")
-async def compare_behavioral_runs(
-    study_id: str,
-    run_ids: str = Query(description="Comma-separated run IDs to compare"),
-    session: AsyncSession = Depends(get_session),
-    user: Optional[Users] = Depends(get_optional_current_user),
-) -> dict[str, Any]:
-    """Compare multiple historical simulation runs side-by-side."""
-    await _get_study_and_verify_access(study_id, session, user)
-
-    ids = [i.strip() for i in run_ids.split(",") if i.strip()]
-    if not ids:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one run_id must be provided for comparison.",
-        )
-
-    res = await session.execute(
-        select(BehavioralTestRuns).where(
-            BehavioralTestRuns.id.in_(ids),
-            BehavioralTestRuns.study_id == study_id,
-        )
-    )
-    runs = res.scalars().all()
-
-    compared_runs: list[dict[str, Any]] = []
-    for r in runs:
-        res_results = await session.execute(
-            select(BehavioralTestResults).where(BehavioralTestResults.test_run_id == r.id)
-        )
-        results = res_results.scalars().all()
-        compared_runs.append(_serialize_run(r, results=results))
-
-    return {
-        "study_id": study_id,
-        "compared_run_count": len(compared_runs),
-        "runs": compared_runs,
-    }

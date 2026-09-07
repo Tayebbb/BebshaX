@@ -2,6 +2,7 @@
 
 import type { BigFivePersonality, DetailedAttributes } from './persona';
 
+// Mirrors bebshax/llm/types.py::TaskType exactly (18 values).
 export type TaskType =
   | "PERSONA_GENERATION"
   | "PERSONA_REFINEMENT"
@@ -18,19 +19,83 @@ export type TaskType =
   | "STRUCTURED_OUTPUT"
   | "BROWSER_AGENT"
   | "TOOL_CALLING"
+  | "PERSONA_NARRATIVE"
+  | "BEHAVIORAL_SIMULATION"
   | "EMERGENCY_FALLBACK";
 
+// Mirrors bebshax/llm/failures.py::FailureKind exactly (13 kinds, closed taxonomy — R6).
 export type FailureKind =
-  | "RATE_LIMIT"
-  | "QUOTA_EXHAUSTED"
   | "TIMEOUT"
   | "CONNECTION"
+  | "RATE_LIMITED"
+  | "QUOTA_EXHAUSTED"
   | "SERVER_ERROR"
+  | "PROVIDER_UNAVAILABLE"
+  | "AUTH_INVALID"
   | "MODEL_UNAVAILABLE"
+  | "CONTEXT_WINDOW_EXCEEDED"
   | "CAPABILITY_UNSUPPORTED"
-  | "CONTEXT_OVERFLOW"
   | "MALFORMED_RESPONSE"
+  | "CONTENT_REFUSAL"
   | "INTERNAL_ERROR";
+
+export const FAILURE_KINDS: readonly FailureKind[] = [
+  "TIMEOUT",
+  "CONNECTION",
+  "RATE_LIMITED",
+  "QUOTA_EXHAUSTED",
+  "SERVER_ERROR",
+  "PROVIDER_UNAVAILABLE",
+  "AUTH_INVALID",
+  "MODEL_UNAVAILABLE",
+  "CONTEXT_WINDOW_EXCEEDED",
+  "CAPABILITY_UNSUPPORTED",
+  "MALFORMED_RESPONSE",
+  "CONTENT_REFUSAL",
+  "INTERNAL_ERROR",
+];
+
+/** Machine-readable error codes the backend envelope carries. */
+export type ApiErrorCode =
+  | "all_candidates_failed"
+  | "context_window_exceeded"
+  | "llm_error"
+  | "validation_error"
+  | "rate_limited"
+  | "not_found"
+  | "forbidden"
+  | "unauthorized"
+  | "conflict"
+  | "payload_too_large"
+  | "internal_error"
+  | "database_unavailable";
+
+/** One FastAPI/pydantic validation item (422 `detail` is an array of these). */
+export interface ValidationItem {
+  loc?: (string | number)[];
+  msg?: string;
+  type?: string;
+}
+
+export interface ApiErrorAttempt {
+  provider: string;
+  model: string;
+  failure_kind: FailureKind | string | null;
+  fallback_reason: string | null;
+}
+
+/** Every backend error response body (see backend error handler contract). */
+export interface ApiErrorBody {
+  detail: string | ValidationItem[];
+  error_code: ApiErrorCode | string;
+  request_id: string;
+  message?: string;
+  llm_request_id?: string;
+  attempts?: ApiErrorAttempt[];
+  routing_path?: string[];
+  estimated_tokens?: number;
+  largest_window?: number | null;
+}
 
 export type ProvenanceClass = "OBSERVED" | "INFERRED" | "SYNTHETIC";
 
@@ -79,13 +144,15 @@ export interface ProviderStatus {
   type: "keyless" | "free_tier_key" | "local_fallback";
   status: "healthy" | "degraded" | "down";
   available_models: number;
-  active_cooldowns: number;
+  /** Null when the backend has not measured it — render as "—", never 0. */
+  active_cooldowns: number | null;
 }
 
 export interface PoolStatus {
   name: string;
   max_concurrency: number;
-  active_requests: number;
+  /** Null when the backend has not measured it — render as "—", never 0. */
+  active_requests: number | null;
   candidates_count: number;
 }
 
@@ -168,11 +235,20 @@ export interface MemoryItem {
   persona_id: string;
   kind: MemoryKind;
   text: string;
-  importance: number;
-  recency_weight: number;
-  relevance_score: number;
+  /** Null when the backend did not report it — never a fabricated constant. */
+  importance: number | null;
+  recency_weight: number | null;
+  relevance_score: number | null;
+  /** Who authored the text: only `persona` items are recollections; `interviewer`
+   * rows are researcher questions kept as context (listed only on request). */
+  source?: 'persona' | 'interviewer' | 'system';
+  conversation_id?: string | null;
   created_at: string;
 }
+
+/** A memory the interview engine recalled for one turn. The backend emits plain
+ * strings today; richer entries stay renderable without a contract change. */
+export type RetrievedMemory = string | { text: string; kind?: string; score?: number | null };
 
 export interface ConversationTurn {
   id: string;
@@ -230,6 +306,61 @@ export interface EvaluationMetrics {
   };
   pools: PoolPerformance[];
   quality_gate: QualityGate | null;
+}
+
+// ---------------------------------------------------------------------------
+// Judge Lab (demo-lab) — scripted adapters exercising the REAL routing code.
+// ---------------------------------------------------------------------------
+
+export type DemoLabScenarioName =
+  | "provider_429_fallback"
+  | "provider_5xx_fallback"
+  | "all_providers_down"
+  | "context_overflow"
+  | "prompt_injection"
+  | "evidence_conflict"
+  | "insufficient_evidence";
+
+export interface DemoLabScenario {
+  name: DemoLabScenarioName | string;
+  title: string;
+  description: string;
+  expected_outcome: string;
+}
+
+export interface DemoLabScenariosResponse {
+  enabled: boolean;
+  simulated: boolean;
+  scenarios: DemoLabScenario[];
+}
+
+export type DemoLabOutcome =
+  | "served"
+  | "served_after_fallback"
+  | "explicit_failure"
+  | "claims_downgraded"
+  | "low_grounding";
+
+export interface DemoLabTimelineStep {
+  step: string;
+  provider: string | null;
+  model: string | null;
+  result: "failed" | "served" | "skipped";
+  failure_kind: FailureKind | string | null;
+  fallback_reason: string | null;
+  latency_ms: number | null;
+}
+
+export interface DemoLabRunResult {
+  scenario: string;
+  title: string;
+  simulated: boolean;
+  outcome: DemoLabOutcome;
+  error_code: null | "all_candidates_failed" | "context_window_exceeded" | string;
+  explanation: string;
+  provenance: ProvenanceRecord | null;
+  timeline: DemoLabTimelineStep[];
+  extra: Record<string, unknown>;
 }
 
 export * from './study';

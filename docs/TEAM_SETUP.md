@@ -9,7 +9,7 @@ Get from `git clone` to green tests in ~5 minutes. Read [PROJECT_CONTEXT.md](../
 | Python         | 3.12+      | backend (now)                                        |
 | Git            | any recent | everything                                           |
 | Docker Desktop | any recent | database (Phase 6+)                                  |
-| Node.js        | 20+        | frontend (Phase 12+)                                 |
+| Node.js        | 24 LTS     | frontend; CI + the `web` image use 24 (20+ builds)   |
 | Ollama         | 0.20+      | local fallback (Phase 4+, optional for backend work) |
 
 ## Setup

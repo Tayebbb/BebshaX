@@ -65,7 +65,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
       if (isPaymentsNotConfigured(err)) {
         setPaymentsUnavailable(true);
         setErrorMessage(
-          "Paid plans aren't enabled in this build. The free plan works right now — start there and everything else stays unlocked."
+          "Paid plans aren't enabled in this build. The free plan works right now: start there and everything else stays unlocked."
         );
       } else {
         setErrorMessage("We couldn't start checkout. Please try again.");
@@ -88,7 +88,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
       features: [
         '3 active customer research studies',
         '5 synthetic personas per study',
-        'Runs on the aggregated free provider pool — no API key needed',
+        'Runs on the aggregated free provider pool, no API key needed',
         'Standard interactive interview simulator',
         'Basic demographic & persona attribute cards',
         'Community & documentation support',
@@ -156,27 +156,6 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
       >
         {/* Section Header */}
         <div style={{ textAlign: 'center', maxWidth: '760px', margin: '0 auto 64px auto' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '6px 16px',
-              background: 'rgba(var(--lp-gold-rgb), 0.06)',
-              border: '1px solid rgba(var(--lp-gold-rgb), 0.2)',
-              borderRadius: '999px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              color: 'var(--lp-gold)',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              marginBottom: '20px',
-            }}
-          >
-            <Sparkles size={14} />
-            <span>Transparent Pricing</span>
-          </div>
-
           <h2
             style={{
               fontSize: 'clamp(2rem, 3.5vw, 2.75rem)',
@@ -187,7 +166,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
               marginBottom: '16px',
             }}
           >
-            Scale Synthetic Customer Research with Confidence
+            Pricing that starts at nothing
           </h2>
 
           <p
@@ -197,7 +176,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
               lineHeight: 1.6,
             }}
           >
-            Every persona attribute is labelled with how it is known — evidence, inference, or assumption — so you can see what is grounded and what is a guess. Cancel anytime.
+            Every persona attribute is labelled with how it is known (evidence, inference, or assumption) so you can see what is grounded and what is a guess. Cancel anytime.
           </p>
 
           {errorMessage && (
@@ -428,7 +407,7 @@ export const Pricing: React.FC<PricingProps> = ({ onOpenAuth }) => {
           <Shield size={16} color="var(--lp-text-gray)" />
           <span>
             {paymentsUnavailable
-              ? 'Paid plans are not enabled in this build — no payment is taken.'
+              ? 'Paid plans are not enabled in this build. No payment is taken.'
               : 'The free plan needs no payment details. Paid plans, when enabled, are processed by Stripe.'}
           </span>
         </div>

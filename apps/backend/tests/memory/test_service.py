@@ -13,7 +13,7 @@ def service(session_maker, embeddings) -> MemoryService:
 
 
 async def test_remember_and_retrieve_orders_by_relevance(service) -> None:
-    await service.remember("p1", "ordered a large cappuccino with oat milk")
+    await service.remember("p1", "ordered a large cappuccino with oat milk at the coffee shop")
     await service.remember("p1", "complained that coffee delivery was late twice")
     await service.remember("p1", "watched a documentary about deep sea fish")
 
@@ -41,8 +41,11 @@ async def test_retrieval_is_scoped_to_persona_and_space(service, session_maker) 
 
 
 async def test_recency_breaks_ties_between_identical_memories(service, session_maker) -> None:
+    # identical text under two kinds: same relevance, same importance → recency decides
+    # (same kind + same text would dedupe into one row by design)
     old = await service.remember("p1", "asked about the premium plan price")
-    new = await service.remember("p1", "asked about the premium plan price")
+    new = await service.remember("p1", "asked about the premium plan price", kind="semantic")
+    assert old.id != new.id
     async with session_maker() as session:
         await session.execute(
             update(MemoryItems)

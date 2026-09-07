@@ -330,6 +330,15 @@ class ResearchEngineService:
         plan = res.scalar_one_or_none()
         if not plan:
             return None
+        # The plan table predates the honesty marker; the run that produced the
+        # plan stores the full ResearchPlanResult dump (incl. source/fallback_reason).
+        source, fallback_reason = "unknown", None
+        if plan.run_id:
+            run = await session.get(ResearchRuns, plan.run_id)
+            dumped = (run.research_plan if run is not None else None) or {}
+            if isinstance(dumped, dict):
+                source = dumped.get("source") or source
+                fallback_reason = dumped.get("fallback_reason")
         return {
             "id": plan.id,
             "study_id": plan.study_id,
@@ -342,6 +351,8 @@ class ResearchEngineService:
             "market_questions": plan.market_questions,
             "dataset_requirements": plan.dataset_requirements,
             "summary": plan.summary,
+            "source": source,
+            "fallback_reason": fallback_reason,
             "created_at": plan.created_at.isoformat() if plan.created_at else None,
         }
 

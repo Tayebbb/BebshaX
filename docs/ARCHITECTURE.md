@@ -37,7 +37,7 @@ Two rules shape everything (RULES.md R1/R3): provider SDKs are imported **only**
 
 ## Startup (lifespan in `main.py`)
 
-1. **Migration drift guard** — dev/local, non-demo: hard `SystemExit(1)` if the database is behind `alembic head` (loud failure instead of mysterious 500s).
+1. **Migration drift guard** — dev/local, non-demo, `localhost` database only: hard `SystemExit(1)` if the database is behind `alembic head` (loud failure instead of mysterious 500s). Cloud URLs and demo mode skip it; the compose `full` profile instead runs `alembic upgrade head` in the `app` container before uvicorn (see [SETUP.md](SETUP.md) § Deployment stories).
 2. `build_default_adapters()` → engine + sessionmaker → `ProvenanceSink.start()`.
 3. `QuotaLedger` re-seeded from today's `llm_requests`; `CooldownStore.load_active()` restores router cooldowns across restarts; freellmpool fast-routing metrics warmed from recent route observations (fail-soft).
 4. `PoolRouter(adapters, on_provenance, ranker=quota_aware_ranker, initial_cooldowns, on_cooldown_change)` attached to `app.state` as both `llm_router` and `llm_service`.
@@ -48,7 +48,7 @@ Two rules shape everything (RULES.md R1/R3): provider SDKs are imported **only**
 
 ## API surface
 
-All routers mount under `/api`: health, routes (provenance/status), personas, interviews, behavioral, copilot, studies, evaluation, datasets, evidence, segmentation, auth (`/api/auth`), OpenRouter health (`/api/health/openrouter`). Shapes are frozen in [API_CONTRACT.md](API_CONTRACT.md). Middleware: slowapi rate limiting + explicit-origin CORS.
+All routers mount under `/api`: health, routes (provenance/status), personas, interviews, behavioral, copilot, studies, evaluation, datasets, evidence, segmentation, auth (`/api/auth`), OpenRouter health (`/api/health/openrouter`), and the Judge Lab (`/api/demo-lab`, dev/demo only — scripted `FakeAdapter` scenarios run through the real `PoolRouter`, every payload `simulated: true`). Shapes are frozen in [API_CONTRACT.md](API_CONTRACT.md). Middleware: slowapi rate limiting + explicit-origin CORS. In the compose `full` profile nginx fronts everything (SPA + `/api` proxy) and adds the browser security headers/CSP (`deploy/nginx.conf`).
 
 ## Frontend (`apps/frontend/`)
 

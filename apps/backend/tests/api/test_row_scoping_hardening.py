@@ -205,7 +205,7 @@ async def test_persona_read_and_memories_are_owner_scoped(scoped_app):
     app, _ = scoped_app
 
     class _FakeMemoryService:
-        async def list_for_persona(self, persona_id, kind=None, limit=50):
+        async def list_for_persona(self, persona_id, kind=None, limit=50, *, sources=("persona",)):
             return []
 
     app.state.memory_service = _FakeMemoryService()

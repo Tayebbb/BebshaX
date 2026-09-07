@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add backend to sys.path if running as script from repo root
@@ -43,7 +43,7 @@ async def main() -> int:
     )
     args = parser.parse_args()
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     result = EvaluationSuiteResult(timestamp=timestamp, suite_type=args.suite)
 
     # 1. Persona Quality Evaluation

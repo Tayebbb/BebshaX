@@ -134,8 +134,15 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
                 {/* Score */}
                 <div style={{ padding: '16px', backgroundColor: 'var(--glass-mid)', borderRadius: '12px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Acceptance Likelihood</div>
-                  <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--accent-teal-bright)' }}>
-                    {metrics?.average_likelihood_percentage ?? Math.round((metrics?.average_likelihood || 0.5) * 100)}%
+                  <div
+                    style={{ fontSize: '2.2rem', fontWeight: 800, color: typeof metrics?.average_likelihood_percentage === 'number' || typeof metrics?.average_likelihood === 'number' ? 'var(--accent-teal-bright)' : 'var(--text-muted)' }}
+                    title={typeof metrics?.average_likelihood_percentage === 'number' || typeof metrics?.average_likelihood === 'number' ? undefined : 'Not measured for this run'}
+                  >
+                    {typeof metrics?.average_likelihood_percentage === 'number'
+                      ? `${metrics.average_likelihood_percentage}%`
+                      : typeof metrics?.average_likelihood === 'number'
+                      ? `${Math.round(metrics.average_likelihood * 100)}%`
+                      : '—'}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                     {metrics?.positive_count} pos / {metrics?.neutral_count} neu / {metrics?.negative_count} neg

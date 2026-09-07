@@ -56,13 +56,14 @@ def test_unknown_label_downgrades_to_synthetic() -> None:
 
 
 def test_provenance_is_never_upgraded() -> None:
-    ev = EvidenceItem(source="ds", text="some evidence")
+    ev = EvidenceItem(source="ds", text="reads reviews before ordering")
     profile = coerce_provenance(
-        _generated(value="x", provenance="SYNTHETIC", evidence_ids=[ev.id]),
+        _generated(value="checks reviews before ordering", provenance="SYNTHETIC", evidence_ids=[ev.id]),
         business_id="b1",
         evidence=[ev],
     )
-    # cited valid evidence → OBSERVED is legitimate (citation is the ground truth)
+    # cited valid evidence that lexically grounds the claim → OBSERVED is
+    # legitimate (citation is the ground truth, not the model's label)
     goal = next(a for a in profile.attributes if a.key == "goal")
     assert goal.provenance_class == ProvenanceClass.OBSERVED
 

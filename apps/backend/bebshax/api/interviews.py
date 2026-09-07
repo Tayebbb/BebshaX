@@ -23,6 +23,8 @@ from bebshax.api.deps import (
     user_can_write_study,
     user_owns_study,
 )
+from bebshax.api.errors import request_id_of
+from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
 from bebshax.interview.engine import ConversationNotFound, InterviewEngine, InterviewFinished, PersonaNotFound
@@ -80,6 +82,7 @@ class MessageIn(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _serialize_turn(t: ConversationTurns) -> dict[str, Any]:
+    meta = t.metadata_json or {}
     return {
         "id": t.id,
         "interview_id": t.conversation_id,
@@ -91,7 +94,12 @@ def _serialize_turn(t: ConversationTurns) -> dict[str, Any]:
         "latency_ms": t.latency_ms,
         "served_by": t.served_by,
         "retrieved_memories": t.retrieved_memories or [],
-        "metadata": t.metadata_json or {},
+        "metadata": meta,
+        # Lifted from metadata so reloaded transcripts flag turns like live ones.
+        "identity_drift": bool(meta.get("identity_drift", False)),
+        "drift_notes": meta.get("drift_notes") or [],
+        "contradiction_detected": bool(meta.get("contradiction_detected", False)),
+        "contradiction_details": meta.get("contradiction_details"),
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }
 
@@ -369,6 +377,7 @@ async def get_study_interview_detail(
 
 
 @router.post("/studies/{study_id}/interviews/{interview_id}/messages")
+@limiter.limit("30/minute")
 async def post_study_interview_message(
     study_id: str,
     interview_id: str,
@@ -377,7 +386,12 @@ async def post_study_interview_message(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Submit a researcher question and receive the adaptive persona response."""
+    """Submit a researcher question and receive the adaptive persona response.
+
+    ContextWindowExceeded (413) and AllCandidatesFailed (503) propagate to the
+    global handlers in api/errors.py, which render the rich envelope (attempts,
+    failure kinds, llm_request_id) — a local ``except`` would flatten it.
+    """
     await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
     _require_interview_in_study(
@@ -397,10 +411,6 @@ async def post_study_interview_message(
         raise HTTPException(status_code=404, detail="Persona not found") from exc
     except InterviewFinished as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ContextWindowExceeded as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from exc
-    except AllCandidatesFailed as exc:
-        raise HTTPException(status_code=503, detail="No LLM route could serve this request") from exc
 
     reply_text = result.get("reply", "")
     # M4: engine values pass through untouched — never fabricate latency/route.
@@ -411,6 +421,15 @@ async def post_study_interview_message(
     topics_explored = result.get("topics_explored", {})
     suggested_questions = result.get("suggested_questions", [])
     is_finished = result.get("is_finished", False)
+    # Deterministic consistency signals from the engine (quality layer, never
+    # infra): numeric self-contradiction + identity drift. Surfaced so the UI
+    # can flag the turn instead of the judge having to read metadata_json.
+    consistency = {
+        "contradiction_detected": bool(result.get("contradiction_detected", False)),
+        "contradiction_details": result.get("contradiction_details"),
+        "identity_drift": bool(result.get("identity_drift", False)),
+        "drift_notes": result.get("drift_notes") or [],
+    }
 
     return {
         "reply": reply_text,
@@ -423,6 +442,7 @@ async def post_study_interview_message(
         "max_turns": result.get("max_turns"),
         "is_finished": is_finished,
         "suggested_questions": suggested_questions,
+        **consistency,
         "user_message": {
             "role": "researcher",
             "content": text.strip(),
@@ -439,11 +459,13 @@ async def post_study_interview_message(
             "turn_number": turn_num,
             "topic": topic,
             "retrieved_memories": result.get("retrieved_memories", []),
+            **consistency,
         },
     }
 
 
 @router.post("/studies/{study_id}/interviews/{interview_id}/messages/stream")
+@limiter.limit("30/minute")
 async def post_study_interview_message_stream(
     study_id: str,
     interview_id: str,
@@ -454,7 +476,8 @@ async def post_study_interview_message_stream(
 ) -> StreamingResponse:
     """SSE variant of the message endpoint: `delta` events as the persona
     speaks, then one `done` event with the canonical ask() payload (normalized
-    reply + provenance). Errors after headers are sent arrive as `error` events."""
+    reply + provenance). Errors after headers are sent arrive as `error` events
+    carrying the same ``error_code`` values as the JSON envelope."""
     await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
     _require_interview_in_study(
@@ -466,9 +489,15 @@ async def post_study_interview_message_stream(
         raise HTTPException(status_code=422, detail="Message content cannot be empty")
 
     engine = request.app.state.interview_engine
+    http_request_id = request_id_of(request)
 
     def _sse(event: str, data: dict[str, Any]) -> str:
         return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    def _error(kind: str, error_code: str, detail: str, **fields: Any) -> str:
+        payload = {"kind": kind, "error_code": error_code, "detail": detail, "request_id": http_request_id}
+        payload.update(fields)
+        return _sse("error", payload)
 
     async def event_source():
         try:
@@ -501,16 +530,38 @@ async def post_study_interview_message_stream(
                         }
                         yield _sse("done", payload)
         except InterviewFinished as exc:
-            yield _sse("error", {"kind": "finished", "detail": str(exc)})
+            yield _error("finished", "interview_finished", str(exc))
         except (ConversationNotFound, PersonaNotFound) as exc:
-            yield _sse("error", {"kind": "not_found", "detail": str(exc)})
+            yield _error("not_found", "not_found", str(exc))
         except ContextWindowExceeded as exc:
-            yield _sse("error", {"kind": "context_window", "detail": str(exc)})
-        except AllCandidatesFailed:
-            yield _sse("error", {"kind": "no_route", "detail": "No LLM route could serve this request"})
+            yield _error(
+                "context_window",
+                "context_window_exceeded",
+                f"This request needs ~{exc.estimated_tokens} tokens of context; no eligible "
+                "model can hold it. Nothing was truncated.",
+                estimated_tokens=exc.estimated_tokens,
+                largest_window=exc.largest_window,
+            )
+        except AllCandidatesFailed as exc:
+            yield _error(
+                "no_route",
+                "all_candidates_failed",
+                "No AI route could serve this request — all candidates failed.",
+                llm_request_id=exc.provenance.request_id,
+                attempts=[
+                    {
+                        "provider": a.provider,
+                        "model": a.model,
+                        "failure_kind": str(a.failure_kind) if a.failure_kind else None,
+                        "fallback_reason": a.fallback_reason,
+                    }
+                    for a in exc.provenance.attempts
+                ],
+                routing_path=list(exc.provenance.routing_path),
+            )
         except Exception:
             logger.warning("interview stream failed for %s", interview_id, exc_info=True)
-            yield _sse("error", {"kind": "generic", "detail": "interview turn failed"})
+            yield _error("generic", "internal_error", "interview turn failed")
 
     return StreamingResponse(
         event_source(),
@@ -520,6 +571,7 @@ async def post_study_interview_message_stream(
 
 
 @router.post("/studies/{study_id}/interviews/{interview_id}/complete")
+@limiter.limit("10/minute")
 async def complete_study_interview(
     study_id: str,
     interview_id: str,
@@ -651,6 +703,7 @@ async def start_conversation(
 
 
 @router.post("/conversations/{conversation_id}/messages")
+@limiter.limit("30/minute")
 async def post_message(
     conversation_id: str,
     body: MessageIn,
@@ -671,12 +724,7 @@ async def post_message(
         raise HTTPException(status_code=404, detail="persona not found") from exc
     except InterviewFinished as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ContextWindowExceeded as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from exc
-    except AllCandidatesFailed as exc:
-        raise HTTPException(
-            status_code=503, detail="no LLM route could serve this request"
-        ) from exc
+    # LLM-layer failures (413/503) are rendered by the global handlers.
 
     reply_text = result.get("reply", "")
     # M4: engine values pass through untouched — never fabricate latency/route.
@@ -769,6 +817,7 @@ async def _run_batch_job(
 
 
 @router.post("/studies/{study_id}/interviews/batch-run", status_code=202)
+@limiter.limit("5/minute")
 async def batch_run_study_interviews(
     study_id: str,
     payload: Optional[BatchInterviewRunRequest] = None,

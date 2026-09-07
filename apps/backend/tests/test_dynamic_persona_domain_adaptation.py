@@ -131,7 +131,9 @@ def test_contradiction_detection_in_interview_engine():
     assert has_contra is True
     assert "exceeds stated monthly budget of ৳400" in details
     assert "What changed your willingness to pay" in follow_up
-    assert conf == 0.60
+    # A deterministic regex rule yields a boolean fact, not a calibrated
+    # probability — the former constant 0.60 was invented and is gone.
+    assert conf is None
 
     # 2. Consistent response: declining out-of-budget proposal
     has_contra2, details2, follow_up2, conf2 = engine._detect_contradiction(

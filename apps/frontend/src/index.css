@@ -160,6 +160,81 @@
   --shadow-glow: 0 0 24px rgba(13, 148, 136, 0.14);
 }
 
+/* ==========================================================================
+   Scales — the rhythm every console surface is built on.
+   Type: 8 stops, --fs-xs is the metadata FLOOR (nothing renders smaller).
+   Space: 4px base. Radius: 5 stops + pill. See docs/DESIGN_SYSTEM.md.
+   ========================================================================== */
+:root {
+  --fs-xs: 0.72rem;
+  --fs-sm: 0.8rem;
+  --fs-base: 0.875rem;
+  --fs-md: 0.95rem;
+  --fs-lg: 1.1rem;
+  --fs-xl: 1.35rem;
+  --fs-2xl: 1.75rem;
+  --fs-3xl: clamp(1.9rem, 3.4vw, 2.5rem);
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  /* Page gutter + reading width shared by every console view */
+  --page-x: clamp(16px, 4vw, 40px);
+  --page-max: 1280px;
+
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* The one CTA gradient — every primary action, both themes */
+  --accent-gradient: linear-gradient(135deg, var(--accent-teal) 0%, #0d9488 100%);
+
+  /* Semantic status surfaces (bg + border pair with the *-text tokens above) */
+  --status-success-bg: rgba(16, 185, 129, 0.1);
+  --status-success-border: rgba(16, 185, 129, 0.35);
+  --status-warn-bg: rgba(245, 158, 11, 0.1);
+  --status-warn-border: rgba(245, 158, 11, 0.4);
+  --status-error-bg: rgba(239, 68, 68, 0.08);
+  --status-error-border: rgba(239, 68, 68, 0.4);
+  --status-info-bg: var(--accent-subtle);
+  --status-info-border: var(--accent-glow);
+
+  /* Evidence provenance — OBSERVED is the only "confirmed" colour */
+  --prov-observed: var(--accent-emerald);
+  --prov-inferred: var(--accent-amber);
+  --prov-synthetic: var(--text-muted);
+
+  /* Big Five trait hues (theme-aware pairs below) */
+  --trait-o: #38bdf8;
+  --trait-c: var(--accent-emerald);
+  --trait-e: #f59e0b;
+  --trait-a: #a855f7;
+  --trait-n: #ec4899;
+}
+[data-theme='light'] {
+  --accent-gradient: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+  --status-success-bg: rgba(5, 150, 105, 0.09);
+  --status-success-border: rgba(5, 150, 105, 0.35);
+  --status-warn-bg: rgba(161, 98, 7, 0.09);
+  --status-warn-border: rgba(161, 98, 7, 0.35);
+  --status-error-bg: rgba(185, 28, 28, 0.07);
+  --status-error-border: rgba(185, 28, 28, 0.35);
+  --prov-inferred: #b45309;
+  --trait-o: #0284c7;
+  --trait-e: #b45309;
+  --trait-a: #7e22ce;
+  --trait-n: #be185d;
+}
+
 /* Light-mode shim for Tailwind color utilities used by the console views —
    pale-on-dark accent shades and white text flip to readable equivalents. */
 [data-theme='light'] .text-white { color: var(--text-main); }
@@ -553,6 +628,12 @@ html.theme-transition *::after {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+.bx-fade {
+  animation: bx-fade 0.2s ease-out both;
+}
+@keyframes bx-spin {
+  to { transform: rotate(360deg); }
+}
 @keyframes bx-modal-in {
   from { opacity: 0; transform: translateY(14px) scale(0.96); }
   to { opacity: 1; transform: none; }
@@ -582,6 +663,27 @@ html.theme-transition *::after {
     display: none;
   }
 }
+/* "Step N of 5" readout — only shown once the pill labels collapse */
+.bx-step-count {
+  display: none;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+@media (max-width: 720px) {
+  .bx-step-count {
+    display: inline;
+  }
+  .bx-step-label:not(.bx-step-label--current) {
+    display: none !important;
+  }
+  .bx-step-rule {
+    width: 8px !important;
+  }
+}
 
 /* Small screens: modals use the full width, app headers clear the mobile bar */
 @media (max-width: 720px) {
@@ -607,6 +709,7 @@ html.theme-transition *::after {
   .bx-backdrop,
   .bx-modal,
   .bx-pop,
+  .bx-fade,
   .bx-skeleton {
     animation: none;
   }

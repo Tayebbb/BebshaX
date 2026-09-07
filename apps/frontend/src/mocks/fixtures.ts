@@ -52,7 +52,7 @@ export const mockProvenanceRecords: ProvenanceRecord[] = [
         started_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
         latency_ms: 184.2,
         success: false,
-        failure_kind: 'RATE_LIMIT',
+        failure_kind: 'RATE_LIMITED',
         failure_detail: 'HTTP 429: TPM free tier ceiling reached (12,000 / min)',
         fallback_reason: 'Route 429 rate limited, failover to next pool candidate',
         notes: ['Route placed in 30s cooldown'],

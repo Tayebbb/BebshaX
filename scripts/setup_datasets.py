@@ -17,24 +17,25 @@ import csv
 import hashlib
 import json
 import logging
-import os
+import math
+import numbers
 import sys
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
-from huggingface_hub import HfApi, HfFileSystem, hf_hub_download
 import fastparquet
+from huggingface_hub import HfApi, HfFileSystem, hf_hub_download
 
 # Add project root to path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.dataset_manifest import (
-    DATASET_MANIFEST,
+    PROFILES_ORDER,
     DatasetEntry,
     ProfileType,
-    PROFILES_ORDER,
     get_entries_for_profile,
     get_manifest,
 )
@@ -62,7 +63,7 @@ def compute_sha256(filepath: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def preprocess_personahub(raw_files: List[Path], output_file: Path) -> int:
+def preprocess_personahub(raw_files: list[Path], output_file: Path) -> int:
     """Preprocess PersonaHub 200k persona release with systematic stride-8 sampling."""
     persona_jsonl = raw_files[0]
     count = 0
@@ -92,7 +93,7 @@ def preprocess_personahub(raw_files: List[Path], output_file: Path) -> int:
     return total_written
 
 
-def preprocess_synthetic_persona_chat(raw_files: List[Path], output_file: Path) -> int:
+def preprocess_synthetic_persona_chat(raw_files: list[Path], output_file: Path) -> int:
     """Preprocess Synthetic-Persona-Chat CSVs into turn sequences."""
     total_written = 0
 
@@ -131,7 +132,7 @@ def preprocess_synthetic_persona_chat(raw_files: List[Path], output_file: Path) 
     return total_written
 
 
-def preprocess_empathetic_dialogues(raw_files: List[Path], output_file: Path) -> int:
+def preprocess_empathetic_dialogues(raw_files: list[Path], output_file: Path) -> int:
     """Preprocess EmpatheticDialogues parquet files."""
     total_written = 0
 
@@ -162,9 +163,10 @@ def preprocess_empathetic_dialogues(raw_files: List[Path], output_file: Path) ->
     return total_written
 
 
-def preprocess_amazon_reviews(raw_files: List[Path], output_file: Path) -> int:
+def preprocess_amazon_reviews(raw_files: list[Path], output_file: Path) -> int:
     """Preprocess Amazon Reviews Office_Products category jsonl."""
     total_written = 0
+    skipped_malformed = 0
     max_reviews = 50000
 
     review_file = None
@@ -184,7 +186,8 @@ def preprocess_amazon_reviews(raw_files: List[Path], output_file: Path) -> int:
                 continue
             try:
                 data = json.loads(line)
-            except Exception:
+            except json.JSONDecodeError:
+                skipped_malformed += 1
                 continue
 
             text = data.get("text", "").strip()
@@ -203,11 +206,15 @@ def preprocess_amazon_reviews(raw_files: List[Path], output_file: Path) -> int:
             out_f.write(json.dumps(record, ensure_ascii=False) + "\n")
             total_written += 1
 
-    logger.info("Amazon Reviews preprocessed: %d office product reviews", total_written)
+    logger.info(
+        "Amazon Reviews preprocessed: %d office product reviews (%d malformed lines skipped)",
+        total_written,
+        skipped_malformed,
+    )
     return total_written
 
 
-def preprocess_mmlu_micro(raw_files: List[Path], output_file: Path) -> int:
+def preprocess_mmlu_micro(raw_files: list[Path], output_file: Path) -> int:
     """Preprocess MMLU micro-slice parquets."""
     total_written = 0
 
@@ -234,7 +241,7 @@ def preprocess_mmlu_micro(raw_files: List[Path], output_file: Path) -> int:
     return total_written
 
 
-def preprocess_gsm8k_micro(raw_files: List[Path], output_file: Path) -> int:
+def preprocess_gsm8k_micro(raw_files: list[Path], output_file: Path) -> int:
     """Preprocess GSM8K test parquet."""
     total_written = 0
     max_probes = 100
@@ -263,8 +270,24 @@ def preprocess_gsm8k_micro(raw_files: List[Path], output_file: Path) -> int:
     return total_written
 
 
-def preprocess_router_arena(raw_files: List[Path], output_file: Path) -> int:
-    """Preprocess RouterArena sub_10 parquet."""
+_ROUTER_ARENA_TEXT_COLUMNS = {
+    "prompt", "question", "category", "domain", "context", "options", "answer",
+    "dataset name", "global index", "metadata", "keywords", "difficulty", "id",
+}
+
+
+def _row_ci(row: Any) -> dict[str, Any]:
+    """Row values keyed by lower-cased, stripped column name.
+
+    The upstream RouterArena parquet ships ``Category``/``Domain``/``Question``;
+    the lower-case lookups this pipeline used produced 809 rows with an empty
+    prompt, empty domain and no scores — the offline replay was degenerate.
+    """
+    return {str(k).strip().lower(): v for k, v in row.items()}
+
+
+def preprocess_router_arena(raw_files: list[Path], output_file: Path) -> int:
+    """Preprocess RouterArena sub_10 parquet (column names matched case-insensitively)."""
     total_written = 0
 
     with open(output_file, "w", encoding="utf-8") as out_f:
@@ -274,11 +297,27 @@ def preprocess_router_arena(raw_files: List[Path], output_file: Path) -> int:
             pfile = fastparquet.ParquetFile(str(pf))
             df = pfile.to_pandas()
             for i, row in df.iterrows():
+                ci = _row_ci(row)
+                category = str(ci.get("category") or "").strip()
+                domain = str(ci.get("domain") or "").strip()
                 record = {
                     "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, f"router_arena-{i}")),
-                    "prompt": str(row.get("prompt", "") or row.get("question", "")).strip(),
-                    "domain": str(row.get("category", "") or row.get("domain", "")).strip(),
-                    "model_scores": {k: float(v) for k, v in row.items() if k not in ["prompt", "question", "category", "domain"] and isinstance(v, (int, float))},
+                    "prompt": str(ci.get("prompt") or ci.get("question") or "").strip(),
+                    "category": category,
+                    "domain": domain or category,
+                    "source_dataset": str(ci.get("dataset name") or "").strip(),
+                    "difficulty": str(ci.get("difficulty") or "").strip(),
+                    # Per-model score columns, when the slice carries them. The
+                    # pinned sub_10 slice does not — the evaluator marks such
+                    # rows unusable instead of inventing a winner.
+                    "model_scores": {
+                        k: float(v)
+                        for k, v in ci.items()
+                        if k not in _ROUTER_ARENA_TEXT_COLUMNS
+                        and isinstance(v, numbers.Real)
+                        and not isinstance(v, bool)
+                        and not math.isnan(float(v))  # NaN never becomes a score
+                    },
                 }
                 out_f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 total_written += 1
@@ -287,7 +326,7 @@ def preprocess_router_arena(raw_files: List[Path], output_file: Path) -> int:
     return total_written
 
 
-def preprocess_xroute_bench(raw_files: List[Path], output_file: Path) -> int:
+def preprocess_xroute_bench(raw_files: list[Path], output_file: Path) -> int:
     """Preprocess xRouteBench valid parquet."""
     total_written = 0
 
@@ -311,7 +350,7 @@ def preprocess_xroute_bench(raw_files: List[Path], output_file: Path) -> int:
     return total_written
 
 
-def preprocess_lmsys_chat(raw_files: List[Path], output_file: Path) -> int:
+def preprocess_lmsys_chat(raw_files: list[Path], output_file: Path) -> int:
     """Preprocess LMSYS-Chat-1M partition."""
     total_written = 0
     max_convs = 5000
@@ -338,7 +377,7 @@ def preprocess_lmsys_chat(raw_files: List[Path], output_file: Path) -> int:
     return total_written
 
 
-def preprocess_mbti_traits(raw_files: List[Path], output_file: Path) -> int:
+def preprocess_mbti_traits(raw_files: list[Path], output_file: Path) -> int:
     """Preprocess MBTI personality traits."""
     total_written = 0
 
@@ -363,7 +402,7 @@ def preprocess_mbti_traits(raw_files: List[Path], output_file: Path) -> int:
     return total_written
 
 
-PREPROCESSORS: Dict[str, Callable[[List[Path], Path], int]] = {
+PREPROCESSORS: dict[str, Callable[[list[Path], Path], int]] = {
     "preprocess_personahub": preprocess_personahub,
     "preprocess_synthetic_persona_chat": preprocess_synthetic_persona_chat,
     "preprocess_empathetic_dialogues": preprocess_empathetic_dialogues,
@@ -382,7 +421,7 @@ PREPROCESSORS: Dict[str, Callable[[List[Path], Path], int]] = {
 # ---------------------------------------------------------------------------
 
 
-def verify_manifest_online(entries: List[DatasetEntry]) -> bool:
+def verify_manifest_online(entries: list[DatasetEntry]) -> bool:
     """Verify live that each dataset revision resolves and all specified files exist."""
     api = HfApi()
     all_ok = True
@@ -404,7 +443,7 @@ def verify_manifest_online(entries: List[DatasetEntry]) -> bool:
                 all_ok = False
             else:
                 print(f"[PASS] {entry.dataset_id:32} -> {entry.hf_repo_id}@{entry.pinned_revision[:7]} ({len(entry.files_or_patterns)} files verified)")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — CLI boundary: any HF/network error is reported, never raised
             if entry.distribution.is_gated or not entry.is_required:
                 print(f"[WARN] {entry.dataset_id:32} -> Gated/Optional dataset unauthenticated or unavailable ({e}) [FAIL-SOFT]")
             else:
@@ -415,7 +454,7 @@ def verify_manifest_online(entries: List[DatasetEntry]) -> bool:
     return all_ok
 
 
-def download_entry(entry: DatasetEntry, raw_target_dir: Path) -> List[Path]:
+def download_entry(entry: DatasetEntry, raw_target_dir: Path) -> list[Path]:
     """Download pinned files for a dataset entry."""
     raw_target_dir.mkdir(parents=True, exist_ok=True)
     downloaded_paths = []
@@ -458,7 +497,7 @@ def download_entry(entry: DatasetEntry, raw_target_dir: Path) -> List[Path]:
     return downloaded_paths
 
 
-def process_dataset(entry: DatasetEntry, force: bool = False) -> Tuple[str, Optional[str], Optional[str]]:
+def process_dataset(entry: DatasetEntry, force: bool = False) -> tuple[str, str | None, str | None]:
     """Process a single dataset entry.
     
     Returns (status, raw_sha256, processed_sha256) where status is 'SKIPPED' | 'PROCESSED' | 'FAILED_SOFT' | 'FAILED'.
@@ -519,7 +558,7 @@ def process_dataset(entry: DatasetEntry, force: bool = False) -> Tuple[str, Opti
     return "PROCESSED", raw_sha, processed_sha
 
 
-def generate_datasets_md(entries: List[DatasetEntry]) -> None:
+def generate_datasets_md(entries: list[DatasetEntry]) -> None:
     """Generate data/DATASETS.md directly from the manifest."""
     lines = [
         "# BebshaX — Datasets Documentation",
@@ -551,11 +590,13 @@ def generate_datasets_md(entries: List[DatasetEntry]) -> None:
         "",
         "## Coverage & Representativeness",
         "",
-        "These datasets are **slices, not representative samples**: they skew toward specific domains "
-        "(office-product reviews, English-language dialogues, exam-style probes) and specific populations. "
-        "No conclusion drawn from them — or from personas grounded in them — generalizes to 'all users'. "
-        "BebshaX produces synthetic research participants; synthetic findings are research signals and "
-        "hypotheses, not ground truth. Validate consequential decisions with real users.",
+        (
+            "These datasets are **slices, not representative samples**: they skew toward specific domains "
+            "(office-product reviews, English-language dialogues, exam-style probes) and specific populations. "
+            "No conclusion drawn from them — or from personas grounded in them — generalizes to 'all users'. "
+            "BebshaX produces synthetic research participants; synthetic findings are research signals and "
+            "hypotheses, not ground truth. Validate consequential decisions with real users."
+        ),
         "",
         "## Dataset Manifest & Gebru Datasheets",
         "",
@@ -608,9 +649,9 @@ def run_pipeline(profile: ProfileType, verify_only: bool = False, force: bool = 
     for entry in entries:
         logger.info("--- Processing %s (%s) ---", entry.dataset_id, entry.hf_repo_id)
         try:
-            status, raw_sha, proc_sha = process_dataset(entry, force=force)
+            status, _raw_sha, proc_sha = process_dataset(entry, force=force)
             summary_rows.append((entry.dataset_id, entry.hf_repo_id, status, proc_sha[:8] if proc_sha else "none"))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — CLI boundary: one dataset failing must not abort the profile
             logger.error("Failed processing %s: %s", entry.dataset_id, e)
             summary_rows.append((entry.dataset_id, entry.hf_repo_id, "FAILED", "none"))
             if entry.is_required:

@@ -18,6 +18,27 @@ from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
 logger = logging.getLogger(__name__)
 
+CLAIM_STATUSES = ("supported", "inference", "unsupported", "contested")
+
+
+def citation_confidence(distinct_sources: int) -> float:
+    """Confidence is a function of verifiable citations, never the model's
+    self-score: 0 sources → 0.0, 1 → 0.5, ≥2 independent sources → 0.8."""
+    if distinct_sources <= 0:
+        return 0.0
+    if distinct_sources == 1:
+        return 0.5
+    return 0.8
+
+
+def _as_list(value: Any) -> list[Any]:
+    """Model output is untrusted: a missing/scalar field must not crash the parser."""
+    if isinstance(value, list):
+        return value
+    if value is None:
+        return []
+    return [value]
+
 
 def extract_deterministic_claims(
     idea: str,
@@ -148,11 +169,15 @@ async def extract_claims_with_llm(
         "CLASSIFICATION RULES:\n"
         "- 'supported' (GREEN): Directly proven by the provided chunk text. Must cite supporting chunk IDs and source IDs.\n"
         "- 'inference' (AMBER): Plausible extrapolation from evidence, but lacks direct confirmation.\n"
+        "- 'contested' (AMBER): The provided chunks DISAGREE with each other on this point — list the disagreeing "
+        "source IDs in conflicts_with.\n"
         "- 'unsupported' (RED): An unverified assumption from the product idea or contradicted by the evidence.\n\n"
-        "NEVER silently promote unsupported information to 'supported'.\n"
+        "NEVER silently promote unsupported information to 'supported'. Whenever two chunks contradict each other "
+        "on a claim, report both sides via conflicts_with instead of picking one.\n"
         "Output ONLY a valid JSON array of objects with keys: "
-        "claim_text, status (supported|inference|unsupported), category, confidence (float 0.1 to 1.0), "
-        "supporting_source_ids (list of strings), supporting_chunk_ids (list of strings), rationale."
+        "claim_text, status (supported|inference|contested|unsupported), category, "
+        "supporting_source_ids (list of strings), supporting_chunk_ids (list of strings), "
+        "conflicts_with (list of source ids whose text disagrees with the claim), rationale."
     )
 
     user_prompt = f"Product Idea: {idea}\n\nEVIDENCE CHUNKS:\n{chunk_context}"
@@ -179,19 +204,29 @@ async def extract_claims_with_llm(
                 # was actually shown — mirrors persona coerce_provenance.
                 shown_chunks = chunks[:12]
                 valid_chunk_ids = {c.id for c in shown_chunks}
+                chunk_source = {c.id: c.source_id for c in shown_chunks}
                 valid_source_ids = {c.source_id for c in shown_chunks} | {s.id for s in sources}
                 extracted = []
                 for item in parsed:
                     if not isinstance(item, dict) or not item.get("claim_text"):
                         continue
                     cited_sources = [
-                        sid for sid in item.get("supporting_source_ids", []) if sid in valid_source_ids
+                        sid for sid in _as_list(item.get("supporting_source_ids")) if sid in valid_source_ids
                     ]
                     cited_chunks = [
-                        cid for cid in item.get("supporting_chunk_ids", []) if cid in valid_chunk_ids
+                        cid for cid in _as_list(item.get("supporting_chunk_ids")) if cid in valid_chunk_ids
                     ]
+                    conflicts = [
+                        sid
+                        for sid in (
+                            *_as_list(item.get("conflicts_with")),
+                            *_as_list(item.get("contradicting_source_ids")),
+                        )
+                        if sid in valid_source_ids
+                    ]
+                    conflicts = list(dict.fromkeys(conflicts))
                     status = str(item.get("status", "")).lower()
-                    if status not in ("supported", "inference", "unsupported"):
+                    if status not in CLAIM_STATUSES:
                         status = "inference"
                     rationale = str(item.get("rationale", "")).strip()
                     if status == "supported" and not (cited_sources or cited_chunks):
@@ -199,18 +234,27 @@ async def extract_claims_with_llm(
                         # downgraded, never trusted.
                         status = "inference"
                         rationale = (rationale + " [Downgraded: cited evidence ids did not match shown chunks.]").strip()
+                    if conflicts and status == "supported":
+                        # Evidence that disagrees with itself cannot "support" anything.
+                        status = "contested"
+                        rationale = (rationale + " [Contested: cited sources disagree on this claim.]").strip()
+
+                    # Independent evidence count: distinct sources cited directly
+                    # or through their chunks. Drives confidence — the model's
+                    # own "confidence" number is ignored on purpose.
+                    distinct_sources = set(cited_sources) | {
+                        chunk_source[cid] for cid in cited_chunks if chunk_source.get(cid)
+                    }
 
                     extracted.append({
                         "id": f"claim_{uuid.uuid4().hex[:12]}",
                         "claim_text": str(item["claim_text"]).strip(),
                         "status": status,
                         "category": str(item.get("category", "general")).lower(),
-                        "confidence": float(item.get("confidence", 0.5)),
+                        "confidence": citation_confidence(len(distinct_sources)),
                         "supporting_source_ids": cited_sources,
                         "supporting_chunk_ids": cited_chunks,
-                        "contradicting_source_ids": [
-                            sid for sid in item.get("contradicting_source_ids", []) if sid in valid_source_ids
-                        ],
+                        "contradicting_source_ids": conflicts,
                         "rationale": rationale,
                     })
                 if extracted:

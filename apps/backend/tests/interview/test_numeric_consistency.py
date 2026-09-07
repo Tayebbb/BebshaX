@@ -84,7 +84,8 @@ class TestNumericContradiction:
         assert flagged is True
         assert "self-contradiction" in details
         assert follow_up and "closer to what you actually spend" in follow_up
-        assert confidence < 0.9
+        # deterministic rule → boolean fact; no invented probability attached
+        assert confidence is None
 
     def test_consistent_claims_do_not_flag(self) -> None:
         consistent = "My lunch runs about 3,600 taka per month in total."
@@ -108,6 +109,37 @@ class TestNumericContradiction:
             prior_persona_texts=["Yesterday my ride was quick."],
         )
         assert flagged is False
+
+    def test_restating_the_known_budget_is_not_a_spend_claim(self) -> None:
+        """Observed in the first real cross-route run (llm7/codestral, 3/3 flags):
+        'with a monthly budget of 800 BDT for apps and services I could spend
+        around 200 BDT per month on this app' restates the persona's TOTAL budget
+        and then allocates part of it — two different quantities, not a
+        contradiction. Only genuine spend-vs-spend gaps may flag."""
+        budget_reply = (
+            "As a junior software developer with a monthly budget of 800 BDT for apps and "
+            "services, I could potentially spend around 200 BDT per month on an app that plans my study."
+        )
+        pain_reply = (
+            "With a monthly budget of 800 BDT for apps and services, the most frustrating part "
+            "of organizing my week is balancing work and a limited budget."
+        )
+        det = _detector()
+        flagged, *_ = det._detect_contradiction(
+            _persona(800), "How much could you spend per month?", budget_reply, prior_persona_texts=[]
+        )
+        assert flagged is False
+        flagged, *_ = det._detect_contradiction(
+            _persona(800), "What is frustrating?", pain_reply, prior_persona_texts=[budget_reply]
+        )
+        assert flagged is False
+        # …while a real 4x gap between two spend claims on the same topic still flags
+        flagged, *_ = det._detect_contradiction(
+            _persona(800), "How much for the app?",
+            "I would spend around 900 BDT per month on the app.",
+            prior_persona_texts=["I could spend around 200 BDT per month on an app that plans my study."],
+        )
+        assert flagged is True
 
 
 def test_shares_spend_topic_requires_common_word() -> None:

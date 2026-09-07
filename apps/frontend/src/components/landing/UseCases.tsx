@@ -39,7 +39,7 @@ export const UseCases: React.FC = () => {
       pain: 'Studying routing usually means building the whole harness before you can measure anything.',
       gain: 'Seven routing strategies can be compared offline, and replay evaluation runs against RouterArena and xRouteBench.',
       metrics: ['HYBRID, ROUND_ROBIN, LEAST_USED', 'QUALITY_FIRST, LATENCY_FIRST', 'CAPABILITY_FIRST, QUOTA_AWARE'],
-      detail: 'Datasets are used for grounding and evaluation only. No fine-tuning, ever — that is an explicit project rule.',
+      detail: 'Datasets are used for grounding and evaluation only. No fine-tuning, ever; that is an explicit project rule.',
     },
     {
       id: 'nobudget' as const,
@@ -49,7 +49,7 @@ export const UseCases: React.FC = () => {
       pain: 'Most persona tooling assumes you already pay for a frontier model.',
       gain: 'Keyless free provider tiers work out of the box, and every pool terminates at a local Ollama model.',
       metrics: ['Keyless start', 'Local model as final fallback', 'Emergency pool is local-first'],
-      detail: 'The freellmpool adapter aggregates the free provider catalog behind one API — roughly 18–24 providers and 200+ routes, depending on the catalog version.',
+      detail: 'The freellmpool adapter aggregates the free provider catalog behind one API: roughly 18 to 24 providers and 200+ routes, depending on the catalog version.',
     },
   ];
 
@@ -74,27 +74,6 @@ export const UseCases: React.FC = () => {
       >
         {/* Section Header */}
         <div style={{ textAlign: 'center', maxWidth: '720px', margin: '0 auto 56px auto' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 16px',
-              borderRadius: '9999px',
-              background: 'rgba(var(--lp-fill-rgb), 0.05)',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--lp-text)',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: '16px',
-            }}
-          >
-            Who It Is For
-          </div>
-
           <h2
             style={{
               fontSize: 'clamp(2rem, 3.8vw, 3rem)',
@@ -111,7 +90,7 @@ export const UseCases: React.FC = () => {
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
-            Four ways the same loop — describe, generate, interview — gets used.
+            Four ways the same loop (describe, generate, interview) gets used.
           </p>
         </div>
 

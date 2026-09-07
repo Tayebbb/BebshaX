@@ -3,6 +3,11 @@
 The embedding column is pgvector Vector(384) on postgres and JSON on sqlite
 (unit tests score in Python either way). `embedding_space` tags the vector's
 space; retrieval never compares across spaces.
+
+``source`` records WHO produced the remembered text (persona | interviewer |
+system) so researcher-typed text can never be replayed to the persona as its
+own recollection; ``content_hash`` (sha256 of kind+text) dedupes identical
+write-backs per persona (migration e1f2a3b4c5d6).
 """
 
 from __future__ import annotations
@@ -16,6 +21,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from bebshax.db.models import Base
 from bebshax.llm.adapters.embeddings import CANONICAL_DIM
+
+MEMORY_SOURCES = ("persona", "interviewer", "system")
 
 
 def _utcnow() -> datetime:
@@ -34,6 +41,11 @@ class MemoryItems(Base):
     )
     embedding_space: Mapped[str] = mapped_column(String(64), index=True)
     importance: Mapped[float] = mapped_column(Float, default=0.5)
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="persona", server_default="persona"
+    )  # persona|interviewer|system
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     last_accessed: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

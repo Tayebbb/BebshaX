@@ -1,8 +1,13 @@
 import React from 'react';
-import { ArrowRight, Check, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Send, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Send, Sparkles } from 'lucide-react';
 import { PersonaRoleSuggestion } from '../../../../types';
 import { CopilotMessage, READ_ONLY_TITLE } from './types';
 import { EvidenceProbe } from './evidenceProbe';
+import { RequestIdTag } from '../../../common/RequestIdTag';
+
+/** Why a template-produced goal card cannot be approved. */
+export const TEMPLATE_APPROVAL_BLOCKED =
+  'This goal card came from a keyword template, not the AI — retry when providers are back before approving it.';
 
 /** Step 1 — conversational context gathering + role selection drawer. Pure
  * JSX extraction from StudyWorkflowView: copilot state, persistence, and the
@@ -202,7 +207,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                   style={{
                     alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
                     maxWidth: '80%',
-                    background: msg.role === 'user' ? 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)' : 'var(--bg-card-hover)',
+                    background: msg.role === 'user' ? 'var(--accent-gradient)' : 'var(--bg-card-hover)',
                     color: 'var(--text-main)',
                     padding: '14px 18px',
                     borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
@@ -210,6 +215,41 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.content}</div>
+
+                  {msg.role === 'assistant' && msg.isTemplate && (
+                    <div
+                      role="note"
+                      title={msg.fallbackReason ? `Backend reason: ${msg.fallbackReason}` : undefined}
+                      style={{
+                        marginTop: '10px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: 'rgba(245, 158, 11, 0.12)',
+                        border: '1px solid rgba(245, 158, 11, 0.4)',
+                        borderRadius: '6px',
+                        padding: '3px 8px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        color: '#F59E0B',
+                        letterSpacing: '0.03em',
+                      }}
+                    >
+                      <AlertTriangle size={12} aria-hidden="true" />
+                      Template reply — AI providers unavailable
+                      {msg.fallbackReason && (
+                        <span style={{ fontWeight: 500, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
+                          ({msg.fallbackReason})
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {msg.isRetryPrompt && msg.requestId && (
+                    <div style={{ marginTop: '8px' }}>
+                      <RequestIdTag requestId={msg.requestId} />
+                    </div>
+                  )}
 
                   {msg.isRetryPrompt && msg.retryContent && (
                     <button
@@ -261,22 +301,23 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                       <button
                         type="button"
                         onClick={() => handleApproveGoal(msg.goalCardData?.summary)}
-                        disabled={isReadOnly}
-                        title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                        disabled={isReadOnly || !!msg.isTemplate}
+                        aria-disabled={isReadOnly || !!msg.isTemplate}
+                        title={isReadOnly ? READ_ONLY_TITLE : msg.isTemplate ? TEMPLATE_APPROVAL_BLOCKED : undefined}
                         style={{
                           marginTop: '14px',
                           width: '100%',
                           background: showRoleSelection
                             ? 'var(--accent-subtle)'
-                            : 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                            : 'var(--accent-gradient)',
                           border: showRoleSelection ? '1px solid var(--accent-teal)' : 'none',
                           borderRadius: '8px',
                           padding: '10px 16px',
                           color: showRoleSelection ? 'var(--accent-teal-bright)' : 'var(--bg-pure)',
                           fontWeight: 700,
                           fontSize: '0.85rem',
-                          cursor: isReadOnly ? 'not-allowed' : 'pointer',
-                          opacity: isReadOnly ? 0.55 : 1,
+                          cursor: isReadOnly || msg.isTemplate ? 'not-allowed' : 'pointer',
+                          opacity: isReadOnly || msg.isTemplate ? 0.55 : 1,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -286,6 +327,11 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                         <CheckCircle2 size={16} />
                         {showRoleSelection ? 'Goal Approved — View Suggested Roles ↓' : 'Approve Goal & Discover Personas'}
                       </button>
+                      {msg.isTemplate && (
+                        <p style={{ margin: '8px 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                          {TEMPLATE_APPROVAL_BLOCKED}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -382,7 +428,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                         : undefined
                     }
                     style={{
-                      background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                      background: 'var(--accent-gradient)',
                       border: 'none',
                       borderRadius: '8px',
                       padding: '10px 20px',

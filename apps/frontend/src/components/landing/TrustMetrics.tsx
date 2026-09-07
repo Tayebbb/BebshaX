@@ -6,7 +6,7 @@ export const TrustMetrics: React.FC = () => {
     {
       value: '7',
       label: 'Routing pools',
-      description: 'Eighteen fixed task types route across reasoning, conversation, long_context, structured, fast and emergency — plus a dedicated local pool.',
+      description: 'Eighteen fixed task types route across reasoning, conversation, long_context, structured, fast and emergency, plus a dedicated local pool.',
       icon: <Database size={20} color="var(--lp-text)" />,
     },
     {

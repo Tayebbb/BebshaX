@@ -27,7 +27,10 @@ async def test_composition_places_identity_history_and_message(
     system = second_request.messages[0]
     assert system.role == "system"
     assert "Rina Akter" in system.content  # identity present every turn
-    assert "INTERVIEW OBJECTIVE: learn about delivery pain points" in system.content
+    # objective is present but as DATA inside an untrusted block, never bare
+    assert "INTERVIEW OBJECTIVE:" in system.content
+    assert "learn about delivery pain points" in system.content
+    assert "<UNTRUSTED_OBJECTIVE" in system.content
     assert "QuickBite" in system.content  # business context present
 
     # full history: system, q1, a1, q2

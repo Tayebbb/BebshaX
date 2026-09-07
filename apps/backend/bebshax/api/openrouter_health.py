@@ -2,8 +2,10 @@
 
 Safe server-side diagnostics:
 - NEVER leaks API keys or Authorization headers
-- Tests real authenticated connection to OpenRouter
-- Identifies failure kinds (missing key, auth failed, model unavailable, rate limit, timeout)
+- GET reports configuration only (key present? which models?) — anonymous,
+  so it makes NO network call and spends nothing
+- POST /test runs the real authenticated probe (auth + rate limit) and
+  identifies failure kinds (auth failed, model unavailable, rate limit, timeout)
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bebshax.api.auth import get_current_user
 from bebshax.api.limiter import limiter
@@ -29,6 +31,7 @@ class OpenRouterHealthResponse(BaseModel):
     configured: bool
     authenticated: bool
     model: str
+    models: list[str] = Field(default_factory=list)  # configured route list (GET)
     status: str
     latency_ms: Optional[float] = None
     error_code: Optional[str] = None
@@ -38,9 +41,9 @@ class OpenRouterHealthResponse(BaseModel):
 
 @router.get("", response_model=OpenRouterHealthResponse)
 async def get_openrouter_health() -> dict:
-    """Check OpenRouter configuration status and availability."""
+    """Configuration status only — no outbound call, nothing spent."""
     service = get_openrouter_service()
-    return await service.health_check()
+    return service.configuration_report()
 
 
 @router.post("/test", response_model=OpenRouterHealthResponse)

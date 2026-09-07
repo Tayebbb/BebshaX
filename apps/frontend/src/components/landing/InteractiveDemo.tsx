@@ -84,27 +84,6 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
       >
         {/* Section Header */}
         <div style={{ textAlign: 'center', maxWidth: '720px', margin: '0 auto 56px auto' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 16px',
-              borderRadius: '9999px',
-              background: 'rgba(var(--lp-fill-rgb), 0.05)',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--lp-text)',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: '16px',
-            }}
-          >
-            Task → Pool Map
-          </div>
-
           <h2
             style={{
               fontSize: 'clamp(2rem, 3.8vw, 3rem)',
@@ -121,7 +100,7 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
-            This is the real configuration: 18 fixed task types routed across 7 pools, in preference order, with a local model at the end of every chain — including a dedicated <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--lp-text)' }}>local</span> pool that runs entirely on your machine.
+            This is the real configuration: 18 fixed task types routed across 7 pools, in preference order, with a local model at the end of every chain, including a dedicated <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--lp-text)' }}>local</span> pool that runs entirely on your machine.
           </p>
         </div>
 

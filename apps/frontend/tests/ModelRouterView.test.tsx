@@ -8,10 +8,16 @@ vi.mock('../src/services/api', () => ({
   api: {
     getRoutesStatus: vi.fn(),
     getProvenance: vi.fn(),
+    getEvaluationMetrics: vi.fn(),
+    getDemoLabScenarios: vi.fn(),
+    runDemoLabScenario: vi.fn(),
   },
   default: {
     getRoutesStatus: vi.fn(),
     getProvenance: vi.fn(),
+    getEvaluationMetrics: vi.fn(),
+    getDemoLabScenarios: vi.fn(),
+    runDemoLabScenario: vi.fn(),
   },
 }));
 
@@ -45,13 +51,15 @@ describe('ModelRouterView honesty regressions', () => {
     vi.clearAllMocks();
     (api.getRoutesStatus as any).mockResolvedValue(mockRoutes);
     (api.getProvenance as any).mockResolvedValue({ items: [failedTrace] });
+    (api.getEvaluationMetrics as any).mockRejectedValue(new Error('metrics offline'));
+    (api.getDemoLabScenarios as any).mockResolvedValue(null);
   });
 
   it('renders "not served" and "—" for a failed trace, never a fabricated provider or latency', async () => {
     render(<ModelRouterView />);
 
     expect(await screen.findByText('not served')).toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
     expect(screen.queryByText(/340ms/)).not.toBeInTheDocument();
     expect(screen.queryByText(/pollinations/i)).not.toBeInTheDocument();
   });
@@ -63,6 +71,6 @@ describe('ModelRouterView honesty regressions', () => {
     expect(screen.queryByText('Active Task Pools')).not.toBeInTheDocument();
     expect(
       screen.getAllByText(/How routing works — architecture, not live status/i)
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 });

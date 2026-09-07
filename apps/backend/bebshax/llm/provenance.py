@@ -27,6 +27,9 @@ class AttemptRecord(BaseModel):
     failure_detail: str | None = None
     fallback_reason: str | None = None  # why the router moved past this attempt
     notes: list[str] = Field(default_factory=list)  # adapter-internal detail (e.g. inner failovers)
+    # Routing candidate that produced the answer when it differs from the
+    # concrete serving route, e.g. "freellmpool/auto" when llm7/codestral served.
+    via: str | None = None
 
 
 class ProvenanceRecord(BaseModel):
@@ -38,6 +41,7 @@ class ProvenanceRecord(BaseModel):
     created_at: datetime = Field(default_factory=_utcnow)
     routing_path: list[str] = Field(default_factory=list)  # ordered candidates considered
     attempts: list[AttemptRecord] = Field(default_factory=list)
+    estimated_tokens: int | None = None  # pre-flight estimate that drove eligibility
     served_by_provider: str | None = None
     served_by_model: str | None = None
     input_tokens: int | None = None

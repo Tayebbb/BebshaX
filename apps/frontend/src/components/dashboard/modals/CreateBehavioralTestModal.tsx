@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Sparkles,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { BehavioralTestType, SyntheticPersona, MarketSegment } from '../../../types';
 import { api } from '../../../services/api';
+import { useDialogA11y } from '../../../utils/useDialogA11y';
 
 interface CreateBehavioralTestModalProps {
   isOpen: boolean;
@@ -135,6 +136,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
   const [_isLoadingContext, setIsLoadingContext] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogA11y(dialogRef, isOpen, onClose);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -283,7 +286,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         className="bx-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-behavioral-test-title"
         style={{
           width: '100%',
           maxWidth: '780px',
@@ -327,7 +334,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               <Sliders size={20} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-main)' }}>
+              <h2 id="create-behavioral-test-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-main)' }}>
                 New Behavioral Simulation
               </h2>
               <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -336,7 +343,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close new behavioral simulation dialog"
             style={{
               background: 'transparent',
               border: 'none',
@@ -349,7 +358,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               justifyContent: 'center',
             }}
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
 
@@ -462,10 +471,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                <label htmlFor="bt-name" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                   Test Name
                 </label>
                 <input
+                  id="bt-name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -488,10 +498,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               {selectedType === 'pricing_test' && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '14px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                    <label htmlFor="bt-price" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Proposed Price (BDT ৳)
                     </label>
                     <input
+                      id="bt-price"
                       type="text"
                       value={price}
                       onChange={(e) => setPrice(e.target.value)}
@@ -509,10 +520,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                    <label htmlFor="bt-billing" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Billing Period
                     </label>
                     <select
+                      id="bt-billing"
                       value={billingPeriod}
                       onChange={(e) => setBillingPeriod(e.target.value)}
                       style={{
@@ -533,10 +545,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     </select>
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                    <label htmlFor="bt-alternative" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Current Alternative Personas Use
                     </label>
                     <input
+                      id="bt-alternative"
                       type="text"
                       value={alternative}
                       onChange={(e) => setAlternative(e.target.value)}
@@ -559,10 +572,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               {selectedType === 'feature_test' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                    <label htmlFor="bt-feature" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Feature Name
                     </label>
                     <input
+                      id="bt-feature"
                       type="text"
                       value={featureName}
                       onChange={(e) => setFeatureName(e.target.value)}
@@ -580,10 +594,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                    <label htmlFor="bt-benefit" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Key Claimed Benefit
                     </label>
                     <input
+                      id="bt-benefit"
                       type="text"
                       value={benefit}
                       onChange={(e) => setBenefit(e.target.value)}
@@ -606,10 +621,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               {selectedType === 'message_test' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                    <label htmlFor="bt-headline" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Marketing Headline / Value Prop
                     </label>
                     <input
+                      id="bt-headline"
                       type="text"
                       value={headline}
                       onChange={(e) => setHeadline(e.target.value)}
@@ -627,10 +643,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                    <label htmlFor="bt-cta" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                       Call to Action (CTA)
                     </label>
                     <input
+                      id="bt-cta"
                       type="text"
                       value={cta}
                       onChange={(e) => setCta(e.target.value)}
@@ -651,10 +668,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               )}
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                <label htmlFor="bt-scenario" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
                   Detailed Scenario Context (Optional)
                 </label>
                 <textarea
+                  id="bt-scenario"
                   rows={3}
                   value={customScenarioText}
                   onChange={(e) => setCustomScenarioText(e.target.value)}
@@ -832,7 +850,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          onChange={() => {}}
+                          onChange={() => togglePersonaSelection(p.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Include ${p.name}`}
                           style={{ accentColor: '#14B8A6' }}
                         />
                         <span style={{ color: isChecked ? 'var(--text-main)' : 'var(--text-secondary)' }}>{p.name}</span>

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import get_session, require_study_access
+from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import (
     DatasetSources,
@@ -135,10 +136,11 @@ async def get_segmentation_readiness(
 
 
 @router.post("/{study_id}/segmentation", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def run_segmentation(
     study_id: str,
+    request: Request,
     request_data: Optional[RunSegmentationRequest] = None,
-    req: Request = None,
     session: AsyncSession = Depends(get_session),
     current_user: Optional[Users] = Depends(get_optional_current_user),
 ):
@@ -146,7 +148,7 @@ async def run_segmentation(
     study = await _verify_study_access(session, study_id, current_user, write=True)
     user_id = current_user.id if current_user else study.user_id
 
-    llm_service = getattr(req.app.state, "llm_service", None) if req else None
+    llm_service = getattr(request.app.state, "llm_service", None)
     service = SegmentationEngineService(session=session, llm_service=llm_service)
 
     desired_clusters = request_data.desired_clusters if request_data else None

@@ -9,6 +9,8 @@
 import {
   Business,
   Conversation,
+  DemoLabRunResult,
+  DemoLabScenariosResponse,
   EvidenceClaim,
   EvidenceSource,
   MemoryItem,
@@ -35,6 +37,63 @@ import {
 // Re-exported so api.ts has a single lazy entry point into the mock layer —
 // it must never import ../mocks/fixtures statically (prod-bundle eviction).
 export { mockEvaluationMetrics, mockHealth, mockRoutesStatus } from '../mocks/fixtures';
+
+/** Judge Lab fixture (mock mode only) — a small, clearly-simulated scenario set. */
+export const mockDemoLabScenarios: DemoLabScenariosResponse = {
+  enabled: true,
+  simulated: true,
+  scenarios: [
+    {
+      name: 'provider_429_fallback',
+      title: 'Provider rate-limits (429) → fallback',
+      description: 'First route answers 429; the router classifies RATE_LIMITED, cools it down and serves from the next candidate.',
+      expected_outcome: 'served_after_fallback',
+    },
+    {
+      name: 'all_providers_down',
+      title: 'Every provider down → explicit failure',
+      description: 'All candidates fail; nothing is fabricated and the API returns all_candidates_failed (503).',
+      expected_outcome: 'explicit_failure',
+    },
+  ],
+};
+
+export function mockDemoLabRun(name: string): DemoLabRunResult {
+  if (name === 'all_providers_down') {
+    return {
+      scenario: name,
+      title: 'Every provider down → explicit failure',
+      simulated: true,
+      outcome: 'explicit_failure',
+      error_code: 'all_candidates_failed',
+      explanation: 'Both scripted routes failed with SERVER_ERROR. The router exhausted its candidates and raised an explicit failure instead of inventing a reply.',
+      provenance: null,
+      timeline: [
+        { step: 'REQUEST', provider: null, model: null, result: 'served', failure_kind: null, fallback_reason: null, latency_ms: 0 },
+        { step: 'FAILURE', provider: 'alpha', model: 'alpha-8b', result: 'failed', failure_kind: 'SERVER_ERROR', fallback_reason: 'HTTP 503 from provider', latency_ms: 42 },
+        { step: 'FAILURE', provider: 'beta', model: 'beta-7b', result: 'failed', failure_kind: 'SERVER_ERROR', fallback_reason: 'HTTP 502 from provider', latency_ms: 38 },
+        { step: 'EXPLICIT FAILURE', provider: null, model: null, result: 'failed', failure_kind: null, fallback_reason: 'all_candidates_failed', latency_ms: null },
+      ],
+      extra: { attempts: 2 },
+    };
+  }
+  return {
+    scenario: name,
+    title: 'Provider rate-limits (429) → fallback',
+    simulated: true,
+    outcome: 'served_after_fallback',
+    error_code: null,
+    explanation: 'The first scripted route returned HTTP 429. The router classified it RATE_LIMITED, put the route on cooldown and served the request from the next candidate.',
+    provenance: null,
+    timeline: [
+      { step: 'REQUEST', provider: null, model: null, result: 'served', failure_kind: null, fallback_reason: null, latency_ms: 0 },
+      { step: 'FAILURE', provider: 'alpha', model: 'alpha-8b', result: 'failed', failure_kind: 'RATE_LIMITED', fallback_reason: 'HTTP 429 from provider', latency_ms: 51 },
+      { step: 'FALLBACK', provider: 'beta', model: 'beta-7b', result: 'skipped', failure_kind: null, fallback_reason: 'route on cooldown', latency_ms: null },
+      { step: 'SUCCESS', provider: 'gamma', model: 'gamma-9b', result: 'served', failure_kind: null, fallback_reason: null, latency_ms: 120 },
+    ],
+    extra: { cooldown_seconds: 60 },
+  };
+}
 
 // In-memory state store for client modifications during mock/fallback mode
 export class MockStore {
@@ -83,7 +142,12 @@ export interface MockCopilotReply {
   served_by: string;
 }
 
-/** Canned local copilot engine used by sendStudyCopilotMessage in mock mode. */
+/** Canned local copilot engine used by sendStudyCopilotMessage in mock mode.
+ * Its route label is distinct from the backend's `bebshax/copilot-engine`
+ * (the live keyword-template fallback) so the UI's template warning only
+ * fires for a real degraded backend; mock mode is labelled globally as sample data. */
+const MOCK_COPILOT_ROUTE = 'mock/sample-copilot';
+
 export function mockCopilotReply(
   messages: { role: 'user' | 'assistant'; content: string }[]
 ): MockCopilotReply {
@@ -201,7 +265,7 @@ export function mockCopilotReply(
       is_ready_for_approval: false,
       research_goal_card: null,
       suggested_roles: roles,
-      served_by: 'bebshax/copilot-engine',
+      served_by: MOCK_COPILOT_ROUTE,
     };
   } else if (turnCount === 2) {
     return {
@@ -210,7 +274,7 @@ export function mockCopilotReply(
       is_ready_for_approval: false,
       research_goal_card: null,
       suggested_roles: roles,
-      served_by: 'bebshax/copilot-engine',
+      served_by: MOCK_COPILOT_ROUTE,
     };
   } else {
     return {
@@ -224,7 +288,7 @@ export function mockCopilotReply(
         core_hypothesis: `Demand and product-market fit for the ${productType}`,
       },
       suggested_roles: roles,
-      served_by: 'bebshax/copilot-engine',
+      served_by: MOCK_COPILOT_ROUTE,
     };
   }
 }

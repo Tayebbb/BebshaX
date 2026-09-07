@@ -7,7 +7,7 @@ import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Query, Request, UploadFile, status
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -81,24 +81,27 @@ async def _get_session(request: Request) -> AsyncSession:
 
 
 class IngestUrlRequest(BaseModel):
-    url: str
-    name: str
-    description: Optional[str] = None
-    study_id: Optional[str] = None
-    file_type: Optional[str] = None
+    url: str = Field(max_length=2048)
+    name: str = Field(min_length=1, max_length=256)
+    description: Optional[str] = Field(default=None, max_length=8000)
+    study_id: Optional[str] = Field(default=None, max_length=64)
+    file_type: Optional[str] = Field(default=None, max_length=16)
 
 
 class QueryDatasetRequest(BaseModel):
-    filter_col: Optional[str] = None
+    filter_col: Optional[str] = Field(default=None, max_length=256)
     filter_val: Optional[Any] = None
-    limit: int = 100
+    limit: int = Field(default=100, ge=1, le=1000)
 
 
 class GeneratePersonasRequest(BaseModel):
-    requested_count: int = 10
-    study_id: Optional[str] = None
-    business_name: str = "BebshaX Research Initiative"
-    business_description: str = "Evidence-grounded user interview validation"
+    # Each persona is a sequential LLM call; an unbounded count was unbounded spend.
+    requested_count: int = Field(default=10, ge=1, le=50)
+    study_id: Optional[str] = Field(default=None, max_length=64)
+    business_name: str = Field(default="BebshaX Research Initiative", max_length=256)
+    business_description: str = Field(
+        default="Evidence-grounded user interview validation", max_length=8000
+    )
 
 
 def _serialize_dataset(ds: DatasetSources) -> dict[str, Any]:
@@ -293,8 +296,11 @@ async def get_dataset_preview(
 
 
 @router.post("/datasets/{dataset_id}/refresh")
+# An outbound fetch per call: pinned to the same budget as URL ingestion.
+@limiter.limit("10/hour")
 async def refresh_dataset(
     dataset_id: str,
+    request: Request,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
@@ -357,9 +363,11 @@ async def delete_dataset(
 
 
 @router.post("/datasets/{dataset_id}/generate-personas")
+@limiter.limit("10/minute")
 async def generate_personas_from_dataset(
     dataset_id: str,
     payload: GeneratePersonasRequest,
+    request: Request,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     service: DatasetService = Depends(_get_dataset_service),
 ) -> dict[str, Any]:
@@ -575,9 +583,11 @@ async def get_study_dataset_preview(
 
 
 @router.post("/studies/{study_id}/datasets/{dataset_id}/refresh")
+@limiter.limit("10/hour")
 async def refresh_study_dataset(
     study_id: str,
     dataset_id: str,
+    request: Request,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(_get_session),
     service: DatasetService = Depends(_get_dataset_service),

@@ -66,7 +66,7 @@ const ctaStyle = (disabled: boolean): React.CSSProperties => ({
   width: '100%',
   height: '44px',
   borderRadius: '10px',
-  background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+  background: 'var(--accent-gradient)',
   color: 'var(--text-on-accent)',
   border: 'none',
   fontSize: '0.9rem',

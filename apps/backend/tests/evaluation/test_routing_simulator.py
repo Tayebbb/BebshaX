@@ -17,6 +17,15 @@ async def test_run_single_strategy_simulation():
 
 
 @pytest.mark.asyncio
+async def test_simulation_is_labelled_control_flow_and_reports_no_fake_throughput():
+    """avg_tokens_per_sec used to be a hardcoded 120.5 written into every artifact."""
+    res = await RoutingChaosSimulator(request_count=5, seed=1).run_strategy(RoutingStrategy.HYBRID)
+    assert res.kind == "router_control_flow_simulation"
+    assert res.avg_tokens_per_sec is None
+    assert res.model_dump()["avg_tokens_per_sec"] is None
+
+
+@pytest.mark.asyncio
 async def test_run_all_strategies_simulation():
     simulator = RoutingChaosSimulator(request_count=10, seed=456)
     results = await simulator.run_all_strategies()

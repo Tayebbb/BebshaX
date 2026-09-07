@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bebshax.utils.safe_errors import safe_error_summary
 from bebshax.db.models import (
     DatasetSources,
     EvidenceClaims,
@@ -22,8 +24,28 @@ from bebshax.db.models import (
 from bebshax.llm.service import LLMService
 from bebshax.personas.generator import generate_personas_for_study
 
+logger = logging.getLogger(__name__)
+
 # Generator only consumes up to 6 claims; fetch no more to avoid full-table scans.
 _CLAIM_FETCH_LIMIT = 6
+
+_ACTIVE_RUN_STATES = (
+    "pending", "loading_segments", "preparing_context", "generating_personas",
+    "validating_personas", "saving_personas",
+)
+# A run that has shown no progress for this long is a crashed process, not an
+# active one; without this cutoff a single interrupted run locked the study
+# out of persona generation until someone deleted the row by hand.
+STALE_RUN_AFTER = timedelta(minutes=30)
+
+
+def _run_age(run: PersonaGenerationRuns, now: datetime) -> timedelta:
+    started = run.started_at or run.created_at
+    if started is None:
+        return timedelta(0)
+    if started.tzinfo is None:  # sqlite hands back naive UTC
+        started = started.replace(tzinfo=timezone.utc)
+    return now - started
 
 
 class PersonaGenerationService:
@@ -86,18 +108,29 @@ class PersonaGenerationService:
         if not study:
             raise ValueError(f"Study '{study_id}' not found.")
 
-        # 2. Check for active run
+        # 2. Check for active run — stale ones (no progress for STALE_RUN_AFTER)
+        # are marked failed and no longer block a new run.
         active_stmt = select(PersonaGenerationRuns).where(
             PersonaGenerationRuns.study_id == study_id,
-            PersonaGenerationRuns.status.in_([
-                "pending", "loading_segments", "preparing_context", "generating_personas", "validating_personas", "saving_personas"
-            ]),
+            PersonaGenerationRuns.status.in_(_ACTIVE_RUN_STATES),
         )
         if user_id:
             active_stmt = active_stmt.where(PersonaGenerationRuns.user_id == user_id)
-        active_run = (await self.session.execute(active_stmt)).scalar_one_or_none()
-        if active_run:
-            raise ValueError(f"A persona generation run is already in progress ({active_run.id}).")
+        now = _utcnow()
+        stale_found = False
+        for active_run in (await self.session.execute(active_stmt)).scalars().all():
+            if _run_age(active_run, now) < STALE_RUN_AFTER:
+                raise ValueError(f"A persona generation run is already in progress ({active_run.id}).")
+            logger.warning(
+                "persona generation run %s stuck in %r for over %s — marking failed",
+                active_run.id, active_run.status, STALE_RUN_AFTER,
+            )
+            active_run.status = "failed"
+            active_run.error_message = "StaleRun: no progress for 30 minutes (process interrupted)"
+            active_run.completed_at = now
+            stale_found = True
+        if stale_found:
+            await self.session.commit()
 
         # 3. Load segments
         seg_stmt = select(MarketSegments).where(MarketSegments.study_id == study_id)
@@ -279,8 +312,13 @@ class PersonaGenerationService:
 
         except Exception as exc:
             run.status = "failed"
-            run.error_message = str(exc)
+            # Class name + correlation code only: the raw message can carry
+            # prompt fragments or provider error bodies (served by the API).
+            run.error_message = safe_error_summary(exc)
             run.completed_at = _utcnow()
+            logger.error(
+                "persona generation run %s failed: %s", run_id, run.error_message, exc_info=True
+            )
             await self.session.commit()
             raise exc
 

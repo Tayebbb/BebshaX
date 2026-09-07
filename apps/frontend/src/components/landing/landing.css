@@ -241,37 +241,6 @@
   outline-offset: 3px;
 }
 
-/* ------------------------------------------------------------ scroll cue */
-
-.lp-scroll-cue {
-  position: absolute;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 22px;
-  height: 34px;
-  border: 1.5px solid rgba(var(--lp-gold-rgb), 0.35);
-  border-radius: 12px;
-  opacity: calc(0.9 - var(--lp-hero-p) * 4);
-  pointer-events: none;
-}
-.lp-scroll-cue::after {
-  content: '';
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  width: 3px;
-  height: 7px;
-  margin-left: -1.5px;
-  border-radius: 2px;
-  background: var(--lp-gold);
-  animation: lp-cue 2s var(--lp-ease) infinite;
-}
-@keyframes lp-cue {
-  0% { transform: translateY(0); opacity: 1; }
-  70% { transform: translateY(12px); opacity: 0; }
-  100% { transform: translateY(0); opacity: 0; }
-}
 
 /* -------------------------------------------------------- scene reveals */
 
@@ -343,6 +312,5 @@
     transform: none;
     opacity: 1;
   }
-  .lp-scroll-cue { display: none; }
   .lp-cta { transition: none; transform: none; }
 }

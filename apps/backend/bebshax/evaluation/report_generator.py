@@ -1,10 +1,22 @@
-"""Report generator for formatting evaluation results into Markdown and JSON artifacts."""
+"""Report generator for formatting evaluation results into Markdown and JSON artifacts.
+
+Rendering rule: a ``None`` metric is printed as "not measured" / "not
+measurable" — never as 0, never as a placeholder number.
+"""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from bebshax.evaluation.types import EvaluationSuiteResult
+
+NOT_MEASURED = "not measured"
+NOT_MEASURABLE = "not measurable"
+
+
+def _fmt(value: float | None, spec: str, missing: str = NOT_MEASURED) -> str:
+    """Measured values render as code spans; missing ones as plain prose."""
+    return missing if value is None else f"`{format(value, spec)}`"
 
 
 class ReportGenerator:
@@ -33,15 +45,19 @@ class ReportGenerator:
             lines.append("")
 
         if result.routing_metrics:
+            kinds = sorted({rm.kind for rm in result.routing_metrics})
             lines.extend([
                 "## 2. Routing Strategy Chaos Simulation",
                 "",
-                "| Strategy | Requests | Success Rate | Fallback Count | Latency P50 | Latency P95 | Context Failures |",
-                "|---|---|---|---|---|---|---|",
+                f"**Kind:** `{', '.join(kinds)}` — router control flow over scripted FakeAdapter "
+                "failures; latencies are injected sleeps, not provider measurements.",
+                "",
+                "| Strategy | Requests | Success Rate | Fallback Count | Latency P50 | Latency P95 | Context Failures | Tokens/sec |",
+                "|---|---|---|---|---|---|---|---|",
             ])
             for rm in result.routing_metrics:
                 lines.append(
-                    f"| **{rm.strategy_name}** | {rm.total_requests} | `{rm.success_rate_pct:.1f}%` | {rm.fallback_count} | `{rm.latency_p50_ms:.1f} ms` | `{rm.latency_p95_ms:.1f} ms` | {rm.context_overflow_failures} |"
+                    f"| **{rm.strategy_name}** | {rm.total_requests} | `{rm.success_rate_pct:.1f}%` | {rm.fallback_count} | `{rm.latency_p50_ms:.1f} ms` | `{rm.latency_p95_ms:.1f} ms` | {rm.context_overflow_failures} | {_fmt(rm.avg_tokens_per_sec, '.1f')} |"
                 )
             lines.append("")
 
@@ -51,17 +67,21 @@ class ReportGenerator:
                 "",
             ])
             for om in result.offline_metrics:
-                heading = f"### Dataset: `{om.dataset_name}` ({om.total_samples} samples)"
+                heading = (
+                    f"### Dataset: `{om.dataset_name}` ({om.total_samples} samples, "
+                    f"{om.usable_samples} usable / {om.unusable_samples} unusable)"
+                )
                 if om.synthetic_fallback:
                     heading += " — ⚠ SYNTHETIC FALLBACK (dataset absent; NOT a benchmark result)"
+                lines.extend([heading, ""])
+                if om.unusable_reason:
+                    lines.extend([f"⚠ {om.unusable_reason}", ""])
                 lines.extend([
-                    heading,
-                    "",
                     "| Strategy | Alignment Score / Top-Match Rate |",
                     "|---|---|",
                 ])
                 for strat, score in om.strategy_scores.items():
-                    lines.append(f"| **{strat}** | `{score:.2%}` |")
+                    lines.append(f"| **{strat}** | {_fmt(score, '.2%', NOT_MEASURABLE)} |")
                 lines.append("")
 
         return "\n".join(lines)

@@ -18,6 +18,11 @@ export interface InterviewTurn {
   latency_ms?: number;
   served_by?: string;
   retrieved_memories?: string[];
+  /** Deterministic quality signals from the engine (never infra failures). */
+  identity_drift?: boolean;
+  drift_notes?: string[];
+  contradiction_detected?: boolean;
+  contradiction_details?: string | null;
   created_at: string;
 }
 

@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-from bebshax.llm.failures import AllCandidatesFailed, ContextWindowExceeded
+from bebshax.llm.failures import LLMError
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
@@ -873,9 +873,12 @@ async def _process_segment(
                     seg_name,
                 )
                 template_fill += batch_count
-        except (AllCandidatesFailed, ContextWindowExceeded):
-            # Honest infrastructure failure — never quietly replaced with
-            # template personas pretending to be research output (R2/R6).
+        except LLMError:
+            # Honest infrastructure failure (AllCandidatesFailed,
+            # ContextWindowExceeded, INTERNAL_ERROR surfaced by the router…) —
+            # never quietly replaced with template personas pretending to be
+            # research output (R2/R6). Templates are ONLY for a successful
+            # reply whose JSON cannot be parsed/validated (below).
             raise
         except Exception:
             logger.warning(
@@ -1095,7 +1098,7 @@ async def generate_personas_for_study(
 
     all_generated: list[GeneratedPersonaDraft] = []
     for (seg, count_for_seg, idx_start), seg_result in zip(seg_specs, seg_results):
-        if isinstance(seg_result, (AllCandidatesFailed, ContextWindowExceeded)):
+        if isinstance(seg_result, LLMError):
             raise seg_result
         if isinstance(seg_result, Exception):
             # Skipping the segment would return fewer personas than

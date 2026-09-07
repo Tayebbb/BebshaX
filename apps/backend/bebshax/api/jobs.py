@@ -16,9 +16,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
 
+from bebshax.api.errors import APIError
+
 logger = logging.getLogger(__name__)
 
 _MAX_JOBS = 50  # evict oldest beyond this — polling clients read fast
+# Each running job is minutes of free-tier LLM spend; one caller may not queue
+# up more than this many at once.
+MAX_RUNNING_JOBS_PER_USER = 3
 
 
 def _registry(app) -> dict[str, dict[str, Any]]:
@@ -30,12 +35,23 @@ def _registry(app) -> dict[str, dict[str, Any]]:
     return reg
 
 
+def running_jobs_for_user(app, user_id: Optional[str]) -> int:
+    if user_id is None:
+        return 0
+    return sum(
+        1
+        for job in _registry(app).values()
+        if job["status"] == "running" and job.get("user_id") == user_id
+    )
+
+
 def start_job(
     app,
     *,
     kind: str,
     scope_id: str,
     runner: Callable[[dict[str, Any]], Awaitable[None]],
+    user_id: Optional[str] = None,
     user_safe_exceptions: tuple[type[BaseException], ...] = (),
 ) -> dict[str, Any]:
     """Register a job and run `runner(job)` in the background.
@@ -46,12 +62,24 @@ def start_job(
     domain failures, e.g. ContextWindowExceeded — R2/R6) pass their message
     through to `job["error"]`; anything else is redacted to the class name
     (full traceback goes to the log, never to the client).
+
+    Raises ``APIError(429, error_code="too_many_jobs")`` when ``user_id``
+    already has ``MAX_RUNNING_JOBS_PER_USER`` jobs running.
     """
     registry = _registry(app)
+    if running_jobs_for_user(app, user_id) >= MAX_RUNNING_JOBS_PER_USER:
+        raise APIError(
+            429,
+            f"You already have {MAX_RUNNING_JOBS_PER_USER} background jobs running — "
+            "wait for one to finish before starting another.",
+            error_code="too_many_jobs",
+            extra={"max_running_jobs": MAX_RUNNING_JOBS_PER_USER},
+        )
     job: dict[str, Any] = {
         "job_id": f"job_{uuid.uuid4().hex[:12]}",
         "kind": kind,
         "scope_id": scope_id,
+        "user_id": user_id,
         "status": "running",
         "result": None,
         "error": None,

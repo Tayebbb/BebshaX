@@ -30,7 +30,7 @@ bebshax.llm — BebshaX policy layer (custom)
    pre-flight context budgeting · per-pool concurrency · full provenance per request
         │
 bebshax.llm.adapters — the ONLY code allowed to import provider SDKs
-   FreellmpoolAdapter → freellmpool (MIT) → ~24 free providers / 222 routes / keyless start
+   FreellmpoolAdapter → freellmpool (MIT) → 18 providers in the freellmpool 0.11.4 catalog (verified 2026-08-28) / keyless start
    OllamaAdapter      → local Ollama (final reliability fallback)
         │
 PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
@@ -45,7 +45,7 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | Routing engine | freellmpool as a **library** behind `LLMService`                           | MIT, active, failover/quotas/circuits/keyless built in |
 | LiteLLM        | Not installed (Gate B, revisit only if a provider is missing)              | avoids heavy proxy stack                               |
 | DB             | PG16 + pgvector via `pgvector/pgvector:pg16` on **5433**                   | native PG16 on the dev machine lacks pgvector          |
-| Local fallback | Ollama (`qwen3.5:latest` now; ≤4 GB-VRAM fast model chosen in Phase 4)     | 4 GB VRAM ceiling — no 70B fantasies                   |
+| Local fallback | Ollama — `llama3.2:3b` primary / `qwen3:4b` secondary (Phase 4 benchmark)  | 4 GB VRAM ceiling — no 70B fantasies                   |
 | Frontend       | React + Vite, single app                                                   | owner decision                                         |
 | Datasets       | Profiles: minimal/development/evaluation/full; grounding + evaluation only | **no fine-tuning, ever**                               |
 

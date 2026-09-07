@@ -289,8 +289,8 @@ describe('PersonaLibraryView Component', () => {
       expect(screen.getByText('Nadia Rahman')).toBeInTheDocument();
     });
 
-    // Click Deep Dive on first persona card
-    const deepDiveButtons = screen.getAllByText('Deep Dive Inspector');
+    // Click Open profile on first persona card
+    const deepDiveButtons = screen.getAllByText('Open profile');
     fireEvent.click(deepDiveButtons[0]);
 
     // Verify modal opened
@@ -335,7 +335,7 @@ describe('PersonaLibraryView Component', () => {
     });
 
     // Open deep dive modal
-    fireEvent.click(screen.getAllByText('Deep Dive Inspector')[0]);
+    fireEvent.click(screen.getAllByText('Open profile')[0]);
 
     // Click Regenerate button
     const regenBtn = screen.getByText('Regenerate');

@@ -1,4 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { RequestIdTag } from './RequestIdTag';
+import { fromUnknownError } from '../../utils/apiError';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -25,6 +27,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   render(): ReactNode {
     if (!this.state.hasError) return this.props.children;
+    const details = fromUnknownError(this.state.error);
 
     return (
       <div
@@ -70,11 +73,38 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           >
             An unexpected error occurred. Reloading the page usually fixes it.
           </p>
+          {details.message && (
+            <pre
+              style={{
+                textAlign: 'left',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                fontSize: '0.74rem',
+                color: 'var(--text-muted)',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                marginBottom: '16px',
+                maxHeight: '140px',
+                overflow: 'auto',
+                fontFamily: 'var(--font-mono, monospace)',
+              }}
+            >
+              {details.errorCode ? `${details.errorCode}: ` : ''}
+              {details.message}
+            </pre>
+          )}
+          {details.requestId && (
+            <div style={{ marginBottom: '16px' }}>
+              <RequestIdTag requestId={details.requestId} />
+            </div>
+          )}
           <button
             type="button"
             onClick={() => window.location.reload()}
             style={{
-              background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+              background: 'var(--accent-gradient)',
               border: 'none',
               borderRadius: '10px',
               padding: '10px 24px',

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 
 class FailureKind(StrEnum):
@@ -27,11 +28,17 @@ class FailureKind(StrEnum):
     INTERNAL_ERROR = "INTERNAL_ERROR"  # bug in our own layer — surface it
 
 
+CooldownScope = Literal["route", "provider"]
+
+
 @dataclass(frozen=True)
 class FailurePolicy:
     retry_same_once: bool  # one immediate retry on the same route
     try_next_candidate: bool  # advance the fallback chain
     cooldown_route: bool  # temporarily remove route from selection
+    # "route" cools (provider, model); "provider" cools every model of the
+    # provider — for account-level signals where sibling models share the fate.
+    cooldown_scope: CooldownScope = "route"
 
 
 # Consumed by the Phase-5 router. CONTEXT_WINDOW_EXCEEDED advances only to
@@ -39,11 +46,11 @@ class FailurePolicy:
 FAILURE_POLICIES: dict[FailureKind, FailurePolicy] = {
     FailureKind.TIMEOUT: FailurePolicy(False, True, False),
     FailureKind.CONNECTION: FailurePolicy(True, True, False),
-    FailureKind.RATE_LIMITED: FailurePolicy(False, True, True),
-    FailureKind.QUOTA_EXHAUSTED: FailurePolicy(False, True, True),
+    FailureKind.RATE_LIMITED: FailurePolicy(False, True, True, cooldown_scope="provider"),
+    FailureKind.QUOTA_EXHAUSTED: FailurePolicy(False, True, True, cooldown_scope="provider"),
     FailureKind.SERVER_ERROR: FailurePolicy(False, True, True),
     FailureKind.PROVIDER_UNAVAILABLE: FailurePolicy(False, True, True),
-    FailureKind.AUTH_INVALID: FailurePolicy(False, True, True),
+    FailureKind.AUTH_INVALID: FailurePolicy(False, True, True, cooldown_scope="provider"),
     FailureKind.MODEL_UNAVAILABLE: FailurePolicy(False, True, True),
     FailureKind.CONTEXT_WINDOW_EXCEEDED: FailurePolicy(False, True, False),
     FailureKind.CAPABILITY_UNSUPPORTED: FailurePolicy(False, True, False),

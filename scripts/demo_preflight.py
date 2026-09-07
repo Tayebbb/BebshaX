@@ -2,8 +2,11 @@
 
 Verifies the machine is actually ready for the OFFLINE exhibition demo:
 env points at the local pgvector container, demo mode is on, the container
-is healthy, migrations are at head, the demo seed exists, and Ollama can
-serve the local fallback pool. Exits 1 on any ✗ so it can gate scripts.
+is healthy, migrations are at head, the demo seed exists, grounding datasets
+are present, and Ollama can serve the local fallback pool. With
+--strict-offline it also scans for cloud reliance (key names, remote *_URL
+hosts, and a Neon tenant URL baked into apps/frontend/dist). Exits 1 on any
+✗ so it can gate scripts.
 
 Run from the repo root:
     .\\.venv\\Scripts\\python scripts\\demo_preflight.py [--strict-offline]
@@ -27,9 +30,13 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
+from sqlalchemy.exc import SQLAlchemyError
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = REPO_ROOT / "apps" / "backend"
 ENV_FILE = REPO_ROOT / ".env"
+FRONTEND_DIST = REPO_ROOT / "apps" / "frontend" / "dist"
+PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 
 LOCAL_DB_HOSTS = {"localhost", "127.0.0.1"}
 LOCAL_DB_PORT = 5433
@@ -43,6 +50,10 @@ CLOUD_KEY_NAME_RE = re.compile(r"(API_KEY|SECRET_KEY|ACCESS_KEY|API_TOKEN)$")
 # Endpoint-style names whose host should be local for an offline demo.
 URL_NAME_RE = re.compile(r"_URL$")
 JWT_MIN_LEN = 32
+# A Neon Auth tenant URL inlined into the SPA build means the "Continue with
+# Google" button is LIVE at the venue — and dead without internet.
+CLOUD_TENANT_MARKERS = ("neonauth", "neon.tech")
+DIST_SCAN_SUFFIXES = {".js", ".html", ".css"}
 
 _failures: list[str] = []
 
@@ -151,8 +162,9 @@ def check_jwt_secret(dotenv: dict[str, str]) -> None:
 
 def _run(cmd: list[str], timeout: int = 20) -> subprocess.CompletedProcess[str] | None:
     try:
+        # check=False: callers inspect returncode themselves (docker may be down).
         return subprocess.run(
-            cmd, cwd=REPO_ROOT, capture_output=True, text=True, timeout=timeout
+            cmd, cwd=REPO_ROOT, capture_output=True, text=True, timeout=timeout, check=False
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -208,9 +220,8 @@ async def _db_checks(db_url: str) -> None:
     import sqlalchemy as sa
     from alembic.config import Config as AlembicConfig
     from alembic.script import ScriptDirectory
-    from sqlalchemy.ext.asyncio import create_async_engine
-
     from bebshax.db.engine import normalize_async_database_url
+    from sqlalchemy.ext.asyncio import create_async_engine
 
     heads = set(
         ScriptDirectory.from_config(
@@ -227,7 +238,7 @@ async def _db_checks(db_url: str) -> None:
                     .scalars()
                     .all()
                 )
-            except Exception:
+            except SQLAlchemyError:  # table missing = no migrations applied yet
                 current = set()
             if current == heads:
                 ok("alembic current == head", ", ".join(sorted(heads)))
@@ -257,7 +268,7 @@ async def _db_checks(db_url: str) -> None:
                         "demo seed missing (no demo user, no personas)",
                         "start the backend once with BEBSHAX_DEMO_MODE=true — seeding runs at startup",
                     )
-            except Exception as exc:
+            except SQLAlchemyError as exc:
                 fail(
                     f"demo seed query failed ({type(exc).__name__})",
                     "run migrations first: alembic upgrade head from apps/backend",
@@ -274,14 +285,33 @@ def check_database(db_url: str) -> None:
             "database unreachable (15s timeout)",
             "docker compose up -d --wait db — and check BEBSHAX_DATABASE_URL points at localhost:5433",
         )
-    except Exception as exc:
+    except (SQLAlchemyError, OSError, ValueError) as exc:  # refused / bad URL / driver
         fail(
             f"database checks failed ({type(exc).__name__})",
             "docker compose up -d --wait db, then alembic upgrade head from apps/backend",
         )
+    except ImportError as exc:
+        fail(
+            f"backend package not importable ({exc.name or 'bebshax'})",
+            '.venv\\Scripts\\pip install -e "apps/backend[dev]"',
+        )
 
 
-# ── 7. Ollama ────────────────────────────────────────────────────────────────
+# ── 7. Grounding datasets ────────────────────────────────────────────────────
+
+def check_processed_datasets() -> None:
+    """EvidenceStore reads data/processed/*.jsonl; empty = zero OBSERVED claims."""
+    files = sorted(PROCESSED_DIR.glob("*.jsonl")) if PROCESSED_DIR.is_dir() else []
+    if files:
+        ok("data/processed has grounding datasets", f"{len(files)} jsonl file(s)")
+    else:
+        fail(
+            "data/processed has no *.jsonl — persona evidence grounding would be empty",
+            ".venv\\Scripts\\python scripts\\setup_datasets.py --profile minimal  (needs internet once)",
+        )
+
+
+# ── 8. Ollama ────────────────────────────────────────────────────────────────
 
 def _http_json(url: str, timeout: float) -> dict | None:
     try:
@@ -318,7 +348,7 @@ def check_ollama() -> None:
             warn(f"model {model} missing (optional)", f"ollama pull {model} for extra headroom")
 
 
-# ── 8. Running backend sanity ────────────────────────────────────────────────
+# ── 9. Running backend sanity ────────────────────────────────────────────────
 
 def check_backend_health() -> None:
     data = _http_json(BACKEND_HEALTH_URL, timeout=2)
@@ -334,7 +364,42 @@ def check_backend_health() -> None:
         )
 
 
-# ── 9. --strict-offline: cloud-reliance key scan (names only) ───────────────
+# ── 10. --strict-offline: cloud-reliance scans (names + hosts only) ─────────
+
+def check_dist_offline() -> None:
+    """A built SPA carrying a Neon tenant URL would show a live Google button.
+
+    Vite inlines VITE_NEON_AUTH_URL at BUILD time, so a dist produced before
+    .env.demo was copied over .env keeps the cloud tenant no matter what the
+    running .env says. Only file paths are printed, never the URL.
+    """
+    if not FRONTEND_DIST.is_dir():
+        skip(
+            "apps/frontend/dist cloud-tenant scan",
+            "no build present (the Vite dev server reads .env live — nothing baked)",
+        )
+        return
+    hits: list[str] = []
+    for path in sorted(FRONTEND_DIST.rglob("*")):
+        if path.suffix not in DIST_SCAN_SUFFIXES or not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if any(marker in text for marker in CLOUD_TENANT_MARKERS):
+            hits.append(path.relative_to(REPO_ROOT).as_posix())
+    if hits:
+        fail(
+            f"apps/frontend/dist embeds a Neon tenant URL in {len(hits)} file(s): "
+            + ", ".join(hits[:3])
+            + (" …" if len(hits) > 3 else ""),
+            "copy .env.demo over .env FIRST, then rebuild: cd apps/frontend; npm run build "
+            "(compose users: docker compose --profile full build web)",
+        )
+    else:
+        ok("apps/frontend/dist has no baked cloud tenant URL")
+
 
 def check_strict_offline(dotenv: dict[str, str]) -> None:
     candidates = set(dotenv) | {k for k in os.environ if k.startswith("BEBSHAX_")}
@@ -373,14 +438,17 @@ def check_strict_offline(dotenv: dict[str, str]) -> None:
 def main() -> int:
     try:  # classic conhost may be cp1252; the check marks need utf-8
         sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+    except (AttributeError, ValueError, OSError) as exc:  # stdout replaced/closed
+        print(f"note: stdout stays in its default encoding ({type(exc).__name__})", file=sys.stderr)
 
     parser = argparse.ArgumentParser(description="BebshaX offline-demo preflight gate")
     parser.add_argument(
         "--strict-offline",
         action="store_true",
-        help="additionally warn about *_API_KEY-style vars that imply cloud reliance",
+        help=(
+            "additionally fail/warn on cloud reliance: *_API_KEY-style vars, remote *_URL "
+            "hosts, and a Neon tenant URL baked into apps/frontend/dist"
+        ),
     )
     args = parser.parse_args()
 
@@ -398,6 +466,9 @@ def main() -> int:
     if db_url:
         check_database(db_url)
 
+    print("\n[datasets — evidence grounding]")
+    check_processed_datasets()
+
     print("\n[ollama — offline fallback pool]")
     check_ollama()
 
@@ -407,6 +478,7 @@ def main() -> int:
     if args.strict_offline:
         print("\n[strict-offline]")
         check_strict_offline(dotenv)
+        check_dist_offline()
 
     print()
     if _failures:

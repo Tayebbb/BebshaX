@@ -1,0 +1,965 @@
+/* ==========================================================================
+   BebshaX UI primitives (bx-*)
+   Class-based so both the inline-styled console views and the Tailwind
+   views can adopt them one element at a time. Every value is a token from
+   src/index.css — no literals. Documented in docs/DESIGN_SYSTEM.md.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Utilities
+   -------------------------------------------------------------------------- */
+.bx-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Keyboard users jump straight past the sidebar */
+.bx-skip-link {
+  position: fixed;
+  top: var(--sp-3);
+  left: var(--sp-3);
+  z-index: 1000;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-sm);
+  background: var(--accent-teal);
+  color: var(--text-on-accent);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 0.2s var(--bx-ease);
+}
+.bx-skip-link:focus-visible {
+  transform: none;
+}
+
+.bx-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
+.bx-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Page scaffolding
+   -------------------------------------------------------------------------- */
+.bx-page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--sp-6) var(--page-x) var(--sp-12);
+}
+
+.bx-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4) var(--sp-6);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-6);
+}
+.bx-page-header__text {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+.bx-page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.bx-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-2);
+}
+.bx-title {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--text-main);
+  margin: 0;
+}
+.bx-title--display {
+  font-size: var(--fs-3xl);
+}
+.bx-lede {
+  margin: var(--sp-2) 0 0;
+  max-width: 62ch;
+  font-size: var(--fs-md);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.bx-section {
+  margin-top: var(--sp-8);
+}
+.bx-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.bx-section__title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  margin: 0;
+}
+.bx-section__hint {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Buttons — one family, four intents, three sizes
+   -------------------------------------------------------------------------- */
+.bx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 38px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  user-select: none;
+}
+.bx-btn:disabled,
+.bx-btn[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.bx-btn--primary {
+  background: var(--accent-gradient);
+  color: var(--text-on-accent);
+  box-shadow: 0 1px 0 var(--reflect) inset, 0 4px 14px var(--accent-glow);
+}
+.bx-btn--primary:not(:disabled):hover {
+  box-shadow: 0 1px 0 var(--reflect-strong) inset, 0 6px 20px var(--accent-glow);
+}
+.bx-btn--secondary {
+  background: var(--bg-card);
+  border-color: var(--border-subtle);
+  color: var(--text-main);
+  box-shadow: inset 0 1px 0 var(--reflect);
+}
+.bx-btn--secondary:not(:disabled):hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-medium);
+}
+.bx-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.bx-btn--ghost:not(:disabled):hover {
+  background: var(--fill-soft);
+  color: var(--text-main);
+}
+.bx-btn--danger {
+  background: var(--status-error-bg);
+  border-color: var(--status-error-border);
+  color: var(--status-error-text);
+}
+.bx-btn--sm {
+  min-height: 30px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-sm);
+  border-radius: var(--r-xs);
+}
+.bx-btn--lg {
+  min-height: 46px;
+  padding: 0 var(--sp-6);
+  font-size: var(--fs-md);
+  border-radius: var(--r-md);
+}
+.bx-btn--icon {
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+.bx-btn--icon.bx-btn--sm {
+  width: 30px;
+}
+.bx-btn--block {
+  width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   Badges & status
+   -------------------------------------------------------------------------- */
+.bx-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--fill-soft);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.bx-badge--success {
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+  color: var(--status-success-text);
+}
+.bx-badge--warn {
+  background: var(--status-warn-bg);
+  border-color: var(--status-warn-border);
+  color: var(--status-warn-text);
+}
+.bx-badge--error {
+  background: var(--status-error-bg);
+  border-color: var(--status-error-border);
+  color: var(--status-error-text);
+}
+.bx-badge--info {
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
+  color: var(--accent-cyan);
+}
+.bx-badge--mono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Status dot — always paired with a text label, never colour alone */
+.bx-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+.bx-dot--success { background: var(--accent-emerald); }
+.bx-dot--warn { background: var(--accent-amber); }
+.bx-dot--error { background: var(--accent-rose); }
+.bx-dot--info { background: var(--accent-teal); }
+.bx-dot--live {
+  box-shadow: 0 0 0 0 var(--accent-glow);
+  animation: bx-dot-pulse 1.8s ease-out infinite;
+}
+@keyframes bx-dot-pulse {
+  0% { box-shadow: 0 0 0 0 var(--accent-glow); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* --------------------------------------------------------------------------
+   Callout — inline notice; tone is semantic, icon + text always
+   -------------------------------------------------------------------------- */
+.bx-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--fill-soft);
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+.bx-callout__icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-secondary);
+}
+.bx-callout__body {
+  min-width: 0;
+  flex: 1;
+}
+.bx-callout__title {
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 2px;
+}
+.bx-callout__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+}
+.bx-callout--info {
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
+}
+.bx-callout--info .bx-callout__icon { color: var(--accent-cyan); }
+.bx-callout--success {
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+}
+.bx-callout--success .bx-callout__icon { color: var(--status-success-text); }
+.bx-callout--warn {
+  background: var(--status-warn-bg);
+  border-color: var(--status-warn-border);
+}
+.bx-callout--warn .bx-callout__icon { color: var(--status-warn-text); }
+.bx-callout--error {
+  background: var(--status-error-bg);
+  border-color: var(--status-error-border);
+}
+.bx-callout--error .bx-callout__icon { color: var(--status-error-text); }
+.bx-callout--error .bx-callout__title { color: var(--status-error-text); }
+
+/* --------------------------------------------------------------------------
+   Empty state — what is missing, why it matters, what to do next
+   -------------------------------------------------------------------------- */
+.bx-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  text-align: center;
+  padding: var(--sp-12) var(--sp-6);
+  border: 1px dashed var(--border-medium);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--fill-soft) 0%, transparent 70%);
+}
+.bx-empty__icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-md);
+  background: var(--accent-subtle);
+  color: var(--accent-teal);
+  margin-bottom: var(--sp-1);
+}
+.bx-empty__title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  margin: 0;
+}
+.bx-empty__desc {
+  max-width: 46ch;
+  margin: 0;
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.bx-empty__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--sp-2);
+}
+.bx-empty--compact {
+  padding: var(--sp-8) var(--sp-5);
+}
+
+/* --------------------------------------------------------------------------
+   Skeletons — shape-true placeholders (shimmer lives in index.css)
+   -------------------------------------------------------------------------- */
+.bx-skel-line {
+  height: 12px;
+  border-radius: 4px;
+}
+.bx-skel-block {
+  border-radius: var(--r-md);
+}
+.bx-skel-circle {
+  border-radius: 50%;
+}
+
+/* --------------------------------------------------------------------------
+   Confidence / coverage bar — a number the eye can compare across cards
+   -------------------------------------------------------------------------- */
+.bx-conf {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+}
+.bx-conf__label {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.bx-conf__track {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--fill-soft-2);
+  overflow: hidden;
+}
+.bx-conf__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-teal);
+  transition: width 0.6s var(--bx-ease);
+}
+.bx-conf--success .bx-conf__fill { background: var(--accent-emerald); }
+.bx-conf--warn .bx-conf__fill { background: var(--accent-amber); }
+.bx-conf--muted .bx-conf__fill { background: var(--text-muted); }
+.bx-conf__value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* --------------------------------------------------------------------------
+   Figure row — a dl of headline numbers separated by hairlines. The
+   typographic alternative to a strip of metric cards.
+   -------------------------------------------------------------------------- */
+.bx-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) 0;
+  margin: 0 0 var(--sp-6);
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.bx-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 160px;
+  min-width: 0;
+  padding: 0 var(--sp-6);
+  border-left: 1px solid var(--border-subtle);
+}
+.bx-figure:first-child {
+  padding-left: var(--sp-1);
+  border-left: none;
+}
+.bx-figure dd {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+.bx-figure dt {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.bx-figure__of {
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0;
+  margin: 0 2px;
+}
+@media (max-width: 720px) {
+  .bx-figure {
+    flex-basis: calc(50% - 1px);
+    padding: 0 var(--sp-3);
+  }
+  .bx-figure:nth-child(odd) {
+    border-left: none;
+    padding-left: var(--sp-1);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Metric — a labelled number with an honest footnote
+   -------------------------------------------------------------------------- */
+.bx-metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: inset 0 1px 0 var(--reflect);
+  min-width: 0;
+}
+.bx-metric__label {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.bx-metric__value {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+.bx-metric__value--muted {
+  color: var(--text-muted);
+}
+.bx-metric__note {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.bx-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: var(--sp-3);
+}
+
+/* --------------------------------------------------------------------------
+   Command menu (Ctrl/⌘ K)
+   -------------------------------------------------------------------------- */
+.bx-cmdk-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 34px;
+  width: clamp(120px, 20vw, 250px);
+  padding: 0 var(--sp-2) 0 var(--sp-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  min-width: 0;
+}
+.bx-cmdk-trigger:hover {
+  border-color: var(--border-medium);
+  color: var(--text-secondary);
+}
+.bx-cmdk-trigger__label {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bx-cmdk-trigger__keys {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.bx-cmdk-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh var(--sp-4) var(--sp-4);
+  background: var(--scrim);
+}
+.bx-cmdk {
+  width: 100%;
+  max-width: 600px;
+  max-height: min(70vh, 560px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-soft);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  overflow: hidden;
+}
+.bx-cmdk__input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-muted);
+}
+.bx-cmdk__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: var(--fs-md);
+}
+.bx-cmdk__input:focus-visible {
+  outline: none !important;
+}
+.bx-cmdk__input::placeholder {
+  color: var(--text-muted);
+}
+.bx-cmdk__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-2);
+  margin: 0;
+  list-style: none;
+}
+.bx-cmdk__group {
+  padding: var(--sp-2) var(--sp-3) var(--sp-1);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.bx-cmdk__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  text-align: left;
+  cursor: pointer;
+}
+.bx-cmdk__item[aria-selected='true'] {
+  background: var(--accent-subtle);
+  color: var(--text-main);
+}
+.bx-cmdk__item-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-xs);
+  background: var(--fill-soft);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.bx-cmdk__item[aria-selected='true'] .bx-cmdk__item-icon {
+  color: var(--accent-teal);
+}
+.bx-cmdk__item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bx-cmdk__item-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.bx-cmdk__empty {
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+}
+.bx-cmdk__footer {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--border-soft);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.bx-cmdk__footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* --------------------------------------------------------------------------
+   Sidebar (console shell)
+   -------------------------------------------------------------------------- */
+.bx-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--sp-4);
+}
+.bx-nav-group__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
+  margin-bottom: var(--sp-1);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.bx-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: 8px var(--sp-3);
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.bx-nav-item:hover {
+  background: var(--fill-soft);
+  color: var(--text-main);
+}
+.bx-nav-item[aria-current='page'] {
+  background: var(--accent-subtle);
+  border-color: var(--accent-glow);
+  color: var(--text-main);
+  font-weight: 600;
+}
+.bx-nav-item[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent-teal);
+}
+.bx-nav-item__icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  color: inherit;
+  flex-shrink: 0;
+}
+.bx-nav-item[aria-current='page'] .bx-nav-item__icon {
+  color: var(--accent-teal);
+}
+.bx-nav-item__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bx-nav-item--collapsed {
+  justify-content: center;
+  padding: 9px 0;
+}
+.bx-nav-item--collapsed::before {
+  display: none;
+}
+.bx-nav-item--muted {
+  color: var(--text-muted);
+}
+
+/* Active-study context chip inside the Study group */
+.bx-study-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 var(--sp-1) var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: inset 0 1px 0 var(--reflect);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.bx-study-chip:hover {
+  border-color: var(--border-medium);
+  background: var(--bg-card-hover);
+}
+.bx-study-chip__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.bx-study-chip__hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.bx-study-chip--empty {
+  cursor: default;
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.bx-study-chip[aria-current='page'] {
+  border-color: var(--accent-glow);
+  background: var(--accent-subtle);
+}
+.bx-study-chip[aria-current='page'] .bx-study-chip__hint {
+  color: var(--accent-teal);
+  font-weight: 600;
+}
+.bx-study-chip--empty .bx-study-chip__title {
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   Top bar (console shell)
+   -------------------------------------------------------------------------- */
+.bx-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 56px;
+  padding: var(--sp-2) var(--page-x);
+  border-bottom: 1px solid var(--border-soft);
+}
+.bx-topbar__crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.bx-topbar__crumbs ol {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.bx-topbar__crumbs li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.bx-topbar__crumbs li:last-child {
+  color: var(--text-main);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bx-topbar__crumb-sep {
+  color: var(--text-faint);
+}
+.bx-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+.bx-topbar__greeting {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.bx-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--fill-soft);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+  .bx-topbar__greeting {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .bx-topbar {
+    min-height: 48px;
+  }
+  .bx-topbar__greeting,
+  .bx-health__label {
+    display: none;
+  }
+  .bx-cmdk-trigger__label,
+  .bx-cmdk-trigger__keys {
+    display: none;
+  }
+  .bx-cmdk-trigger {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+  .bx-cmdk-backdrop {
+    padding-top: var(--sp-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bx-dot--live {
+    animation: none;
+  }
+  .bx-skip-link,
+  .bx-conf__fill {
+    transition: none;
+  }
+}

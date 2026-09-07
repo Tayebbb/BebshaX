@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   X,
   Sparkles,
@@ -10,6 +10,7 @@ import {
 import { SyntheticPersona, InterviewLengthTier } from '../../../types';
 import { api } from '../../../services/api';
 import { isEvidenceBacked } from '../../../utils/personaEvidence';
+import { useDialogA11y } from '../../../utils/useDialogA11y';
 
 interface StartInterviewModalProps {
   isOpen: boolean;
@@ -64,6 +65,8 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
   const [lengthTier, setLengthTier] = useState<InterviewLengthTier>('standard');
   const [isStarting, setIsStarting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogA11y(dialogRef, isOpen, onClose);
 
   // The grounding claim is only made when the persona actually carries one.
   const evidenceBacked = isEvidenceBacked(persona);
@@ -109,7 +112,13 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--scrim)] animate-fade-in bx-backdrop">
-      <div className="bg-[var(--bg-card)] border border-[var(--border-medium)] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] bx-modal">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="start-interview-title"
+        className="bg-[var(--bg-card)] border border-[var(--border-medium)] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] bx-modal"
+      >
         {/* Modal Header */}
         <div className="p-6 border-b border-[var(--border-medium)] flex items-center justify-between bg-[var(--bg-secondary)]">
           <div className="flex items-center gap-3">
@@ -126,7 +135,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-white tracking-tight">
+                <h2 id="start-interview-title" className="text-xl font-bold text-white tracking-tight">
                   Interview {persona.name}
                 </h2>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
@@ -142,10 +151,12 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close interview setup dialog"
             className="text-[var(--text-secondary)] hover:text-[var(--text-main)] p-2 rounded-lg hover:bg-[var(--bg-card-hover)] transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 

@@ -11,7 +11,8 @@ import {
 import { api } from '../../../services/api';
 import { useNavigation } from '../../../context/NavigationContext';
 import { useViewMotion } from '../../../motion/useViewMotion';
-import { CopilotMessage, DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE } from './workflow/types';
+import { CopilotMessage, DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE, isTemplateReply } from './workflow/types';
+import { fromUnknownError, toUserMessage } from '../../../utils/apiError';
 import { Step1Context } from './workflow/Step1Context';
 import { Step2Personas } from './workflow/Step2Personas';
 import { Step3Script } from './workflow/Step3Script';
@@ -65,11 +66,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     if (!studyId || typeof localStorage === 'undefined') return false;
     return localStorage.getItem(`bebshax_script_generated_${studyId}`) === '1';
   });
+  // Where the current questions came from, once a generation has run this session.
+  const [scriptSource, setScriptSource] = useState<'llm' | 'fallback_static' | null>(null);
   const [newQuestion, setNewQuestion] = useState<string>('');
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
   const [isGeneratingPersonas, setIsGeneratingPersonas] = useState<boolean>(false);
   const [personaGenError, setPersonaGenError] = useState<string | null>(null);
+  const [personaGenRequestId, setPersonaGenRequestId] = useState<string | null>(null);
   const [viewingPersona, setViewingPersona] = useState<Persona | null>(null);
 
   // Copilot Multi-turn Conversational States (Step 1)
@@ -90,6 +94,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [userInputMessage, setUserInputMessage] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [interviewStatusMap, setInterviewStatusMap] = useState<Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'>>({});
+  // Per-persona failure reasons reported by the batch job, plus the whole-batch
+  // error (with its request id) when the job itself could not start.
+  const [interviewFailureReasons, setInterviewFailureReasons] = useState<Record<string, string>>({});
+  const [batchError, setBatchError] = useState<{ message: string; requestId: string | null } | null>(null);
 
   // Step 5: Final Report
   const [report, setReport] = useState<StudyReport | null>(null);
@@ -291,6 +299,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     setIsCopilotTyping(true);
     try {
       const res = await api.sendStudyCopilotMessage(history, initialType, studyId);
+      const template = isTemplateReply(res);
       const assistantMsg: CopilotMessage = {
         id: `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         role: 'assistant',
@@ -298,6 +307,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
         isGoalCard: res.is_ready_for_approval && !!res.research_goal_card,
         goalCardData: res.research_goal_card || undefined,
+        servedBy: res.served_by,
+        fallbackReason: res.fallback_reason ?? null,
+        isTemplate: template,
       };
 
       const last = copilotMessagesRef.current[copilotMessagesRef.current.length - 1];
@@ -331,13 +343,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       } else {
         // Never synthesise a goal card on error — that would present a fabrication as AI success.
         const lastUserMsg = history.filter((m) => m.role === 'user').pop();
+        const detail = toUserMessage(err, { timeoutMs: 300000 });
         const errorMsg: CopilotMessage = {
           id: `msg_a_${Date.now()}`,
           role: 'assistant',
-          content: `I couldn't process that — the AI providers may be busy. Please try again.`,
+          content: `I couldn't process that — ${detail}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
           isRetryPrompt: true,
           retryContent: lastUserMsg?.content,
+          errorDetail: detail,
+          requestId: fromUnknownError(err).requestId ?? null,
         };
         const updated = [...copilotMessagesRef.current, errorMsg];
         copilotMessagesRef.current = updated;
@@ -555,9 +570,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       if (refusal) {
         setReadOnlyNotice(refusal);
       } else {
-        setPersonaGenError(
-          err?.message || 'Persona generation failed. Please try again.'
-        );
+        setPersonaGenError(toUserMessage(err, { timeoutMs: 300000 }));
+        setPersonaGenRequestId(fromUnknownError(err).requestId ?? null);
       }
     } finally {
       setIsGeneratingPersonas(false);
@@ -586,9 +600,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       const res = await api.generateStudyScriptQuestions(studyId, study?.prompt || promptInput);
       if (res.questions && res.questions.length > 0) {
         setQuestions(res.questions);
-        setScriptGenerated(true);
+        // Only a model-written script counts as "generated"; a canned starter
+        // script must keep the template label (honesty over convenience).
+        const fromLlm = res.source === 'llm';
+        setScriptSource(fromLlm ? 'llm' : 'fallback_static');
+        setScriptGenerated(fromLlm);
         try {
-          localStorage.setItem(`bebshax_script_generated_${studyId}`, '1');
+          if (fromLlm) localStorage.setItem(`bebshax_script_generated_${studyId}`, '1');
+          else localStorage.removeItem(`bebshax_script_generated_${studyId}`);
         } catch {
           // storage unavailable — the label just resets on the next reload
         }
@@ -630,14 +649,21 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       initialMap[p.id] = 'in_progress';
     });
     setInterviewStatusMap(initialMap);
+    setInterviewFailureReasons({});
+    setBatchError(null);
 
     const applyJobStatuses = (job: any) => {
       const map: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'> = {};
+      const reasons: Record<string, string> = {};
       personas.forEach((p) => {
         const entry = job?.personas?.[p.id];
         map[p.id] = entry ? entry.status : 'pending';
+        if (entry?.status === 'failed' && typeof entry.error === 'string' && entry.error) {
+          reasons[p.id] = entry.error;
+        }
       });
       setInterviewStatusMap(map);
+      setInterviewFailureReasons(reasons);
     };
 
     try {
@@ -656,11 +682,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         } catch (pollErr: any) {
           if (pollErr?.status === 404) {
             // Job lost (e.g. backend restart) — everything unfinished is failed.
+            const lostReason = toUserMessage(pollErr);
+            setBatchError({ message: lostReason, requestId: fromUnknownError(pollErr).requestId ?? null });
             setInterviewStatusMap((prev) => {
               const map = { ...prev };
+              const reasons: Record<string, string> = {};
               Object.keys(map).forEach((pid) => {
-                if (map[pid] === 'in_progress' || map[pid] === 'pending') map[pid] = 'failed';
+                if (map[pid] === 'in_progress' || map[pid] === 'pending') {
+                  map[pid] = 'failed';
+                  reasons[pid] = lostReason;
+                }
               });
+              setInterviewFailureReasons((prevReasons) => ({ ...prevReasons, ...reasons }));
               return map;
             });
             break;
@@ -676,11 +709,17 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setInterviewStatusMap({});
       } else {
         // Whole-batch failure: everything selected is failed. Nothing "completed".
+        const reason = toUserMessage(err, { timeoutMs: 30000 });
+        setBatchError({ message: reason, requestId: fromUnknownError(err).requestId ?? null });
         const failedMap: Record<string, 'pending' | 'failed'> = {};
+        const reasons: Record<string, string> = {};
         personas.forEach((p) => {
-          failedMap[p.id] = selectedPersonaIds.includes(p.id) ? 'failed' : 'pending';
+          const selected = selectedPersonaIds.includes(p.id);
+          failedMap[p.id] = selected ? 'failed' : 'pending';
+          if (selected) reasons[p.id] = reason;
         });
         setInterviewStatusMap(failedMap);
+        setInterviewFailureReasons(reasons);
       }
     } finally {
       setIsBatchRunning(false);
@@ -959,14 +998,17 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         </div>
 
         {/* 5-Step Stepper */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <nav aria-label="Study steps" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span className="bx-step-count" aria-hidden="true">
+            Step {currentStep} of {stepLabels.length}
+          </span>
           {stepLabels.map((s, idx) => {
             const isDone = s.num < currentStep;
             const isCurrent = s.num === currentStep;
             const unlocked = isStepUnlocked(s.num);
             return (
               <React.Fragment key={s.num}>
-                {idx > 0 && <div style={{ width: '16px', height: '1px', background: isDone ? 'var(--accent-teal)' : 'var(--border-subtle)' }} />}
+                {idx > 0 && <div className="bx-step-rule" style={{ width: '16px', height: '1px', background: isDone ? 'var(--accent-teal)' : 'var(--border-subtle)' }} />}
                 <button
                   type="button"
                   onClick={() => {
@@ -974,6 +1016,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   }}
                   aria-disabled={!unlocked}
                   aria-current={isCurrent ? 'step' : undefined}
+                  aria-label={`Step ${s.num}: ${s.label}${isDone ? ' (done)' : ''}`}
                   tabIndex={unlocked ? 0 : -1}
                   title={unlocked ? s.sub : stepLockReason(s.num)}
                   style={{
@@ -1008,7 +1051,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   >
                     {isDone ? <Check size={11} strokeWidth={3} /> : s.num}
                   </div>
-                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.25 }}>
+                  <span className={`bx-step-label${isCurrent ? ' bx-step-label--current' : ''}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.25 }}>
                     <span>{s.label}</span>
                     <span className="bx-step-sub">{s.sub}</span>
                   </span>
@@ -1016,7 +1059,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               </React.Fragment>
             );
           })}
-        </div>
+        </nav>
 
         {isReadOnly && (
           <div
@@ -1043,8 +1086,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         )}
       </header>
 
-      {/* Main Workflow Container */}
-      <main style={{ flex: 1, padding: '28px clamp(14px, 4vw, 40px)', maxWidth: '1280px', width: '100%', margin: '0 auto' }}>
+      {/* Main Workflow Container (the dashboard shell owns the <main> landmark) */}
+      <div style={{ flex: 1, padding: '28px clamp(14px, 4vw, 40px)', maxWidth: '1280px', width: '100%', margin: '0 auto' }}>
         {readOnlyNotice && (
           <div
             role="status"
@@ -1107,6 +1150,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             <Step2Personas
               personas={personas}
               personaGenError={personaGenError}
+              personaGenRequestId={personaGenRequestId}
               isGeneratingPersonas={isGeneratingPersonas}
               suggestedRoles={suggestedRoles}
               handleGeneratePersonas={handleGeneratePersonas}
@@ -1136,6 +1180,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               isGeneratingScript={isGeneratingScript}
               scriptError={scriptError}
               scriptGenerated={scriptGenerated}
+              scriptSource={scriptSource}
               handleStepChange={handleStepChange}
               isReadOnly={isReadOnly}
             />
@@ -1156,6 +1201,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               handleGenerateFinalReport={handleGenerateFinalReport}
               handleStepChange={handleStepChange}
               interviewStatusMap={interviewStatusMap}
+              interviewFailureReasons={interviewFailureReasons}
+              batchError={batchError}
               activeInterviewPersonaId={activeInterviewPersonaId}
               setActiveInterviewPersonaId={setActiveInterviewPersonaId}
               setChatMessages={setChatMessages}
@@ -1192,7 +1239,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             />
           </div>
         )}
-      </main>
+      </div>
 
       {/* Viewing Full Persona Modal */}
       {viewingPersona && (

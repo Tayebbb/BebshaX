@@ -13,18 +13,18 @@ Rules:
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 ProfileType = Literal["minimal", "development", "evaluation", "full"]
 
-PROFILES_ORDER: List[ProfileType] = ["minimal", "development", "evaluation", "full"]
+PROFILES_ORDER: list[ProfileType] = ["minimal", "development", "evaluation", "full"]
 
 
 @dataclass(frozen=True)
 class DatasheetMotivation:
     purpose: str
     domain: str
-    research_questions: List[str]
+    research_questions: list[str]
 
 
 @dataclass(frozen=True)
@@ -46,13 +46,13 @@ class DatasheetCollection:
 class DatasheetPreprocessing:
     raw_format: str
     cleaning_applied: str
-    normalized_jsonl_schema: Dict[str, str]
+    normalized_jsonl_schema: dict[str, str]
 
 
 @dataclass(frozen=True)
 class DatasheetUses:
-    intended_uses: List[str]
-    prohibited_uses: List[str] = field(
+    intended_uses: list[str]
+    prohibited_uses: list[str] = field(
         default_factory=lambda: [
             "Model training / fine-tuning (R9 violation)",
             "Commercial redistribution without upstream license compliance",
@@ -77,8 +77,8 @@ class DatasetEntry:
     dataset_id: str
     hf_repo_id: str
     pinned_revision: str
-    files_or_patterns: List[str]
-    profiles: List[ProfileType]
+    files_or_patterns: list[str]
+    profiles: list[ProfileType]
     download_method: Literal["hf_hub_file", "hf_stream_slice"]
     preprocessing_fn: str
     is_required: bool
@@ -89,15 +89,15 @@ class DatasetEntry:
     preprocessing: DatasheetPreprocessing
     uses: DatasheetUses
     distribution: DatasheetDistribution
-    raw_sha256: Optional[str] = None        # Nullable on first run; verified on subsequent runs
-    processed_sha256: Optional[str] = None  # Nullable on first run; verified on subsequent runs
+    raw_sha256: str | None = None        # Nullable on first run; verified on subsequent runs
+    processed_sha256: str | None = None  # Nullable on first run; verified on subsequent runs
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 # Authoritative Dataset Manifest for BebshaX
-DATASET_MANIFEST: List[DatasetEntry] = [
+DATASET_MANIFEST: list[DatasetEntry] = [
     DatasetEntry(
         dataset_id="personahub_sample",
         hf_repo_id="proj-persona/PersonaHub",
@@ -556,12 +556,12 @@ DATASET_MANIFEST: List[DatasetEntry] = [
 ]
 
 
-def get_manifest() -> List[DatasetEntry]:
+def get_manifest() -> list[DatasetEntry]:
     """Return the authoritative list of dataset entries."""
     return DATASET_MANIFEST
 
 
-def get_entries_for_profile(profile: ProfileType) -> List[DatasetEntry]:
+def get_entries_for_profile(profile: ProfileType) -> list[DatasetEntry]:
     """Return all dataset entries included in the specified profile.
     
     Enforces strict subset hierarchy: minimal ⊂ development ⊂ evaluation ⊂ full.

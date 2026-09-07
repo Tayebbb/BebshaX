@@ -5,13 +5,13 @@ export const Comparison: React.FC = () => {
   const criteria = [
     {
       feature: 'Your persona gets complicated',
-      bebshax: 'You get the whole persona, or an honest error — never a quietly shortened one',
+      bebshax: 'You get the whole persona, or an honest error. Never a quietly shortened one',
       detail: 'Identity, memory and evidence are never compressed to fit a smaller model; the call fails with ContextWindowExceeded instead.',
       traditional: 'Details are silently trimmed to fit whatever model is free right now',
     },
     {
       feature: 'An AI provider goes down',
-      bebshax: 'It moves to another model and keeps going — you barely notice',
+      bebshax: 'It moves to another model and keeps going. You barely notice',
       detail: '13 classified failure kinds, one policy each: retry the route once, advance to the next candidate, or cool the route.',
       traditional: 'The request fails, or it retries the same broken route',
     },
@@ -60,27 +60,6 @@ export const Comparison: React.FC = () => {
       >
         {/* Section Header */}
         <div style={{ textAlign: 'center', maxWidth: '720px', margin: '0 auto 64px auto' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 16px',
-              borderRadius: '9999px',
-              background: 'rgba(var(--lp-fill-rgb), 0.05)',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--lp-text)',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: '16px',
-            }}
-          >
-            What This Means For You
-          </div>
-
           <h2
             style={{
               fontSize: 'clamp(2rem, 3.8vw, 3rem)',

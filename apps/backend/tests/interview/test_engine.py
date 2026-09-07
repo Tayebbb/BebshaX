@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from bebshax.interview.engine import ConversationNotFound, InterviewEngine, PersonaNotFound
 from bebshax.llm import TaskType
@@ -42,15 +42,21 @@ async def test_each_exchange_writes_an_observation_memory(
     await engine.ask(conversation.id, "q2")
 
     async with session_maker() as session:
-        count = (
-            await session.execute(
-                select(func.count()).select_from(MemoryItems).where(
-                    MemoryItems.persona_id == stored_persona.id,
-                    MemoryItems.kind == "episodic",
+        rows = list(
+            (
+                await session.execute(
+                    select(MemoryItems).where(
+                        MemoryItems.persona_id == stored_persona.id,
+                        MemoryItems.kind == "episodic",
+                    )
                 )
-            )
-        ).scalar()
-    assert count == 2
+            ).scalars()
+        )
+    # one persona-sourced recollection per exchange (the reply, full text) plus
+    # one interviewer-sourced audit item (the question) — never merged into one
+    assert sorted(r.text for r in rows if r.source == "persona") == ["a", "b"]
+    assert sorted(r.text for r in rows if r.source == "interviewer") == ["q1", "q2"]
+    assert all(r.conversation_id == conversation.id for r in rows)
 
 
 async def test_unknown_ids_raise(session_maker, stored_persona, memory_service, llm_factory) -> None:

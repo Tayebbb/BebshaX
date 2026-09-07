@@ -10,6 +10,8 @@ into AdapterCompletion so provenance never shows "auto".
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 from freellmpool import errors as fl_errors
 from freellmpool.aio import AsyncPool
@@ -89,7 +91,11 @@ class FreellmpoolAdapter(ProviderAdapter):
         messages = [{"role": m.role, "content": m.content} for m in request.messages]
         # Per-attempt budget by task class: a queued free endpoint that cannot
         # answer an interactive request in time yields to the next candidate.
-        kwargs: dict = {"timeout": attempt_timeout_s(request.task)}
+        # freellmpool applies `timeout` PER INNER TARGET, so its internal
+        # failover could stretch one attempt to N×budget — the outer wait_for
+        # makes the budget hold for the attempt as a whole.
+        budget_s = attempt_timeout_s(request.task)
+        kwargs: dict = {"timeout": budget_s}
         if request.max_output_tokens is not None:
             kwargs["max_tokens"] = request.max_output_tokens
         if request.temperature is not None:
@@ -98,7 +104,11 @@ class FreellmpoolAdapter(ProviderAdapter):
             kwargs["routing"] = self._routing
 
         try:
-            reply = await pool.achat(messages, **kwargs)
+            reply = await asyncio.wait_for(pool.achat(messages, **kwargs), timeout=budget_s)
+        except asyncio.TimeoutError as exc:
+            raise AttemptFailed(
+                FailureKind.TIMEOUT, PROVIDER, VIRTUAL_MODEL, "attempt budget exceeded"
+            ) from exc
         except fl_errors.ContextWindowExceeded as exc:  # subclass — catch first
             raise AttemptFailed(
                 FailureKind.CONTEXT_WINDOW_EXCEEDED, PROVIDER, VIRTUAL_MODEL, str(exc)

@@ -234,7 +234,10 @@ describe('Adaptive Persona Interviews (Part 6)', () => {
       expect(screen.getByText(/I usually eat at the dorm canteen/i)).toBeDefined();
     });
 
-    // Provenance is honest and visible: the concrete serving route.
+    // Provenance is honest and visible on demand: the "Route" disclosure
+    // reveals the concrete serving route instead of printing it as chrome.
+    expect(screen.queryByText(/openrouter\/qwen3\.5/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Route$/ }));
     expect(screen.getByText(/openrouter\/qwen3\.5/)).toBeDefined();
 
     // Structured insights render with turn references.

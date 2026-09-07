@@ -18,6 +18,7 @@ import json
 import os
 import re
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,24 +26,27 @@ REPO = Path(__file__).resolve().parents[1]
 os.environ.setdefault("BEBSHAX_JWT_SECRET", "x" * 40)  # config import guard for scripts
 os.environ.setdefault("FREELLMPOOL_CONFIG", str(REPO / "providers.toml"))
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
-
-import bebshax.interview.orm  # noqa: F401, E402
-import bebshax.memory.orm  # noqa: F401, E402
-import bebshax.persona.orm  # noqa: F401, E402
-from bebshax.db.models import Base  # noqa: E402
-from bebshax.llm import SingleAdapterLLMService  # noqa: E402
-from bebshax.llm.adapters.base import AdapterCompletion, ProviderAdapter, RouteCandidate  # noqa: E402
-from bebshax.llm.adapters.embeddings import HashEmbedding  # noqa: E402
-from bebshax.llm.adapters.freellmpool_adapter import FreellmpoolAdapter  # noqa: E402
-from bebshax.llm.adapters.ollama_adapter import OllamaAdapter  # noqa: E402
-from bebshax.llm.adapters.openrouter_adapter import OpenRouterAdapter  # noqa: E402
-from bebshax.llm.types import ChatMessage, LLMRequest, TaskType  # noqa: E402
-from bebshax.interview.engine import InterviewEngine  # noqa: E402
-from bebshax.memory.service import MemoryService  # noqa: E402
-from bebshax.persona.schema import PersonaAttribute, PersonaProfile  # noqa: E402
-from bebshax.persona.store import create_business, save_persona  # noqa: E402
+import bebshax.interview.orm
+import bebshax.memory.orm
+import bebshax.persona.orm  # noqa: F401
+from bebshax.db.models import Base
+from bebshax.interview.engine import InterviewEngine
+from bebshax.llm import SingleAdapterLLMService
+from bebshax.llm.adapters.base import (
+    AdapterCompletion,
+    ProviderAdapter,
+    RouteCandidate,
+)
+from bebshax.llm.adapters.embeddings import HashEmbedding
+from bebshax.llm.adapters.freellmpool_adapter import FreellmpoolAdapter
+from bebshax.llm.adapters.ollama_adapter import OllamaAdapter
+from bebshax.llm.adapters.openrouter_adapter import OpenRouterAdapter
+from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+from bebshax.memory.service import MemoryService
+from bebshax.persona.schema import PersonaAttribute, PersonaProfile
+from bebshax.persona.store import create_business, save_persona
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 LOCAL_MODEL = "llama3.2:3b"
 QUESTIONS = [
@@ -72,6 +76,39 @@ class PinnedModel(ProviderAdapter):
 
     async def candidates(self) -> list[RouteCandidate]:
         return [c for c in await self._inner.candidates() if self._needle in c.model]
+
+    async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
+        return await self._inner.complete(candidate, request)
+
+
+def _weights(route: str) -> str:
+    """Model identity independent of gateway: 'ovh/Meta-Llama-3.3-70B' and
+    'openrouter/meta-llama/llama-3.3-70b-instruct:free' compare on the model
+    token only, lower-cased, without ':free'/':latest' tags."""
+    model = route.rsplit("/", 1)[-1].lower()
+    return model.split(":", 1)[0]
+
+
+def shares_weights(judge_route: str, arm_routes: set[str]) -> bool:
+    """True when the judge is the same route OR the same model weights as any arm."""
+    return judge_route in arm_routes or _weights(judge_route) in {_weights(r) for r in arm_routes}
+
+
+class ExcludeArmRoutes(ProviderAdapter):
+    """Drop candidate routes that served an arm (exact or same weights). Adapters
+    that resolve a virtual route internally (freellmpool) are re-checked after
+    the call — see `judge_disjoint`."""
+
+    def __init__(self, inner: ProviderAdapter, arm_routes: set[str]) -> None:
+        self._inner = inner
+        self._arm_routes = arm_routes
+
+    async def candidates(self) -> list[RouteCandidate]:
+        return [
+            c
+            for c in await self._inner.candidates()
+            if c.model == "auto" or not shares_weights(f"{c.provider}/{c.model}", self._arm_routes)
+        ]
 
     async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
         return await self._inner.complete(candidate, request)
@@ -178,6 +215,54 @@ def weighted(scores: dict) -> float:
     return round(sum(float(scores[d]) * w for d, w in RUBRIC.items()), 2)
 
 
+class JudgeNotDisjoint(RuntimeError):
+    """No judge route disjoint from every arm's serving route could be obtained."""
+
+
+async def judge_disjoint(
+    run_a: dict,
+    run_b: dict,
+    arm_routes: set[str],
+    judge_adapters: list[tuple[str, Callable[[], ProviderAdapter]]] | None = None,
+) -> dict:
+    """Judge with a route that is NOT any arm's serving route (nor the same
+    weights behind another gateway). LLM-as-judge self-preference is a known
+    bias, so this is a hard requirement: candidates are tried in order and a
+    verdict whose served route collides with an arm is DISCARDED; when every
+    candidate collides or fails, raise instead of quietly judging with arm B."""
+    if judge_adapters is None:
+        judge_adapters = [
+            ("openrouter", lambda: OpenRouterAdapter()),
+            ("freellmpool/fast", lambda: FreellmpoolAdapter(routing="fast")),
+            ("freellmpool/default", lambda: FreellmpoolAdapter()),
+        ]
+    rejected: list[str] = []
+    for label, build in judge_adapters:
+        adapter = build()
+        try:
+            verdict = await judge(SingleAdapterLLMService(ExcludeArmRoutes(adapter, arm_routes)), run_a, run_b)
+        except Exception as exc:  # noqa: BLE001 — any adapter/JSON failure just disqualifies this judge
+            rejected.append(f"{label}: unavailable ({exc!r})")
+            continue
+        finally:
+            await adapter.aclose()
+        if shares_weights(verdict["judge_route"], arm_routes):
+            rejected.append(f"{label}: served by {verdict['judge_route']} which is an arm's route/weights")
+            continue
+        verdict["rejected_judges"] = rejected
+        return verdict
+    raise JudgeNotDisjoint(
+        "no judge route disjoint from the arms' serving routes "
+        f"{sorted(arm_routes)}; tried: {rejected}"
+    )
+
+
+def _write_report(report: dict) -> Path:
+    out = REPO / "data" / "metadata" / f"local_3b_gate_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}.json"
+    out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
 async def main() -> None:
     print("== Arm A: local", LOCAL_MODEL)
     local = SingleAdapterLLMService(PinnedModel(OllamaAdapter(), LOCAL_MODEL))
@@ -187,44 +272,63 @@ async def main() -> None:
     cloud_adapter = FreellmpoolAdapter(routing="fast")
     cloud = SingleAdapterLLMService(cloud_adapter)
     run_b = await run_interview(cloud, "freellmpool/fast")
+    await cloud_adapter.aclose()
 
-    print("== Judging (blind labels A/B)")
-    # Prefer a judge on a DIFFERENT provider than either arm (self-preference
-    # bias); fall back to the cloud service when OpenRouter has no route.
-    try:
-        judge_llm = SingleAdapterLLMService(OpenRouterAdapter())
-        verdict = await judge(judge_llm, run_a, run_b)
-    except Exception as exc:
-        print(f"   (openrouter judge unavailable: {exc!r} — falling back to the arm-B service)")
-        verdict = await judge(cloud, run_a, run_b)
-    a, b = verdict["scores"]["A"], verdict["scores"]["B"]
-    # Self-preference detection: a judge scoring transcripts produced by its
-    # own serving model is a known LLM-as-judge bias — flag it honestly.
-    # Limitation: exact route match — the same model reached via a different
-    # gateway (ovh/X vs openrouter/X) is not detected.
     arm_routes = {
-        *(t["served_by"] for t in run_a["turns"]),
-        *(t["served_by"] for t in run_b["turns"]),
+        *(t["served_by"] for t in run_a["turns"] if t["served_by"]),
+        *(t["served_by"] for t in run_b["turns"] if t["served_by"]),
     }
-    self_pref = verdict["judge_route"] in arm_routes
-    report = {
+    base_report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "bar": 8.0,
         "rubric_weights": RUBRIC,
+        "arm_routes": sorted(arm_routes),
+        # Always present, even when judging fails, so readers never have to
+        # infer them from a missing key.
+        "judge_route": None,
+        "self_preference_risk": None,
+    }
+
+    print("== Judging (blind labels A/B; judge must be disjoint from both arms)")
+    try:
+        verdict = await judge_disjoint(run_a, run_b, arm_routes)
+    except JudgeNotDisjoint as exc:
+        report = {
+            **base_report,
+            "gate": "NOT_JUDGED",
+            "judge_error": str(exc),
+            "arm_a": {"model": f"ollama/{LOCAL_MODEL}", **run_a},
+            "arm_b": {"model": "freellmpool/fast (see served_by)", **run_b},
+            "judge": {"route": None, "notes": None, "self_preference_risk": None, "error": str(exc)},
+        }
+        out = _write_report(report)
+        print(f"\nJUDGING REFUSED: {exc}")
+        print("Transcripts were saved unjudged; re-run when a provider disjoint from both arms is available.")
+        print(f"report: {out}")
+        raise SystemExit(2)
+
+    a, b = verdict["scores"]["A"], verdict["scores"]["B"]
+    # Disjointness was enforced above; the flag is recomputed (not assumed) so
+    # the artifact states what was checked, including same-weights matches.
+    self_pref = shares_weights(verdict["judge_route"], arm_routes)
+    report = {
+        **base_report,
+        "judge_route": verdict["judge_route"],
+        "self_preference_risk": self_pref,
         "arm_a": {"model": f"ollama/{LOCAL_MODEL}", **run_a, "weighted": weighted(a), "dims": a},
         "arm_b": {"model": "freellmpool/fast (see served_by)", **run_b, "weighted": weighted(b), "dims": b},
         "judge": {
             "route": verdict["judge_route"],
             "notes": verdict["scores"].get("notes"),
             "self_preference_risk": self_pref,
+            "rejected_judges": verdict.get("rejected_judges", []),
         },
     }
-    out = REPO / "data" / "metadata" / f"local_3b_gate_{datetime.now():%Y%m%d_%H%M%S}.json"
-    out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    out = _write_report(report)
 
     print(f"\nA local/{LOCAL_MODEL}:  weighted {report['arm_a']['weighted']}/10  avg {run_a['avg_ms']}ms")
     print(f"B freellmpool/fast:     weighted {report['arm_b']['weighted']}/10  avg {run_b['avg_ms']}ms")
-    print(f"judge: {verdict['judge_route']}" + ("  [SELF-PREFERENCE RISK: judge == an arm's serving model]" if self_pref else ""))
+    print(f"judge: {verdict['judge_route']}  self_preference_risk={self_pref}")
     print(f"report: {out}")
     verdict_line = (
         f"GATE {'PASS' if report['arm_a']['weighted'] >= 8.0 else 'FAIL'}: "

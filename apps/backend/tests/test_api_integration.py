@@ -120,16 +120,19 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, 
     assert c_res.status_code == 201
     conv_id = c_res.json()["id"]
 
-    # 8. Post message
+    # 8. Post message — the question shares topic tokens with the identity memory
+    # ("Delivery Courier") so relevance-floored retrieval legitimately recalls it;
+    # an unrelated question would (honestly) recall nothing.
+    question = "As a delivery courier, would you use an automated 5% buffer deduction?"
     msg_res = api_test_app.post(
         f"/api/conversations/{conv_id}/messages",
-        json={"content": "Would you use an automated 5% buffer deduction?"},
+        json={"content": question},
         headers=auth_headers,
     )
     assert msg_res.status_code == 200
     msg_data = msg_res.json()
     assert "Alex" in msg_data["reply"]
-    assert msg_data["user_message"]["content"] == "Would you use an automated 5% buffer deduction?"
+    assert msg_data["user_message"]["content"] == question
     # M4: latency/route/memories must be REAL values from the engine — the
     # audited code hardcoded latency_ms=750 and invented placeholder memories.
     reply_meta = msg_data["persona_reply"]

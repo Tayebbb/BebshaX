@@ -7,6 +7,7 @@ Llama-3.3-70B, Gemini 2.0 Flash, Claude, GPT-4o-mini, etc.).
 from __future__ import annotations
 
 import os
+import re
 import time
 from typing import Optional
 import httpx
@@ -20,13 +21,21 @@ PROVIDER = "openrouter"
 # Measured-fast first (session data 2026-08-26). deepseek-r1 (CoT) and other
 # reasoning-heavy free routes are intentionally NOT in the defaults — they
 # burned 100s+ per interactive turn; pin them explicitly when needed.
+# `openrouter/auto` is deliberately absent: it routes to PAID models, which
+# breaks the $0 thesis (an operator can still pin it via BEBSHAX_OPENROUTER_MODELS).
 DEFAULT_MODELS = [
     "google/gemini-2.0-flash-exp:free",
     "meta-llama/llama-3.3-70b-instruct:free",
     "mistralai/mistral-small-24b-instruct-2501:free",
-    "openrouter/auto",
 ]
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+RESPONSE_FORMAT_DROPPED_NOTE = "response_format dropped after 400"
+
+# OpenRouter reports prompt overflow as 400 (sometimes 413) with a prose body,
+# e.g. "This endpoint's maximum context length is 8192 tokens".
+_CONTEXT_OVERFLOW_BODY_RE = re.compile(
+    r"context|maximum.*tokens|too long|token limit", re.IGNORECASE | re.DOTALL
+)
 
 
 def _configured_models() -> list[str]:
@@ -38,13 +47,23 @@ def _configured_models() -> list[str]:
     return models or list(DEFAULT_MODELS)
 
 
-def _map_http_status(status: int | None) -> FailureKind:
+def _is_context_overflow_body(body: str | None) -> bool:
+    return bool(body) and _CONTEXT_OVERFLOW_BODY_RE.search(body) is not None
+
+
+def _map_http_status(status: int | None, body: str | None = None) -> FailureKind:
     if status == 429:
         return FailureKind.RATE_LIMITED
+    if status == 402:
+        return FailureKind.QUOTA_EXHAUSTED  # credits/free allowance gone — account-level
+    if status == 408:
+        return FailureKind.TIMEOUT
     if status in (401, 403):
         return FailureKind.AUTH_INVALID
     if status == 404:
         return FailureKind.MODEL_UNAVAILABLE
+    if status in (400, 413) and _is_context_overflow_body(body):
+        return FailureKind.CONTEXT_WINDOW_EXCEEDED  # advance to a roomier route, no cooldown
     if status is not None and status >= 500:
         return FailureKind.SERVER_ERROR
     return FailureKind.PROVIDER_UNAVAILABLE
@@ -78,6 +97,39 @@ class OpenRouterAdapter(ProviderAdapter):
         if self._client is not None and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
+
+    def configured_models(self) -> list[str]:
+        """Models this adapter would offer (env override or defaults) — no network."""
+        return _configured_models()
+
+    def configuration_status(self, model: Optional[str] = None) -> dict:
+        """Configuration report with NO network call and no LLM spend: is a key
+        present, which models are configured. Verification of the key is the
+        job of health_check() (authenticated, rate-limited POST /test)."""
+        key = self._get_api_key()
+        configured = bool(key and key.strip())
+        target_model = model or os.environ.get("OPENROUTER_MODEL") or self._default_model
+        if not configured:
+            return {
+                "configured": False,
+                "authenticated": False,
+                "model": target_model,
+                "models": [],
+                "status": "not_configured",
+                "error_code": "OPENROUTER_NOT_CONFIGURED",
+                "message": "OPENROUTER_API_KEY is not set in environment or .env.",
+            }
+        return {
+            "configured": True,
+            "authenticated": False,  # not verified here — POST /test performs the live probe
+            "model": target_model,
+            "models": self.configured_models(),
+            "status": "configured",
+            "message": (
+                "OPENROUTER_API_KEY is configured (not verified). "
+                "POST /api/health/openrouter/test runs an authenticated live probe."
+            ),
+        }
 
     async def candidates(self) -> list[RouteCandidate]:
         key = self._get_api_key()
@@ -128,23 +180,31 @@ class OpenRouterAdapter(ProviderAdapter):
         t0 = time.perf_counter()
         # Per-attempt budget by task class overrides the client-wide default.
         req_timeout = httpx.Timeout(attempt_timeout_s(request.task), connect=10.0)
+        degradation_notes: list[str] = []
         try:
             resp = await client.post(
                 OPENROUTER_ENDPOINT, json=payload, headers=headers, timeout=req_timeout
             )
-            if resp.status_code == 400 and "response_format" in payload:
-                # Some models reject response_format; retry without it (prompt already demands JSON)
+            if (
+                resp.status_code == 400
+                and "response_format" in payload
+                and not _is_context_overflow_body(resp.text)
+            ):
+                # Some models reject response_format; retry without it (the prompt
+                # already demands JSON). A context-overflow 400 is NOT retried — the
+                # same prompt would overflow again. Provenance records the drop.
                 retry_payload = {k: v for k, v in payload.items() if k != "response_format"}
                 resp = await client.post(
                     OPENROUTER_ENDPOINT, json=retry_payload, headers=headers, timeout=req_timeout
                 )
+                degradation_notes.append(RESPONSE_FORMAT_DROPPED_NOTE)
         except httpx.TimeoutException as exc:
             raise AttemptFailed(FailureKind.TIMEOUT, PROVIDER, candidate.model, str(exc)) from exc
         except httpx.TransportError as exc:
             raise AttemptFailed(FailureKind.CONNECTION, PROVIDER, candidate.model, str(exc)) from exc
 
         if resp.status_code != 200:
-            kind = _map_http_status(resp.status_code)
+            kind = _map_http_status(resp.status_code, resp.text)
             raise AttemptFailed(
                 kind,
                 PROVIDER,
@@ -199,7 +259,7 @@ class OpenRouterAdapter(ProviderAdapter):
         )
 
         serving_model = data.get("model", candidate.model)
-        notes = [f"served via OpenRouter: {serving_model}"]
+        notes = [f"served via OpenRouter: {serving_model}", *degradation_notes]
 
         return AdapterCompletion(
             text=content,

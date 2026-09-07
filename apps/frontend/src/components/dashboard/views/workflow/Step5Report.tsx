@@ -119,7 +119,7 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                   disabled={!report}
                   title={report ? undefined : 'No report to export yet — generate the report first'}
                   style={{
-                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                    background: 'var(--accent-gradient)',
                     border: 'none',
                     color: 'var(--text-on-accent)',
                     borderRadius: '8px',
@@ -265,7 +265,7 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                   title={isReadOnly ? READ_ONLY_TITLE : undefined}
                   style={{
                     marginTop: '6px',
-                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                    background: 'var(--accent-gradient)',
                     border: 'none',
                     borderRadius: '8px',
                     padding: '10px 20px',

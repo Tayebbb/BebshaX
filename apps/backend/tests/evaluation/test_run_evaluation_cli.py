@@ -49,6 +49,26 @@ def test_report_generator_markdown_and_json(tmp_path: Path):
         assert "`p-1`" in md_text
 
 
+def test_report_renders_unmeasured_metrics_as_prose_not_numbers(tmp_path: Path):
+    from bebshax.evaluation.types import OfflineEvalResult, StrategyMetricResult
+
+    result = EvaluationSuiteResult(timestamp="20260906_000000", suite_type="all")
+    result.routing_metrics.append(StrategyMetricResult(strategy_name="HYBRID", total_requests=3))
+    result.offline_metrics.append(
+        OfflineEvalResult(
+            dataset_name="router_arena", total_samples=809, usable_samples=0, unusable_samples=809,
+            unusable=True, unusable_reason="record carries no model_scores",
+            strategy_scores={"HYBRID": None, "ROUND_ROBIN": None},
+        )
+    )
+    md = ReportGenerator().to_markdown(result)
+    assert "router_control_flow_simulation" in md
+    assert "| not measured |" in md  # avg_tokens_per_sec None → prose
+    assert "0 usable / 809 unusable" in md and "record carries no model_scores" in md
+    assert "| **HYBRID** | not measurable |" in md
+    assert "120.5" not in md and "100.00%" not in md
+
+
 def test_cli_execution_with_tmp_output(tmp_path: Path):
     cmd = [
         sys.executable,

@@ -62,7 +62,7 @@ const STATS: Array<{ value: number; label: React.ReactNode }> = [
     value: 3,
     label: (
       <>
-        Labels on every persona attribute — <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>evidence, inference, or assumption</strong>
+        Labels on every persona attribute: <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>evidence, inference, or assumption</strong>
       </>
     ),
   },
@@ -70,7 +70,7 @@ const STATS: Array<{ value: number; label: React.ReactNode }> = [
     value: 0,
     label: (
       <>
-        API keys required — works on <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>free providers and a local model</strong>
+        API keys required. Works on <strong style={{ color: 'var(--lp-text)', fontWeight: 600 }}>free providers and a local model</strong>
       </>
     ),
   },
@@ -130,7 +130,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
         zIndex: 1,
       }}
     >
-      {/* Depth plane 1 — badges (fastest parallax, first to dim) */}
+      {/* Depth plane 1 — category label (fastest parallax, first to dim) */}
       <div className="lp-hero-layer lp-hero-layer--badges" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
         <div
           className="lp-soft"
@@ -139,14 +139,6 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
           <span style={{ color: 'var(--lp-gold)', opacity: 0.6 }}>[</span>
           <span><strong style={{ color: 'var(--lp-text)', fontWeight: 700 }}>Synthetic Persona Research</strong></span>
           <span style={{ color: 'var(--lp-gold)', opacity: 0.6 }}>]</span>
-        </div>
-
-        <div
-          className="lp-soft"
-          style={{ ['--lp-i' as string]: 1, display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 20px', borderRadius: '9999px', background: 'rgba(var(--lp-fill-rgb), 0.04)', fontSize: '0.78rem', color: 'var(--lp-text-dim)' }}
-        >
-          <span>Runs on free provider tiers — </span>
-          <span style={{ fontStyle: 'italic', color: 'var(--lp-gold)' }}>zero API keys required to start</span>
         </div>
       </div>
 
@@ -168,7 +160,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
           className="lp-soft"
           style={{ ['--lp-i' as string]: 4, fontSize: 'clamp(0.95rem, 1.5vw, 1.15rem)', color: 'var(--lp-text-dim)', maxWidth: '680px', lineHeight: 1.6, marginBottom: '38px', fontWeight: 400 }}
         >
-          Pressure-test your idea against realistic customers in minutes, not weeks — and see exactly where every answer came from. Each persona attribute is labelled as cited evidence, reasoned inference, or an explicit assumption, so you always know what is fact and what is a guess.
+          Pressure-test your idea against realistic customers in minutes, and see exactly where every answer came from.
         </p>
 
         <button
@@ -198,8 +190,6 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
           </div>
         ))}
       </div>
-
-      <div className="lp-scroll-cue" aria-hidden="true" />
     </section>
   );
 };

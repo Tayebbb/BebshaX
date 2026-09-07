@@ -1,11 +1,22 @@
 """Auth service for user registration, login, and retrieval."""
 
+import functools
+import secrets
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
 from bebshax.auth.security import hash_password, verify_password
+
+
+@functools.lru_cache(maxsize=1)
+def _dummy_hash() -> str:
+    """A throwaway hash of a random secret, computed once per process, so an
+    unknown email or a password-less account still costs one full PBKDF2
+    verification — otherwise the fast-return timing revealed which emails
+    are registered."""
+    return hash_password(secrets.token_urlsafe(32))
 
 
 async def get_user_by_email(session: AsyncSession, email: str) -> Optional[Users]:
@@ -49,9 +60,14 @@ async def create_user(
 async def authenticate_user(
     session: AsyncSession, email: str, password: str
 ) -> Optional[Users]:
-    """Authenticate a user with email and password."""
+    """Authenticate a user with email and password.
+
+    Unknown emails and accounts without a usable password (federated or
+    revoked) take the same code path length as a wrong password.
+    """
     user = await get_user_by_email(session, email)
     if not user or not user.hashed_password:
+        verify_password(password, _dummy_hash())
         return None
     if not verify_password(password, user.hashed_password):
         return None

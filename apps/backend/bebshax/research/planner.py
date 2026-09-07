@@ -15,12 +15,14 @@ with deterministic domain fallback templates.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
@@ -45,6 +47,10 @@ class ResearchPlanResult(BaseModel):
     market_questions: list[str]
     dataset_requirements: list[DatasetRequirementSpec]
     summary: str
+    # Honesty marker: the deterministic keyword template is a starting point,
+    # not analysis of THIS idea. Consumers must never present it as LLM output.
+    source: str = "deterministic_template"  # "llm" | "deterministic_template"
+    fallback_reason: Optional[str] = None
 
 
 def get_deterministic_research_plan(
@@ -333,18 +339,28 @@ async def generate_structured_research_plan(
 ) -> ResearchPlanResult:
     """Generate a structured research plan utilizing LLMService when available, with deterministic fallback."""
     if not llm_service:
-        return get_deterministic_research_plan(idea, target_audience, pricing_hypothesis)
+        plan = get_deterministic_research_plan(idea, target_audience, pricing_hypothesis)
+        return plan.model_copy(update={"fallback_reason": "llm_service_unavailable"})
+
+    # Researcher text is DATA: wrapped so it cannot restate the instructions, and
+    # JSON-encoded inside the schema template so quotes cannot break out of the
+    # "business_idea" string.
+    context_lines = [f"BUSINESS IDEA: {idea}"]
+    if target_audience:
+        context_lines.append(f"TARGET AUDIENCE: {target_audience}")
+    if pricing_hypothesis:
+        context_lines.append(f"PRICING HYPOTHESIS: {pricing_hypothesis}")
+    context_block = untrusted_block("RESEARCH_BRIEF", "\n".join(context_lines), source="study")
 
     prompt = f"""You are the Chief Research Officer for BebshaX, an empirical customer validation platform.
 Analyze the following business idea and generate a comprehensive, structured research plan to discover evidence and public datasets.
+{UNTRUSTED_RULE}
 
-BUSINESS IDEA: {idea}
-{f"TARGET AUDIENCE: {target_audience}" if target_audience else ""}
-{f"PRICING HYPOTHESIS: {pricing_hypothesis}" if pricing_hypothesis else ""}
+{context_block}
 
 Produce a valid JSON object matching this exact schema:
 {{
-  "business_idea": "{idea}",
+  "business_idea": {json.dumps(idea, ensure_ascii=False)},
   "target_market": ["segment 1", "segment 2", "segment 3"],
   "problem_areas": ["problem 1", "problem 2", "problem 3", "problem 4"],
   "behavioral_questions": ["question 1", "question 2", "question 3"],
@@ -397,7 +413,9 @@ Respond ONLY with valid JSON."""
             market_questions=data.get("market_questions", []),
             dataset_requirements=reqs,
             summary=data.get("summary", f"Research plan for {idea}"),
+            source="llm",
         )
     except Exception as exc:
         logger.warning("LLM research plan generation failed (%s), falling back to deterministic template", exc)
-        return get_deterministic_research_plan(idea, target_audience, pricing_hypothesis)
+        plan = get_deterministic_research_plan(idea, target_audience, pricing_hypothesis)
+        return plan.model_copy(update={"fallback_reason": f"llm_error:{type(exc).__name__}"})

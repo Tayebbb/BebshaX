@@ -16,13 +16,17 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 
 from bebshax.llm.adapters.base import ProviderAdapter, RouteCandidate, StreamDelta
-from bebshax.llm.estimator import estimate_request_tokens
+from bebshax.llm.estimator import (
+    DEFAULT_EXPECTED_OUTPUT_TOKENS,
+    estimate_request_tokens,
+)
 from bebshax.llm.failures import (
     FAILURE_POLICIES,
     AllCandidatesFailed,
     AttemptFailed,
     ContextWindowExceeded,
     FailureKind,
+    LLMError,
 )
 from bebshax.llm.provenance import AttemptRecord, ProvenanceRecord
 from bebshax.llm.types import LLMRequest, LLMResult
@@ -53,6 +57,28 @@ def capability_skip_reason(cand: RouteCandidate, request: LLMRequest) -> str | N
     return None
 
 
+def _stamp_request_context(
+    request: LLMRequest, provenance: ProvenanceRecord, needed_tokens: int
+) -> None:
+    """Record the pre-flight estimate and the request parameters ONCE per
+    request so provenance explains every eligibility decision."""
+    if provenance.estimated_tokens is not None:
+        return
+    provenance.estimated_tokens = needed_tokens
+    max_output = (
+        str(request.max_output_tokens)
+        if request.max_output_tokens is not None
+        else f"{DEFAULT_EXPECTED_OUTPUT_TOKENS} (default)"
+    )
+    provenance.routing_path.append(
+        f"[context estimate ~{needed_tokens} tokens incl. max_output {max_output}]"
+    )
+    provenance.routing_path.append(
+        f"[params temperature={request.temperature} "
+        f"max_output_tokens={request.max_output_tokens} json_mode={request.json_mode}]"
+    )
+
+
 def filter_eligible(
     entries: list[Entry],
     request: LLMRequest,
@@ -65,6 +91,7 @@ def filter_eligible(
     list (never truncate), AllCandidatesFailed when nothing was eligible.
     """
     needed_tokens = estimate_request_tokens(request)
+    _stamp_request_context(request, provenance, needed_tokens)
     eligible: list[Entry] = []
     context_excluded = False
     largest_capable_window: int | None = None
@@ -93,16 +120,58 @@ def filter_eligible(
     return eligible
 
 
+def exhaustion_error(provenance: ProvenanceRecord, request: LLMRequest) -> LLMError:
+    """Error for a request that ran out of candidates.
+
+    When EVERY attempt overflowed a context window the honest failure is
+    ContextWindowExceeded (413, never truncate) — pre-flight could not catch
+    it because aggregating adapters advertise a virtual window and learn the
+    real per-model limits only at call time. Anything else is
+    AllCandidatesFailed with the full trail.
+    """
+    attempts = provenance.attempts
+    if attempts and all(a.failure_kind == FailureKind.CONTEXT_WINDOW_EXCEEDED for a in attempts):
+        estimate = (
+            provenance.estimated_tokens
+            if provenance.estimated_tokens is not None
+            else estimate_request_tokens(request)
+        )
+        return ContextWindowExceeded(estimate, None)
+    return AllCandidatesFailed(provenance)
+
+
+def stamp_internal_error(record: AttemptRecord, exc: Exception, started: float) -> AttemptFailed:
+    """An adapter raised something other than AttemptFailed: that is a bug in
+    OUR layer (R6). Stamp the attempt and return the wrapped failure to raise
+    — the chain must not advance and the cause must stay attached."""
+    record.latency_ms = (time.perf_counter() - started) * 1000
+    record.failure_kind = FailureKind.INTERNAL_ERROR
+    record.failure_detail = f"{type(exc).__name__}: {exc}"[:300]
+    return AttemptFailed(
+        FailureKind.INTERNAL_ERROR, record.provider, record.model, record.failure_detail
+    )
+
+
 async def attempt_candidates(
     eligible: list[Entry],
     request: LLMRequest,
     provenance: ProvenanceRecord,
     on_cooldown: Callable[[RouteCandidate, FailureKind], None] | None = None,
+    skip_reason: Callable[[RouteCandidate], str | None] | None = None,
 ) -> LLMResult:
     """Policy-driven attempt loop over eligible routes. Raises
-    AllCandidatesFailed with the full provenance trail on exhaustion."""
+    AllCandidatesFailed with the full provenance trail on exhaustion (or
+    ContextWindowExceeded when every attempt overflowed context).
+
+    `skip_reason` is re-checked before EACH candidate: a cooldown started by an
+    earlier attempt in this very request (e.g. a provider-wide 429) must skip
+    the sibling routes that eligibility admitted a moment ago."""
     attempt_no = 0
     for adapter, cand in eligible:
+        reason = skip_reason(cand) if skip_reason is not None else None
+        if reason is not None:
+            provenance.routing_path.append(f"{cand.provider}/{cand.model} [skipped: {reason}]")
+            continue
         same_route_retries = 0
         while True:
             attempt_no += 1
@@ -128,8 +197,12 @@ async def attempt_candidates(
                     raise  # e.g. INTERNAL_ERROR — surface, don't burn candidates
                 record.fallback_reason = f"advancing after {failure.kind}"
                 break
+            except Exception as exc:  # adapter bug — never advance past our own defects
+                raise stamp_internal_error(record, exc, t0) from exc
             record.latency_ms = (time.perf_counter() - t0) * 1000
             record.success = True
+            if (completion.provider, completion.model) != (cand.provider, cand.model):
+                record.via = f"{cand.provider}/{cand.model}"
             record.provider = completion.provider  # concrete serving route
             record.model = completion.model
             record.notes = list(completion.notes)
@@ -146,7 +219,7 @@ async def attempt_candidates(
                 provenance=provenance,
             )
 
-    raise AllCandidatesFailed(provenance)
+    raise exhaustion_error(provenance, request)
 
 
 class SingleAdapterLLMService(LLMService):

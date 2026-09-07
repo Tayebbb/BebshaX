@@ -23,6 +23,7 @@ import {
   BehavioralTestType,
 } from '../../../types';
 import { api } from '../../../services/api';
+import { useDialogA11y } from '../../../utils/useDialogA11y';
 
 interface BehavioralTestDetailViewProps {
   studyId: string;
@@ -51,6 +52,8 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
   const [isTriggeringRun, setIsTriggeringRun] = useState(false);
 
   const pollTimerRef = useRef<any>(null);
+  const resultDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogA11y(resultDialogRef, !!selectedPersonaResult, () => setSelectedPersonaResult(null));
 
   const fetchDetailAndRuns = async (keepLoading = true) => {
     if (keepLoading) setIsLoading(true);
@@ -780,7 +783,11 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
           onClick={() => setSelectedPersonaResult(null)}
         >
           <div
+            ref={resultDialogRef}
             className="bx-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="persona-result-title"
             style={{
               width: '100%',
               maxWidth: '680px',
@@ -807,7 +814,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               }}
             >
               <div>
-                <h2 style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                <h2 id="persona-result-title" style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)' }}>
                   {selectedPersonaResult.persona_name} — Behavioral Evaluation
                 </h2>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -815,10 +822,12 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedPersonaResult(null)}
+                aria-label="Close behavioral evaluation"
                 style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
               >
-                <X size={20} />
+                <X size={20} aria-hidden="true" />
               </button>
             </div>
 

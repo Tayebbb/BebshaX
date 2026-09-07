@@ -52,27 +52,6 @@ export const ProblemSection: React.FC = () => {
       >
         {/* Section Header */}
         <div style={{ textAlign: 'center', maxWidth: '780px', margin: '0 auto 64px auto' }}>
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 16px',
-              borderRadius: '9999px',
-              background: 'rgba(var(--lp-red-rgb), 0.1)',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--lp-red-soft)',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              marginBottom: '16px',
-            }}
-          >
-            What Makes Synthetic Personas Hard
-          </div>
-
           <h2
             style={{
               fontSize: 'clamp(2rem, 3.8vw, 3rem)',
@@ -198,7 +177,7 @@ export const ProblemSection: React.FC = () => {
                 },
                 {
                   title: 'A closed failure taxonomy',
-                  desc: 'Thirteen failure kinds, each with one policy — retry, advance, or cool the route — and every pool ends at a local model.',
+                  desc: 'Thirteen failure kinds, each with one policy (retry, advance, or cool the route), and every pool ends at a local model.',
                 },
               ].map((adv, idx) => (
                 <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>

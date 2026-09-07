@@ -7,7 +7,6 @@ import {
   FileText,
   CheckCircle2,
   ArrowRight,
-  Sparkles,
 } from 'lucide-react';
 
 export const HowItWorks: React.FC = () => {
@@ -21,14 +20,14 @@ export const HowItWorks: React.FC = () => {
       description:
         'Tell the Study Design Copilot what you want to find out, in plain English. It asks follow-up questions, sharpens it into a research objective you can defend, and proposes which kinds of customers you should be talking to.',
       icon: <MessagesSquare size={22} color="var(--lp-text)" />,
-      features: ['Free-text chat — start with one sentence', 'The copilot refines the objective with you', 'Pick the customer roles to generate'],
+      features: ['Free-text chat: start with one sentence', 'The copilot refines the objective with you', 'Pick the customer roles to generate'],
     },
     {
       num: '02',
       title: 'Generate your personas',
       subtitle: 'Labelled by how each attribute is known',
       description:
-        'BebshaX retrieves supporting records from public research datasets, builds the personas, and labels every attribute with how it is known — cited evidence, reasoned inference, or an explicit assumption. Consistency rules run before anything is saved.',
+        'BebshaX retrieves supporting records from public research datasets, builds the personas, and labels every attribute with how it is known: cited evidence, reasoned inference, or an explicit assumption. Consistency rules run before anything is saved.',
       icon: <BrainCircuit size={22} color="var(--lp-gold)" />,
       features: ['Evidence retrieved from public datasets', 'Every attribute labelled with how it is known', 'Inconsistent personas are rejected, not patched'],
     },
@@ -37,7 +36,7 @@ export const HowItWorks: React.FC = () => {
       title: 'Build the interview script',
       subtitle: 'The questions you would actually ask',
       description:
-        'BebshaX drafts the questions and the probing rules that follow up on vague answers. You read them, edit them, and cut the ones you do not need — before a single interview runs.',
+        'BebshaX drafts the questions and the probing rules that follow up on vague answers. You read them, edit them, and cut the ones you do not need, before a single interview runs.',
       icon: <ListChecks size={22} color="var(--lp-text)" />,
       features: ['Questions drafted from your objective', 'Probing rules for shallow answers', 'Fully editable before you run it'],
     },
@@ -55,7 +54,7 @@ export const HowItWorks: React.FC = () => {
       title: 'Get your decision report',
       subtitle: 'What you should do next',
       description:
-        'One report synthesised across every interview: what you heard, where the personas disagreed, and what it means for the idea — with each finding traceable back to the persona and the evidence behind it.',
+        'One report synthesised across every interview: what you heard, where the personas disagreed, and what it means for the idea. Each finding is traceable back to the persona and the evidence behind it.',
       icon: <FileText size={22} color="var(--lp-text)" />,
       features: ['Synthesised across all interviews', 'Findings traceable to their source', 'Regenerate it as the study evolves'],
     },
@@ -217,12 +216,6 @@ export const HowItWorks: React.FC = () => {
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '20px' }}>
             <div style={{ maxWidth: '620px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <Sparkles size={14} color="var(--lp-gold)" />
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--lp-gold)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Step {steps[activeStep - 1].num} in Action
-                </span>
-              </div>
               <h4 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--lp-text)', marginBottom: '8px' }}>
                 {steps[activeStep - 1].title}
               </h4>

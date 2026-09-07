@@ -225,12 +225,10 @@ async def generate_study_personas_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except ContextWindowExceeded as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from exc
-    except AllCandidatesFailed as exc:
-        raise HTTPException(
-            status_code=503, detail="no LLM route could serve persona generation"
-        ) from exc
+    except (ContextWindowExceeded, AllCandidatesFailed):
+        # Rendered by the global handlers (413 / 503 with attempts) — never
+        # flattened into a bare 500 by the catch-all below.
+        raise
     except Exception as exc:
         logger.error("persona generation failed for study %s", study_id, exc_info=True)
         raise HTTPException(
@@ -257,6 +255,7 @@ async def generate_study_personas_endpoint(
 # ---------------------------------------------------------------------------
 
 @router.post("/studies/{study_id}/personas/generate/jobs", status_code=202)
+@limiter.limit("10/minute")
 async def start_persona_generation_job(
     study_id: str,
     body: StudyGeneratePersonasRequest,
@@ -303,6 +302,7 @@ async def start_persona_generation_job(
         kind="persona_generation",
         scope_id=study_id,
         runner=_runner,
+        user_id=user_id,
         # Honest domain failures (R2/R6) pass their message through.
         user_safe_exceptions=(PersonaGenerationFailed, ContextWindowExceeded, AllCandidatesFailed),
     )
@@ -358,6 +358,7 @@ async def get_study_persona_endpoint(
 
 
 @router.post("/studies/{study_id}/personas/{persona_id}/regenerate")
+@limiter.limit("10/minute")
 async def regenerate_study_persona_endpoint(
     study_id: str,
     persona_id: str,
@@ -379,12 +380,7 @@ async def regenerate_study_persona_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ContextWindowExceeded as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from exc
-    except AllCandidatesFailed as exc:
-        raise HTTPException(
-            status_code=503, detail="no LLM route could serve persona regeneration"
-        ) from exc
+    # ContextWindowExceeded / AllCandidatesFailed: global handlers (413 / 503).
 
     segment_name = None
     if persona.segment_id:
@@ -524,6 +520,7 @@ async def list_personas_legacy_endpoint(
 
 
 @router.post("/businesses/{business_id}/personas", status_code=201)
+@limiter.limit("10/minute")
 async def generate_persona_endpoint(
     business_id: str,
     body: PersonaGenerateRequest,
@@ -567,12 +564,7 @@ async def generate_persona_endpoint(
             status_code=422,
             detail={"reason": exc.reason, "violations": [v.message for v in exc.violations]},
         ) from exc
-    except ContextWindowExceeded as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from exc
-    except AllCandidatesFailed as exc:
-        raise HTTPException(
-            status_code=503, detail="no LLM route could serve this request"
-        ) from exc
+    # ContextWindowExceeded / AllCandidatesFailed: global handlers (413 / 503).
 
     async with request.app.state.db_sessionmaker() as session:
         await save_persona(session, profile, owner_id=owner_id)
@@ -623,6 +615,9 @@ async def get_persona_memories_endpoint(
     request: Request,
     kind: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    include_interviewer: bool = Query(
+        default=False, description="Also list researcher questions (source=interviewer)"
+    ),
     current_user: Optional[Users] = Depends(get_optional_current_user),
 ) -> list[dict]:
     # M9: a missing service and a missing persona must be distinguishable from
@@ -641,7 +636,12 @@ async def get_persona_memories_endpoint(
         if not owner_accessible(p_row.owner_id, current_user):
             raise HTTPException(status_code=404, detail="persona not found")
 
-    memories = await memory_service.list_for_persona(persona_id, kind=kind, limit=limit)
+    memories = await memory_service.list_for_persona(
+        persona_id,
+        kind=kind,
+        limit=limit,
+        sources=None if include_interviewer else ("persona",),
+    )
     return [
         {
             "id": m.id,
@@ -649,6 +649,10 @@ async def get_persona_memories_endpoint(
             "kind": m.kind,
             "text": m.text,
             "importance": m.importance,
+            # Who authored the text: the persona's own statements are recollections;
+            # interviewer questions are context and are only listed on request.
+            "source": m.source,
+            "conversation_id": m.conversation_id,
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         for m in memories

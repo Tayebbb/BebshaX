@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Trash2 } from 'lucide-react';
 import { api } from '../../../../services/api';
 import { READ_ONLY_TITLE } from './types';
 
@@ -17,6 +17,9 @@ interface Step3ScriptProps {
   scriptError: string | null;
   /** False until the generator has actually returned questions for this study. */
   scriptGenerated?: boolean;
+  /** Set after a generation attempt: 'fallback_static' means the backend served
+   * canned starter questions because no LLM answered. */
+  scriptSource?: 'llm' | 'fallback_static' | null;
   handleStepChange: (newStep: number, opts?: { reportReady?: boolean }) => void;
   /** Example (demo) studies are viewable but never mutable from here. */
   isReadOnly?: boolean;
@@ -32,11 +35,35 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
   isGeneratingScript,
   scriptError,
   scriptGenerated = false,
+  scriptSource = null,
   handleStepChange,
   isReadOnly = false,
 }) => {
   return (
     <>
+            {scriptSource === 'fallback_static' && (
+              <div
+                role="status"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  color: '#F59E0B',
+                  fontSize: '0.84rem',
+                  fontWeight: 600,
+                }}
+              >
+                <AlertTriangle size={15} aria-hidden="true" />
+                <span>
+                  Starter script (not AI-generated for this study) — the AI providers did not answer, so
+                  these are generic questions. Edit them or regenerate later.
+                </span>
+              </div>
+            )}
             {scriptError && (
               <div
                 role="alert"
@@ -123,7 +150,7 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                   type="button"
                   onClick={() => handleStepChange(4)}
                   style={{
-                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                    background: 'var(--accent-gradient)',
                     border: 'none',
                     color: 'var(--text-on-accent)',
                     borderRadius: '8px',

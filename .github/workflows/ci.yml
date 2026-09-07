@@ -22,10 +22,22 @@ jobs:
         run: python -m ruff check apps/backend/bebshax apps/backend/tests
       - name: Unit tests (no network) + coverage floor
         run: python -m pytest apps/backend/tests -q --cov=bebshax --cov-fail-under=68
+      - name: Dependency vulnerability scan (pip-audit)
+        # Advisory for now: local baseline on 2026-09-06 was 0 known
+        # vulnerabilities (pip-audit 2.10.1; the editable `bebshax` package is
+        # skipped as not-on-PyPI, which is expected). Flip to blocking (drop
+        # continue-on-error) after this step has passed green in CI once — CI
+        # resolves fresh versions on Ubuntu, so the baseline must be confirmed
+        # here, not only on a dev machine.
+        continue-on-error: true
+        run: python -m pip_audit --progress-spinner off --desc off
 
   typecheck:
     # Advisory until the pre-existing type debt is burned down (audit M11) —
     # failures are surfaced in the job log but do not block the merge yet.
+    # Debt tracker: 79 errors / 0 warnings on 2026-09-06 (pyright 1.1.413,
+    # typeCheckingMode basic). Update this number when it moves; make the job
+    # blocking once it reaches 0.
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -79,9 +91,14 @@ jobs:
       - name: Apply all migrations from zero
         working-directory: apps/backend
         run: python -m alembic upgrade head
-      - name: Verify current == heads
+      - name: Verify current == heads (and exactly one head)
         working-directory: apps/backend
         run: |
+          # Two heads means an unmerged branch of the migration chain —
+          # `alembic upgrade head` refuses to run and every deploy breaks.
+          head_count=$(python -m alembic heads | grep -cE '^[0-9a-f]+')
+          echo "head_count=$head_count"
+          test "$head_count" = "1"
           current=$(python -m alembic current | grep -oE '^[0-9a-f]+' | head -1)
           head=$(python -m alembic heads | grep -oE '^[0-9a-f]+' | head -1)
           echo "current=$current head=$head"
@@ -96,7 +113,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          # Matches deploy/web.Dockerfile (node:24.11-alpine) — one Node major
+          # for CI and the shipped image.
+          node-version: "24"
       # M11: no --if-present — a vanished script must FAIL, not silently pass.
       - name: Install
         working-directory: apps/frontend
@@ -104,6 +123,20 @@ jobs:
       - name: Build
         working-directory: apps/frontend
         run: npm run build
+      - name: Theme-token drift gate
+        working-directory: apps/frontend
+        run: npm run theme:check
       - name: Tests
         working-directory: apps/frontend
         run: npm test -- --run
+
+  compose-config:
+    # The demo/exhibition profile is only exercised by hand before the venue;
+    # at least keep both compose graphs parseable on every push.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose (default + full profile)
+        run: |
+          docker compose config --quiet
+          docker compose --profile full config --quiet

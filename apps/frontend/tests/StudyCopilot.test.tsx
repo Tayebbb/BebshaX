@@ -658,7 +658,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
 
     // URL says step 2 (initialStep=2 > 1) → should stay on step 2, not override to DB step 4
     await waitFor(() => {
-      expect(screen.getByText('Persona Library')).toBeInTheDocument();
+      expect(screen.getByText('Study Personas')).toBeInTheDocument();
     });
   });
 

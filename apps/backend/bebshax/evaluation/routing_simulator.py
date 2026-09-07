@@ -1,4 +1,12 @@
-"""Chaos simulation harness for evaluating LLM routing strategies."""
+"""Chaos simulation harness for evaluating LLM routing strategies.
+
+What this measures: the router's CONTROL FLOW under scripted failures — how
+many requests still get served, how many fallbacks each strategy burns,
+whether context overflow is refused. FakeAdapter latencies are injected
+sleeps and its replies carry no real tokens, so results are labelled
+``kind="router_control_flow_simulation"`` and ``avg_tokens_per_sec`` is
+None: nothing here is a provider throughput measurement.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +19,7 @@ from bebshax.evaluation.strategies import RoutingStrategy, StrategyRankerFactory
 from bebshax.evaluation.types import StrategyMetricResult
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.adapters.base import AdapterCompletion, RouteCandidate
-from bebshax.llm.failures import AttemptFailed, FailureKind, LLMError
+from bebshax.llm.failures import AttemptFailed, ContextWindowExceeded, FailureKind, LLMError
 from bebshax.llm.pools import POOLS, TASK_POOL_MAP
 from bebshax.llm.router import PoolRouter
 from bebshax.llm.types import LLMRequest, TaskType
@@ -144,7 +152,9 @@ class RoutingChaosSimulator:
                 lat_ms = (time.perf_counter() - start) * 1000.0
                 latencies.append(lat_ms)
                 failed += 1
-                if err.kind == FailureKind.CONTEXT_WINDOW_EXCEEDED:
+                # LLMError subclasses carry no .kind — the old `err.kind` check
+                # raised AttributeError on the first all-routes-down request.
+                if isinstance(err, ContextWindowExceeded):
                     context_overflows += 1
 
         latencies.sort()
@@ -162,7 +172,9 @@ class RoutingChaosSimulator:
             latency_p50_ms=round(p50, 2),
             latency_p95_ms=round(p95, 2),
             context_overflow_failures=context_overflows,
-            avg_tokens_per_sec=120.5,
+            # FakeAdapter tokens are len(text)//4 of a canned reply timed against
+            # an injected sleep — not a throughput measurement, so: not measured.
+            avg_tokens_per_sec=None,
         )
 
     async def run_all_strategies(self) -> list[StrategyMetricResult]:

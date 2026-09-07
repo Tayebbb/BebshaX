@@ -20,7 +20,14 @@ class PersonaMetricResult(BaseModel):
 
 
 class StrategyMetricResult(BaseModel):
-    """Metrics recorded for a specific routing strategy during chaos simulation."""
+    """Metrics recorded for a specific routing strategy during chaos simulation.
+
+    ``kind`` labels what this measures: the router's control flow over scripted
+    FakeAdapter failures (fallback counts, policy behaviour, eligibility) — NOT
+    provider throughput. ``avg_tokens_per_sec`` is therefore None: FakeAdapter
+    emits no real tokens and the harness has no clock worth reporting.
+    """
+    kind: str = "router_control_flow_simulation"
     strategy_name: str
     total_requests: int = 0
     successful_requests: int = 0
@@ -30,14 +37,21 @@ class StrategyMetricResult(BaseModel):
     latency_p50_ms: float = 0.0
     latency_p95_ms: float = 0.0
     context_overflow_failures: int = 0
-    avg_tokens_per_sec: float = 0.0
+    avg_tokens_per_sec: float | None = None
 
 
 class OfflineEvalResult(BaseModel):
     """Evaluation output for offline dataset replay benchmarks."""
     dataset_name: str
     total_samples: int = 0
-    strategy_scores: dict[str, float] = Field(default_factory=dict)
+    # Records that carried per-model labels (the only ones alignment is computed
+    # over) vs. records that did not. When nothing is usable every strategy
+    # score is None — never a default "best model" tautology.
+    usable_samples: int = 0
+    unusable_samples: int = 0
+    unusable: bool = False
+    unusable_reason: str | None = None
+    strategy_scores: dict[str, float | None] = Field(default_factory=dict)
     details: list[dict[str, Any]] = Field(default_factory=list)
     # True when the benchmark dataset was absent and hardcoded synthetic
     # records were replayed instead — scores then measure nothing real and

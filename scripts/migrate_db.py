@@ -19,7 +19,6 @@ Examples:
     python scripts/migrate_db.py --url "sqlite+aiosqlite:///bebshax.db"
 """
 
-import os
 import sys
 from pathlib import Path
 

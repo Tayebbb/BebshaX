@@ -15,6 +15,9 @@ import {
   SyntheticPersona,
 } from '../../types';
 import { api } from '../../services/api';
+import { fromUnknownError } from '../../utils/apiError';
+import { ConsistencyFlags, MemoryDisclosure, RouteDisclosure } from '../common/MemoryDisclosure';
+import { RequestIdTag } from '../common/RequestIdTag';
 import './interview.css';
 
 interface InterviewWorkspaceProps {
@@ -117,7 +120,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [elapsedS, setElapsedS] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
-  const [sendError, setSendError] = useState<{ kind: FailureKindUI; detail: string } | null>(null);
+  const [sendError, setSendError] = useState<{ kind: FailureKindUI; detail: string; requestId?: string | null } | null>(null);
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
   const [flashTurn, setFlashTurn] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
@@ -215,6 +218,10 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
         latency_ms: res.latency_ms,
         served_by: res.served_by,
         retrieved_memories: res.retrieved_memories || res.persona_reply?.retrieved_memories || [],
+        identity_drift: Boolean(res.identity_drift ?? res.persona_reply?.identity_drift),
+        drift_notes: res.drift_notes ?? res.persona_reply?.drift_notes ?? [],
+        contradiction_detected: Boolean(res.contradiction_detected ?? res.persona_reply?.contradiction_detected),
+        contradiction_details: res.contradiction_details ?? res.persona_reply?.contradiction_details ?? null,
         created_at: new Date().toISOString(),
       };
       // Streamed text was already read live — don't re-animate the canonical swap.
@@ -263,7 +270,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
         err?.kind && err.kind in FAILURE_COPY
           ? (err.kind as FailureKindUI)
           : classifyFailure(err?.message || '', err?.status);
-      setSendError({ kind, detail: err?.message || 'Unknown failure' });
+      setSendError({ kind, detail: err?.message || 'Unknown failure', requestId: fromUnknownError(err).requestId ?? null });
     } finally {
       setStreamText(null);
       setIsSending(false);
@@ -289,7 +296,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
       if (Array.isArray(res.structured_insights)) setInsights(res.structured_insights);
       setRailOpen(true);
     } catch (err: any) {
-      setSendError({ kind: 'generic', detail: err?.message || 'Synthesis failed' });
+      setSendError({ kind: 'generic', detail: err?.message || 'Synthesis failed', requestId: fromUnknownError(err).requestId ?? null });
     } finally {
       setIsCompleting(false);
     }
@@ -501,7 +508,6 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                           {isPersona && turn.latency_ms != null
                             ? ` · ${(turn.latency_ms / 1000).toFixed(1)}s`
                             : ''}
-                          {isPersona && turn.served_by ? ` · ${turn.served_by}` : ''}
                         </span>
                       </div>
                       <div className="iv-turn-body">
@@ -511,6 +517,19 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                           turn.content
                         )}
                       </div>
+                      {isPersona && (
+                        <>
+                          <ConsistencyFlags
+                            identityDrift={turn.identity_drift}
+                            driftNotes={turn.drift_notes}
+                            contradictionDetected={turn.contradiction_detected}
+                            contradictionDetails={turn.contradiction_details}
+                            compact
+                          />
+                          <MemoryDisclosure memories={turn.retrieved_memories} compact />
+                          <RouteDisclosure servedBy={turn.served_by} latencyMs={turn.latency_ms} compact />
+                        </>
+                      )}
                       <div className="iv-turn-actions">
                         <button
                           type="button"
@@ -567,6 +586,11 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
               <div className="iv-error" role="alert">
                 <div className="iv-error-title">{FAILURE_COPY[sendError.kind].title}</div>
                 <div className="iv-error-body">{FAILURE_COPY[sendError.kind].body}</div>
+                {sendError.requestId && (
+                  <div style={{ marginTop: '6px' }}>
+                    <RequestIdTag requestId={sendError.requestId} />
+                  </div>
+                )}
                 <div className="iv-error-actions">
                   {sendError.kind !== 'finished' && (
                     <button

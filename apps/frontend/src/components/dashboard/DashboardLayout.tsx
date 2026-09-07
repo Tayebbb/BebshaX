@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Menu,
   PenSquare,
@@ -19,10 +19,13 @@ import {
   Cpu,
   FolderOpen,
   MailWarning,
+  Search,
+  Command,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
 import { useTheme } from '../../context/ThemeContext';
+import { CommandMenu, type CommandItem, EmptyState, Button } from '../ui';
 import { NewStudyView } from './views/NewStudyView';
 import { StudiesDashboardView } from './views/StudiesDashboardView';
 import { PersonaLibraryView } from './views/PersonaLibraryView';
@@ -37,7 +40,7 @@ import { BehavioralTestDetailView } from './views/BehavioralTestDetailView';
 import { BehavioralComparisonView } from './views/BehavioralComparisonView';
 import { StartInterviewModal } from './modals/StartInterviewModal';
 import { CreateBehavioralTestModal } from './modals/CreateBehavioralTestModal';
-import { StudyType, Study, SyntheticPersona } from '../../types';
+import { HealthResponse, StudyType, Study, SyntheticPersona } from '../../types';
 import { findExampleStudy, EXAMPLE_STUDY_STEP } from '../../utils/exampleStudy';
 import { api } from '../../services/api';
 import { BebshaXLogo } from '../common/BebshaXLogo';
@@ -56,8 +59,27 @@ export type DashboardTab =
   | 'evidence'
   | 'segmentation';
 
+/** Bottom-centre honesty pill shared by the backend-down / mock / demo banners. */
+const honestPillStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  padding: '8px 16px',
+  borderRadius: '999px',
+  background: 'var(--status-warn-bg)',
+  border: '1px solid var(--status-warn-border)',
+  color: 'var(--status-warn-text)',
+  fontSize: '0.78rem',
+  fontWeight: 600,
+  backdropFilter: 'blur(8px)',
+  textAlign: 'center',
+  maxWidth: 'min(92vw, 720px)',
+};
+
 interface DashboardLayoutProps {
   onOpenLandingPage?: () => void;
+  /** Backend health (App fetches it once); `demo_mode` drives the cached-results banner. */
+  health?: HealthResponse | null;
 }
 
 /** Shown wherever a study-scoped view is opened without an active study —
@@ -67,60 +89,22 @@ const NoStudySelected: React.FC<{
   onPickStudy: () => void;
   onCreateStudy: () => void;
 }> = ({ title, onPickStudy, onCreateStudy }) => (
-  <div
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '12px',
-      textAlign: 'center',
-      padding: '72px 24px',
-      margin: '24px clamp(16px, 4vw, 40px)',
-      border: '1px dashed var(--border-subtle)',
-      borderRadius: '16px',
-      color: 'var(--text-secondary)',
-    }}
-  >
-    <FolderOpen size={28} color="var(--accent-teal)" />
-    <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)' }}>{title}</div>
-    <div style={{ fontSize: '0.88rem', maxWidth: '420px' }}>
-      Pick one of your studies to work in, or start a new one.
-    </div>
-    <div style={{ display: 'flex', gap: '10px', marginTop: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-      <button
-        type="button"
-        onClick={onPickStudy}
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border-subtle)',
-          color: 'var(--text-main)',
-          borderRadius: '8px',
-          padding: '10px 18px',
-          fontSize: '0.85rem',
-          fontWeight: 600,
-          cursor: 'pointer',
-        }}
-      >
-        Choose a study
-      </button>
-      <button
-        type="button"
-        onClick={onCreateStudy}
-        style={{
-          background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-          border: 'none',
-          color: 'var(--text-on-accent)',
-          borderRadius: '8px',
-          padding: '10px 18px',
-          fontSize: '0.85rem',
-          fontWeight: 700,
-          cursor: 'pointer',
-        }}
-      >
-        New study
-      </button>
-    </div>
+  <div style={{ padding: '24px var(--page-x)' }}>
+    <EmptyState
+      icon={<FolderOpen size={22} />}
+      title={title}
+      description="Interviews, behavioral tests, evidence and segments all belong to a study. Pick one of your studies to work in, or start a new one."
+      actions={
+        <>
+          <Button variant="secondary" onClick={onPickStudy}>
+            Choose a study
+          </Button>
+          <Button variant="primary" onClick={onCreateStudy}>
+            New study
+          </Button>
+        </>
+      }
+    />
   </div>
 );
 
@@ -221,7 +205,7 @@ const parseDashboardPath = (path: string): {
   return { tab: 'new-study' };
 };
 
-export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingPage }) => {
+export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingPage, health = null }) => {
   const { user, logout } = useAuth();
   const { currentPath, navigate } = useNavigation();
   const { theme, toggleTheme } = useTheme();
@@ -468,43 +452,171 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       id: 'new-study' as DashboardTab,
       label: 'New Study',
       icon: <PenSquare size={16} />,
+      group: 'workspace' as const,
     },
     {
       id: 'dashboard' as DashboardTab,
       label: 'Dashboard',
       icon: <LayoutGrid size={16} />,
+      group: 'workspace' as const,
     },
     {
       id: 'personas' as DashboardTab,
       label: 'Persona Library',
       icon: <Contact2 size={16} />,
+      group: 'workspace' as const,
     },
     {
       id: 'interviews' as DashboardTab,
       label: 'Interviews',
       icon: <MessageSquare size={16} />,
+      group: 'study' as const,
     },
     {
       id: 'behavioral-tests' as DashboardTab,
       label: 'Behavioral Testing',
       icon: <Sliders size={16} />,
+      group: 'study' as const,
     },
     {
       id: 'evidence' as DashboardTab,
       label: 'Evidence Laboratory',
       icon: <FlaskConical size={16} />,
+      group: 'study' as const,
     },
     {
       id: 'segmentation' as DashboardTab,
       label: 'Audience Segments',
       icon: <PieChart size={16} />,
+      group: 'study' as const,
     },
     {
       id: 'router' as DashboardTab,
-      label: 'AI Provider Status',
+      label: 'Routing & Provenance',
       icon: <Cpu size={16} />,
+      group: 'system' as const,
     },
   ];
+  const NAV_GROUPS: { id: 'workspace' | 'study' | 'system'; label: string }[] = [
+    { id: 'workspace', label: 'Workspace' },
+    { id: 'study', label: 'Study' },
+    { id: 'system', label: 'System' },
+  ];
+  // Tabs that live inside a study map onto the Study group for breadcrumbs.
+  const TAB_TO_NAV: Partial<Record<DashboardTab, DashboardTab>> = {
+    'interview-workspace': 'interviews',
+    'behavioral-test-detail': 'behavioral-tests',
+    'behavioral-compare': 'behavioral-tests',
+  };
+  const activeNavId = TAB_TO_NAV[activeTab] ?? activeTab;
+  const activeNav = navItems.find((n) => n.id === activeNavId);
+  const activeGroup = NAV_GROUPS.find((g) => g.id === activeNav?.group);
+
+  // Title of the study the Study-group tabs are scoped to. Recent list first;
+  // deep links to older studies fetch once.
+  const [activeStudyTitle, setActiveStudyTitle] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!activeStudyId) {
+      setActiveStudyTitle(undefined);
+      return;
+    }
+    const known = recentStudies.find((s) => s.id === activeStudyId);
+    if (known) {
+      setActiveStudyTitle(known.title);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getStudyById(activeStudyId)
+      .then((s) => {
+        if (!cancelled) setActiveStudyTitle(s?.title ?? undefined);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveStudyTitle(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStudyId, recentStudies]);
+
+  // Ctrl/⌘ K jump menu
+  const [cmdOpen, setCmdOpen] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+  const commandItems = useMemo<CommandItem[]>(() => {
+    const nav: CommandItem[] = navItems.map((n) => ({
+      id: `nav-${n.id}`,
+      label: n.label,
+      group: n.group === 'study' ? 'Study' : n.group === 'system' ? 'System' : 'Workspace',
+      icon: n.icon,
+      hint: n.group === 'study' && !activeStudyId ? 'pick a study' : undefined,
+      keywords: n.id === 'router' ? ['ai', 'models', 'provenance', 'routing', 'health'] : undefined,
+      onSelect: () => handleTabClick(n.id),
+    }));
+    const studies: CommandItem[] = recentStudies.map((s) => ({
+      id: `study-${s.id}`,
+      label: s.title && s.title !== 'Untitled Study' ? s.title : 'Untitled study',
+      group: 'Recent studies',
+      icon: <FolderOpen size={14} />,
+      hint: `Step ${s.step || 1}${s.status === 'completed' ? ' · complete' : ''}`,
+      keywords: ['open', 'study', 'research'],
+      onSelect: () => handleOpenStudy(s.id, s.step || 1),
+    }));
+    const actions: CommandItem[] = [
+      {
+        id: 'act-theme',
+        label: theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
+        group: 'Actions',
+        icon: theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />,
+        keywords: ['theme', 'appearance'],
+        onSelect: toggleTheme,
+      },
+      ...(onOpenLandingPage
+        ? [
+            {
+              id: 'act-site',
+              label: 'Open marketing site',
+              group: 'Actions',
+              icon: <Globe size={14} />,
+              onSelect: onOpenLandingPage,
+            } as CommandItem,
+          ]
+        : []),
+      {
+        id: 'act-signout',
+        label: 'Sign out',
+        group: 'Actions',
+        icon: <LogOut size={14} />,
+        onSelect: () => {
+          logout();
+          if (onOpenLandingPage) onOpenLandingPage();
+          else navigate('/');
+        },
+      },
+    ];
+    return [...nav, ...studies, ...actions];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recentStudies, activeStudyId, theme, onOpenLandingPage]);
+
+  const healthLabel = backendDown
+    ? 'Backend unreachable'
+    : api.isMockMode()
+      ? 'Sample data'
+      : health?.demo_mode
+        ? 'Demo mode'
+        : health
+          ? 'Backend connected'
+          : 'Connecting…';
+  const healthTone = backendDown ? 'error' : api.isMockMode() || health?.demo_mode ? 'warn' : health ? 'success' : undefined;
 
   return (
     <div
@@ -522,6 +634,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       {/* Ambient light field — glass chrome picks up this static glow */}
       <div className="bx-ambient" aria-hidden="true" />
 
+      {/* Keyboard users skip the sidebar entirely */}
+      <a href="#bx-main" className="bx-skip-link">
+        Skip to main content
+      </a>
+
+      <CommandMenu open={cmdOpen} onClose={() => setCmdOpen(false)} items={commandItems} />
+
       {/* Mobile drawer backdrop */}
       {isMobile && isMobileNavOpen && (
         <div
@@ -535,7 +654,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
          ============================================================ */}
       <aside
         style={{
-          width: isSidebarCollapsed ? '72px' : isMobile ? '280px' : '240px',
+          width: isSidebarCollapsed ? '72px' : isMobile ? '280px' : '256px',
           background: isMobile ? 'var(--glass-strong)' : 'var(--glass-soft)',
           backdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
           WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
@@ -610,47 +729,56 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             </button>
           </div>
 
-          {/* Navigation Links */}
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '28px' }}>
-            {navItems.map((item) => {
-              const isActive = activeTab === item.id;
+          {/* Navigation Links — grouped by scope so the console reads as
+              Workspace / Study / System instead of a flat list */}
+          <nav aria-label="Primary" style={{ marginBottom: '8px' }}>
+            {NAV_GROUPS.map((group) => {
+              const items = navItems.filter((n) => n.group === group.id);
+              const isStudyGroup = group.id === 'study';
               return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleTabClick(item.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    justifyContent: isSidebarCollapsed ? 'center' : 'flex-start',
-                    width: '100%',
-                    padding: isSidebarCollapsed ? '10px 0' : '10px 12px',
-                    borderRadius: '10px',
-                    background: isActive ? 'var(--accent-subtle)' : 'transparent',
-                    color: isActive ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-                    border: isActive ? '1px solid var(--accent-glow)' : '1px solid transparent',
-                    fontSize: '0.86rem',
-                    fontWeight: isActive ? 600 : 400,
-                    cursor: 'pointer',
-                    transition: 'all 0.18s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.color = 'var(--text-main)';
-                      e.currentTarget.style.background = 'var(--fill-soft)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.color = 'var(--text-secondary)';
-                      e.currentTarget.style.background = 'transparent';
-                    }
-                  }}
-                >
-                  <span style={{ color: isActive ? 'var(--accent-teal)' : 'var(--text-secondary)' }}>{item.icon}</span>
-                  {!isSidebarCollapsed && <span>{item.label}</span>}
-                </button>
+                <div key={group.id} className="bx-nav-group">
+                  {!isSidebarCollapsed && (
+                    <div className="bx-nav-group__label">
+                      <span>{group.label}</span>
+                    </div>
+                  )}
+                  {isStudyGroup && !isSidebarCollapsed && (
+                    activeStudyId ? (
+                      <button
+                        type="button"
+                        className="bx-study-chip"
+                        aria-current={activeTab === 'study-workflow' ? 'page' : undefined}
+                        onClick={() => handleOpenStudy(activeStudyId, activeStep || 1)}
+                        title={`Open “${activeStudyTitle || 'this study'}” workflow`}
+                      >
+                        <FolderOpen size={13} color="var(--accent-teal)" aria-hidden="true" />
+                        <span className="bx-study-chip__title">{activeStudyTitle || 'Current study'}</span>
+                        <span className="bx-study-chip__hint">{activeTab === 'study-workflow' ? `Step ${activeStep || 1}` : 'Open'}</span>
+                      </button>
+                    ) : (
+                      <div className="bx-study-chip bx-study-chip--empty" aria-live="polite">
+                        <span className="bx-study-chip__title">No study selected</span>
+                      </div>
+                    )
+                  )}
+                  {items.map((item) => {
+                    const isActive = activeNavId === item.id;
+                    const needsStudy = isStudyGroup && !activeStudyId;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleTabClick(item.id)}
+                        aria-current={isActive ? 'page' : undefined}
+                        className={`bx-nav-item${isSidebarCollapsed ? ' bx-nav-item--collapsed' : ''}${needsStudy && !isActive ? ' bx-nav-item--muted' : ''}`}
+                        title={isSidebarCollapsed ? item.label : needsStudy ? `${item.label} — pick a study first` : undefined}
+                      >
+                        <span className="bx-nav-item__icon">{item.icon}</span>
+                        {!isSidebarCollapsed && <span className="bx-nav-item__label">{item.label}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </nav>
@@ -662,23 +790,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 type="button"
                 onClick={() => setIsRecentStudiesOpen(!isRecentStudiesOpen)}
                 aria-expanded={isRecentStudiesOpen}
+                className="bx-nav-group__label"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
                   width: '100%',
                   background: 'none',
                   border: 'none',
                   fontFamily: 'inherit',
                   textAlign: 'left',
-                  padding: '4px 12px',
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  color: 'var(--text-secondary)',
                   cursor: 'pointer',
-                  marginBottom: '6px',
+                  padding: '4px 12px',
                 }}
               >
                 <span>Recent Studies</span>
@@ -1071,7 +1191,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   background: 'transparent',
                   border: 'none',
                   outline: 'none',
-                  color: '#EF4444',
+                  color: 'var(--status-error-text)',
                   fontSize: '0.82rem',
                   fontWeight: 500,
                   textAlign: 'left',
@@ -1079,7 +1199,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   borderRadius: '8px',
                   transition: 'background 0.15s ease',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--status-error-bg)')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
                 <LogOut size={14} /> Sign Out
@@ -1092,7 +1212,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       {/* ============================================================
           MAIN VIEW AREA
          ============================================================ */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative', zIndex: 1 }}>
+      <main id="bx-main" tabIndex={-1} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative', zIndex: 1, outline: 'none' }}>
         {/* Mobile top bar — opens the nav drawer */}
         {isMobile && (
           <div
@@ -1137,25 +1257,50 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           </div>
         )}
 
-        {/* Top Greeting Header Bar (Screenshot 1) */}
+        {/* Top bar — where am I, jump anywhere, is the backend alive */}
         {activeTab !== 'study-workflow' && (
-          <header
-            style={{
-              padding: '20px clamp(16px, 4vw, 40px) 0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '0.95rem',
-                color: 'var(--text-primary)',
-                fontWeight: 500,
-                letterSpacing: '-0.01em',
-              }}
-            >
-              {getGreeting()}, {displayName}
+          <header className="bx-topbar">
+            <nav className="bx-topbar__crumbs" aria-label="Breadcrumb">
+              <ol>
+                {activeGroup && <li>{activeGroup.label}</li>}
+                {activeGroup && activeNav && (
+                  <li aria-hidden="true" className="bx-topbar__crumb-sep">
+                    <ChevronRight size={13} />
+                  </li>
+                )}
+                {activeNav && <li aria-current="page">{activeNav.label}</li>}
+                {activeNav?.group === 'study' && activeStudyTitle && (
+                  <>
+                    <li aria-hidden="true" className="bx-topbar__crumb-sep">
+                      <ChevronRight size={13} />
+                    </li>
+                    <li style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{activeStudyTitle}</li>
+                  </>
+                )}
+              </ol>
+            </nav>
+            <div className="bx-topbar__right">
+              <span className="bx-topbar__greeting">
+                {getGreeting()}, {displayName}
+              </span>
+              <button
+                type="button"
+                className="bx-cmdk-trigger"
+                onClick={() => setCmdOpen(true)}
+                aria-label="Open command menu"
+                aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
+              >
+                <Search size={14} aria-hidden="true" />
+                <span className="bx-cmdk-trigger__label">Search or jump to…</span>
+                <span className="bx-cmdk-trigger__keys" aria-hidden="true">
+                  <span className="bx-kbd">{isMac ? <Command size={9} /> : 'Ctrl'}</span>
+                  <span className="bx-kbd">K</span>
+                </span>
+              </button>
+              <span className="bx-health" role="status" title={healthLabel}>
+                <span className={`bx-dot${healthTone ? ` bx-dot--${healthTone}` : ''}${healthTone === 'success' ? ' bx-dot--live' : ''}`} aria-hidden="true" />
+                <span className="bx-health__label">{healthLabel}</span>
+              </span>
             </div>
           </header>
         )}
@@ -1208,8 +1353,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               alignItems: 'flex-start',
               justifyContent: 'space-between',
               gap: '14px',
-              background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: 'var(--status-error-bg)',
+              border: '1px solid var(--status-error-border)',
               borderRadius: '12px',
               padding: '12px 16px',
             }}
@@ -1488,10 +1633,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         </div>
       </main>
 
-      {/* Honest-state banner: fixtures must never pass as live research data */}
-      {backendDown && (
+      {/* Honest-state banners: fixtures / cached demo results must never pass as live research data */}
+      {(backendDown || api.isMockMode() || health?.demo_mode) && (
         <div
-          role="status"
           style={{
             position: 'fixed',
             bottom: '16px',
@@ -1499,21 +1643,27 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             transform: 'translateX(-50%)',
             zIndex: 90,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            gap: '10px',
-            padding: '8px 16px',
-            borderRadius: '999px',
-            background: 'rgba(245, 158, 11, 0.12)',
-            border: '1px solid rgba(245, 158, 11, 0.4)',
-            color: '#F59E0B',
-            fontSize: '0.78rem',
-            fontWeight: 600,
-            backdropFilter: 'blur(8px)',
+            gap: '8px',
+            pointerEvents: 'none',
           }}
         >
-          {api.isMockMode()
-            ? 'Showing sample data — backend unreachable. Data shown here is not live research output.'
-            : "Backend unreachable — your studies can't be loaded right now. Nothing shown here is missing data; it simply hasn't loaded."}
+          {backendDown && (
+            <div role="status" style={{ ...honestPillStyle, pointerEvents: 'auto' }}>
+              Backend unreachable — your studies can&apos;t be loaded right now. Nothing shown here is missing data; it simply hasn&apos;t loaded.
+            </div>
+          )}
+          {api.isMockMode() && (
+            <div role="status" data-testid="mock-mode-banner" style={{ ...honestPillStyle, pointerEvents: 'auto' }}>
+              Showing sample data (mock mode) — nothing here is live research output.
+            </div>
+          )}
+          {health?.demo_mode && (
+            <div role="status" data-testid="demo-mode-banner" style={{ ...honestPillStyle, pointerEvents: 'auto', color: 'var(--accent-cyan)', background: 'rgba(34, 211, 238, 0.12)', border: '1px solid rgba(34, 211, 238, 0.4)' }}>
+              Demo mode — cached results are labeled CACHED wherever they appear.
+            </div>
+          )}
         </div>
       )}
 

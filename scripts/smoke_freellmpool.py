@@ -7,10 +7,9 @@ Exit code 0 on success. Not part of the unit suite (RULES.md R7).
 import asyncio
 import sys
 
-from dotenv import load_dotenv
-
 from bebshax.llm import ChatMessage, LLMRequest, SingleAdapterLLMService, TaskType
 from bebshax.llm.adapters.freellmpool_adapter import FreellmpoolAdapter
+from dotenv import load_dotenv
 
 
 async def main() -> int:

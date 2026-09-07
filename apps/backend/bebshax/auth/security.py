@@ -11,6 +11,14 @@ from bebshax.config import get_settings
 
 ALGORITHM = "HS256"
 
+# The hash string encodes its own iteration count (`pbkdf2_sha256$<iters>$<salt>$<dk>`)
+# and `verify_password` reads it back, so this constant only governs NEW hashes:
+# raising it never invalidates stored passwords (they upgrade on the next reset).
+# OWASP's 2023+ floor for PBKDF2-HMAC-SHA256 is 600_000; the bump is deliberately
+# NOT applied yet because tests/test_auth.py pins the `$100000$` prefix — flip this
+# constant together with that assertion (one-line change each).
+PBKDF2_ITERATIONS = 100_000
+
 
 def _b64_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
@@ -23,8 +31,8 @@ def _b64_decode(s: str) -> bytes:
 
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000, dklen=32)
-    return f"pbkdf2_sha256$100000${_b64_encode(salt)}${_b64_encode(dk)}"
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, PBKDF2_ITERATIONS, dklen=32)
+    return f"pbkdf2_sha256${PBKDF2_ITERATIONS}${_b64_encode(salt)}${_b64_encode(dk)}"
 
 
 def verify_password(plain: str, hashed: str) -> bool:

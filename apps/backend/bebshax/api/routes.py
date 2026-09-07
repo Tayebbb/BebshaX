@@ -108,6 +108,17 @@ async def get_routing_capacity(request: Request) -> dict[str, Any]:
     }
 
 
+def redact_attempts(attempts: list[Any]) -> list[Any]:
+    """Drop ``failure_detail`` (raw provider error bodies can echo request
+    fragments) while keeping the classified ``failure_kind``."""
+    redacted: list[Any] = []
+    for attempt in attempts or []:
+        if isinstance(attempt, dict) and "failure_detail" in attempt:
+            attempt = {**attempt, "failure_detail": None}
+        redacted.append(attempt)
+    return redacted
+
+
 @router.get("/provenance")
 async def get_provenance(
     request: Request,
@@ -122,14 +133,15 @@ async def get_provenance(
 
     Tenant-scoped (B6 stage 3): rows tied to a persona are only visible to
     that persona's owner; infra rows (no persona, or orphaned persona id)
-    and shared/system personas are visible to everyone.
+    and shared/system personas are visible to everyone. ``failure_detail`` is
+    only served on rows the caller owns — everyone else sees ``failure_kind``.
     """
     sessionmaker_ = getattr(request.app.state, "db_sessionmaker", None)
     if not sessionmaker_:
         return {"items": [], "total": 0}
 
     async with sessionmaker_() as session:
-        query = select(LLMRequests).order_by(desc(LLMRequests.created_at))
+        query = select(LLMRequests, Personas.owner_id).order_by(desc(LLMRequests.created_at))
 
         # Same shared-owner set as every row-scoping rule (bebshax.tenancy).
         scope_terms = [
@@ -155,10 +167,11 @@ async def get_provenance(
         total_stmt = select(func.count()).select_from(query.subquery())
         total = (await session.execute(total_stmt)).scalar_one_or_none() or 0
 
-        rows = (await session.execute(query.limit(limit))).scalars().all()
+        rows = (await session.execute(query.limit(limit))).all()
 
         items = []
-        for r in rows:
+        for r, owner_id in rows:
+            owned = current_user is not None and owner_id == current_user.id
             items.append(
                 {
                     "request_id": r.request_id,
@@ -168,7 +181,7 @@ async def get_provenance(
                     "conversation_id": r.conversation_id,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
                     "routing_path": r.routing_path or [],
-                    "attempts": r.attempts or [],
+                    "attempts": (r.attempts or []) if owned else redact_attempts(r.attempts or []),
                     "served_by_provider": r.served_by_provider,
                     "served_by_model": r.response_model or r.request_model,
                     "input_tokens": r.input_tokens,

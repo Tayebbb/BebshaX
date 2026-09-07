@@ -148,7 +148,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <MessageSquare className="w-4 h-4 text-teal-400" />
           </div>
           <div className="text-2xl font-black text-white"><CountUp value={metrics.total_interviews} /></div>
-          <p className="text-[11px] text-[var(--text-muted)]">Recorded research sessions</p>
+          <p className="text-[0.72rem] text-[var(--text-muted)]">Recorded research sessions</p>
         </div>
 
         <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
@@ -157,7 +157,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <Activity className="w-4 h-4 text-cyan-400" />
           </div>
           <div className="text-2xl font-black text-cyan-400"><CountUp value={metrics.active_interviews} /></div>
-          <p className="text-[11px] text-[var(--text-muted)]">Conversations in progress</p>
+          <p className="text-[0.72rem] text-[var(--text-muted)]">Conversations in progress</p>
         </div>
 
         <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
@@ -166,7 +166,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-black text-emerald-400"><CountUp value={metrics.completed_interviews} /></div>
-          <p className="text-[11px] text-[var(--text-muted)]">Synthesized sessions</p>
+          <p className="text-[0.72rem] text-[var(--text-muted)]">Synthesized sessions</p>
         </div>
 
         <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
@@ -177,7 +177,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
           <div className="text-2xl font-black text-amber-400">
             <CountUp value={metrics.total_insights_generated} />
           </div>
-          <p className="text-[11px] text-[var(--text-muted)]">Turn-provenance claims</p>
+          <p className="text-[0.72rem] text-[var(--text-muted)]">Turn-provenance claims</p>
         </div>
       </div>
 
@@ -264,7 +264,8 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
           {filteredInterviews.map((item) => {
             const isCompleted = item.status === 'completed';
             const turnsCount = item.turn_count || 0;
-            const maxTurns = item.max_turns || 14;
+            // A missing max_turns is unknown, not "14" — the bar and label say so.
+            const maxTurns = typeof item.max_turns === 'number' && item.max_turns > 0 ? item.max_turns : null;
             const exploredCount = Object.values(item.topics_explored || {}).filter(
               (v) => v === 'explored'
             ).length;
@@ -295,14 +296,14 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                         <h3 className="text-sm font-bold text-white group-hover:text-teal-300 transition-colors line-clamp-1">
                           {item.persona_name || 'Synthetic Persona'}
                         </h3>
-                        <p className="text-[11px] text-[var(--text-secondary)] line-clamp-1">
+                        <p className="text-[0.72rem] text-[var(--text-secondary)] line-clamp-1">
                           {item.persona_occupation || 'Target Customer Archetype'}
                         </p>
                       </div>
                     </div>
 
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${
+                      className={`px-2 py-0.5 rounded-full text-[0.72rem] font-bold border shrink-0 ${
                         isCompleted
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                           : 'bg-teal-500/10 text-teal-400 border-teal-500/30 flex items-center gap-1'
@@ -317,7 +318,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
 
                   {/* Objective & Tier */}
                   <div className="bg-[var(--bg-card-hover)] border border-[var(--border-subtle)] rounded-xl p-2.5 text-xs space-y-1">
-                    <div className="text-[10px] text-[var(--text-muted)] font-semibold uppercase tracking-wider">
+                    <div className="text-[0.72rem] text-[var(--text-muted)] font-semibold uppercase tracking-wider">
                       Research Objective
                     </div>
                     <div className="text-white font-medium text-xs line-clamp-1">
@@ -330,20 +331,23 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                 <div className="space-y-3 pt-2 border-t border-white/5 text-xs text-[var(--text-secondary)]">
                   {/* Turn Progress */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span>Turns: <strong className="text-white">{turnsCount}</strong> / {maxTurns}</span>
+                    <div className="flex items-center justify-between text-[0.72rem]">
+                      <span>
+                        Turns: <strong className="text-white">{turnsCount}</strong>
+                        {maxTurns !== null ? ` / ${maxTurns}` : ''}
+                      </span>
                       <span className="text-teal-400 capitalize font-medium">{item.length_tier} Tier</span>
                     </div>
                     <div className="w-full h-1.5 bg-[var(--border-subtle)] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-teal-500 to-cyan-400"
-                        style={{ width: `${Math.min(100, (turnsCount / maxTurns) * 100)}%` }}
+                        style={{ width: maxTurns !== null ? `${Math.min(100, (turnsCount / maxTurns) * 100)}%` : '0%' }}
                       />
                     </div>
                   </div>
 
                   {/* Explored Topics & Insights Badges */}
-                  <div className="flex items-center justify-between text-[11px] pt-1">
+                  <div className="flex items-center justify-between text-[0.72rem] pt-1">
                     <span className="flex items-center gap-1 text-[var(--text-secondary)]">
                       <Layers className="w-3.5 h-3.5 text-cyan-400" />
                       {exploredCount} topics explored

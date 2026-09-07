@@ -5,11 +5,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from bebshax.db.models import Base
+
+# One row per (conversation, turn_number): concurrent turns used to persist
+# duplicate numbers (migration e1f2a3b4c5d6 backfills + enforces this).
+TURN_NUMBER_UNIQUE = "uq_conversation_turns_conversation_turn"
 
 
 def _utcnow() -> datetime:
@@ -62,6 +66,9 @@ Interviews = Conversations
 
 class ConversationTurns(Base):
     __tablename__ = "conversation_turns"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "turn_number", name=TURN_NUMBER_UNIQUE),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     conversation_id: Mapped[str] = mapped_column(

@@ -2,6 +2,8 @@ import {
   Business,
   Conversation,
   ConversationTurn,
+  DemoLabRunResult,
+  DemoLabScenariosResponse,
   EvaluationMetrics,
   HealthResponse,
   MemoryItem,
@@ -36,6 +38,7 @@ import {
 } from '../types/dataset';
 import { neonAuth } from './neonAuth';
 import { createResearchApi } from './researchApi';
+import { parseApiError, toApiErrorInstance, ApiErrorLike } from '../utils/apiError';
 
 const API_BASE = import.meta.env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 
@@ -66,6 +69,19 @@ const authError = (message: string, code: string = 'AUTH_SERVER_ERROR'): Error &
   const err = new Error(message) as Error & { code: string };
   err.code = code;
   return err;
+};
+
+/** Read a failed response's error envelope (`detail`/`error_code`/`request_id`/
+ * `attempts`…) and build the Error callers receive. A 422 array `detail` is
+ * summarised — never "[object Object]" — and the request id falls back to the
+ * `X-Request-ID` header so every banner can quote it. */
+const apiErrorFrom = async (res: Response, fallback: string): Promise<ApiErrorLike> => {
+  const body = await res.json().catch(() => ({}));
+  const parsed = parseApiError(body, res.status, `${fallback} (HTTP ${res.status})`);
+  if (!parsed.requestId && typeof res.headers?.get === 'function') {
+    parsed.requestId = res.headers.get('X-Request-ID');
+  }
+  return toApiErrorInstance(parsed);
 };
 
 /** Lazily-loaded mock layer (MockStore + fixtures, ~1.8k lines). A static
@@ -246,8 +262,7 @@ export const api = {
           return created;
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Failed to create business' }));
-        throw new Error(err.detail || err.message || `Failed to create business (HTTP ${res.status})`);
+        throw await apiErrorFrom(res, 'Failed to create business');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -332,9 +347,11 @@ export const api = {
               persona_id: d.persona_id,
               kind: d.kind,
               text: d.text,
-              importance: d.importance ?? 0.8,
-              recency_weight: 0.9,
-              relevance_score: 0.95,
+              // The backend reports importance only; recency/relevance are
+              // retrieval-time scores it does not expose here — stay null.
+              importance: typeof d.importance === 'number' ? d.importance : null,
+              recency_weight: null,
+              relevance_score: null,
               created_at: d.created_at,
             }));
           }
@@ -412,10 +429,7 @@ export const api = {
           return conv;
         }
         lastKnownLive = false;
-        const errorData = await res.json().catch(() => ({ detail: `Failed to start conversation (${res.status})` }));
-        const e = new Error(errorData.detail || errorData.message || 'Failed to start conversation') as Error & { status?: number };
-        e.status = res.status;
-        throw e;
+        throw await apiErrorFrom(res, 'Failed to start conversation');
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -477,10 +491,7 @@ export const api = {
           return { userTurn, assistantTurn };
         }
         lastKnownLive = false;
-        const errorData = await res.json().catch(() => ({ detail: `Interview message failed with status ${res.status}` }));
-        const e = new Error(errorData.detail || errorData.message || 'Interview message failed') as Error & { status?: number };
-        e.status = res.status;
-        throw e;
+        throw await apiErrorFrom(res, 'Interview message failed');
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -541,6 +552,38 @@ export const api = {
     }
     const { mockEvaluationMetrics } = await loadMocks();
     return mockEvaluationMetrics;
+  },
+
+  // 8b. Judge Lab (demo-lab): scripted adapters driving the REAL routing code.
+  /** Resolves to null when the lab is disabled (404) so callers hide the panel;
+   * other failures rethrow. */
+  async getDemoLabScenarios(): Promise<DemoLabScenariosResponse | null> {
+    if (!this.isMockMode()) {
+      const res = await fetch(`${API_BASE}/demo-lab/scenarios`, {
+        headers: this.getAuthHeaders(),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
+      });
+      if (res.status === 404) return null;
+      if (!res.ok) throw await apiErrorFrom(res, 'Failed to load judge lab scenarios');
+      return await res.json();
+    }
+    const { mockDemoLabScenarios } = await loadMocks();
+    return mockDemoLabScenarios;
+  },
+
+  async runDemoLabScenario(name: string): Promise<DemoLabRunResult> {
+    if (!this.isMockMode()) {
+      const res = await fetch(`${API_BASE}/demo-lab/scenarios/${encodeURIComponent(name)}/run`, {
+        method: 'POST',
+        headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+        // Scripted adapters answer fast, but the real router still runs.
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
+      });
+      if (!res.ok) throw await apiErrorFrom(res, 'Judge lab scenario failed');
+      return await res.json();
+    }
+    const { mockDemoLabRun } = await loadMocks();
+    return mockDemoLabRun(name);
   },
 
   // 9. Authentication & User Management (JWT + Neon DB)
@@ -1109,8 +1152,7 @@ export const api = {
           return created;
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Failed to create study' }));
-        throw new Error(err.detail || err.message || `Failed to create study (HTTP ${res.status})`);
+        throw await apiErrorFrom(res, 'Failed to create study');
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -1165,8 +1207,7 @@ export const api = {
           return updated;
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Failed to update study' }));
-        throw new Error(err.detail || err.message || `Failed to update study (HTTP ${res.status})`);
+        throw await apiErrorFrom(res, 'Failed to update study');
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -1243,8 +1284,7 @@ export const api = {
           return await res.json();
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Failed to save audience' }));
-        throw new Error(err.detail || err.message || `Failed to save audience (HTTP ${res.status})`);
+        throw await apiErrorFrom(res, 'Failed to save audience');
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -1296,6 +1336,9 @@ export const api = {
     } | null;
     suggested_roles?: PersonaRoleSuggestion[];
     served_by: string;
+    /** Set by the backend when the reply came from its keyword-template engine
+     * instead of an LLM (e.g. `llm_error:TimeoutError`, `llm_router_unavailable`). */
+    fallback_reason?: string | null;
   }> {
     if (!this.isMockMode()) {
       try {
@@ -1314,10 +1357,7 @@ export const api = {
           return await res.json();
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Copilot turn failed' }));
-        const e = new Error(err.detail || `Copilot turn failed (HTTP ${res.status})`) as Error & { status?: number };
-        e.status = res.status;
-        throw e;
+        throw await apiErrorFrom(res, 'Copilot turn failed');
       } catch (err) {
         // Live mode never falls back to the local canned engine — a fabricated
         // "LLM reply" is worse than a visible failure.
@@ -1344,8 +1384,7 @@ export const api = {
           return await res.json();
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Role suggestion failed' }));
-        throw new Error(err.detail || `Role suggestion failed (HTTP ${res.status})`);
+        throw await apiErrorFrom(res, 'Role suggestion failed');
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -1378,10 +1417,7 @@ export const api = {
       });
       if (!res.ok) {
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Persona generation failed' }));
-        const e = new Error(err.detail || 'Persona generation failed') as Error & { status?: number };
-        e.status = res.status;
-        throw e;
+        throw await apiErrorFrom(res, 'Persona generation failed');
       }
       lastKnownLive = true;
       const data = await res.json();
@@ -1535,8 +1571,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to ingest dataset URL');
+        throw await apiErrorFrom(res, 'Failed to ingest dataset URL');
       } catch (e: any) {
         // Live mode: connectivity loss surfaces — no fabricated dataset rows.
         lastKnownLive = false;
@@ -1602,8 +1637,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to upload dataset');
+        throw await apiErrorFrom(res, 'Failed to upload dataset');
       } catch (e: any) {
         // Live mode: connectivity loss surfaces — no fabricated dataset rows.
         lastKnownLive = false;
@@ -1797,8 +1831,7 @@ export const api = {
           return await res.json();
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Dataset persona generation failed' }));
-        throw new Error(err.detail || `Dataset persona generation failed (HTTP ${res.status})`);
+        throw await apiErrorFrom(res, 'Dataset persona generation failed');
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -1953,8 +1986,7 @@ export const api = {
           return await res.json();
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Segmentation run failed' }));
-        throw new Error(err.detail || `Segmentation run failed (HTTP ${res.status})`);
+        throw await apiErrorFrom(res, 'Segmentation run failed');
       } catch (err) {
         // Fabricated "data_backed" segments would poison the research — fail visibly.
         lastKnownLive = false;
@@ -2680,8 +2712,7 @@ export const api = {
           signal: AbortSignal.timeout(TIMEOUT_MS.POLL),
         });
         if (res.status === 404) {
-          const err = await res.json().catch(() => ({ detail: 'job not found' }));
-          throw Object.assign(new Error(err.detail || 'job not found'), { isJobFailure: true });
+          throw Object.assign(await apiErrorFrom(res, 'job not found'), { isJobFailure: true });
         }
         if (!res.ok) throw new Error(`poll ${res.status}`);
         transientFailures = 0;
@@ -2752,12 +2783,10 @@ export const api = {
             return await res.json();
           }
           lastKnownLive = false;
-          const err = await res.json().catch(() => ({ detail: 'Persona generation failed' }));
-          throw new Error(err.detail || `Persona generation failed (HTTP ${res.status})`);
+          throw await apiErrorFrom(res, 'Persona generation failed');
         }
         lastKnownLive = false;
-        const jobErr = await jobRes.json().catch(() => ({ detail: 'Persona generation failed' }));
-        throw new Error(jobErr.detail || `Persona generation failed (HTTP ${jobRes.status})`);
+        throw await apiErrorFrom(jobRes, 'Persona generation failed');
       } catch (e) {
         // Live mode never degrades into a fabricated "completed" run —
         // honest job failures and connectivity loss both surface.
@@ -2803,8 +2832,7 @@ export const api = {
           return await res.json();
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Persona regeneration failed' }));
-        throw new Error(err.detail || `Persona regeneration failed (HTTP ${res.status})`);
+        throw await apiErrorFrom(res, 'Persona regeneration failed');
       } catch (err) {
         lastKnownLive = false;
         throw err;
@@ -2907,8 +2935,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to start interview' }));
-        throw new Error(err.detail || 'Failed to start interview');
+        throw await apiErrorFrom(res, 'Failed to start interview');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3066,8 +3093,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to send message' }));
-        throw new Error(err.detail || 'Failed to send message');
+        throw await apiErrorFrom(res, 'Failed to send message');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3096,11 +3122,8 @@ export const api = {
       }
     );
     if (!res.ok || !res.body) {
-      const err = await res.json().catch(() => ({ detail: `Stream failed (${res.status})` }));
-      const e = new Error(err.detail || 'Stream failed') as Error & { status?: number };
-      e.status = res.status;
       lastKnownLive = false;
-      throw e;
+      throw await apiErrorFrom(res, 'Stream failed');
     }
     lastKnownLive = true;
 
@@ -3123,7 +3146,9 @@ export const api = {
       if (event === 'delta') onDelta(data.text || '');
       else if (event === 'done') done = data;
       else if (event === 'error') {
-        const e = new Error(data.detail || 'interview turn failed') as Error & { kind?: string };
+        // Stream errors carry the same envelope fields as HTTP errors plus the
+        // backend failure `kind`; keep both so the workspace can classify.
+        const e = toApiErrorInstance(parseApiError(data, 502, 'interview turn failed')) as ApiErrorLike & { kind?: string };
         e.kind = data.kind;
         throw e;
       }
@@ -3165,8 +3190,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to complete interview' }));
-        throw new Error(err.detail || 'Failed to complete interview');
+        throw await apiErrorFrom(res, 'Failed to complete interview');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3211,8 +3235,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to create behavioral test' }));
-        throw new Error(err.detail || 'Failed to create behavioral test');
+        throw await apiErrorFrom(res, 'Failed to create behavioral test');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3282,8 +3305,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to fetch test detail' }));
-        throw new Error(err.detail || 'Failed to fetch test detail');
+        throw await apiErrorFrom(res, 'Failed to fetch test detail');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3304,8 +3326,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to update test' }));
-        throw new Error(err.detail || 'Failed to update test');
+        throw await apiErrorFrom(res, 'Failed to update test');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3345,8 +3366,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to start simulation run' }));
-        throw new Error(err.detail || 'Failed to start simulation run');
+        throw await apiErrorFrom(res, 'Failed to start simulation run');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3382,8 +3402,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to fetch run status' }));
-        throw new Error(err.detail || 'Failed to fetch run status');
+        throw await apiErrorFrom(res, 'Failed to fetch run status');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3407,8 +3426,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to retry failed simulations' }));
-        throw new Error(err.detail || 'Failed to retry failed simulations');
+        throw await apiErrorFrom(res, 'Failed to retry failed simulations');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3503,8 +3521,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Failed to fetch report' }));
-        throw new Error(err.detail || 'Failed to fetch report');
+        throw await apiErrorFrom(res, 'Failed to fetch report');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3545,15 +3562,9 @@ export const api = {
             lastKnownLive = true;
             return await res.json();
           }
-          const err = await res.json().catch(() => ({ detail: 'Report generation failed' }));
-          const e = new Error(err.detail || 'Report generation failed') as Error & { status?: number };
-          e.status = res.status;
-          throw e;
+          throw await apiErrorFrom(res, 'Report generation failed');
         }
-        const err = await jobRes.json().catch(() => ({ detail: 'Report generation failed' }));
-        const e = new Error(err.detail || 'Report generation failed') as Error & { status?: number };
-        e.status = jobRes.status;
-        throw e;
+        throw await apiErrorFrom(jobRes, 'Report generation failed');
       } catch (e) {
         // Honest job failures mean the backend responded fine — only genuine
         // connectivity loss should mark it dead.
@@ -3568,7 +3579,14 @@ export const api = {
     studyId: string,
     prompt?: string,
     count = 5
-  ): Promise<{ study_id: string; questions: string[]; count: number }> {
+  ): Promise<{
+    study_id: string;
+    questions: string[];
+    count: number;
+    /** 'llm' = written for this study; 'fallback_static' = canned starter questions. */
+    source?: 'llm' | 'fallback_static';
+    fallback_reason?: string | null;
+  }> {
     if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/script/generate`, {
@@ -3582,10 +3600,7 @@ export const api = {
           return await res.json();
         }
         lastKnownLive = false;
-        const err = await res.json().catch(() => ({ detail: 'Script generation failed' }));
-        const e = new Error(err.detail || `Script generation failed (HTTP ${res.status})`) as Error & { status?: number };
-        e.status = res.status;
-        throw e;
+        throw await apiErrorFrom(res, 'Script generation failed');
       } catch (err) {
         // Canned questions must never impersonate LLM output in live mode.
         lastKnownLive = false;
@@ -3602,6 +3617,8 @@ export const api = {
         'What is your primary concern before committing to this workflow?',
       ],
       count: 5,
+      // Mock mode is sample data end to end; label it as such rather than as LLM output.
+      source: 'llm',
     };
   },
 
@@ -3623,10 +3640,7 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-        const err = await res.json().catch(() => ({ detail: 'Batch interview run failed' }));
-        const e = new Error(err.detail || 'Batch interview run failed') as Error & { status?: number };
-        e.status = res.status;
-        throw e;
+        throw await apiErrorFrom(res, 'Batch interview run failed');
       } catch (e) {
         lastKnownLive = false;
         throw e;
@@ -3642,10 +3656,7 @@ export const api = {
         signal: AbortSignal.timeout(TIMEOUT_MS.POLL),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: `Batch status failed (${res.status})` }));
-        const e = new Error(err.detail || 'Batch status failed') as Error & { status?: number };
-        e.status = res.status;
-        throw e;
+        throw await apiErrorFrom(res, 'Batch status failed');
       }
       lastKnownLive = true;
       return await res.json();

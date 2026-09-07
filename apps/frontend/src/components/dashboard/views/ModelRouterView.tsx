@@ -1,24 +1,46 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Cpu,
   Activity,
   Shield,
   Layers,
-  CheckCircle2,
   AlertTriangle,
-  Clock,
   RefreshCw,
 } from 'lucide-react';
-import { RoutesStatusResponse, ProvenanceRecord } from '../../../types';
+import { RoutesStatusResponse, ProvenanceRecord, EvaluationMetrics } from '../../../types';
 import { api } from '../../../services/api';
+import { ProvenanceTraceRow } from './router/ProvenanceTraceRow';
+import { EvaluationCard } from './router/EvaluationCard';
+import { JudgeLabPanel } from './router/JudgeLabPanel';
+import { fmtCount } from './router/routerFormat';
 
+/** Developer-facing routing & provenance dashboard (RULES R11: internals live
+ * here only, clearly labelled). Every number is measured or rendered as "—". */
 export const ModelRouterView: React.FC = () => {
   const [routesStatus, setRoutesStatus] = useState<RoutesStatusResponse | null>(null);
   const [provenance, setProvenance] = useState<ProvenanceRecord[]>([]);
+  // Distinct "never loaded" state so the empty-traces copy cannot flash before
+  // the first response arrives.
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [evaluation, setEvaluation] = useState<EvaluationMetrics | null>(null);
+  const [evaluationLoading, setEvaluationLoading] = useState(true);
+  const [evaluationError, setEvaluationError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadEvaluation = useCallback(async () => {
+    setEvaluationLoading(true);
+    setEvaluationError(null);
+    try {
+      setEvaluation(await api.getEvaluationMetrics());
+    } catch (err: any) {
+      setEvaluation(null);
+      setEvaluationError(err?.message || 'metrics endpoint did not respond');
+    } finally {
+      setEvaluationLoading(false);
+    }
+  }, []);
+
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
     try {
@@ -36,12 +58,15 @@ export const ModelRouterView: React.FC = () => {
       setProvenance([]);
     } finally {
       setIsLoading(false);
+      setHasLoaded(true);
     }
-  };
+    // Evaluation is independent: its failure must not blank the health matrix.
+    void loadEvaluation();
+  }, [loadEvaluation]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    void loadData();
+  }, [loadData]);
 
   return (
     <div
@@ -73,10 +98,10 @@ export const ModelRouterView: React.FC = () => {
               margin: '0 0 6px 0',
             }}
           >
-            AI Provider Status
+            Routing &amp; Provenance
           </h1>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', margin: 0 }}>
-            Which AI providers are online right now, and how requests are being routed.
+            Which AI providers are online, how each request was routed, and what the evaluation log measures.
           </p>
         </div>
 
@@ -104,101 +129,80 @@ export const ModelRouterView: React.FC = () => {
         </button>
       </div>
 
-      {/* Grid: Architecture Overview */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
-          gap: '20px',
-          marginBottom: '32px',
-        }}
-      >
-        {/* Zero-Budget Routing Engine */}
+      {/* How routing works — static architecture, deliberately labelled as such */}
+      <section aria-labelledby="bx-router-arch" style={{ marginBottom: '36px' }}>
         <div
+          id="bx-router-arch"
+          style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: '10px' }}
+        >
+          How routing works — architecture, not live status
+        </div>
+        <dl
           style={{
-            background: 'var(--fill-soft)',
-            border: '1px solid var(--fill-soft-2)',
-            borderRadius: '16px',
-            padding: '24px',
-            boxShadow: 'var(--shadow-md)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))',
+            gap: '10px 32px',
+            margin: 0,
+            fontSize: '0.86rem',
+            lineHeight: 1.55,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <Cpu size={20} color="var(--accent-emerald)" />
-            <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
-              FreeLLMpool Routing Engine
-            </h2>
+          <div>
+            <dt style={{ color: 'var(--text-muted)' }}>Operational budget</dt>
+            <dd style={{ margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Zero API cost: free-tier aggregation across providers</dd>
           </div>
-          <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            {routesStatus?.providers && (
-              <div>
-                Providers reporting now:{' '}
-                <strong style={{ color: 'var(--text-main)' }}>{routesStatus.providers.length}</strong>
-              </div>
-            )}
-            <div
-              style={{
-                fontSize: '0.72rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                margin: '10px 0 2px',
-              }}
-            >
-              How routing works — architecture, not live status
+          <div>
+            <dt style={{ color: 'var(--text-muted)' }}>Reliability fallback</dt>
+            <dd style={{ margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Local Ollama model at the end of every pool</dd>
+          </div>
+          <div>
+            <dt style={{ color: 'var(--text-muted)' }}>Task Pool Design</dt>
+            <dd style={{ margin: 0, color: 'var(--text-main)' }}>
+              <span style={{ fontWeight: 600 }}>Reasoning</span> generates and checks personas · <span style={{ fontWeight: 600 }}>Conversation</span> runs interviews ·{' '}
+              <span style={{ fontWeight: 600 }}>Emergency</span> is local-first
+            </dd>
+          </div>
+          {routesStatus?.providers && (
+            <div>
+              <dt style={{ color: 'var(--text-muted)' }}>Providers reporting now</dt>
+              <dd style={{ margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>{routesStatus.providers.length}</dd>
             </div>
-            <div>Operational Budget: <strong style={{ color: 'var(--accent-emerald)' }}>Zero API Cost (Free Tier Aggregation)</strong></div>
-            <div>Reliability Fallback: <strong style={{ color: 'var(--status-warn-text)' }}>Local Ollama (Qwen / LLaMA)</strong></div>
-          </div>
+          )}
+        </dl>
+      </section>
+
+      {/* Provenance Record Traces (Rule R3) — the request story comes first */}
+      <section className="bx-section" style={{ marginTop: 0, marginBottom: '36px' }}>
+        <div className="bx-section__head" style={{ flexWrap: 'wrap' }}>
+          <h2 className="bx-section__title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Shield size={18} color="var(--accent-teal)" aria-hidden="true" />
+            Recent Provenance Traces (Rule R3)
+          </h2>
+          <span className="bx-section__hint">Every LLM request produces 14-field provenance. Expand a row for its attempt chain.</span>
         </div>
 
-        {/* Task Pool Routing Topology */}
-        <div
-          style={{
-            background: 'var(--fill-soft)',
-            border: '1px solid var(--fill-soft-2)',
-            borderRadius: '16px',
-            padding: '24px',
-            boxShadow: 'var(--shadow-md)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-            <Layers size={20} color="var(--status-warn-text)" />
-            <h2 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
-              Task Pool Design
-            </h2>
-          </div>
-          <div
-            style={{
-              fontSize: '0.72rem',
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              marginBottom: '12px',
-            }}
-          >
-            How routing works — architecture, not live status
-          </div>
-          <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            <div>Reasoning Pool: <strong style={{ color: 'var(--text-main)' }}>Persona Generation & Consistency</strong></div>
-            <div>Conversation Pool: <strong style={{ color: 'var(--text-main)' }}>Multi-Turn Persona Interviews</strong></div>
-            <div>Emergency Pool: <strong style={{ color: 'var(--status-warn-text)' }}>Local-First Fallback (Ollama)</strong></div>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {!hasLoaded || isLoading ? (
+            <div role="status" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
+              Loading provenance traces…
+            </div>
+          ) : provenance.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.86rem', border: '1px dashed var(--border-medium)', borderRadius: '12px' }}>
+              {loadError
+                ? 'Provenance traces could not be loaded.'
+                : 'No recent provenance traces found. Run a research study or persona generation to generate traces.'}
+            </div>
+          ) : (
+            provenance.map((rec) => <ProvenanceTraceRow key={rec.request_id} rec={rec} />)
+          )}
         </div>
-      </div>
+      </section>
 
       {/* Live Provider Health Matrix */}
-      <div
-        style={{
-          background: 'var(--fill-soft)',
-          border: '1px solid var(--fill-soft-2)',
-          borderRadius: '16px',
-          padding: '24px',
-          marginBottom: '32px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-          <Activity size={18} color="var(--status-warn-text)" />
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
+      <section className="bx-section" style={{ marginTop: 0, marginBottom: '36px' }}>
+        <div className="bx-section__head">
+          <h2 className="bx-section__title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Activity size={18} color="var(--accent-teal)" aria-hidden="true" />
             Live Provider Health Matrix
           </h2>
         </div>
@@ -211,8 +215,8 @@ export const ModelRouterView: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '12px',
-              background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: 'var(--status-error-bg)',
+              border: '1px solid var(--status-error-border)',
               borderRadius: '10px',
               padding: '12px 16px',
               marginBottom: '16px',
@@ -242,26 +246,27 @@ export const ModelRouterView: React.FC = () => {
           </div>
         )}
 
-        {!loadError && !isLoading && (routesStatus?.providers?.length ?? 0) === 0 && (
+        {!loadError && hasLoaded && !isLoading && (routesStatus?.providers?.length ?? 0) === 0 && (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.86rem', padding: '12px 0' }}>
             No providers reported yet.
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(190px, 100%), 1fr))', gap: '14px' }}>
           {routesStatus?.providers.map((p) => {
             const isHealthy = p.status === 'healthy';
             return (
               <div
                 key={p.name}
                 style={{
-                  background: 'var(--fill-soft)',
-                  border: '1px solid var(--fill-soft-2)',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '12px',
                   padding: '16px',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '8px',
+                  boxShadow: 'inset 0 1px 0 var(--reflect)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -270,15 +275,15 @@ export const ModelRouterView: React.FC = () => {
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span
+                      aria-hidden="true"
                       style={{
-                        width: '8px',
-                        height: '8px',
+                        width: '7px',
+                        height: '7px',
                         borderRadius: '50%',
-                        background: isHealthy ? 'var(--accent-emerald)' : '#F59E0B',
-                        boxShadow: isHealthy ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none',
+                        background: isHealthy ? 'var(--accent-emerald)' : 'var(--accent-amber)',
                       }}
                     />
-                    <span style={{ fontSize: '0.72rem', color: isHealthy ? 'var(--accent-emerald)' : '#F59E0B', textTransform: 'capitalize' }}>
+                    <span style={{ fontSize: '0.72rem', color: isHealthy ? 'var(--status-success-text)' : 'var(--status-warn-text)', textTransform: 'capitalize' }}>
                       {p.status}
                     </span>
                   </div>
@@ -287,53 +292,45 @@ export const ModelRouterView: React.FC = () => {
                   Type: <span style={{ color: 'var(--text-primary)' }}>{p.type.replace(/_/g, ' ')}</span>
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  Models: <span style={{ color: 'var(--status-warn-text)', fontWeight: 600 }}>{p.available_models} active</span>
+                  Models: <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{p.available_models} active</span>
                 </div>
-                {p.active_cooldowns > 0 && (
-                  <div style={{ fontSize: '0.72rem', color: '#F59E0B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <AlertTriangle size={12} /> {p.active_cooldowns} cooling down
-                  </div>
-                )}
+                <div style={{ fontSize: '0.72rem', color: p.active_cooldowns ? 'var(--status-warn-text)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {p.active_cooldowns ? <AlertTriangle size={12} aria-hidden="true" /> : null}
+                  Cooling down: {fmtCount(p.active_cooldowns)}
+                </div>
               </div>
             );
           })}
         </div>
-      </div>
+      </section>
 
       {/* Task Pools Concurrency Status */}
       {routesStatus?.pools && routesStatus.pools.length > 0 && (
-        <div
-          style={{
-            background: 'var(--fill-soft)',
-            border: '1px solid var(--fill-soft-2)',
-            borderRadius: '16px',
-            padding: '24px',
-            marginBottom: '32px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-            <Layers size={18} color="var(--accent-emerald)" />
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
+        <section className="bx-section" style={{ marginTop: 0, marginBottom: '36px' }}>
+          <div className="bx-section__head">
+            <h2 className="bx-section__title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Layers size={18} color="var(--accent-teal)" aria-hidden="true" />
               Pool Concurrency & Candidate Allocation
             </h2>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: '12px' }}>
             {routesStatus.pools.map((pool) => (
               <div
                 key={pool.name}
                 style={{
-                  background: 'var(--fill-soft)',
-                  border: '1px solid var(--fill-soft)',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '10px',
                   padding: '14px',
+                  boxShadow: 'inset 0 1px 0 var(--reflect)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                   <span style={{ fontWeight: 600, color: 'var(--text-main)', textTransform: 'capitalize', fontSize: '0.88rem' }}>
                     {pool.name}
                   </span>
-                  <span style={{ fontSize: '0.74rem', color: 'var(--status-warn-text)', fontWeight: 600 }}>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                     {pool.candidates_count} candidates
                   </span>
                 </div>
@@ -341,113 +338,20 @@ export const ModelRouterView: React.FC = () => {
                   Max Concurrency: <strong style={{ color: 'var(--text-primary)' }}>{pool.max_concurrency}</strong>
                 </div>
                 <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
-                  Active Requests: <strong style={{ color: pool.active_requests > 0 ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>{pool.active_requests}</strong>
+                  Active Requests:{' '}
+                  <strong style={{ color: pool.active_requests ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>{fmtCount(pool.active_requests)}</strong>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Provenance Record Traces (Rule R3) */}
-      <div
-        style={{
-          background: 'var(--fill-soft)',
-          border: '1px solid var(--fill-soft-2)',
-          borderRadius: '16px',
-          padding: '24px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Shield size={18} color="var(--status-warn-text)" />
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
-              Recent Provenance Traces (Rule R3)
-            </h2>
-          </div>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            Every LLM request produces 14-field provenance
-          </span>
-        </div>
+      {/* Measured evaluation numbers */}
+      <EvaluationCard metrics={evaluation} loading={evaluationLoading} error={evaluationError} />
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {provenance.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
-              No recent provenance traces found. Run a research study or persona generation to generate traces.
-            </div>
-          ) : (
-            provenance.map((rec) => (
-              <div
-                key={rec.request_id}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.015)',
-                  border: '1px solid var(--fill-soft)',
-                  borderRadius: '12px',
-                  padding: '14px 18px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '12px',
-                  fontSize: '0.84rem',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span
-                    style={{
-                      fontFamily: 'monospace',
-                      color: 'var(--status-warn-text)',
-                      background: 'rgba(246, 200, 120, 0.1)',
-                      padding: '2px 6px',
-                      borderRadius: '6px',
-                      fontSize: '0.78rem',
-                    }}
-                  >
-                    {rec.request_id.slice(0, 10)}
-                  </span>
-                  <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{rec.task}</span>
-                  {rec.pool && (
-                    <span
-                      style={{
-                        fontSize: '0.72rem',
-                        color: 'var(--text-muted)',
-                        background: 'var(--fill-soft)',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      {rec.pool}
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--text-muted)' }}>
-                  <span style={{ color: 'var(--text-primary)' }}>
-                    Served: <strong style={{ color: 'var(--text-main)' }}>{rec.served_by_provider || 'not served'}</strong>
-                    {rec.served_by_model && ` (${rec.served_by_model})`}
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Clock size={13} />
-                    {rec.total_latency_ms != null ? `${Math.round(rec.total_latency_ms)}ms` : '—'}
-                  </span>
-                  <span
-                    style={{
-                      color: rec.success ? 'var(--accent-emerald)' : '#EF4444',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <CheckCircle2 size={14} /> {rec.success ? 'Success' : 'Failed'}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      {/* Judge Lab — only when the backend exposes it */}
+      <JudgeLabPanel />
     </div>
   );
 };

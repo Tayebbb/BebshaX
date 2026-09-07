@@ -111,7 +111,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  background: var(--accent-gradient);
   color: var(--text-on-accent);
   border: none;
   border-radius: 12px;

@@ -3,6 +3,7 @@ import { ArrowRight, FlaskConical, RefreshCw, Sparkles, Trash2 } from 'lucide-re
 import { Persona, PersonaRoleSuggestion } from '../../../../types';
 import { EvidenceBadge, TemplateBadge, countEvidenceBacked } from '../../../../utils/personaEvidence';
 import { DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE } from './types';
+import { RequestIdTag } from '../../../common/RequestIdTag';
 
 /** Step 2 — persona library. Pure JSX extraction from
  * StudyWorkflowView: generation state/handlers stay in the parent; the modal
@@ -10,6 +11,8 @@ import { DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE } from './types';
 interface Step2PersonasProps {
   personas: Persona[];
   personaGenError: string | null;
+  /** Request id of the failed generation call, when the backend returned one. */
+  personaGenRequestId?: string | null;
   isGeneratingPersonas: boolean;
   suggestedRoles: PersonaRoleSuggestion[];
   handleGeneratePersonas: () => Promise<void>;
@@ -26,6 +29,7 @@ interface Step2PersonasProps {
 export const Step2Personas: React.FC<Step2PersonasProps> = ({
   personas,
   personaGenError,
+  personaGenRequestId = null,
   isGeneratingPersonas,
   suggestedRoles,
   handleGeneratePersonas,
@@ -53,12 +57,17 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 }}
               >
                 Persona generation failed: {personaGenError} — no personas were fabricated. Retry when ready.
+                {personaGenRequestId && (
+                  <div style={{ marginTop: '6px' }}>
+                    <RequestIdTag requestId={personaGenRequestId} />
+                  </div>
+                )}
               </div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>
                 <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
-                  Persona Library
+                  Study Personas
                 </h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
                   <span>Total Personas</span>
@@ -105,7 +114,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                   style={
                     isStepUnlocked(3)
                       ? {
-                          background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                          background: 'var(--accent-gradient)',
                           border: 'none',
                           color: 'var(--text-on-accent)',
                           borderRadius: '8px',
@@ -283,7 +292,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                           width: '42px',
                           height: '42px',
                           borderRadius: '10px',
-                          background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                          background: 'var(--accent-gradient)',
                           color: 'var(--text-on-accent)',
                           fontWeight: 700,
                           fontSize: '1rem',
@@ -398,7 +407,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                   title={isReadOnly ? READ_ONLY_TITLE : undefined}
                   style={{
                     marginTop: '6px',
-                    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+                    background: 'var(--accent-gradient)',
                     border: 'none',
                     borderRadius: '8px',
                     padding: '10px 20px',

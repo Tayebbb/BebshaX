@@ -144,4 +144,5 @@ def test_required_ctx_is_generous_and_floored() -> None:
     small = _request(content="hi", max_output_tokens=10)
     assert _required_ctx(small) == 4096  # floor
     big = _request(content="y" * 30_000, max_output_tokens=1000)
-    assert _required_ctx(big) >= 30_000 // 3 + 1000  # chars/3 + output
+    # ladder rung >= the shared estimator's figure (chars/3.5 + output + margin)
+    assert _required_ctx(big) >= 30_000 // 3 + 1000

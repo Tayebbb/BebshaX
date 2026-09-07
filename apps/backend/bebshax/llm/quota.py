@@ -11,10 +11,12 @@ serving-provider names recorded in provenance (never the virtual "auto").
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from bebshax.llm.provenance import ProvenanceRecord
+from bebshax.llm.service import Entry
 
 logger = logging.getLogger(__name__)
 
@@ -122,15 +124,35 @@ class QuotaLedger:
         return rows
 
 
-def quota_aware_ranker(ledger: QuotaLedger):
-    """Ranker for PoolRouter: drain all quotas evenly — never hammer a capped
-    provider while others sit idle. Stable sort preserves pool order as the
-    tiebreak, and the local tier keeps its configured position."""
+# A capped provider is demoted only once it is nearly drained. Sorting on the
+# continuous fraction would demote openrouter below the uncapped routes after a
+# SINGLE request each day (49/50 < 1.0) — the opposite of "use free capacity".
+QUOTA_DEMOTE_THRESHOLD = 0.15
+LOCAL_PROVIDER = "ollama"  # the local tier's position is pool design, not quota
 
-    def rank(entries):
-        return sorted(
-            entries,
-            key=lambda e: -ledger.remaining_fraction(e[1].provider),
+
+def quota_aware_ranker(ledger: QuotaLedger) -> Callable[[list[Entry]], list[Entry]]:
+    """Ranker for PoolRouter: bucketed demotion, otherwise configured order.
+
+    Remote routes whose provider has < QUOTA_DEMOTE_THRESHOLD of a published
+    cap left move behind the healthy remote routes (most-remaining first,
+    stable); everything else keeps pool order. The local adapter is
+    partitioned out and re-inserted at its configured index — it is either
+    the terminal fallback or the deliberate first choice, never a quota lever.
+    """
+
+    def rank(entries: list[Entry]) -> list[Entry]:
+        local = [(i, e) for i, e in enumerate(entries) if e[1].provider == LOCAL_PROVIDER]
+        remote = [e for e in entries if e[1].provider != LOCAL_PROVIDER]
+        fraction = {e[1].provider: ledger.remaining_fraction(e[1].provider) for e in remote}
+        healthy = [e for e in remote if fraction[e[1].provider] >= QUOTA_DEMOTE_THRESHOLD]
+        demoted = sorted(
+            (e for e in remote if fraction[e[1].provider] < QUOTA_DEMOTE_THRESHOLD),
+            key=lambda e: -fraction[e[1].provider],
         )
+        ranked = healthy + demoted
+        for index, entry in local:  # ascending indices → original positions restored
+            ranked.insert(index, entry)
+        return ranked
 
     return rank

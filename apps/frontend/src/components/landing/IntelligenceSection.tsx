@@ -65,7 +65,7 @@ export const IntelligenceSection: React.FC = () => {
           </h2>
 
           <p style={{ fontSize: '1.05rem', color: 'var(--lp-text-muted)', lineHeight: '1.6' }}>
-            Every LLM call goes through one entry point with an explicit task type. No model classifies the task — the application always declares it.
+            Every LLM call goes through one entry point with an explicit task type. No model classifies the task. The application always declares it.
           </p>
         </div>
 
@@ -170,7 +170,7 @@ export const IntelligenceSection: React.FC = () => {
             </div>
 
             <p style={{ fontSize: '0.85rem', color: 'var(--lp-text-muted)', lineHeight: '1.6', marginBottom: '20px' }}>
-              The failure is classified, then the policy applies: retry the same route once, advance to the next candidate, or put the route on cooldown. Low answer quality is never treated as an infrastructure failure — quality belongs to the evaluation layer.
+              The failure is classified, then the policy applies: retry the same route once, advance to the next candidate, or put the route on cooldown. Low answer quality is never treated as an infrastructure failure; quality belongs to the evaluation layer.
             </p>
 
             <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(var(--lp-blue-rgb), 0.08)', border: 'none', fontSize: '0.75rem', color: 'var(--lp-blue-soft)', fontWeight: 500 }}>

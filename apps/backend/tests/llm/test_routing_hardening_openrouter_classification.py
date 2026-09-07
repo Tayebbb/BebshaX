@@ -1,0 +1,147 @@
+"""OpenRouter failure classification and the $0 model list.
+
+Regressions: 402 (credits gone) and 408 fell through to PROVIDER_UNAVAILABLE;
+a 400 whose body says the prompt exceeds the model's context was classified
+PROVIDER_UNAVAILABLE and cooled the route for a size problem; the retry
+without response_format was invisible in provenance; `openrouter/auto`
+(routes to PAID models) sat in the defaults.
+"""
+
+import json
+
+import httpx
+import pytest
+
+from bebshax.llm import AttemptFailed, ChatMessage, FailureKind, LLMRequest, TaskType
+from bebshax.llm.adapters.base import RouteCandidate
+from bebshax.llm.adapters.openrouter_adapter import (
+    DEFAULT_MODELS,
+    RESPONSE_FORMAT_DROPPED_NOTE,
+    OpenRouterAdapter,
+    _map_http_status,
+)
+from bebshax.llm.failures import FAILURE_POLICIES
+
+_CTX_BODY = json.dumps(
+    {
+        "error": {
+            "message": "This endpoint's maximum context length is 8192 tokens. "
+            "However, you requested about 12000 tokens (11000 of text input, 1000 in the output).",
+            "code": 400,
+        }
+    }
+)
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "expected"),
+    [
+        (429, "", FailureKind.RATE_LIMITED),
+        (402, '{"error":{"message":"Insufficient credits"}}', FailureKind.QUOTA_EXHAUSTED),
+        (408, "", FailureKind.TIMEOUT),
+        (401, "", FailureKind.AUTH_INVALID),
+        (403, "", FailureKind.AUTH_INVALID),
+        (404, "", FailureKind.MODEL_UNAVAILABLE),
+        (400, _CTX_BODY, FailureKind.CONTEXT_WINDOW_EXCEEDED),
+        (400, "Prompt is too long for this model", FailureKind.CONTEXT_WINDOW_EXCEEDED),
+        (400, "Request exceeds the TOKEN LIMIT", FailureKind.CONTEXT_WINDOW_EXCEEDED),
+        (413, "Payload Too Large: maximum tokens exceeded", FailureKind.CONTEXT_WINDOW_EXCEEDED),
+        (400, '{"error":{"message":"response_format is not supported"}}', FailureKind.PROVIDER_UNAVAILABLE),
+        (413, "", FailureKind.PROVIDER_UNAVAILABLE),
+        (500, "", FailureKind.SERVER_ERROR),
+        (503, "", FailureKind.SERVER_ERROR),
+        (None, "", FailureKind.PROVIDER_UNAVAILABLE),
+    ],
+)
+def test_status_and_body_map_to_kind(status, body, expected) -> None:
+    assert _map_http_status(status, body) == expected
+
+
+def test_context_overflow_policy_advances_without_cooldown() -> None:
+    policy = FAILURE_POLICIES[FailureKind.CONTEXT_WINDOW_EXCEEDED]
+    assert policy.try_next_candidate and not policy.cooldown_route
+
+
+def test_default_models_are_free_only() -> None:
+    assert "openrouter/auto" not in DEFAULT_MODELS
+    assert DEFAULT_MODELS and all(m.endswith(":free") for m in DEFAULT_MODELS)
+
+
+def _adapter(handler) -> OpenRouterAdapter:
+    adapter = OpenRouterAdapter(api_key="test-key-not-real")
+    adapter._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return adapter
+
+
+_CAND = RouteCandidate(provider="openrouter", model="some/model:free", context_window=8192)
+
+
+def _request(json_mode: bool = False) -> LLMRequest:
+    return LLMRequest(
+        task=TaskType.STRUCTURED_OUTPUT,
+        messages=[ChatMessage(role="user", content="hello")],
+        json_mode=json_mode,
+        max_output_tokens=200,
+    )
+
+
+async def test_context_overflow_400_is_not_retried_and_classified() -> None:
+    calls: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(json.loads(request.content))
+        return httpx.Response(400, content=_CTX_BODY.encode())
+
+    with pytest.raises(AttemptFailed) as exc:
+        await _adapter(handler).complete(_CAND, _request(json_mode=True))
+    assert exc.value.kind == FailureKind.CONTEXT_WINDOW_EXCEEDED
+    assert len(calls) == 1  # dropping response_format cannot shrink the prompt — no retry
+
+
+async def test_402_is_quota_exhausted_end_to_end() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(402, json={"error": {"message": "Insufficient credits"}})
+
+    with pytest.raises(AttemptFailed) as exc:
+        await _adapter(handler).complete(_CAND, _request())
+    assert exc.value.kind == FailureKind.QUOTA_EXHAUSTED
+    assert FAILURE_POLICIES[exc.value.kind].cooldown_scope == "provider"
+
+
+async def test_dropping_response_format_is_recorded_in_completion_notes() -> None:
+    calls: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        calls.append(payload)
+        if "response_format" in payload:
+            return httpx.Response(
+                400, json={"error": {"message": "response_format is not supported by this model"}}
+            )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"ok": true}'}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 4},
+                "model": "some/model:free",
+            },
+        )
+
+    completion = await _adapter(handler).complete(_CAND, _request(json_mode=True))
+    assert len(calls) == 2 and "response_format" not in calls[1]
+    assert RESPONSE_FORMAT_DROPPED_NOTE in completion.notes
+
+
+async def test_clean_success_has_no_degradation_note() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 1},
+                "model": "some/model:free",
+            },
+        )
+
+    completion = await _adapter(handler).complete(_CAND, _request(json_mode=True))
+    assert RESPONSE_FORMAT_DROPPED_NOTE not in completion.notes

@@ -23,6 +23,7 @@ import {
   Study,
 } from '../../../types';
 import { api } from '../../../services/api';
+import { useDialogA11y } from '../../../utils/useDialogA11y';
 
 interface EvidenceLaboratoryViewProps {
   studyId: string;
@@ -45,6 +46,8 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sourceTypeFilter, setSourceTypeFilter] = useState<string>('all');
   const [selectedClaimDetail, setSelectedClaimDetail] = useState<ClaimDetail | null>(null);
+  const claimDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogA11y(claimDialogRef, !!selectedClaimDetail, () => setSelectedClaimDetail(null));
   const [, setIsLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isRunningResearch, setIsRunningResearch] = useState<boolean>(false);
@@ -298,7 +301,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           onClick={handleRunResearch}
           disabled={isRunningResearch}
           style={{
-            background: isRunningResearch ? '#0D9488' : 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
+            background: isRunningResearch ? '#0D9488' : 'var(--accent-gradient)',
             color: 'var(--text-on-accent)',
             border: 'none',
             borderRadius: '8px',
@@ -907,7 +910,11 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
           onClick={() => setSelectedClaimDetail(null)}
         >
           <div
+            ref={claimDialogRef}
             className="bx-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="claim-provenance-title"
             style={{
               background: 'var(--bg-secondary)',
               border: '1px solid #2A3042',
@@ -929,7 +936,9 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                 </span>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedClaimDetail(null)}
+                aria-label="Close claim provenance"
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -938,13 +947,13 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
                   cursor: 'pointer',
                 }}
               >
-                ✕
+                <span aria-hidden="true">✕</span>
               </button>
             </div>
 
             <div style={{ marginBottom: '14px' }}>{getStatusBadge(selectedClaimDetail.status)}</div>
 
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px 0', lineHeight: 1.4 }}>
+            <h2 id="claim-provenance-title" style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px 0', lineHeight: 1.4 }}>
               {selectedClaimDetail.claim_text}
             </h2>
 
