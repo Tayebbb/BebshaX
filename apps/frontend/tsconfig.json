@@ -16,6 +16,12 @@
 
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
 
+    /* Path Aliases */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
