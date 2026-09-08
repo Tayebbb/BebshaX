@@ -28,6 +28,9 @@ import {
   MailWarning,
   Search,
   Command,
+  ChevronsUpDown,
+  Clock,
+  ArrowRight,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
@@ -662,14 +665,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       <aside
         style={{
           width: isSidebarCollapsed ? '72px' : isMobile ? '280px' : '256px',
-          background: isMobile ? 'var(--glass-strong)' : 'var(--glass-soft)',
+          background: isMobile ? 'var(--glass-strong)' : 'var(--bg-glass)',
           backdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
           WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
-          borderRight: '1px solid var(--fill-soft-2)',
+          borderRight: '1px solid var(--border-subtle)',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          padding: isSidebarCollapsed ? '20px 10px' : '20px 16px',
+          padding: isSidebarCollapsed ? '16px 8px' : '16px 12px',
           flexShrink: 0,
           top: 0,
           height: isMobile ? '100dvh' : '100vh',
@@ -691,19 +694,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       >
         {/* Top Brand Header — scrolls internally so the theme toggle and
             user chip below always stay on-screen */}
-        <div style={{ minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+        <div style={{ minHeight: 0, overflowY: 'auto', overflowX: 'hidden', scrollbarWidth: 'none' }}>
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
-              marginBottom: '28px',
-              padding: isSidebarCollapsed ? '0' : '0 4px',
+              marginBottom: '20px',
+              padding: isSidebarCollapsed ? '0' : '2px 4px 0',
             }}
           >
             {!isSidebarCollapsed ? (
               <BebshaXLogo
-                size={28}
+                size={26}
                 showIcon={false}
                 onClick={() => navigate('/create-study')}
               />
@@ -721,18 +724,30 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               aria-label="Toggle sidebar"
               onClick={() => (isMobile ? setIsMobileNavOpen(false) : setIsSidebarCollapsed(!isSidebarCollapsedState))}
               style={{
+                width: '28px',
+                height: '28px',
                 background: 'transparent',
-                border: 'none',
+                border: '1px solid transparent',
                 color: 'var(--text-muted)',
                 cursor: 'pointer',
-                padding: '4px',
                 borderRadius: '6px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--fill-soft)';
+                e.currentTarget.style.color = 'var(--text-main)';
+                e.currentTarget.style.borderColor = 'var(--border-subtle)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'var(--text-muted)';
+                e.currentTarget.style.borderColor = 'transparent';
               }}
             >
-              <PanelLeft size={16} />
+              <PanelLeft size={15} />
             </button>
           </div>
 
@@ -792,7 +807,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
           {/* Recent Studies Accordion Section */}
           {!isSidebarCollapsed && (
-            <div>
+            <div style={{ marginTop: '8px' }}>
               <button
                 type="button"
                 onClick={() => setIsRecentStudiesOpen(!isRecentStudiesOpen)}
@@ -805,7 +820,17 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   fontFamily: 'inherit',
                   textAlign: 'left',
                   cursor: 'pointer',
-                  padding: '4px 12px',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  transition: 'background 0.15s ease, color 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--fill-soft)';
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'var(--text-muted)';
                 }}
               >
                 <span>Recent Studies</span>
@@ -813,9 +838,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               </button>
 
               {isRecentStudiesOpen && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '2px 0 0 2px' }}>
                   {loadingRecent ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '6px 8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '6px 10px' }}>
                       <div style={{ height: '14px', borderRadius: '4px', background: 'var(--fill-soft-2)' }} />
                       <div style={{ height: '14px', width: '75%', borderRadius: '4px', background: 'var(--fill-soft-2)' }} />
                       <div style={{ height: '14px', width: '60%', borderRadius: '4px', background: 'var(--fill-soft-2)' }} />
@@ -866,23 +891,25 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                               alignItems: 'center',
                               gap: '8px',
                               width: '100%',
+                              height: '32px',
                               background: 'transparent',
                               border: 'none',
                               fontFamily: 'inherit',
                               textAlign: 'left',
-                              padding: '7px 8px',
-                              borderRadius: '8px',
+                              padding: '0 10px',
+                              borderRadius: '6px',
                               fontSize: '0.8rem',
+                              fontWeight: 500,
                               color: 'var(--text-secondary)',
                               cursor: 'pointer',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
-                              transition: 'color 0.16s ease',
+                              transition: 'all 0.15s ease',
                             }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.color = 'var(--text-main)';
-                              e.currentTarget.style.background = 'var(--bg-card)';
+                              e.currentTarget.style.background = 'var(--fill-soft)';
                             }}
                             onMouseLeave={(e) => {
                               e.currentTarget.style.color = 'var(--text-secondary)';
@@ -890,8 +917,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                             }}
                             title={displayTitle}
                           >
-                            {isCompleted && (
-                              <div
+                            {isCompleted ? (
+                              <span
                                 style={{
                                   width: '6px',
                                   height: '6px',
@@ -900,6 +927,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                                   flexShrink: 0,
                                 }}
                               />
+                            ) : (
+                              <Clock size={12} style={{ flexShrink: 0, opacity: 0.6, color: 'var(--text-muted)' }} />
                             )}
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayTitle}</span>
                           </button>
@@ -910,19 +939,31 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                         type="button"
                         onClick={() => handleTabClick('dashboard')}
                         style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
                           width: '100%',
                           background: 'none',
                           border: 'none',
                           fontFamily: 'inherit',
                           textAlign: 'left',
-                          fontSize: '0.78rem',
-                          color: 'var(--accent-cyan)',
+                          fontSize: '0.76rem',
+                          color: 'var(--accent-teal)',
                           fontWeight: 600,
-                          padding: '6px 8px',
+                          padding: '6px 10px',
+                          borderRadius: '6px',
                           cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'var(--fill-soft)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
                         }}
                       >
-                        See more
+                        <span>See more</span>
+                        <ArrowRight size={11} />
                       </button>
                     </>
                   )}
@@ -933,7 +974,17 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         </div>
 
         {/* Bottom User Profile Section */}
-        <div style={{ position: 'relative' }} ref={userMenuAreaRef}>
+        <div
+          style={{
+            position: 'relative',
+            borderTop: '1px solid var(--border-subtle)',
+            paddingTop: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+          }}
+          ref={userMenuAreaRef}
+        >
           <button
             type="button"
             onClick={toggleTheme}
@@ -942,19 +993,18 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             style={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: isSidebarCollapsed ? 'center' : 'flex-start',
-              gap: '10px',
+              justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
+              gap: '8px',
               width: '100%',
-              padding: isSidebarCollapsed ? '8px 0' : '8px 12px',
-              marginBottom: '8px',
-              borderRadius: '10px',
+              padding: isSidebarCollapsed ? '8px 0' : '6px 10px',
+              borderRadius: '8px',
               background: 'transparent',
-              border: '1px solid var(--border-subtle)',
+              border: '1px solid transparent',
               color: 'var(--text-secondary)',
-              fontSize: '0.8rem',
-              fontWeight: 600,
+              fontSize: '0.78rem',
+              fontWeight: 500,
               cursor: 'pointer',
-              transition: 'background 0.2s ease, color 0.2s ease',
+              transition: 'all 0.15s ease',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'var(--fill-soft)';
@@ -965,8 +1015,27 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               e.currentTarget.style.color = 'var(--text-secondary)';
             }}
           >
-            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-            {!isSidebarCollapsed && <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {theme === 'dark' ? <Sun size={14} color="var(--accent-amber)" /> : <Moon size={14} color="var(--text-secondary)" />}
+              {!isSidebarCollapsed && <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>}
+            </div>
+            {!isSidebarCollapsed && (
+              <span
+                style={{
+                  fontSize: '0.66rem',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: 'var(--fill-soft)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                {theme === 'dark' ? 'Dark' : 'Light'}
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -977,18 +1046,26 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
+              gap: '9px',
               justifyContent: isSidebarCollapsed ? 'center' : 'space-between',
               width: '100%',
               fontFamily: 'inherit',
               textAlign: 'left',
-              padding: isSidebarCollapsed ? '8px 0' : '8px 12px',
-              borderRadius: '12px',
+              padding: isSidebarCollapsed ? '6px 0' : '6px 8px',
+              borderRadius: '10px',
               background: showUserMenu ? 'var(--fill-soft-2)' : 'var(--fill-soft)',
-              border: 'none',
+              border: '1px solid var(--border-subtle)',
               outline: 'none',
               cursor: 'pointer',
-              transition: 'background 0.15s ease',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--fill-soft-2)';
+              e.currentTarget.style.borderColor = 'var(--border-medium)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = showUserMenu ? 'var(--fill-soft-2)' : 'var(--fill-soft)';
+              e.currentTarget.style.borderColor = 'var(--border-subtle)';
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '9px', minWidth: 0 }}>
@@ -999,11 +1076,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   alt={displayName}
                   referrerPolicy="no-referrer"
                   style={{
-                    width: '30px',
-                    height: '30px',
+                    width: '28px',
+                    height: '28px',
                     borderRadius: '50%',
                     objectFit: 'cover',
-                    border: 'none',
+                    border: '1px solid var(--border-subtle)',
                     outline: 'none',
                     flexShrink: 0,
                   }}
@@ -1014,17 +1091,18 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               ) : (
                 <div
                   style={{
-                    width: '30px',
-                    height: '30px',
+                    width: '28px',
+                    height: '28px',
                     borderRadius: '50%',
                     background: 'linear-gradient(135deg, var(--accent-teal) 0%, var(--accent-cyan) 100%)',
                     color: 'var(--text-on-accent)',
                     fontWeight: 700,
-                    fontSize: '0.8rem',
+                    fontSize: '0.78rem',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                   }}
                 >
                   {displayName.charAt(0).toUpperCase()}
@@ -1032,22 +1110,40 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               )}
 
               {!isSidebarCollapsed && (
-                <span
-                  style={{
-                    fontSize: '0.84rem',
-                    fontWeight: 600,
-                    color: 'var(--text-main)',
-                    letterSpacing: '0.02em',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {displayName}
-                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+                  <span
+                    style={{
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      color: 'var(--text-main)',
+                      letterSpacing: '-0.01em',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.25,
+                    }}
+                  >
+                    {displayName}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {user?.email || 'BebshaX Workspace'}
+                  </span>
+                </div>
               )}
             </div>
 
+            {!isSidebarCollapsed && (
+              <ChevronsUpDown size={13} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+            )}
           </button>
 
           {/* User Popover Menu */}
