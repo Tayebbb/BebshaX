@@ -3,6 +3,7 @@ import { useTheme } from '../../context/ThemeContext';
 
 interface BebshaXLogoProps {
   size?: number;
+  showIcon?: boolean;
   showText?: boolean;
   textSize?: string;
   className?: string;
@@ -14,6 +15,7 @@ interface BebshaXLogoProps {
 
 export const BebshaXLogo: React.FC<BebshaXLogoProps> = ({
   size = 28,
+  showIcon = true,
   showText = true,
   className,
   style,
@@ -44,29 +46,32 @@ export const BebshaXLogo: React.FC<BebshaXLogoProps> = ({
         ...style,
       }}
     >
-      {/* Official BebshaX Geometric B Logo Mark */}
-      <img
-        src="/logobebshax.jpeg"
-        alt="BebshaX Logo"
-        style={{
-          width: `${size}px`,
-          height: `${size}px`,
-          borderRadius: `${iconRadius}px`,
-          objectFit: 'contain',
-          flexShrink: 0,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-        }}
-      />
+      {/* Official BebshaX Geometric B Logo Mark (rendered only when showIcon is true) */}
+      {showIcon && (
+        <img
+          src="/logobebshax.jpeg"
+          alt="BebshaX Logo"
+          style={{
+            width: `${size}px`,
+            height: `${size}px`,
+            borderRadius: `${iconRadius}px`,
+            objectFit: 'contain',
+            flexShrink: 0,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+          }}
+        />
+      )}
 
-      {/* Brand Wordmark */}
+      {/* Brand Wordmark (Bebshax.png) */}
       {showText && (
         <div style={{ display: 'inline-flex', alignItems: 'center' }}>
           {useImageWordmark ? (
             <img
               src="/Bebshax.png"
               alt="BebshaX"
+              className="bx-brand-wordmark"
               style={{
-                height: `${Math.round(size * 0.85)}px`,
+                height: `${Math.round(size * (showIcon ? 0.85 : 0.95))}px`,
                 objectFit: 'contain',
                 filter: isLight ? 'none' : 'brightness(0) invert(1)',
                 transition: 'filter 0.2s ease',

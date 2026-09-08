@@ -124,7 +124,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             border: 'none',
           }}
         >
-          <BebshaXLogo size={28} textSize="1.22rem" />
+          <BebshaXLogo size={32} showIcon={false} />
           <span
             style={{
               fontSize: '0.72rem',

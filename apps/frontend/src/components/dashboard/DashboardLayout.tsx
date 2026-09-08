@@ -1260,7 +1260,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             >
               <Menu size={18} />
             </button>
-            <BebshaXLogo size={22} textSize="1rem" onClick={() => navigate('/create-study')} />
+            <BebshaXLogo size={26} showIcon={false} onClick={() => navigate('/create-study')} />
           </div>
         )}
 
