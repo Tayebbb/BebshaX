@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowUp,
   Check,
   ChevronLeft,
   Copy,
@@ -18,6 +17,7 @@ import { api } from '../../services/api';
 import { fromUnknownError } from '../../utils/apiError';
 import { ConsistencyFlags, MemoryDisclosure, RouteDisclosure } from '../common/MemoryDisclosure';
 import { RequestIdTag } from '../common/RequestIdTag';
+import { PromptInputBox } from '../ui/PromptInputBox';
 import './interview.css';
 
 interface InterviewWorkspaceProps {
@@ -370,13 +370,6 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const onComposerKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
-  };
-
   const exploredTopics = useMemo(() => {
     const map = interview?.topics_explored || {};
     return Object.entries(map).map(([id, status]) => ({
@@ -671,39 +664,26 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
             )}
 
             {!isCompleted ? (
-              <>
-                <div className="iv-composer">
-                  <textarea
-                    ref={inputRef}
-                    className="iv-input"
-                    rows={1}
-                    placeholder={`Ask ${personaName.split(' ')[0]} about their world…`}
-                    value={input}
-                    onChange={(e) => {
-                      setInput(e.target.value);
-                      e.target.style.height = 'auto';
-                      e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
-                    }}
-                    onKeyDown={onComposerKey}
-                    disabled={isSending}
-                    aria-label={`Interview question for ${personaName}`}
-                  />
-                  <button
-                    type="button"
-                    className="iv-send"
-                    onClick={() => send()}
-                    disabled={!input.trim() || isSending}
-                    aria-label="Send question"
-                  >
-                    <ArrowUp size={17} aria-hidden="true" />
-                  </button>
-                </div>
-                <div className="iv-composer-note">
-                  {maxTurns > 0
-                    ? `Turn ${Math.min(turnCount + 1, maxTurns)} of ${maxTurns} · every reply carries its real model route`
-                    : 'Every reply carries its real model route'}
-                </div>
-              </>
+              <PromptInputBox
+                textareaRef={inputRef}
+                value={input}
+                onValueChange={setInput}
+                onSend={(text) => send(text)}
+                isLoading={isSending}
+                disabled={isSending}
+                maxHeight={140}
+                placeholder={`Ask ${personaName.split(' ')[0]} about their world…`}
+                aria-label={`Interview question for ${personaName}`}
+                sendLabel="Send question"
+                leftActions={
+                  maxTurns > 0 ? (
+                    <span className="iv-turn-counter">
+                      Turn {Math.min(turnCount + 1, maxTurns)} of {maxTurns}
+                    </span>
+                  ) : null
+                }
+                footer="Every reply carries its real model route"
+              />
             ) : (
               <div className="iv-composer-note">
                 Interview complete — the transcript is read-only. Insights are in the panel.

@@ -1,0 +1,217 @@
+/* PromptInputBox — floating frosted-glass composer (theme-native, dark/light). */
+.bx-prompt-wrap {
+  --bxp-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --bxp-t: 220ms;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.bx-prompt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 8px 14px;
+  border-radius: 22px;
+  border: 1px solid var(--border-subtle);
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow:
+    inset 0 1px 0 var(--reflect),
+    0 18px 50px rgba(0, 0, 0, 0.45);
+  transition:
+    border-color var(--bxp-t) var(--bxp-ease),
+    box-shadow 480ms var(--bxp-ease);
+}
+.bx-prompt:focus-within {
+  border-color: var(--border-hover);
+  box-shadow:
+    inset 0 1px 0 var(--reflect-strong),
+    0 18px 50px rgba(0, 0, 0, 0.45),
+    0 0 0 1px var(--accent-subtle),
+    0 0 42px var(--accent-subtle);
+}
+.bx-prompt--loading { border-color: var(--border-hover); }
+.bx-prompt--dragging {
+  border-style: dashed;
+  border-color: var(--accent-teal-bright);
+  background: var(--accent-subtle);
+}
+
+/* Attachments */
+.bx-prompt-files {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0 2px;
+  position: relative;
+  width: max-content;
+}
+.bx-prompt-thumb {
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-card);
+  cursor: zoom-in;
+  transition: transform var(--bxp-t) var(--bxp-ease), border-color var(--bxp-t) var(--bxp-ease);
+}
+.bx-prompt-thumb:hover { transform: translateY(-1px); border-color: var(--border-hover); }
+.bx-prompt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bx-prompt-thumb-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border-medium);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.bx-prompt-thumb-remove:hover { color: var(--accent-teal-bright); border-color: var(--border-hover); }
+.bx-prompt-file-input { display: none; }
+
+/* Textarea */
+.bx-prompt-input {
+  width: 100%;
+  min-height: 24px;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: 400 0.95rem/1.55 var(--font-sans);
+  caret-color: var(--accent-teal-bright);
+  padding: 4px 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-medium) transparent;
+}
+.bx-prompt-input::placeholder { color: var(--text-faint); }
+.bx-prompt-input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Action row */
+.bx-prompt-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bx-prompt-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-muted);
+  font: 500 0.72rem var(--font-mono);
+}
+.bx-prompt-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background var(--bxp-t) var(--bxp-ease), color var(--bxp-t) var(--bxp-ease);
+}
+.bx-prompt-icon-btn:hover:not(:disabled) { background: var(--fill-soft); color: var(--text-primary); }
+.bx-prompt-icon-btn:disabled { opacity: 0.4; cursor: default; }
+
+.bx-prompt-send {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--fill-soft);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    transform var(--bxp-t) var(--bxp-ease),
+    background var(--bxp-t) var(--bxp-ease),
+    color var(--bxp-t) var(--bxp-ease),
+    box-shadow var(--bxp-t) var(--bxp-ease);
+}
+.bx-prompt-send--ready {
+  border-color: transparent;
+  background: linear-gradient(140deg, var(--accent-teal-bright), #0d9488);
+  color: var(--text-on-accent);
+}
+.bx-prompt-send--ready:hover { transform: translateY(-1px); box-shadow: 0 6px 18px var(--accent-glow); }
+.bx-prompt-send--ready:active { transform: translateY(0); }
+.bx-prompt-send:disabled { cursor: default; opacity: 0.45; }
+.bx-prompt--loading .bx-prompt-send { color: var(--accent-teal-bright); border-color: var(--border-hover); }
+.bx-prompt-stop-icon { fill: currentColor; animation: bxp-pulse 1.2s ease-in-out infinite; }
+@keyframes bxp-pulse { 50% { opacity: 0.45; } }
+
+/* CSS tooltip */
+.bx-tip { position: relative; display: inline-flex; }
+.bx-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translate(-50%, 4px);
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: 500 0.72rem var(--font-sans);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--bxp-t) var(--bxp-ease), transform var(--bxp-t) var(--bxp-ease);
+  z-index: 5;
+}
+.bx-tip:hover::after,
+.bx-tip:focus-within::after { opacity: 1; transform: translate(-50%, 0); }
+
+.bx-prompt-footer {
+  margin: 8px auto 0;
+  text-align: center;
+  font: 500 0.72rem var(--font-mono);
+  color: var(--text-faint);
+}
+
+/* Lightbox */
+.bx-prompt-lightbox {
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  background: var(--bg-card);
+  max-width: min(90vw, 800px);
+  box-shadow: var(--shadow-lg, 0 30px 80px rgba(0, 0, 0, 0.6));
+}
+.bx-prompt-lightbox::backdrop { background: var(--scrim); backdrop-filter: blur(6px); }
+.bx-prompt-lightbox img { display: block; max-width: 100%; max-height: 80vh; object-fit: contain; }
+.bx-prompt-lightbox-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--border-medium);
+  background: var(--glass-strong);
+  color: var(--text-primary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bx-prompt, .bx-prompt-send, .bx-prompt-thumb, .bx-tip::after { transition: none; }
+  .bx-prompt-stop-icon { animation: none; }
+}

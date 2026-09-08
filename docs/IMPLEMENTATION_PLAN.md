@@ -55,6 +55,10 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-09-08, evening) — Interview composer replaced by shared `PromptInputBox`
+
+Ported the 21st.dev "ai-prompt-box" composer into `apps/frontend/src/components/ui/PromptInputBox.tsx` (+ `promptinputbox.css`) and made it the interview chat input in `InterviewWorkspace`. Adapted to the house theme instead of copy-pasting: all colours/blur/shadows come from `index.css` tokens (so dark and light themes both work), motion is CSS transitions honouring `prefers-reduced-motion`. **Deliberate deviations from the source (R8 / GSAP guideline):** no `framer-motion`, `@radix-ui/*`, `clsx` or `tailwind-merge` were added — tooltips are CSS (`data-tip`), the image lightbox is a native `<dialog>`. The Search/Think/Canvas mode chips and the fake voice recorder were dropped: the interview API has no such modes and shipping non-functional controls would be dishonest UI. Image attachments are behind `allowAttachments` (off in the interview — the backend does not accept files). Tests: `tests/PromptInputBox.test.tsx` (5); `AdaptiveInterview` tests unchanged and green (261 total).
+
 ### Maintenance (2026-09-08, later) — Frontend performance: measured optimization loop to a 60fps landing page
 
 Mission: "make the website very smooth and fast, without latency — use multi-agent orchestration and keep a loop until verified". Target: `apps/frontend`; environment: modern desktop (no CPU/network throttling). Four parallel read-only audit agents (asset/network, render/animation, React/state, app-layer) produced the backlog; every change was measured before and after via CDP, and three optimization rounds ran until the numbers stopped moving.
