@@ -1092,6 +1092,7 @@ export const api = {
   },
 
   async signout(): Promise<void> {
+    invalidateStudiesCache();
     this.setAuthToken(null);
     this.setStoredUser(null);
     if (!this.isMockMode()) {
