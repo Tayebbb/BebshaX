@@ -4,7 +4,8 @@ Source of truth for console UI work. Tokens live in [`apps/frontend/src/index.cs
 
 ## Principles
 
-1. **Clarity over decoration.** Frosted glass is for chrome (sidebar, headers, drawers, dialogs) — never for content cards. Content cards use a _simulated_ material (surface gradient + top hairline), so the compositor budget stays at ≤ 4 blurred surfaces.
+0. **Visual language: iOS / macOS.** True near-black canvas in dark (`#000`), iOS grouped grey in light (`#f2f2f7`); surfaces step up in luminance (`#1c1c1e` → `#2c2c2e`) instead of being outlined. Separators are hairlines (`--border-soft`), never outlines. One accent (system teal) used for actions and selected-state icons only — not for decoration, eyebrows or heading gradients. No monospace kickers; section headers are small sans caps. Selected navigation is a filled pill, not a side bar.
+1. **Clarity over decoration.** Frosted glass is for chrome (sidebar, sticky toolbar, drawers, dialogs, command menu) — never for content cards. Content cards are flat grouped cells (`--bg-card` + top hairline reflect), so the compositor budget stays at ≤ 4 blurred surfaces.
 2. **Hierarchy over density.** One `h1` per view, one eyebrow, one lede. Cards mark grouping, not everything.
 3. **Evidence is first-class.** Grounding, provenance and routing are never hidden — they are progressively disclosed (`ProvenanceChip` → `EvidenceClaimPeek`; `RouteDisclosure`; `MemoryDisclosure`).
 4. **Honest numbers.** Unmeasured values render `—` or "not measured", never `0` or a placeholder percentage. Sample/demo/mock data is always labelled.
@@ -23,7 +24,7 @@ Source of truth for console UI work. Tokens live in [`apps/frontend/src/index.cs
 | Glass tiers       | `--glass-strong` `--glass-mid` `--glass-soft` (+ `--glass-blur` `--glass-saturate` `--reflect` `--scrim`)                                    |
 | Text              | `--text-main` `--text-primary` `--text-secondary` `--text-muted` `--text-faint` `--text-label` `--text-on-accent`                            |
 | Accent            | `--accent-teal` `--accent-cyan` `--accent-teal-bright` `--accent-emerald` `--accent-amber` `--accent-rose` `--accent-subtle` `--accent-glow` |
-| **CTA gradient**  | `--accent-gradient` — the only gradient allowed on primary actions                                                                           |
+| **CTA fill**      | `--accent-gradient` — a flat accent fill with a whisper of top light; primary actions may also use plain `--accent-teal`                        |
 
 ### Semantic status (new)
 
@@ -51,7 +52,7 @@ Source of truth for console UI work. Tokens live in [`apps/frontend/src/index.cs
 | `--fs-2xl`  | 1.75rem                      | page titles, metric values                   |
 | `--fs-3xl`  | clamp(1.9rem, 3.4vw, 2.5rem) | display titles (Studies, New Study)          |
 
-Weights: 400 body · 500 nav/labels · 600 titles, buttons · 700 display, metrics. Headings use `letter-spacing: -0.03em` and `text-wrap: balance`. Numbers use `font-variant-numeric: tabular-nums`. Fonts: Plus Jakarta Sans (UI), JetBrains Mono (ids, request ids, kbd), self-hosted via `@fontsource`.
+Weights: 400 body · 500 nav/labels · 600 titles, buttons · 700 display, metrics. Headings use `letter-spacing: -0.022em` (display `-0.03em`) and `text-wrap: balance`. Numbers use `font-variant-numeric: tabular-nums`. Fonts: `--font-sans` is system-UI first (`-apple-system, BlinkMacSystemFont, 'SF Pro Text'`) so Apple hardware renders SF; Plus Jakarta Sans (self-hosted via `@fontsource`) is the cross-platform fallback. `--font-mono` (`ui-monospace, 'SF Mono', 'JetBrains Mono'`) is for ids and request ids only — not for labels, kickers or kbd hints.
 
 ### Spacing
 
@@ -59,11 +60,11 @@ Weights: 400 body · 500 nav/labels · 600 titles, buttons · 700 display, metri
 
 ### Radius
 
-`--r-xs 6` `--r-sm 8` `--r-md 12` `--r-lg 16` `--r-xl 20` `--r-pill 999`. Buttons/inputs `sm`; callouts/metrics `md`/`lg`; cards `lg`; dialogs `xl`; badges `pill`.
+iOS continuous-corner scale: `--r-xs 8` `--r-sm 10` `--r-md 14` `--r-lg 18` `--r-xl 24` `--r-pill 999`. Controls/inputs/nav rows `sm`; buttons/callouts `md`; cards/rows `lg`; dialogs, command menu, composer `xl`; badges, chips, pills `pill`.
 
 ### Elevation
 
-`--shadow-sm / -md / -lg` are two-layer (tight contact + soft diffuse) and theme-aware; `--shadow-glow` for the primary CTA only. Raised surfaces add `inset 0 1px 0 var(--reflect)`.
+`--shadow-sm / -md / -lg` are two-layer (tight contact + wide soft diffuse), low-contrast and theme-aware. Raised surfaces add `inset 0 1px 0 var(--reflect)`. Buttons and cards do **not** cast accent-coloured glows; selection is shown with a `0 0 0 3px var(--accent-subtle)` ring.
 
 ## Components (`src/components/ui`)
 
@@ -118,7 +119,7 @@ Grids use `repeat(auto-fit|auto-fill, minmax(min(Npx, 100%), 1fr))` — never a 
 
 ## Motion principles
 
-One ease: `--bx-ease: cubic-bezier(0.16, 1, 0.3, 1)`. View entrance 0.5 s rise 14 px; card stagger 45 ms/step capped 0.36 s total; modal 0.4 s rise+scale; chat bubble 0.3 s; CTA sheen sweep 0.6 s one-shot. GSAP (`src/motion/`) is used for count-ups and view staggers; everything else is CSS. Nothing animates infinitely except the skeleton shimmer and the health dot pulse (both off under reduced motion).
+One ease: `--bx-ease: cubic-bezier(0.32, 0.72, 0, 1)` (Apple's sheet/spring curve). View entrance 0.5 s rise 14 px; card stagger 45 ms/step capped 0.36 s total; modal 0.4 s rise+scale; chat bubble 0.3 s; button press `scale(0.97)`; CTA sheen sweep 0.6 s one-shot (landing only). GSAP (`src/motion/`) is used for count-ups and view staggers; everything else is CSS. Nothing animates infinitely except the skeleton shimmer and the health dot pulse (both off under reduced motion).
 
 ## Adding UI — checklist
 

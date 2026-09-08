@@ -55,6 +55,14 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-09-09, later) — Console restyled to an iOS/macOS visual language
+
+Frontend only; backend untouched. The authenticated console (`/app`, `/dashboard`, `/persona-library`, and every view built on the `bx-*` primitives) now follows Apple's system design conventions instead of the previous dark-teal SaaS look. Token-level change in `index.css`: true near-black canvas (`#000`) with luminance-stepped grouped surfaces (`#1c1c1e`/`#2c2c2e`) in dark, iOS grouped grey (`#f2f2f7`) with white cells in light; iOS label hierarchy for text; hairline separators (`rgba(84,84,88,.42)`) replacing outlines; system-vivid teal accent (`#30d1c7` dark / `#00968c` light) with white on-accent text; SF-first font stack (`-apple-system, BlinkMacSystemFont, 'SF Pro Text'`) falling back to the already-loaded Plus Jakarta Sans; continuous-corner radius scale (8/10/14/18/24); softer wide shadows; Apple's sheet ease `cubic-bezier(0.32, 0.72, 0, 1)`. Primitives (`ui.css`): sidebar rows are filled selection pills with accent icons (left-bar indicator removed); topbar is a sticky translucent toolbar; buttons are filled / gray / plain per iOS; badges, callouts, metrics, empty states, cmdk and search are fill-based with no borders; eyebrows and section labels are small sans caps (monospace kickers removed everywhere). Views (`newstudy.css`, `studies.css`): solid tight display headlines (gradient ink removed), elevated composer cell with round filled send button, iOS suggestion pills, real segmented control, grouped list rows, tinted empty-state CTA. `DashboardLayout.tsx` inline chrome softened to match (hairline sidebar edge, borderless rounded banners, pill verify button, borderless user chip). No text, aria, routing or data changes; 269/269 tests green, `tsc` clean. Verified in both themes at 1440px and 390px. `docs/DESIGN_SYSTEM.md` updated (principle 0, fonts, radius, elevation, motion).
+
+### Maintenance (2026-09-09, later) — Button kit modernised and adopted on the study workflow
+
+`ui.css` `.bx-btn` family reworked to iOS-style pills: gradient-lit primary with glow, frosted `secondary`, new `tinted` intent (accent text on translucent accent), visible focus ring, hover lift. New `.bx-counter` segmented +/- stepper. The kit was previously unused (every button was inline-styled); the workflow header (Exit Study), Step 1 (evidence actions, Retry, Approve Goal, Generate Personas, role counters) and the email-verify banner now use it. Stepper badges got a lit gradient + halo for the current step. 269 tests green.
+
 ### Maintenance (2026-09-09): Approved sync blockers (verification pending)
 
 Scope: preserve the pending `ml_persona` and backend integration work; fix only frontend lockfile alignment, ML package installation wiring, the broken console-script registration, and the redacted staged-audit check. No new ML features, model training, broader cleanup, or chat/interview routing changes are part of this sync.
@@ -78,6 +86,10 @@ This review authorizes alignment of missing lock entries only: no newly selected
 **Targeted results reported by the coordinating sync, not rerun here:** the ML wheel build with `--no-deps` succeeded; 12 added ops/env parity cases moved the targeted suite from RED (9 failed / 12 passed) to GREEN (21 passed); targeted Ruff was clean; `install_backend` covered 2/2 statements. The staged-check probes for a synthetic redacted match, clean input, and Git failure all passed. These are focused checks, not a full-gate or live-model result.
 
 **Verification pending:** the full sync gate has **not run yet**. The coordinating sync will record final results after the approved fixes; this entry does not claim a completed sync, successful push, live inference, or completed model training. No trained production artifact has been provided.
+
+### Maintenance (2026-09-09) — Study workflow composer + stepper polish, touch/mobile pass
+
+Frontend only. Step 1 (Context) now uses the shared `PromptInputBox` (same composer as interviews; new `disabledReason` prop carries the read-only explanation the `DemoReadOnly` test asserts; ref type is now `HTMLTextAreaElement`). The workflow stepper is a single horizontally-scrolling pill row (`.bx-stepper`) instead of wrapping to two lines on phones. Global: `overscroll-behavior`, tap-highlight removal, 44px form controls on coarse pointers, CSS tooltips suppressed on touch. Audited all eight console routes at 390px with a DOM overflow probe — none overflow horizontally. 269 tests green.
 
 ### Maintenance (2026-09-08, latest) — Business-matrix audit: eight dissimilar businesses through the whole pipeline on real routes, 17 live bugs fixed
 

@@ -1505,16 +1505,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               <button
                 type="button"
                 onClick={() => navigate('/auth/verify')}
-                style={{
-                  background: 'var(--accent-subtle)',
-                  border: 'none',
-                  color: 'var(--accent-teal)',
-                  borderRadius: '999px',
-                  padding: '7px 14px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
+                className="bx-btn bx-btn--tinted bx-btn--sm"
               >
                 Verify email
               </button>

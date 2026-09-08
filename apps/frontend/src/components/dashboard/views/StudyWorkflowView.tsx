@@ -1076,11 +1076,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                 >
                   <div
                     style={{
-                      width: '18px',
-                      height: '18px',
+                      width: '20px',
+                      height: '20px',
                       borderRadius: '50%',
-                      background: isDone ? 'var(--accent-teal)' : isCurrent ? 'var(--accent-cyan)' : 'var(--border-subtle)',
-                      color: isDone || isCurrent ? 'var(--bg-pure)' : 'var(--text-secondary)',
+                      background: isDone
+                        ? 'var(--accent-teal)'
+                        : isCurrent
+                        ? 'linear-gradient(180deg, var(--accent-teal-bright), var(--accent-teal))'
+                        : 'var(--fill-soft-2)',
+                      color: isDone || isCurrent ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+                      boxShadow: isCurrent ? '0 0 0 3px var(--accent-subtle), inset 0 1px 0 rgba(255,255,255,0.3)' : 'none',
                       fontSize: '0.7rem',
                       fontWeight: 700,
                       display: 'flex',

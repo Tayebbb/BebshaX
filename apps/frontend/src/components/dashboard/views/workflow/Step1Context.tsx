@@ -349,23 +349,9 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                         ? 'Pick at least one role first'
                         : undefined
                     }
-                    style={{
-                      background: 'var(--accent-gradient)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '10px 20px',
-                      color: 'var(--text-on-accent)',
-                      fontWeight: 700,
-                      fontSize: '0.88rem',
-                      cursor: isGeneratingPersonas || isReadOnly ? 'not-allowed' : 'pointer',
-                      opacity: isReadOnly ? 0.55 : 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      boxShadow: '0 4px 14px var(--accent-glow)',
-                    }}
+                    className="bx-btn bx-btn--primary"
                   >
-                    <Sparkles size={16} />
+                    <Sparkles size={16} aria-hidden="true" />
                     {isGeneratingPersonas ? 'Generating Personas...' : 'Generate Personas'}
                   </button>
                 </div>
@@ -401,17 +387,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                       <button
                         type="button"
                         onClick={handleRetrySuggestedRoles}
-                        style={{
-                          background: 'transparent',
-                          border: '1px solid currentColor',
-                          borderRadius: '6px',
-                          padding: '4px 12px',
-                          color: 'inherit',
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                          fontSize: '0.82rem',
-                          whiteSpace: 'nowrap',
-                        }}
+                        className="bx-btn bx-btn--danger bx-btn--sm"
                       >
                         Retry
                       </button>
@@ -500,52 +476,18 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                         </div>
 
                         {/* Right: Stepper Counter */}
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            background: 'var(--bg-card-hover)',
-                            border: '1px solid var(--border-medium)',
-                            borderRadius: '8px',
-                            padding: '4px 6px',
-                            flexShrink: 0,
-                          }}
-                        >
+                        <div onClick={(e) => e.stopPropagation()} className="bx-counter">
                           <button
                             type="button"
                             aria-label={`Decrease ${role.role} count`}
                             onClick={(e) => handleDecrementRole(role.id, e)}
                             disabled={role.count <= 0}
-                            style={{
-                              background: role.count > 0 ? 'var(--border-subtle)' : 'transparent',
-                              border: 'none',
-                              color: role.count > 0 ? 'var(--text-main)' : 'var(--text-faint)',
-                              borderRadius: '6px',
-                              width: '26px',
-                              height: '26px',
-                              cursor: role.count > 0 ? 'pointer' : 'not-allowed',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'background 0.15s ease',
-                            }}
+                            className="bx-counter__btn"
                           >
-                            <Minus size={13} />
+                            <Minus size={13} aria-hidden="true" />
                           </button>
 
-                          <span
-                            style={{
-                              fontSize: '0.88rem',
-                              fontWeight: 700,
-                              minWidth: '20px',
-                              textAlign: 'center',
-                              color: role.count > 0 ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                            }}
-                          >
-                            {role.count}
-                          </span>
+                          <span className={`bx-counter__value${role.count > 0 ? ' is-active' : ''}`}>{role.count}</span>
 
                           <button
                             type="button"
@@ -554,21 +496,9 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                             disabled={atCap}
                             aria-disabled={atCap ? true : undefined}
                             title={atCap ? `Up to ${MAX_PERSONAS_PER_ROLE} personas per role` : undefined}
-                            style={{
-                              background: atCap ? 'transparent' : 'var(--border-subtle)',
-                              border: 'none',
-                              color: atCap ? 'var(--text-faint)' : 'var(--text-main)',
-                              borderRadius: '6px',
-                              width: '26px',
-                              height: '26px',
-                              cursor: atCap ? 'not-allowed' : 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'background 0.15s ease',
-                            }}
+                            className="bx-counter__btn"
                           >
-                            <Plus size={13} />
+                            <Plus size={13} aria-hidden="true" />
                           </button>
                         </div>
                       </div>
