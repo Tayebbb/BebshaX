@@ -12,6 +12,7 @@ LLM is wired it fails explicitly (``LLMUnavailable``); infrastructure failures
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import math
 import re
@@ -24,6 +25,7 @@ from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_json_block
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.personas.validator import validate_synthetic_persona
+from bebshax.personas.ml_adapter import MLPersonaAdapter, build_business_context, to_persona_draft
 from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 
 logger = logging.getLogger(__name__)
@@ -605,6 +607,47 @@ async def _process_segment(
     return drafts[:count_for_seg]
 
 
+def _ml_context(study: Any, segment: Any, claims: list[Any], datasets: list[Any]) -> Any:
+    characteristics = getattr(segment, "characteristics", {}) or {}
+    age_range = (characteristics.get("demographics", {}) or {}).get("age_range")
+    age_bounds: dict[str, Any] = {}
+    if age_range is not None:
+        if not isinstance(age_range, list) or len(age_range) != 2:
+            from bebshax.api.errors import APIError
+
+            raise APIError(422, "The segment age constraints are unsupported.", error_code="ml_persona_unsupported_context")
+        age_bounds = {"min_age": age_range[0], "max_age": age_range[1]}
+    research = [json.dumps({
+        "goal": getattr(study, "goal", None),
+        "collected_context": getattr(study, "collected_context", None),
+        "findings": getattr(study, "findings", None),
+        "copilot_messages": getattr(study, "copilot_messages", None),
+        "segment": {
+            "name": getattr(segment, "name", ""),
+            "description": getattr(segment, "description", ""),
+            "characteristics": characteristics,
+            "variable_distributions": getattr(segment, "variable_distributions", {}),
+            "population_percentage": getattr(segment, "population_percentage", None),
+        },
+    }, ensure_ascii=False)]
+    research.extend(json.dumps({
+        "id": getattr(claim, "id", ""), "claim_text": getattr(claim, "claim_text", ""),
+        "category": getattr(claim, "category", ""),
+    }, ensure_ascii=False) for claim in claims)
+    research.extend(json.dumps({
+        "id": getattr(dataset, "id", ""), "name": getattr(dataset, "name", ""),
+        "schema_metadata": getattr(dataset, "schema_metadata", {}),
+    }, ensure_ascii=False) for dataset in datasets)
+    return build_business_context(
+        description="\n".join([getattr(study, "title", "") or "", getattr(study, "prompt", "") or ""]),
+        target_audience=getattr(study, "target_audience", "") or "",
+        price_range=getattr(study, "pricing_hypothesis", "") or "",
+        role=getattr(segment, "name", "") or "",
+        research=research,
+        **age_bounds,
+    )
+
+
 async def generate_personas_for_study(
     study: Any,
     segments: list[Any],
@@ -613,6 +656,9 @@ async def generate_personas_for_study(
     datasets: list[Any] | None = None,
     evidence_claims: list[Any] | None = None,
     llm_service: Optional[LLMService] = None,
+    ml_generator: MLPersonaAdapter | None = None,
+    exclude_ids: set[str] | None = None,
+    exclude_names: set[str] | None = None,
 ) -> list[GeneratedPersonaDraft]:
     """Generate synthetic personas across the study's segments.
 
@@ -621,11 +667,35 @@ async def generate_personas_for_study(
     Never returns fewer personas than requested and never a template."""
     if not segments:
         raise ValueError("Cannot generate personas: study has no market segments. Run segmentation first.")
-    if llm_service is None:
-        raise LLMUnavailable("Persona generation")
+    if ml_generator is None and llm_service is None:
+        ml_generator = MLPersonaAdapter.from_settings()
 
     quotas = calculate_segment_quotas(segments, target_count, distribution_strategy)
     claims = list(evidence_claims or [])
+    if ml_generator is not None:
+        used_ids = set(exclude_ids or ())
+        used_names = set(exclude_names or ())
+        drafts: list[GeneratedPersonaDraft] = []
+        for segment in segments:
+            count = quotas.get(getattr(segment, "id", ""), 0)
+            if count <= 0:
+                continue
+            selections = await ml_generator.generate(
+                _ml_context(study, segment, claims, list(datasets or [])), count,
+                exclude_ids=used_ids, exclude_names=used_names,
+            )
+            for selection in selections:
+                drafts.append(to_persona_draft(selection).model_copy(update={
+                    "segment_id": getattr(segment, "id", None),
+                    "segment_name": getattr(segment, "name", None),
+                }))
+                used_ids.add(selection.record.record_id)
+                if selection.record.name:
+                    used_names.add(selection.record.name)
+        return drafts
+
+    if llm_service is None:
+        raise LLMUnavailable("Persona generation")
     study_ctx = _study_context(study)
 
     seg_specs = [(seg, quotas.get(getattr(seg, "id", ""), 1)) for seg in segments]

@@ -22,6 +22,7 @@ from bebshax.db.models import (
 )
 from bebshax.llm.service import LLMService
 from bebshax.personas.generator import generate_personas_for_study
+from bebshax.personas.ml_adapter import MLPersonaAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,15 @@ def _run_age(run: PersonaGenerationRuns, now: datetime) -> timedelta:
 
 
 class PersonaGenerationService:
-    def __init__(self, session: AsyncSession, llm_service: Optional[LLMService] = None) -> None:
+    def __init__(
+        self, session: AsyncSession, llm_service: Optional[LLMService] = None,
+        *, ml_generator: MLPersonaAdapter | None = None,
+    ) -> None:
         self.session = session
         self.llm_service = llm_service
+        self.ml_generator = ml_generator
+        if self.ml_generator is None and llm_service is None:
+            self.ml_generator = MLPersonaAdapter.from_settings()
 
     async def list_runs(self, study_id: str, user_id: Optional[str] = None) -> list[PersonaGenerationRuns]:
         """List historical persona generation runs for a study."""
@@ -167,8 +174,9 @@ class PersonaGenerationService:
             select(EvidenceClaims)
             .where(EvidenceClaims.study_id == study_id)
             .order_by(EvidenceClaims.confidence.desc(), EvidenceClaims.created_at.desc())
-            .limit(_CLAIM_FETCH_LIMIT)
         )
+        if self.ml_generator is None:
+            claim_stmt = claim_stmt.limit(_CLAIM_FETCH_LIMIT)
         claims = list((await self.session.execute(claim_stmt)).scalars().all())
         # claim_count is a provenance fact about the study, not about how many
         # claims we chose to feed the model — count the real total separately.
@@ -225,6 +233,7 @@ class PersonaGenerationService:
                 datasets=datasets,
                 evidence_claims=claims,
                 llm_service=self.llm_service,
+                ml_generator=self.ml_generator,
             )
 
             run.status = "saving_personas"
@@ -390,6 +399,20 @@ class PersonaGenerationService:
             raise ValueError(
                 f"Persona '{persona_id}' has no market segment to regenerate against; run segmentation first."
             )
+        exclude_ids: set[str] = set()
+        exclude_names: set[str] = set()
+        if self.ml_generator is not None:
+            existing_stmt = select(Personas.detailed_attributes, Personas.name).where(
+                Personas.study_id == study_id, Personas.status != "archived",
+            )
+            if user_id:
+                existing_stmt = existing_stmt.where(Personas.user_id == user_id)
+            for detailed, name in (await self.session.execute(existing_stmt)).all():
+                provenance = (detailed or {}).get("ml_provenance", {})
+                if isinstance(provenance, dict) and provenance.get("record_id"):
+                    exclude_ids.add(provenance["record_id"])
+                if name:
+                    exclude_names.add(name)
         drafts = await generate_personas_for_study(
             study=study,
             segments=[segment],
@@ -397,6 +420,9 @@ class PersonaGenerationService:
             distribution_strategy="equal",
             evidence_claims=claims,
             llm_service=self.llm_service,
+            ml_generator=self.ml_generator,
+            exclude_ids=exclude_ids,
+            exclude_names=exclude_names,
         )
         if drafts:
             draft = drafts[0]

@@ -19,7 +19,7 @@ You (the agent) MUST follow this file for any work in this repository. It applie
 - **R6:** the failure taxonomy is closed; new kinds need enum + policy + tests in one commit.
 - **R7:** `python -m pytest apps/backend/tests -q` green before every commit; new behavior ships with tests; chaos paths use `FakeAdapter`, never real providers.
 - **R8:** any new dependency requires a written review (why / what it provides / license / activity / necessity) in the docs before installing.
-- **R9:** datasets only via `scripts/setup_datasets.py` profiles + `data/DATASETS.md`; **no fine-tuning, ever**.
+- **R9:** datasets only via `scripts/setup_datasets.py` profiles + `data/DATASETS.md`; **no LLM fine-tuning**. The owner-approved `ml_persona` profile alone permits reviewed public synthetic data for non-LLM persona training (2026-09-08).
 - **R10:** no Kubernetes, Redis clusters, message queues, custom gateways, or ML routers in the request path. Check mature OSS before building anything.
 
 ## Phase Execution Protocol
@@ -60,5 +60,5 @@ Triggers: a user says **"implement phase N"**, **"implement the next one"**, or 
 - Treat low answer quality as an infrastructure failure.
 - Commit secrets, `.env`, or real PII.
 - Create duplicate accounts or evade provider limits.
-- Fine-tune models on the datasets.
+- Fine-tune LLMs, or train on datasets not explicitly allowlisted under R9.
 - Finish a task with stale docs.

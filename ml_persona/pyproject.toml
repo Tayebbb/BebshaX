@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bebshax-persona-ml"
+version = "0.1.0"
+description = "Reproducible, local, non-LLM persona modeling for BebshaX"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0,<3",
+    "scipy>=1.16,<2",
+    "scikit-learn>=1.7,<2",
+    "pydantic>=2.7,<3",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]

@@ -60,13 +60,13 @@ async def test_evaluation_metrics_endpoint(api_test_app: TestClient):
     assert "quality_gate" in metrics
 
 
-async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, auth_headers):
+async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, auth_headers, ml_training_records):
     # 1. Create Business
     b_res = api_test_app.post(
         "/api/businesses",
         json={
             "name": "SwiftCourier App",
-            "description": "Instant gig earnings management",
+            "description": "Instant food delivery and gig earnings management",
             "industry": "Gig Economy",
             "target_market": "Couriers",
         },
@@ -93,7 +93,14 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, 
     assert p_gen.status_code == 201
     persona = p_gen.json()
     persona_id = persona["id"]
-    assert persona["name"] == "Alex Mercer"
+    assert persona["generation_model"].startswith("bebshax-persona-ml/")
+    source = next(record for record in ml_training_records if record.record_id == persona["detailed_attributes"]["ml_provenance"]["record_id"])
+    assert persona["name"] == (source.name or f"Synthetic profile {source.record_id}")
+    assert persona["detailed_attributes"]["source_documents"] == source.documents
+    fake_adapter = api_test_app.app.state.llm_adapters["pollinations"]
+    assert fake_adapter.requests == []
+    for route in fake_adapter._routes.values():
+        route.replies = [f"Speaking as {persona['name']}: I use a calendar to plan work and meals."]
 
     # 4. List Personas (owner-scoped after B6 stage 3)
     plist_res = api_test_app.get("/api/personas", headers=auth_headers)
@@ -123,7 +130,7 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, 
     # 8. Post message — the question shares topic tokens with the identity memory
     # ("Delivery Courier") so relevance-floored retrieval legitimately recalls it;
     # an unrelated question would (honestly) recall nothing.
-    question = "As a delivery courier, would you use an automated 5% buffer deduction?"
+    question = f"{persona['description']} How do you plan food delivery, work and study?"
     msg_res = api_test_app.post(
         f"/api/conversations/{conv_id}/messages",
         json={"content": question},
@@ -131,7 +138,7 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, 
     )
     assert msg_res.status_code == 200
     msg_data = msg_res.json()
-    assert "Alex" in msg_data["reply"]
+    assert "calendar" in msg_data["reply"]
     assert msg_data["user_message"]["content"] == question
     # M4: latency/route/memories must be REAL values from the engine — the
     # audited code hardcoded latency_ms=750 and invented placeholder memories.
@@ -139,10 +146,10 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, 
     assert isinstance(reply_meta["latency_ms"], (int, float)) and reply_meta["latency_ms"] > 0
     assert reply_meta["latency_ms"] != 750  # the audit's fabricated constant
     assert reply_meta["served_by"] == "pollinations/deepseek-r1"  # the FakeRoute actually serving
-    assert any("Alex Mercer" in m for m in reply_meta["retrieved_memories"]), (
+    assert any(persona["name"] in memory for memory in reply_meta["retrieved_memories"]), (
         "retrieved_memories must be the actual memory texts used in composition"
     )
-    assert "Alex" in msg_data["persona_reply"]["content"]
+    assert "calendar" in msg_data["persona_reply"]["content"]
 
     # 9. Get transcript
     tr_res = api_test_app.get(f"/api/conversations/{conv_id}", headers=auth_headers)

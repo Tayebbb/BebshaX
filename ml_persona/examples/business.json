@@ -1,0 +1,12 @@
+{
+  "description": "A budget food delivery service for university students, offering shared meals and transparent delivery fees.",
+  "target_audience": "University students and young adults living on a limited food budget",
+  "location": "USA",
+  "price_range": "Affordable meals with no hidden delivery charges",
+  "product_category": "Food delivery",
+  "features": ["Shared meal orders", "Upfront fees", "Budget planning"],
+  "research": [],
+  "role": "Student food customer",
+  "min_age": 18,
+  "max_age": 24
+}

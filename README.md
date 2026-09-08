@@ -28,7 +28,7 @@ One-shot: `python scripts/setup.py` (creates venv, installs, bootstraps .env + J
 ```powershell
 # Backend
 python -m venv .venv
-.venv\Scripts\pip install -e "apps/backend[dev]"
+.venv\Scripts\pip install -e ml_persona -e "apps/backend[dev]"
 
 # Required before the API will start (see "Secrets" below)
 copy .env.example .env
@@ -38,6 +38,7 @@ copy .env.example .env
 
 # Tests — run from the REPO ROOT, not from apps/backend
 .venv\Scripts\python -m pytest apps/backend/tests -q
+.venv\Scripts\python -m pytest ml_persona/tests -q
 
 # Run the API
 .venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000
@@ -56,6 +57,8 @@ npm install
 npm run dev
 # → http://localhost:5173
 ```
+
+**Persona ML prerequisite:** install both local Python packages. Inference additionally requires a trained artifact directory via `BEBSHAX_ML_PERSONA_ARTIFACT_DIR`, or at the default `data/processed/ml_persona/model` under the configured processed-data root. This sync supplies no trained production artifact and includes no model training. See [docs/SETUP.md](docs/SETUP.md#persona-ml-artifact) for the exact setting and explicit failures; chat/interview LLM routing is unchanged.
 
 ### Verified command matrix (Last verified: 2026-09-02)
 
@@ -87,7 +90,7 @@ Everything below is enforced by [AGENTS.md](AGENTS.md), [RULES.md](RULES.md), te
 
 ## 1. One-time setup (day 1, ~5 min)
 
-1. Follow [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md) exactly: venv → `pip install -e "apps/backend[dev]"` → run tests. Don't continue until the suite passes.
+1. Follow [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md) exactly: venv → `pip install -e ml_persona -e "apps/backend[dev]"` → run tests. Don't continue until the suite passes.
 2. Copy `.env.example` → `.env`. Provider keys are **optional** (keyless providers work); add only free-tier keys from accounts **you personally own**. Never share keys, never commit `.env`.
 3. Read, in this order: [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) → [RULES.md](RULES.md) → [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md) (find your name) → your phase's section in [docs/PHASES.md](docs/PHASES.md). ~20 minutes total.
 

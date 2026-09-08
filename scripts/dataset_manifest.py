@@ -7,7 +7,8 @@ Rules:
 - Every entry MUST pin an exact commit SHA (pinned_revision), never a branch.
 - Gated datasets must have is_required=False and fail soft.
 - Profile hierarchy: minimal ⊂ development ⊂ evaluation ⊂ full.
-- No model training/fine-tuning permitted.
+- Independent ml_persona profile: reviewed public synthetic, non-LLM training only.
+- No LLM fine-tuning permitted; legacy entries are never training-allowed.
 """
 
 from __future__ import annotations
@@ -15,9 +16,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
-ProfileType = Literal["minimal", "development", "evaluation", "full"]
+ProfileType = Literal["minimal", "development", "evaluation", "full", "ml_persona"]
 
 PROFILES_ORDER: list[ProfileType] = ["minimal", "development", "evaluation", "full"]
+ALL_PROFILES: list[ProfileType] = [*PROFILES_ORDER, "ml_persona"]
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,7 @@ class DatasetEntry:
     distribution: DatasheetDistribution
     raw_sha256: str | None = None        # Nullable on first run; verified on subsequent runs
     processed_sha256: str | None = None  # Nullable on first run; verified on subsequent runs
+    training_allowed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -556,16 +559,164 @@ DATASET_MANIFEST: list[DatasetEntry] = [
 ]
 
 
-def get_manifest() -> list[DatasetEntry]:
-    """Return the authoritative list of dataset entries."""
+ML_DATASET_MANIFEST: list[DatasetEntry] = [
+    DatasetEntry(
+        dataset_id="nemotron_personas_usa_ml",
+        hf_repo_id="nvidia/Nemotron-Personas-USA",
+        pinned_revision="5b4cd35ab46490c1da1bd2b5a2324d6f871be180",
+        files_or_patterns=["data/train-00000-of-00011.parquet"],
+        profiles=["ml_persona"],
+        download_method="hf_hub_file",
+        preprocessing_fn="preprocess_nemotron_personas",
+        is_required=True,
+        estimated_raw_size_mb=245.0,
+        training_allowed=True,
+        motivation=DatasheetMotivation(
+            purpose="Synthetic priors for the isolated non-LLM persona model; never empirical consumer evidence.",
+            domain="Synthetic USA adult profiles",
+            research_questions=["Can explicitly synthetic priors support auditable non-LLM persona modeling?"],
+        ),
+        composition=DatasheetComposition(
+            instance_type="Synthetic adult profile with demographics and full persona narratives",
+            slice_description=(
+                "Lowest 6,000 SHA-256 ranks of UTF-8 '<hf_repo_id>@<pinned_revision>:<uuid>' "
+                "across every row group of data/train-00000-of-00011.parquet, ordered by rank then uuid. "
+                "One pinned shard only, not a prefix or a population-representative sample; "
+                "upstream has 1,000,000 profiles across 11 parquet shards (~2.69 GB)."
+            ),
+            sample_count_estimate=6000,
+            sensitive_content=(
+                "Public synthetic profiles may contain synthetic names, not real PII. "
+                "Sex, zipcode and list variants are excluded. No real users or private studies accepted."
+            ),
+        ),
+        collection=DatasheetCollection(
+            source_url="https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA",
+            upstream_creator="NVIDIA Corporation",
+            collection_mechanism=(
+                "NVIDIA synthetic adult profiles, v1.1 released 2025-10-28; "
+                "repository updated 2025-12-16. Official unauthenticated Hugging Face file download."
+            ),
+        ),
+        preprocessing=DatasheetPreprocessing(
+            raw_format="parquet",
+            cleaning_applied=(
+                "Verify pinned card license and upstream LFS SHA-256; stream row groups with fastparquet; "
+                "select 6,000 hash-ranked profiles and copy full allowlisted fields without truncation. "
+                "Keep raw-shaped records for ml_persona normalization, with no invented income or budget."
+            ),
+            normalized_jsonl_schema={
+                "uuid": "str",
+                "persona": "str",
+                "professional_persona": "str",
+                "sports_persona": "str",
+                "arts_persona": "str",
+                "travel_persona": "str",
+                "culinary_persona": "str",
+                "cultural_background": "str",
+                "skills_and_expertise": "str",
+                "hobbies_and_interests": "str",
+                "career_goals_and_ambitions": "str",
+                "age": "int",
+                "occupation": "str",
+                "education_level": "str",
+                "city": "str",
+                "state": "str",
+                "country": "str",
+            },
+        ),
+        uses=DatasheetUses(
+            intended_uses=["Owner-approved R9 exception: isolated non-LLM persona training on synthetic priors only."],
+            prohibited_uses=[
+                "LLM training / fine-tuning",
+                "OBSERVED customer evidence or empirical consumer conclusions",
+                "Training on real PII, private studies, user uploads or conversations",
+                "Bangladesh population claims or budget inference from age/occupation",
+                "Redistribution without CC-BY-4.0 attribution and change notices",
+            ],
+        ),
+        distribution=DatasheetDistribution(
+            license_claimed_hf="cc-by-4.0",
+            license_verified_upstream="CC-BY-4.0",
+            license_verification_url=(
+                "https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA/blob/"
+                "5b4cd35ab46490c1da1bd2b5a2324d6f871be180/README.md"
+            ),
+            license_verified_at="2026-09-08",
+            license_discrepancy=False,
+            license_notes=(
+                "Verified HF card: CC-BY-4.0, https://creativecommons.org/licenses/by/4.0/. "
+                "Recheck the pinned card at download time, fail closed on mismatch. "
+                "Attribute NVIDIA Corporation and identify the subset/field projection as modifications. "
+                "USA-only synthetic priors inherit generator and demographic biases; no Bangladesh generalization."
+            ),
+            is_gated=False,
+        ),
+    ),
+]
+
+
+ML_RESEARCH_DECISIONS: list[dict[str, str]] = [
+    {
+        "name": "NVIDIA Nemotron-Personas-USA",
+        "status": "used",
+        "license": "CC-BY-4.0",
+        "url": "https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA",
+        "reason": "Used as synthetic priors only, not empirical consumer data; pinned one-shard, hash-ranked subset.",
+    },
+    {
+        "name": "Google Synthetic-Persona-Chat",
+        "status": "not_used",
+        "license": "CC-BY-4.0",
+        "url": "https://huggingface.co/datasets/google/Synthetic-Persona-Chat",
+        "reason": (
+            "Conversation-centric with no required structured demographics; not used for ML training. "
+            "Its existing legacy dialogue-example profile is unchanged."
+        ),
+    },
+    {
+        "name": "PersonaHub",
+        "status": "not_used",
+        "license": "CC-BY-NC-SA-4.0",
+        "url": "https://huggingface.co/datasets/proj-persona/PersonaHub",
+        "reason": (
+            "Noncommercial/share-alike restrictions and insufficient structured fields; not used for ML training. "
+            "Its existing legacy seed role is unchanged."
+        ),
+    },
+    {
+        "name": "UCI Restaurant Consumer Data",
+        "status": "not_used",
+        "license": "CC-BY-4.0",
+        "url": "https://archive.ics.uci.edu/dataset/232/restaurant+consumer+data",
+        "reason": (
+            "138 people and 1,161 ratings, historical 2012 release. Coordinates/religion create privacy concerns; "
+            "real-person data conflicts with the synthetic-only training rule and restaurant scope is narrow. "
+            "Researched, NOT downloaded."
+        ),
+    },
+    {
+        "name": "MiniLM",
+        "status": "not_a_dataset",
+        "license": "Apache-2.0",
+        "url": "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2",
+        "reason": "A pretrained embedding model, not a training dataset; researched, not downloaded or used.",
+    },
+]
+
+
+def get_manifest(*, include_training: bool = False) -> list[DatasetEntry]:
+    """Return the legacy catalog, with isolated training entries only by explicit opt-in."""
+    if include_training:
+        return [*DATASET_MANIFEST, *ML_DATASET_MANIFEST]
     return DATASET_MANIFEST
 
 
 def get_entries_for_profile(profile: ProfileType) -> list[DatasetEntry]:
     """Return all dataset entries included in the specified profile.
     
-    Enforces strict subset hierarchy: minimal ⊂ development ⊂ evaluation ⊂ full.
+    Preserve the legacy hierarchy; ml_persona is independent and opt-in.
     """
-    if profile not in PROFILES_ORDER:
-        raise ValueError(f"Unknown profile '{profile}'. Must be one of {PROFILES_ORDER}")
-    return [entry for entry in DATASET_MANIFEST if profile in entry.profiles]
+    if profile not in ALL_PROFILES:
+        raise ValueError(f"Unknown profile '{profile}'. Must be one of {ALL_PROFILES}")
+    return [entry for entry in get_manifest(include_training=True) if profile in entry.profiles]

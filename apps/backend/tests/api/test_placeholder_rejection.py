@@ -8,6 +8,7 @@ UnusableModelOutput path — nothing is ever substituted.
 
 import json
 
+import pytest
 from starlette.testclient import TestClient
 
 from bebshax.db.models import Personas
@@ -123,7 +124,7 @@ def test_suggest_roles_filters_placeholders_and_refuses_an_all_placeholder_reply
 # --- generate-personas -------------------------------------------------------
 
 
-def test_placeholder_persona_and_placeholder_values_are_treated_as_missing(api_test_app: TestClient, auth_headers):
+def test_placeholder_llm_personas_cannot_replace_trained_profiles(ml_api_app: TestClient, ml_auth_headers, ml_training_records):
     personas = {
         "personas": [
             {"name": "Full Name", "archetype": "Descriptive Archetype", "demographics": {"occupation": "Specific Job Title"}},
@@ -144,32 +145,36 @@ def test_placeholder_persona_and_placeholder_values_are_treated_as_missing(api_t
             },
         ]
     }
-    adapter = _install_router(api_test_app.app, [json.dumps(personas)])
-    roles = [{"id": "r1", "role": "Time-poor dog owner", "description": "Pays for convenience", "count": 2, "selected": True}]
+    adapter = _install_router(ml_api_app.app, [json.dumps(personas)])
+    roles = [{"id": "r1", "role": "Meal planner", "description": "Pays for convenience", "count": 2, "selected": True}]
 
-    res = api_test_app.post("/api/study/generate-personas", json={"study_prompt": "Dog-walking app for Berlin professionals", "roles": roles}, headers=auth_headers)
+    res = ml_api_app.post("/api/study/generate-personas", json={"study_prompt": "Meal delivery planning", "roles": roles}, headers=ml_auth_headers)
     assert res.status_code == 200, res.text
     body = res.json()
-    assert len(adapter.requests) == 1
-    assert [p["name"] for p in body["personas"]] == ["Lena Vogel"]
-    lena = body["personas"][0]
-    assert lena["demographics"] == {"age": 34, "location": "Berlin, Germany"}
-    assert "archetype" not in lena and "tagline" not in lena
-    assert lena["description"].startswith("Consultant with a Border Collie")
-    assert [b["value"] for b in lena["badges"]] == ["About 120 EUR"]
-    assert [a["title"] for a in lena["attributes"]] == ["Reliable evening walks on travel days"]
+    assert adapter.requests == []
+    assert len(body["personas"]) == 2
+    assert len({persona["detailed_attributes"]["ml_provenance"]["record_id"] for persona in body["personas"]}) == 2
+    for persona in body["personas"]:
+        source = next(record for record in ml_training_records if record.record_id == persona["detailed_attributes"]["ml_provenance"]["record_id"])
+        assert persona["name"] == (source.name or f"Synthetic profile {source.record_id}")
+        assert persona["demographics"]["occupation"] == source.occupation
+        assert persona["demographics"]["location"] == source.location
+        assert persona["description"] == source.description
+        assert persona["badges"] == []
+        assert persona["goals"] == source.goals
     assert "Specific Job Title" not in res.text and "Full Name" not in res.text
 
 
-def test_a_reply_whose_only_persona_is_the_example_is_refused(api_test_app: TestClient, auth_headers):
+@pytest.mark.parametrize("ml_api_app", ["missing"], indirect=True)
+def test_missing_ml_artifact_is_not_replaced_by_placeholder_llm(ml_api_app: TestClient, ml_auth_headers):
     only_example = json.dumps({"personas": [{"name": "Full Name", "demographics": {"occupation": "Specific Job Title"}}]})
-    adapter = _install_router(api_test_app.app, [only_example, only_example])
+    adapter = _install_router(ml_api_app.app, [only_example, only_example])
     roles = [{"id": "r1", "role": "Time-poor dog owner", "description": "Pays for convenience", "count": 1, "selected": True}]
 
-    res = api_test_app.post("/api/study/generate-personas", json={"study_prompt": "Dog-walking app for Berlin professionals", "roles": roles}, headers=auth_headers)
-    assert res.status_code == 502, res.text
-    assert res.json()["error_code"] == "persona_generation_unparseable"
-    assert len(adapter.requests) == 2 and "Full Name" not in res.text
+    res = ml_api_app.post("/api/study/generate-personas", json={"study_prompt": "Meal delivery planning", "roles": roles}, headers=ml_auth_headers)
+    assert res.status_code == 503, res.text
+    assert res.json()["error_code"] == "ml_persona_unavailable"
+    assert adapter.requests == [] and "Full Name" not in res.text
 
 
 # --- script ------------------------------------------------------------------

@@ -14,6 +14,7 @@ import bebshax.interview.orm  # noqa: F401
 import bebshax.memory.orm  # noqa: F401
 import bebshax.persona.orm  # noqa: F401
 from bebshax.config import get_settings
+from bebshax.api.errors import APIError
 from bebshax.datasets.service import (
     DATASET_PERSONA_UNPARSEABLE,
     DatasetService,
@@ -25,7 +26,8 @@ from bebshax.llm import SingleAdapterLLMService
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE
-from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
+from bebshax.personas.ml_adapter import MLPersonaAdapter
+from bebshax.utils.explicit_failures import UnusableModelOutput
 
 _CLAIM_GROUPS = (
     "goals",
@@ -140,10 +142,14 @@ async def dataset_session_maker(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
 
-async def test_persona_hardening_no_llm_fails_explicitly(dataset_session_maker) -> None:
-    service = DatasetService(dataset_session_maker, llm=None)
-    with pytest.raises(LLMUnavailable):
-        await service.generate_personas_from_dataset("ds_test", requested_count=2, user_id="usr_test")
+async def test_persona_hardening_missing_ml_model_fails_explicitly(dataset_session_maker, tmp_path) -> None:
+    service = DatasetService(dataset_session_maker, ml_generator=MLPersonaAdapter(tmp_path / "missing-model"))
+    with pytest.raises(APIError) as raised:
+        await service.generate_personas_from_dataset(
+            "ds_test", requested_count=2, user_id="usr_test", business_description="Food delivery for students",
+        )
+    assert raised.value.status_code == 503
+    assert raised.value.error_code == "ml_persona_unavailable"
 
     async with dataset_session_maker() as session:
         assert list((await session.execute(select(Personas))).scalars()) == []

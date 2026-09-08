@@ -26,6 +26,7 @@ from bebshax.persona.schema import (
     PersonaProfile,
     coerce_provenance,
 )
+from bebshax.personas.ml_adapter import MLPersonaAdapter, build_business_context, to_persona_profile
 
 
 class PersonaGenerationFailed(Exception):
@@ -78,11 +79,13 @@ class PersonaEngine:
         evidence_store: EvidenceStore,
         critic: bool = False,
         evidence_k: int = 6,
+        ml_generator: MLPersonaAdapter | None = None,
     ) -> None:
         self._llm = llm
         self._store = evidence_store
         self._critic = critic
         self._evidence_k = evidence_k
+        self._ml_generator = ml_generator
 
     def _build_messages(
         self,
@@ -150,7 +153,24 @@ class PersonaEngine:
         business_name: str,
         business_description: str,
         hints: str | None = None,
+        *,
+        industry: str | None = None,
+        target_market: str | None = None,
+        min_age: int | None = None,
+        max_age: int | None = None,
     ) -> PersonaProfile:
+        if self._ml_generator is not None:
+            context = build_business_context(
+                description=f"{business_name}\n{business_description}",
+                product_category=industry or "",
+                target_audience=target_market or "",
+                research=[hints] if hints else [],
+                min_age=min_age,
+                max_age=max_age,
+            )
+            selections = await self._ml_generator.generate(context, num_personas=1)
+            return to_persona_profile(selections[0], business_id)
+
         persona_id = uuid.uuid4().hex
         evidence = self._store.retrieve(
             f"{business_name} {business_description}", k=self._evidence_k

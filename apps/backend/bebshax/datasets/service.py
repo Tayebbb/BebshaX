@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -15,17 +16,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from bebshax.config import get_settings
-from bebshax.db.models import DatasetPersonaRuns, DatasetSources, Personas, _utcnow
+from bebshax.api.errors import APIError
+from bebshax.db.models import DatasetPersonaRuns, DatasetSources, EvidenceClaims, Personas, Studies, _utcnow
 from bebshax.datasets.parser import parse_dataset_bytes
 from bebshax.datasets.profiler import profile_dataset
 from bebshax.datasets.security import safe_fetch_dataset_bytes
 from bebshax.datasets.segmenter import calculate_segment_persona_distribution, discover_segments
-from bebshax.datasets.validator import validate_persona_against_constraints
+from bebshax.datasets.validator import _numeric_constraint, validate_persona_against_constraints
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.persona.conflicts import contested_slots, shares_content_token
+from bebshax.personas.ml_adapter import MLPersonaAdapter, build_business_context, to_generated_persona, to_persona_draft
 from bebshax.tenancy import PUBLIC_OWNER_IDS
 from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 
@@ -137,9 +140,13 @@ class DatasetService:
         self,
         sessionmaker_: sessionmaker[AsyncSession],
         llm: LLMService | None = None,
+        *, ml_generator: MLPersonaAdapter | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker_
         self._llm = llm
+        self._ml_generator = ml_generator
+        if self._ml_generator is None and llm is None:
+            self._ml_generator = MLPersonaAdapter.from_settings()
         _upload_dir().mkdir(parents=True, exist_ok=True)
 
     @property
@@ -455,6 +462,76 @@ class DatasetService:
             "records": records[:limit],
         }
 
+    async def _generate_ml_segment(
+        self, dataset: DatasetSources, segment: dict[str, Any], count: int,
+        business_name: str, business_description: str, study_context: dict[str, Any],
+        claims: list[dict[str, Any]], exclude_ids: set[str], exclude_names: set[str],
+    ) -> list[dict[str, Any]]:
+        constraints = segment.get("constraints", {}) or {}
+        age_stats = _numeric_constraint(constraints, ("age",))
+        age_range = constraints.get("age_range")
+        if age_range is None and age_stats:
+            age_range = [age_stats.get("min"), age_stats.get("max")]
+        age_bounds: dict[str, Any] = {}
+        if age_range is not None:
+            try:
+                if not isinstance(age_range, list) or len(age_range) != 2:
+                    raise ValueError("Invalid age range")
+                age_bounds = {
+                    "min_age": math.ceil(age_range[0]) if age_range[0] is not None else None,
+                    "max_age": math.floor(age_range[1]) if age_range[1] is not None else None,
+                }
+            except (TypeError, ValueError, OverflowError) as error:
+                raise APIError(422, "The dataset age constraints are unsupported.", error_code="ml_persona_unsupported_context") from error
+        context = build_business_context(
+            description="\n".join([business_name, business_description, study_context.get("prompt") or ""]),
+            target_audience=study_context.get("target_audience") or "",
+            price_range=study_context.get("pricing_hypothesis") or "",
+            role=segment.get("name") or "",
+            research=[json.dumps({
+                "study": study_context,
+                "dataset": {
+                    "id": dataset.id, "name": dataset.name, "description": dataset.description,
+                    "content_hash": dataset.content_hash, "schema_metadata": dataset.schema_metadata,
+                    "statistics": dataset.statistics,
+                },
+                "segment": segment,
+            }, ensure_ascii=False), *(json.dumps(claim, ensure_ascii=False) for claim in claims)],
+            **age_bounds,
+        )
+        assert self._ml_generator is not None
+        selections = await self._ml_generator.generate(
+            context, count, exclude_ids=exclude_ids, exclude_names=exclude_names,
+        )
+        personas: list[dict[str, Any]] = []
+        for selection in selections:
+            persona = to_generated_persona(selection).model_dump(mode="json")
+            draft = to_persona_draft(selection)
+            validation = validate_persona_against_constraints(persona, segment)
+            validation["warnings"] = list(dict.fromkeys([*validation["warnings"], *draft.validation_warnings]))
+            if validation["status"] == "VALID" and validation["warnings"]:
+                validation["status"] = "WARNING"
+            persona.update({
+                "model_used": draft.generation_model,
+                "generation_model": draft.generation_model,
+                "served_by": draft.generation_model,
+                "segment_id": segment["id"],
+                "segment_name": segment["name"],
+                "validation": validation,
+                "warnings": draft.validation_warnings,
+                "evidence_citations": [],
+                "dataset_refs": [*draft.dataset_refs, {
+                    "dataset_id": dataset.id, "dataset_name": dataset.name,
+                    "variable": "segment", "value": segment["name"], "usage": "selection_context",
+                }],
+                "dataset_provenance": {
+                    "dataset_id": dataset.id, "dataset_name": dataset.name,
+                    "segment_name": segment["name"], "population_share": segment.get("population_share", 0.0),
+                },
+            })
+            personas.append(persona)
+        return personas
+
     async def generate_personas_from_dataset(
         self,
         dataset_id: str,
@@ -481,8 +558,20 @@ class DatasetService:
         segments = ds.segments or []
         if not segments:
             raise ValueError(f"Dataset '{dataset_id}' has no discovered segments.")
-        if self._llm is None:
+        if self._llm is None and self._ml_generator is None:
             raise LLMUnavailable("Dataset persona generation")
+
+        study_context: dict[str, Any] = {}
+        claims: list[dict[str, Any]] = []
+        if self._ml_generator is not None and study_id:
+            async with self._sessionmaker() as session:
+                study = await session.get(Studies, study_id)
+                if study is not None:
+                    study_context = {field: getattr(study, field) for field in (
+                        "title", "prompt", "goal", "target_audience", "pricing_hypothesis", "copilot_messages", "findings",
+                    )}
+                claim_rows = (await session.execute(select(EvidenceClaims).where(EvidenceClaims.study_id == study_id))).scalars()
+                claims = [{"id": claim.id, "claim_text": claim.claim_text, "category": claim.category} for claim in claim_rows]
 
         # 1. Mathematically determine exact persona quotas per segment
         quota_distribution = calculate_segment_persona_distribution(segments, requested_count)
@@ -495,12 +584,50 @@ class DatasetService:
         valid_count = 0
         warning_count = 0
         contradiction_count = 0
+        used_source_ids: set[str] = set()
+        used_names: set[str] = set()
+        ml_errors: list[APIError] = []
 
         # 2. Synthesize personas for each segment quota
         for seg in segments:
             seg_id = seg["id"]
             count_for_seg = quota_distribution.get(seg_id, 0)
             if count_for_seg <= 0:
+                continue
+
+            if self._ml_generator is not None:
+                try:
+                    local_personas = await self._generate_ml_segment(
+                        ds, seg, count_for_seg, business_name, business_description,
+                        study_context, claims, used_source_ids, used_names,
+                    )
+                except APIError as error:
+                    if error.status_code == 503:
+                        raise
+                    ml_errors.append(error)
+                    failed.extend({
+                        "segment_id": seg_id, "segment": seg["name"], "index": index,
+                        "error_code": error.error_code, "detail": error.detail,
+                    } for index in range(count_for_seg))
+                    continue
+                for persona in local_personas:
+                    used_source_ids.add(persona["detailed_attributes"]["ml_provenance"]["record_id"])
+                    used_names.add(persona["name"])
+                    if persona["served_by"] not in served_by:
+                        served_by.append(persona["served_by"])
+                    validation = persona["validation"]
+                    if validation["status"] == "VALID":
+                        valid_count += 1
+                    elif validation["status"] == "WARNING":
+                        warning_count += 1
+                    else:
+                        contradiction_count += 1
+                    generated_personas.append(persona)
+                    validation_results.append({
+                        "persona_name": persona["name"], "segment": seg["name"],
+                        "status": validation["status"], "violations": validation["violations"],
+                        "warnings": validation["warnings"],
+                    })
                 continue
 
             constraints = seg.get("constraints", {}) or {}
@@ -618,6 +745,9 @@ class DatasetService:
                 })
 
         if not generated_personas:
+            if ml_errors:
+                ml_errors[-1].extra["failed"] = failed
+                raise ml_errors[-1]
             raise UnusableModelOutput(
                 DATASET_PERSONA_UNPARSEABLE,
                 f"None of the {requested_count} requested personas could be generated from usable model replies.",
@@ -706,7 +836,7 @@ class DatasetService:
                     ),
                     technology_profile=p_data.get("technology_profile") or {},
                     evidence_citations=p_data.get("evidence_citations", []) or [],
-                    dataset_refs=[{"dataset_id": ds.id, "dataset_name": ds.name, "variable": "segment", "value": p_data.get("segment_name")}],
+                    dataset_refs=p_data.get("dataset_refs") or [{"dataset_id": ds.id, "dataset_name": ds.name, "variable": "segment", "value": p_data.get("segment_name")}],
                     # Honest scores: pass through what validation computed, never constants.
                     grounding_score=float(p_data.get("grounding_score") or 0.0),
                     confidence=float(p_data.get("confidence") or 0.0),

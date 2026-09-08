@@ -1,0 +1,124 @@
+{
+  "generated_from": "scripts/dataset_manifest.py",
+  "profile": "ml_persona",
+  "research_decisions": [
+    {
+      "license": "CC-BY-4.0",
+      "name": "NVIDIA Nemotron-Personas-USA",
+      "reason": "Used as synthetic priors only, not empirical consumer data; pinned one-shard, hash-ranked subset.",
+      "status": "used",
+      "url": "https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA"
+    },
+    {
+      "license": "CC-BY-4.0",
+      "name": "Google Synthetic-Persona-Chat",
+      "reason": "Conversation-centric with no required structured demographics; not used for ML training. Its existing legacy dialogue-example profile is unchanged.",
+      "status": "not_used",
+      "url": "https://huggingface.co/datasets/google/Synthetic-Persona-Chat"
+    },
+    {
+      "license": "CC-BY-NC-SA-4.0",
+      "name": "PersonaHub",
+      "reason": "Noncommercial/share-alike restrictions and insufficient structured fields; not used for ML training. Its existing legacy seed role is unchanged.",
+      "status": "not_used",
+      "url": "https://huggingface.co/datasets/proj-persona/PersonaHub"
+    },
+    {
+      "license": "CC-BY-4.0",
+      "name": "UCI Restaurant Consumer Data",
+      "reason": "138 people and 1,161 ratings, historical 2012 release. Coordinates/religion create privacy concerns; real-person data conflicts with the synthetic-only training rule and restaurant scope is narrow. Researched, NOT downloaded.",
+      "status": "not_used",
+      "url": "https://archive.ics.uci.edu/dataset/232/restaurant+consumer+data"
+    },
+    {
+      "license": "Apache-2.0",
+      "name": "MiniLM",
+      "reason": "A pretrained embedding model, not a training dataset; researched, not downloaded or used.",
+      "status": "not_a_dataset",
+      "url": "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2"
+    }
+  ],
+  "schema_version": 1,
+  "sources": [
+    {
+      "collection": {
+        "collection_mechanism": "NVIDIA synthetic adult profiles, v1.1 released 2025-10-28; repository updated 2025-12-16. Official unauthenticated Hugging Face file download.",
+        "source_url": "https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA",
+        "upstream_creator": "NVIDIA Corporation"
+      },
+      "composition": {
+        "instance_type": "Synthetic adult profile with demographics and full persona narratives",
+        "sample_count_estimate": 6000,
+        "sensitive_content": "Public synthetic profiles may contain synthetic names, not real PII. Sex, zipcode and list variants are excluded. No real users or private studies accepted.",
+        "slice_description": "Lowest 6,000 SHA-256 ranks of UTF-8 '<hf_repo_id>@<pinned_revision>:<uuid>' across every row group of data/train-00000-of-00011.parquet, ordered by rank then uuid. One pinned shard only, not a prefix or a population-representative sample; upstream has 1,000,000 profiles across 11 parquet shards (~2.69 GB)."
+      },
+      "dataset_id": "nemotron_personas_usa_ml",
+      "distribution": {
+        "is_gated": false,
+        "license_claimed_hf": "cc-by-4.0",
+        "license_discrepancy": false,
+        "license_notes": "Verified HF card: CC-BY-4.0, https://creativecommons.org/licenses/by/4.0/. Recheck the pinned card at download time, fail closed on mismatch. Attribute NVIDIA Corporation and identify the subset/field projection as modifications. USA-only synthetic priors inherit generator and demographic biases; no Bangladesh generalization.",
+        "license_verification_url": "https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA/blob/5b4cd35ab46490c1da1bd2b5a2324d6f871be180/README.md",
+        "license_verified_at": "2026-09-08",
+        "license_verified_upstream": "CC-BY-4.0"
+      },
+      "download_method": "hf_hub_file",
+      "estimated_raw_size_mb": 245.0,
+      "files_or_patterns": [
+        "data/train-00000-of-00011.parquet"
+      ],
+      "hf_repo_id": "nvidia/Nemotron-Personas-USA",
+      "is_required": true,
+      "motivation": {
+        "domain": "Synthetic USA adult profiles",
+        "purpose": "Synthetic priors for the isolated non-LLM persona model; never empirical consumer evidence.",
+        "research_questions": [
+          "Can explicitly synthetic priors support auditable non-LLM persona modeling?"
+        ]
+      },
+      "pinned_revision": "5b4cd35ab46490c1da1bd2b5a2324d6f871be180",
+      "preprocessing": {
+        "cleaning_applied": "Verify pinned card license and upstream LFS SHA-256; stream row groups with fastparquet; select 6,000 hash-ranked profiles and copy full allowlisted fields without truncation. Keep raw-shaped records for ml_persona normalization, with no invented income or budget.",
+        "normalized_jsonl_schema": {
+          "age": "int",
+          "arts_persona": "str",
+          "career_goals_and_ambitions": "str",
+          "city": "str",
+          "country": "str",
+          "culinary_persona": "str",
+          "cultural_background": "str",
+          "education_level": "str",
+          "hobbies_and_interests": "str",
+          "occupation": "str",
+          "persona": "str",
+          "professional_persona": "str",
+          "skills_and_expertise": "str",
+          "sports_persona": "str",
+          "state": "str",
+          "travel_persona": "str",
+          "uuid": "str"
+        },
+        "raw_format": "parquet"
+      },
+      "preprocessing_fn": "preprocess_nemotron_personas",
+      "processed_sha256": null,
+      "profiles": [
+        "ml_persona"
+      ],
+      "raw_sha256": null,
+      "training_allowed": true,
+      "uses": {
+        "intended_uses": [
+          "Owner-approved R9 exception: isolated non-LLM persona training on synthetic priors only."
+        ],
+        "prohibited_uses": [
+          "LLM training / fine-tuning",
+          "OBSERVED customer evidence or empirical consumer conclusions",
+          "Training on real PII, private studies, user uploads or conversations",
+          "Bangladesh population claims or budget inference from age/occupation",
+          "Redistribution without CC-BY-4.0 attribution and change notices"
+        ]
+      }
+    }
+  ]
+}

@@ -65,6 +65,7 @@ from bebshax.memory.service import MemoryService
 from bebshax.persona.evidence import EvidenceStore
 from bebshax.persona.generation import PersonaEngine
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence  # noqa: F401
+from bebshax.personas.ml_adapter import MLPersonaAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +245,10 @@ async def _lifespan(app: FastAPI):
     app.state.llm_service = llm_router  # same object; studies/personas/evidence/segmentation resolve this name
     app.state.db_sessionmaker = sessionmaker_
     app.state.provenance_sink = sink
-    app.state.persona_engine = PersonaEngine(llm_router, EvidenceStore())
+    app.state.persona_ml = MLPersonaAdapter(settings.ml_persona_artifact_path)
+    app.state.persona_engine = PersonaEngine(
+        llm_router, EvidenceStore(), ml_generator=app.state.persona_ml,
+    )
     app.state.memory_service = MemoryService(
         sessionmaker_,
         build_embedding_backend(settings.embedding_backend, settings.embedding_model),

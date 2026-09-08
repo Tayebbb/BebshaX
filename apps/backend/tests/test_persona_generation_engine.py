@@ -1,6 +1,7 @@
 """Unit and integration tests for synthetic persona generation engine and validator."""
 
 import pytest
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -114,21 +115,22 @@ def test_validate_synthetic_persona_out_of_bounds_warnings():
 
 
 @pytest.mark.asyncio
-async def test_generate_personas_without_llm_fails_explicitly():
-    """No LLM wired → an explicit LLMUnavailable, never template personas."""
-    from bebshax.utils.explicit_failures import LLMUnavailable
+async def test_generate_personas_without_ml_artifact_fails_explicitly(tmp_path):
+    """An unavailable local model fails without generating a substitute persona."""
+    from bebshax.api.errors import APIError
+    from bebshax.personas.ml_adapter import MLPersonaAdapter
 
     segments = [
         MockSegment("seg_1", "Budget Students", 65.0),
         MockSegment("seg_2", "Ambitious Preppers", 35.0),
     ]
-    mock_study = MagicMock()
+    mock_study = SimpleNamespace()
     mock_study.title = "Exam Prep Platform"
     mock_study.prompt = "Affordable study planning"
     mock_study.target_audience = "College students"
     mock_study.pricing_hypothesis = "৳300/month"
 
-    with pytest.raises(LLMUnavailable) as exc_info:
+    with pytest.raises(APIError) as exc_info:
         await generate_personas_for_study(
             study=mock_study,
             segments=segments,
@@ -136,8 +138,9 @@ async def test_generate_personas_without_llm_fails_explicitly():
             distribution_strategy="equal",
             evidence_claims=[],
             llm_service=None,
+            ml_generator=MLPersonaAdapter(tmp_path / "missing-model"),
         )
-    assert exc_info.value.error_code == "llm_unavailable"
+    assert exc_info.value.error_code == "ml_persona_unavailable"
     assert exc_info.value.status_code == 503
 
 

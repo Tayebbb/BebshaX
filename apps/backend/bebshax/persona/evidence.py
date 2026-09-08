@@ -46,6 +46,7 @@ DATASET_ROLES: dict[str, str] = {
     "mmlu_micro": "probe",
     "router_arena": "probe",
     "xroute_bench": "probe",
+    "nemotron_personas_usa_ml": "training",
 }
 # Unknown files are presumed real corpora added for grounding — the safe
 # default for the intended extension path (drop a real dataset in, it works).

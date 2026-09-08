@@ -29,24 +29,24 @@ Custom BebshaX logic: persona engine + `coerce_provenance` (downgrade-only), `pe
 
 ## Subsystem status
 
-| Area                                 | Status | Verified by                                                                                                                                                      |
-| ------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Database & migrations**            | ✅     | from-zero `alembic upgrade head` on pgvector → single head, HNSW indexes, unique turn constraint; 3 integration tests                                            |
-| **AI pipeline (persona generation)** | ✅     | tournaments A/D/F; provenance hardening tests (downgrade-only, lexical gate, contested slots, Bangla tokens)                                                     |
-| **Routing & fallback**               | ✅     | 197 LLM-layer tests incl. 9 new hardening files; tournaments B/C/E/H; live fallback observed (2/8 free-pool → local)                                             |
-| **Provenance**                       | ✅     | sink tests, chaos DB-error test, `/api/provenance` redaction, markers, `via`; every failure recorded in `finally`                                                |
-| **Persona engine honesty**           | ✅     | no phantom defaults (identity card, dataset persistence), confidences derived, templates marked                                                                  |
-| **Memory**                           | ✅     | source column + migration, dedupe, floor, interviewer exclusion, API `source` field, UI badge                                                                    |
-| **Interview engine**                 | ✅     | 20-turn attack tournament, concurrency lock, transcript-as-JSON, drift/contradiction exposed on payloads and reloaded turns                                      |
-| **Evaluation**                       | 🟡     | metrics endpoint + Evaluation card real; cross-route metric real but n = 16; offline replay withdrawn as unusable; judge disjointness enforced                   |
-| **Security**                         | 🟡     | see PRODUCTION_READINESS §5 — pre-hijack/OTP/SSRF/limits/envelope fixed; PBKDF2 cost + history secrets open                                                      |
-| **Testing**                          | ✅     | backend 929 / frontend 249 / lint clean / tournaments A–H + chaos / live AI audit 56/56 (2026-09-08)                                                           |
-| **CI/CD**                            | ✅     | lint · coverage floor · alembic from zero + head count · pgvector integration · frontend test/build/theme · gitleaks · compose validation · pip-audit (advisory) |
-| **Deployment**                       | ✅     | compose `full` built and brought up healthy (2026-09-08): from-zero migration to `f2a3b4c5d6e7` inside the container, nginx IPv6 health fix, SPA + API smoke via :8080 |
-| **Observability**                    | 🟡     | request ids end-to-end, access log, health depth, readiness; no JSON logs / metrics endpoint (deferred by design)                                                |
-| **Demo mode**                        | ✅     | coherent seed, CACHED labels, no fabricated provenance, Judge Lab live-verified (5 scenarios), preflight gates                                                   |
+| Area                                 | Status | Verified by                                                                                                                                                                   |
+| ------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Database & migrations**            | ✅     | from-zero `alembic upgrade head` on pgvector → single head, HNSW indexes, unique turn constraint; 3 integration tests                                                         |
+| **AI pipeline (persona generation)** | ✅     | tournaments A/D/F; provenance hardening tests (downgrade-only, lexical gate, contested slots, Bangla tokens)                                                                  |
+| **Routing & fallback**               | ✅     | 197 LLM-layer tests incl. 9 new hardening files; tournaments B/C/E/H; live fallback observed (2/8 free-pool → local)                                                          |
+| **Provenance**                       | ✅     | sink tests, chaos DB-error test, `/api/provenance` redaction, markers, `via`; every failure recorded in `finally`                                                             |
+| **Persona engine honesty**           | ✅     | no phantom defaults (identity card, dataset persistence), confidences derived, templates marked                                                                               |
+| **Memory**                           | ✅     | source column + migration, dedupe, floor, interviewer exclusion, API `source` field, UI badge                                                                                 |
+| **Interview engine**                 | ✅     | 20-turn attack tournament, concurrency lock, transcript-as-JSON, drift/contradiction exposed on payloads and reloaded turns                                                   |
+| **Evaluation**                       | 🟡     | metrics endpoint + Evaluation card real; cross-route metric real but n = 16; offline replay withdrawn as unusable; judge disjointness enforced                                |
+| **Security**                         | 🟡     | see PRODUCTION_READINESS §5 — pre-hijack/OTP/SSRF/limits/envelope fixed; PBKDF2 cost + history secrets open                                                                   |
+| **Testing**                          | ✅     | backend 929 / frontend 249 / lint clean / tournaments A–H + chaos / live AI audit 56/56 (2026-09-08)                                                                          |
+| **CI/CD**                            | ✅     | lint · coverage floor · alembic from zero + head count · pgvector integration · frontend test/build/theme · gitleaks · compose validation · pip-audit (advisory)              |
+| **Deployment**                       | ✅     | compose `full` built and brought up healthy (2026-09-08): from-zero migration to `f2a3b4c5d6e7` inside the container, nginx IPv6 health fix, SPA + API smoke via :8080        |
+| **Observability**                    | 🟡     | request ids end-to-end, access log, health depth, readiness; no JSON logs / metrics endpoint (deferred by design)                                                             |
+| **Demo mode**                        | ✅     | coherent seed, CACHED labels, no fabricated provenance, Judge Lab live-verified (5 scenarios), preflight gates                                                                |
 | **Frontend**                         | ✅     | 249 tests, tsc build 0, theme drift 0; honesty labels, inspector, evaluation card, memory/consistency disclosures, a11y on 8 dialogs; no seeded questionnaire, AI review card |
-| **Documentation**                    | ✅     | API contract synced (envelope, enums, health, memories, consistency, Judge Lab); drift corrected in 14 docs; new audit/evidence/QA/adversarial docs              |
+| **Documentation**                    | ✅     | API contract synced (envelope, enums, health, memories, consistency, Judge Lab); drift corrected in 14 docs; new audit/evidence/QA/adversarial docs                           |
 
 ## Known limitations (stated, not hidden)
 
@@ -61,18 +61,18 @@ Custom BebshaX logic: persona engine + `coerce_provenance` (downgrade-only), `pe
 
 ## Final verification (this pass)
 
-| Check                                                                                         | Result                                                                             |
-| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `pytest apps/backend/tests -q`                                                                | ✅ 929 passed, 3 deselected (integration) — 2026-09-08 |
-| `pytest -m integration` (scratch pgvector)                                                    | ✅ 3 passed                                                                        |
-| `alembic upgrade head` from zero + `heads`                                                    | ✅ one head `f2a3b4c5d6e7` (verified inside the compose container, 2026-09-08)      |
-| `ruff check apps/backend scripts`                                                             | ✅ clean                                                                           |
-| Frontend `vitest run` / `tsc && vite build` / `theme:check`                                   | ✅ 249 / 0 errors / 0 files                                                        |
-| `scripts/live_ai_audit.py` (real routes, real DB)                                            | ✅ 56/56 checks — `data/metadata/live_ai_audit_20260908_040247.md`                 |
+| Check                                                                                         | Result                                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pytest apps/backend/tests -q`                                                                | ✅ 929 passed, 3 deselected (integration) — 2026-09-08                                                                                                                                     |
+| `pytest -m integration` (scratch pgvector)                                                    | ✅ 3 passed                                                                                                                                                                                |
+| `alembic upgrade head` from zero + `heads`                                                    | ✅ one head `f2a3b4c5d6e7` (verified inside the compose container, 2026-09-08)                                                                                                             |
+| `ruff check apps/backend scripts`                                                             | ✅ clean                                                                                                                                                                                   |
+| Frontend `vitest run` / `tsc && vite build` / `theme:check`                                   | ✅ 249 / 0 errors / 0 files                                                                                                                                                                |
+| `scripts/live_ai_audit.py` (real routes, real DB)                                             | ✅ 56/56 checks — `data/metadata/live_ai_audit_20260908_040247.md`                                                                                                                         |
 | `scripts/business_matrix_audit.py` (8 businesses, real routes, scratch PG)                    | ✅ differentiation 29/29 (`business_matrix_r2/summary_analysis.md`); fixed tree 61/61 end-to-end through 2 businesses (`business_matrix_r5/`); `--edge` 49/49 (`business_matrix_edge_r2/`) |
-| `docker compose config` (default, `--profile full`)                                           | ✅ exit 0                                                                          |
-| Live API smoke (demo mode, PG) — health, envelopes, seed, provenance, Judge Lab ×5, auth gate | ✅                                                                                 |
-| Real cross-route evaluation                                                                   | ✅ artifact `data/metadata/cross_route_20260907_034932.*`                          |
-| `pip-audit` / `npm audit --omit=dev`                                                          | ✅ 0 / 0 known vulnerabilities (advisory in CI)                                    |
-| Docker image build + `up` rehearsal                                                           | 🟡 not run this pass                                                               |
-| Browser screenshot verification                                                               | 🟡 not run this pass                                                               |
+| `docker compose config` (default, `--profile full`)                                           | ✅ exit 0                                                                                                                                                                                  |
+| Live API smoke (demo mode, PG) — health, envelopes, seed, provenance, Judge Lab ×5, auth gate | ✅                                                                                                                                                                                         |
+| Real cross-route evaluation                                                                   | ✅ artifact `data/metadata/cross_route_20260907_034932.*`                                                                                                                                  |
+| `pip-audit` / `npm audit --omit=dev`                                                          | ✅ 0 / 0 known vulnerabilities (advisory in CI)                                                                                                                                            |
+| Docker image build + `up` rehearsal                                                           | 🟡 not run this pass                                                                                                                                                                       |
+| Browser screenshot verification                                                               | 🟡 not run this pass                                                                                                                                                                       |

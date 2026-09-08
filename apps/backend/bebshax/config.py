@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     data_dir: str = "data"
     upload_dir: str | None = None  # default: <data_dir>/uploads
     processed_dir: str | None = None  # default: <data_dir>/processed
+    ml_persona_artifact_dir: str | None = None
 
     @property
     def upload_dir_path(self) -> Path:
@@ -42,6 +43,12 @@ class Settings(BaseSettings):
     @property
     def processed_dir_path(self) -> Path:
         return Path(self.processed_dir) if self.processed_dir else Path(self.data_dir) / "processed"
+
+    @property
+    def ml_persona_artifact_path(self) -> Path:
+        if self.ml_persona_artifact_dir:
+            return Path(self.ml_persona_artifact_dir)
+        return self.processed_dir_path / "ml_persona" / "model"
 
     # M6: explicit origins — wildcard + allow_credentials is invalid per the
     # Fetch spec and unsafe. Comma-separated; override via BEBSHAX_CORS_ORIGINS.

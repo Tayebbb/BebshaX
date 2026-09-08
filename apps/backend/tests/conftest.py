@@ -1,6 +1,11 @@
 """Suite-wide fixtures. tests/ is not a package — helpers are shared from here."""
 
 import os
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bebshax_persona_ml.data import TrainingRecord
 
 # B4 fail-fast: bebshax.config instantiates Settings at import time and exits
 # without a JWT secret. Set a test-only value BEFORE any bebshax import below.
@@ -32,6 +37,47 @@ def _hermetic_local_tier(monkeypatch):
     monkeypatch.setenv("OLLAMA_API_BASE", "http://127.0.0.1:9")
 
 
+@pytest.fixture
+def ml_training_records() -> list["TrainingRecord"]:
+    from bebshax_persona_ml.data import TrainingRecord
+
+    occupations = [
+        "Student", "Nurse", "Teacher", "Farmer", "Baker", "Courier",
+        "Shop owner", "Software engineer", "Researcher", "Designer", "Chef", "Accountant",
+    ]
+    return [
+        TrainingRecord(
+            record_id=f"fixture-{index}",
+            source="test-synthetic-usa",
+            revision="fixture-v1",
+            name=f"Test Person {index}" if index < 11 else None,
+            age=21 + index * 3,
+            occupation=occupation,
+            education="College" if index < 11 else "",
+            location="Austin, Texas, USA",
+            description=f"A synthetic {occupation} balancing food delivery, work and study planning.",
+            goals=["Save time planning meals and work", "Manage a limited budget"],
+            pain_points=["Delivery costs and missed deadlines"],
+            behaviors=["Uses a calendar to organize study and work"],
+            documents={
+                "professional_persona": f"A {occupation} managing work and study schedules.",
+                "culinary_persona": "Plans meals with fresh food and a limited budget.",
+            },
+        )
+        for index, occupation in enumerate(occupations)
+    ]
+
+
+@pytest.fixture
+def ml_artifact(tmp_path: Path, ml_training_records: list["TrainingRecord"]) -> Path:
+    from bebshax_persona_ml.model import ModelConfig, PersonaModel
+
+    artifact_dir = tmp_path / "ml-persona-model"
+    model = PersonaModel.fit(ml_training_records, ModelConfig(n_topics=2, seed=17, max_iter=1000))
+    model.save(artifact_dir)
+    return artifact_dir
+
+
 _VALID_PERSONA_JSON = """
 {
   "name": "Alex Mercer",
@@ -54,10 +100,16 @@ _VALID_PERSONA_JSON = """
 
 
 @pytest.fixture
-async def api_test_app(tmp_path, monkeypatch):
-    """Full app on sqlite with FakeAdapter-backed router — shared across API test modules."""
+async def api_test_app(tmp_path, monkeypatch, ml_artifact):
+    """Full app on sqlite with real local personas and a FakeAdapter-backed chat router."""
+    from bebshax.llm.types import TaskType
+
     db_url = f"sqlite+aiosqlite:///{tmp_path / 'test_api_int.db'}"
     monkeypatch.setenv("BEBSHAX_DATABASE_URL", db_url)
+    monkeypatch.setenv("BEBSHAX_ML_PERSONA_ARTIFACT_DIR", str(ml_artifact))
+    monkeypatch.setenv("BEBSHAX_UPLOAD_DIR", str(tmp_path / "uploads"))
+    monkeypatch.setenv("BEBSHAX_EMBEDDING_BACKEND", "local")
+    monkeypatch.setenv("BEBSHAX_DEMO_MODE", "false")
     get_settings.cache_clear()
 
     engine = create_async_engine(db_url)
@@ -79,6 +131,16 @@ async def api_test_app(tmp_path, monkeypatch):
         reply=_VALID_PERSONA_JSON,
     )
     adapter = FakeAdapter(routes=[fake_route])
+    original_complete = adapter.complete
+
+    async def reject_persona_llm(candidate, llm_request):
+        assert llm_request.task not in {
+            TaskType.PERSONA_GENERATION, TaskType.PERSONA_REFINEMENT,
+            TaskType.PERSONA_NARRATIVE, TaskType.CRITIC,
+        }, "Production persona generation must never call an LLM"
+        return await original_complete(candidate, llm_request)
+
+    monkeypatch.setattr(adapter, "complete", reject_persona_llm)
     adapters = {
         "openrouter": adapter,
         "freellmpool": adapter,
@@ -86,13 +148,14 @@ async def api_test_app(tmp_path, monkeypatch):
         "pollinations": adapter,
     }
 
+    monkeypatch.setattr("bebshax.main.build_default_adapters", lambda: adapters)
     app = create_app()
     with TestClient(app) as client:
         llm_router = PoolRouter(adapters, on_provenance=app.state.provenance_sink)
         app.state.llm_adapters = adapters
         app.state.llm_router = llm_router
         app.state.llm_service = llm_router
-        app.state.persona_engine = PersonaEngine(llm_router, EvidenceStore())
+        app.state.persona_engine = PersonaEngine(llm_router, EvidenceStore(), ml_generator=app.state.persona_ml)
         app.state.interview_engine = InterviewEngine(
             llm_router, app.state.db_sessionmaker, memory=app.state.memory_service
         )
@@ -127,6 +190,128 @@ async def auth_headers(api_test_app):
     """Return auth headers for a seeded test user — use on write endpoints."""
     headers = await seed_test_user(api_test_app.app.state.db_sessionmaker)
     return headers
+
+
+@pytest.fixture
+async def ml_api_app(tmp_path: Path, ml_artifact: Path, monkeypatch, request):
+    from bebshax.llm.types import TaskType
+
+    artifact_state = getattr(request, "param", "ready")
+    artifact_dir = ml_artifact
+    if artifact_state == "missing":
+        artifact_dir = tmp_path / "private-missing-artifact"
+    elif artifact_state == "corrupt":
+        (artifact_dir / "metadata.json").write_text("{}", encoding="utf-8")
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'ml_api.db'}"
+    monkeypatch.setenv("BEBSHAX_DATABASE_URL", db_url)
+    monkeypatch.setenv("BEBSHAX_ML_PERSONA_ARTIFACT_DIR", str(artifact_dir))
+    monkeypatch.setenv("BEBSHAX_UPLOAD_DIR", str(tmp_path / "uploads"))
+    monkeypatch.setenv("BEBSHAX_DEMO_MODE", "false")
+    monkeypatch.setenv("BEBSHAX_EMBEDDING_BACKEND", "local")
+    get_settings.cache_clear()
+
+    engine = create_async_engine(db_url)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    await engine.dispose()
+
+    adapter = FakeAdapter([FakeRoute(
+        candidate=RouteCandidate(provider="pollinations", model="deepseek-r1", context_window=100000),
+        reply="I use a calendar to plan work and meals.",
+    )])
+    original_complete = adapter.complete
+
+    async def reject_persona_llm(candidate, llm_request):
+        assert llm_request.task not in {
+            TaskType.PERSONA_GENERATION, TaskType.PERSONA_REFINEMENT,
+            TaskType.PERSONA_NARRATIVE, TaskType.CRITIC,
+        }, "Persona generation must never call an LLM"
+        return await original_complete(candidate, llm_request)
+
+    monkeypatch.setattr(adapter, "complete", reject_persona_llm)
+    adapters = {name: adapter for name in ("openrouter", "freellmpool", "ollama", "pollinations")}
+    monkeypatch.setattr("bebshax.main.build_default_adapters", lambda: adapters)
+    app = create_app()
+    app.state.ml_test_llm = adapter
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.fixture
+async def ml_auth_headers(ml_api_app) -> dict[str, str]:
+    return await seed_test_user(ml_api_app.app.state.db_sessionmaker)
+
+
+@pytest.fixture
+async def ml_study(ml_api_app, ml_auth_headers) -> str:
+    from bebshax.db.models import EvidenceClaims, MarketSegments, Studies
+
+    study_id = "std_ml_contracts"
+    async with ml_api_app.app.state.db_sessionmaker() as session:
+        session.add(Studies(
+            id=study_id, user_id="usr_test_fixture", title="Meal and Study Planner",
+            prompt="Food delivery and work planning with a limited budget.",
+            goal="demand_validation", target_audience="Students and workers in Dhaka",
+            pricing_hypothesis="BDT 200 per month", status="active", step=2,
+            findings={"market_summary": "Meal planning research_tail"},
+            copilot_messages=[{"role": "user", "content": "Food delivery collected_context_tail"}],
+        ))
+        session.add_all([
+            MarketSegments(
+                id="seg_ml_young", study_id=study_id, user_id="usr_test_fixture",
+                segmentation_run_id="srun_ml", name="Young planners", description="Student meal planning",
+                population_percentage=60.0, population_count=60,
+                characteristics={"demographics": {"age_range": [18, 30]}},
+            ),
+            MarketSegments(
+                id="seg_ml_older", study_id=study_id, user_id="usr_test_fixture",
+                segmentation_run_id="srun_ml", name="Working planners", description="Work and food planning",
+                population_percentage=40.0, population_count=40,
+                characteristics={"demographics": {"age_range": [31, 65]}},
+            ),
+        ])
+        session.add_all([
+            EvidenceClaims(
+                id=f"ml_claim_{index}", study_id=study_id, user_id="usr_test_fixture",
+                claim_text=f"Meal planning research claim {index}", category="problem", confidence=0.9,
+                supporting_source_ids=["ml_test_research_source"],
+            )
+            for index in range(7)
+        ])
+        await session.commit()
+    return study_id
+
+
+@pytest.fixture
+def ml_workflow_payload(ml_study: str) -> dict:
+    return {
+        "study_id": ml_study,
+        "study_prompt": "Food delivery and work planning. Full business context_tail",
+        "roles": [
+            {"id": "role_first", "role": "Pilot", "description": "Meal delivery role_description_tail", "count": 2, "selected": True},
+            {"id": "role_second", "role": "Artist", "description": "Work and study planning", "count": 2, "selected": True},
+        ],
+    }
+
+
+@pytest.fixture
+def ml_uploaded_dataset(ml_api_app, ml_auth_headers, ml_study) -> dict:
+    response = ml_api_app.post(
+        "/api/datasets/upload",
+        files={"file": ("synthetic-planners.csv", (
+            b"cohort,age,location\n"
+            b"Student planners,21,Dhaka\nWorker planners,21,Dhaka\n"
+            b"Student planners,30,Dhaka\nWorker planners,30,Dhaka\n"
+            b"Student planners,54,Dhaka\nWorker planners,54,Dhaka\n"
+        ), "text/csv")},
+        data={"name": "Synthetic meal planning survey", "study_id": ml_study},
+        headers=ml_auth_headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
 
 
 # ---------------------------------------------------------------------------

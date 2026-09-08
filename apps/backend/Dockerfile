@@ -18,10 +18,12 @@ WORKDIR /app
 COPY apps/backend/pyproject.toml apps/backend/alembic.ini ./
 COPY apps/backend/alembic ./alembic
 COPY apps/backend/bebshax ./bebshax
+COPY ml_persona/pyproject.toml ./ml_persona/
+COPY ml_persona/src ./ml_persona/src
 # freellmpool provider catalog — without it the container silently falls back
 # to the library's built-in providers (see bebshax/main.py warning).
 COPY providers.toml ./providers.toml
-RUN pip install .
+RUN pip install ./ml_persona .
 
 # Writable dataset root for the non-root runtime user; compose mounts a named
 # volume here so uploads survive rebuilds. data/ is excluded from the build

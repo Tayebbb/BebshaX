@@ -56,8 +56,8 @@ async def test_persona_generation_job_completes_with_sync_contract(jobs_app, mon
     app, _ = jobs_app
 
     class FakeService:
-        def __init__(self, session, llm_service=None):
-            pass
+        def __init__(self, session, llm_service=None, *, ml_generator=None):
+            assert ml_generator is not None
 
         async def create_generation_run(self, *, study_id, user_id, **_):
             run = PersonaGenerationRuns(
@@ -100,8 +100,8 @@ async def test_persona_generation_job_surfaces_value_errors(jobs_app, monkeypatc
     app, _ = jobs_app
 
     class ExplodingService:
-        def __init__(self, session, llm_service=None):
-            pass
+        def __init__(self, session, llm_service=None, *, ml_generator=None):
+            assert ml_generator is not None
 
         async def create_generation_run(self, **_):
             raise ValueError("Study has no market segments; run segmentation first.")
@@ -139,8 +139,8 @@ async def test_unexpected_job_errors_are_redacted(jobs_app, monkeypatch):
     app, _ = jobs_app
 
     class CrashingService:
-        def __init__(self, session, llm_service=None):
-            pass
+        def __init__(self, session, llm_service=None, *, ml_generator=None):
+            assert ml_generator is not None
 
         async def create_generation_run(self, **_):
             raise RuntimeError("postgres://secret@host — internal state dump")
@@ -171,8 +171,8 @@ async def test_domain_failures_pass_their_message_through(jobs_app, monkeypatch)
     app, _ = jobs_app
 
     class NoRouteService:
-        def __init__(self, session, llm_service=None):
-            pass
+        def __init__(self, session, llm_service=None, *, ml_generator=None):
+            assert ml_generator is not None
 
         async def create_generation_run(self, **_):
             class _Prov:

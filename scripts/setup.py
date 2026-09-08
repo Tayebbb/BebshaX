@@ -52,7 +52,11 @@ def ensure_venv() -> None:
 
 def install_backend() -> None:
     step("Backend install (editable + dev extras)")
-    run([VENV_PY, "-m", "pip", "install", "-e", str(ROOT / "apps" / "backend") + "[dev]"])
+    run([
+        VENV_PY, "-m", "pip", "install",
+        "-e", str(ROOT / "ml_persona"),
+        "-e", str(ROOT / "apps" / "backend") + "[dev]",
+    ])
 
 
 def ensure_env_file() -> None:

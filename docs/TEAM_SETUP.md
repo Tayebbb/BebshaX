@@ -19,15 +19,18 @@ git clone https://github.com/Tayebbb/BebshaX.git
 cd BebshaX
 
 python -m venv .venv
-.venv\Scripts\pip install -e "apps/backend[dev]"
+.venv\Scripts\pip install -e ml_persona -e "apps/backend[dev]"
 
 # verify
 .venv\Scripts\python -m pytest apps/backend/tests -q
+.venv\Scripts\python -m pytest ml_persona/tests -q
 
 # run the API
 .venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000
 # → http://127.0.0.1:8000/api/health
 ```
+
+Install both local Python packages even when no ML artifact is available. Persona ML inference requires a trained artifact directory configured by `BEBSHAX_ML_PERSONA_ARTIFACT_DIR` (default `data/processed/ml_persona/model` with unchanged data roots). This sync provides no trained production artifact and performs no model training; chat/interview LLM routing is unchanged. See [SETUP.md](SETUP.md#persona-ml-artifact) for path resolution and explicit ML failures.
 
 ### Verified repo commands (Last verified: 2026-09-02)
 

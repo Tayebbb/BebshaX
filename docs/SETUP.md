@@ -24,8 +24,21 @@ cd BebshaX
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\pip install -e "apps/backend[dev]"
+.venv\Scripts\pip install -e ml_persona -e "apps/backend[dev]"
 ```
+
+Both editable packages are required by current backend imports. The [setup helper](../scripts/setup.py), all three Python jobs in [CI](../.github/workflows/ci.yml), and the [backend image](../apps/backend/Dockerfile) install both packages; the image copies the ML manifest/source and uses `pip install ./ml_persona .`.
+
+### Persona ML artifact
+
+Installing the ML package does not provide a trained model. Persona ML inference requires a compatible, already-trained artifact directory; **no trained production artifact is supplied by this sync**, and model training is not part of setup or sync.
+
+- **Override:** `BEBSHAX_ML_PERSONA_ARTIFACT_DIR`, consumed by `Settings.ml_persona_artifact_path` in [config.py](../apps/backend/bebshax/config.py). `BEBSHAX_PERSONA_ML_MODEL_PATH` is not a supported setting alias.
+- **Default:** `<processed_dir>/ml_persona/model`. The processed root is `BEBSHAX_PROCESSED_DIR` when set, otherwise `<BEBSHAX_DATA_DIR>/processed`; unchanged defaults give `data/processed/ml_persona/model`. Relative paths resolve against the backend process's working directory.
+- **Explicit failures:** HTTP 503 `ml_persona_unavailable` for missing/unloadable artifacts; HTTP 422 `ml_persona_unsupported_context` when the model cannot support the requested context or constraints. See [API_CONTRACT.md](API_CONTRACT.md).
+- **Console entry point:** [ml_persona/pyproject.toml](../ml_persona/pyproject.toml) declares no console script; no training command is part of this sync. Setup does not train or download an inference artifact. Synthetic-selection limits and the existing R8 dependency review remain in [ml_persona/ARCHITECTURE.md](../ml_persona/ARCHITECTURE.md).
+
+This prerequisite applies to persona ML inference; chat and interview LLM routing is unchanged.
 
 ## 3. Secrets
 
@@ -61,6 +74,7 @@ Profiles nest: `minimal ⊂ development ⊂ evaluation ⊂ full`. Idempotent —
 
 ```powershell
 .venv\Scripts\python -m pytest apps/backend/tests -q
+.venv\Scripts\python -m pytest ml_persona/tests -q
 ```
 
 Expect all green (integration tests needing a live DB run with `-m integration`).

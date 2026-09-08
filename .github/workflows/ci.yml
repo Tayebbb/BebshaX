@@ -17,11 +17,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install backend
-        run: pip install -e "apps/backend[dev]"
+        run: pip install -e ml_persona -e "apps/backend[dev]"
       - name: Lint (bug-tier rules — syntax errors, undefined names)
-        run: python -m ruff check apps/backend/bebshax apps/backend/tests
+        run: python -m ruff check --config apps/backend/pyproject.toml apps/backend/bebshax apps/backend/tests ml_persona/src ml_persona/tests
       - name: Unit tests (no network) + coverage floor
         run: python -m pytest apps/backend/tests -q --cov=bebshax --cov-fail-under=68
+      - name: Isolated ML persona tests
+        run: python -m pytest ml_persona/tests -q
       - name: Dependency vulnerability scan (pip-audit)
         # Advisory for now: local baseline on 2026-09-06 was 0 known
         # vulnerabilities (pip-audit 2.10.1; the editable `bebshax` package is
@@ -47,7 +49,7 @@ jobs:
           python-version: "3.12"
       - name: Install backend + pyright
         run: |
-          pip install -e "apps/backend[dev]"
+          pip install -e ml_persona -e "apps/backend[dev]"
           pip install pyright
       - name: Pyright
         run: pyright --pythonpath "$(which python)" apps/backend/bebshax
@@ -87,7 +89,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install backend
-        run: pip install -e "apps/backend[dev]"
+        run: pip install -e ml_persona -e "apps/backend[dev]"
       - name: Apply all migrations from zero
         working-directory: apps/backend
         run: python -m alembic upgrade head

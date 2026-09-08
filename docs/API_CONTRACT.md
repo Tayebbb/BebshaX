@@ -22,37 +22,46 @@
   }
   ```
 
-  `detail` stays a string for backwards compatibility (a pydantic list for 422, which then also carries `message` = "loc → msg" of the first error). `error_code` is snake_case:
+  `detail` stays a string for backwards compatibility (a pydantic list for request-validation 422 responses, which then also carry `message` = "loc → msg" of the first error). `error_code` is snake_case:
 
-  | HTTP                  | error_code                                              | Extra top-level fields                                                                           |
-  | --------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-  | 400                   | `bad_request`                                           |                                                                                                  |
-  | 401 / 403 / 404 / 409 | `unauthorized` / `forbidden` / `not_found` / `conflict` |                                                                                                  |
-  | 413                   | `payload_too_large`                                     | `max_bytes` (2 MiB JSON cap; dataset uploads exempt, own 25 MB cap)                              |
-  | 413                   | `context_window_exceeded`                               | `estimated_tokens`, `largest_window` — raised BEFORE any provider call; nothing truncated (R2)   |
+  | HTTP                  | error_code                                              | Extra top-level fields                                                                                                                                         |
+  | --------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | 400                   | `bad_request`                                           |                                                                                                                                                                |
+  | 401 / 403 / 404 / 409 | `unauthorized` / `forbidden` / `not_found` / `conflict` |                                                                                                                                                                |
+  | 413                   | `payload_too_large`                                     | `max_bytes` (2 MiB JSON cap; dataset uploads exempt, own 25 MB cap)                                                                                            |
+  | 413                   | `context_window_exceeded`                               | `estimated_tokens`, `largest_window` — raised BEFORE any provider call; nothing truncated (R2)                                                                 |
   | 422                   | `validation_error`                                      | `message`; for `POST /api/study/generate-personas` also `max_personas_per_role` (=3) when a selected role's `count` is outside 1..3 or two roles share an `id` |
-  | 429                   | `rate_limited` / `too_many_jobs` / `too_many_attempts`  | `Retry-After`, `X-RateLimit-*` / `max_running_jobs`                                              |
-  | 502                   | `llm_error`                                             | any other `LLMError` (e.g. `INTERNAL_ERROR` surfaced, never templated)                           |
-  | 503                   | `all_candidates_failed`                                 | `llm_request_id`, `attempts[{provider, model, failure_kind, fallback_reason}]`, `routing_path[]` |
-  | 503                   | `database_unavailable`                                  | request-time `OperationalError`/`InterfaceError`; also `GET /api/health/ready`                   |
-  | 500                   | `internal_error`                                        | body is always the generic envelope; details only in logs, keyed by `request_id`                 |
+  | 429                   | `rate_limited` / `too_many_jobs` / `too_many_attempts`  | `Retry-After`, `X-RateLimit-*` / `max_running_jobs`                                                                                                            |
+  | 502                   | `llm_error`                                             | any other `LLMError` (e.g. `INTERNAL_ERROR` surfaced, never templated)                                                                                         |
+  | 503                   | `all_candidates_failed`                                 | `llm_request_id`, `attempts[{provider, model, failure_kind, fallback_reason}]`, `routing_path[]`                                                               |
+  | 503                   | `database_unavailable`                                  | request-time `OperationalError`/`InterfaceError`; also `GET /api/health/ready`                                                                                 |
+  | 500                   | `internal_error`                                        | body is always the generic envelope; details only in logs, keyed by `request_id`                                                                               |
 
   SSE streams (`…/messages/stream`) emit an `error` event with the same `error_code`, `request_id`, `llm_request_id`, `attempts` fields.
 
 - **Explicit feature failures (2026-09-08, `bebshax/utils/explicit_failures.py`).** No feature substitutes a template, skeleton, heuristic or default when the model or the data cannot produce the artefact (R2). Instead the request fails with one of these coded envelopes (all carry `detail` + `request_id`; `UnusableModelOutput` adds `attempts` and `served_by`):
 
-  | HTTP | error_code                                                                                                                                                                                                                                                  | Raised when                                                                                                          |
-  | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-  | 503  | `llm_unavailable`                                                                                                                                                                                                                                           | no LLM service is wired for a feature that needs one (`detail` names the feature, e.g. "Behavioral simulation")      |
-  | 502  | `copilot_reply_unparseable` · `roles_unparseable` · `persona_generation_unparseable` · `script_unparseable` · `claims_extraction_failed` · `query_generation_failed` · `research_plan_failed` · `report_synthesis_failed` · `segment_interpretation_failed` · `dataset_persona_unparseable` · `simulation_unparseable` · `interview_synthesis_unparseable` · `judge_unavailable` | the route answered but the reply could not be turned into the artefact after the retry budget; nothing was templated |
-  | 502  | `dataset_download_failed`                                                                                                                                                                                                                                   | a discovered dataset resource could not be fetched (non-http(s) URL, HTTP error, >6 MB)                              |
-  | 422  | `dataset_unparseable`                                                                                                                                                                                                                                       | a fetched/uploaded dataset is not a readable CSV/JSON table                                                          |
-  | 400  | `segmentation_requires_data` · `behavioral_requires_personas` · `scenario_required` · `script_required` · `nothing_to_review` · `business_description_required` · `report_requires_data`                                                                | the input the feature analyses is missing (no dataset rows / personas / scenario text / interview script / artefacts). `business_description_required`: script generation on a study with no prompt (a title is not a business). `report_requires_data`: report generation on a study with no personas, interviews, evidence, segments, behavioral results or datasets — a report over nothing would be a template. `nothing_to_review` also fires when a report row is the study's ONLY artefact. |
-  | 404  | `scenario_not_found`                                                                                                                                                                                                                                        | `POST …/behavioral-tests/{id}/runs` named a `scenario_id` that does not belong to that test (the run is refused, never silently substituted with the description)                                                                                                                                 |
+  | HTTP | error_code                                                                                                                                                                                                                                                                                                                                                                       | Raised when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+  | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | 503  | `llm_unavailable`                                                                                                                                                                                                                                                                                                                                                                | no LLM service is wired for a feature that needs one (`detail` names the feature, e.g. "Behavioral simulation")                                                                                                                                                                                                                                                                                                                                                                                    |
+  | 502  | `copilot_reply_unparseable` · `roles_unparseable` · `persona_generation_unparseable` · `script_unparseable` · `claims_extraction_failed` · `query_generation_failed` · `research_plan_failed` · `report_synthesis_failed` · `segment_interpretation_failed` · `dataset_persona_unparseable` · `simulation_unparseable` · `interview_synthesis_unparseable` · `judge_unavailable` | the route answered but the reply could not be turned into the artefact after the retry budget; nothing was templated                                                                                                                                                                                                                                                                                                                                                                               |
+  | 502  | `dataset_download_failed`                                                                                                                                                                                                                                                                                                                                                        | a discovered dataset resource could not be fetched (non-http(s) URL, HTTP error, >6 MB)                                                                                                                                                                                                                                                                                                                                                                                                            |
+  | 422  | `dataset_unparseable`                                                                                                                                                                                                                                                                                                                                                            | a fetched/uploaded dataset is not a readable CSV/JSON table                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+  | 400  | `segmentation_requires_data` · `behavioral_requires_personas` · `scenario_required` · `script_required` · `nothing_to_review` · `business_description_required` · `report_requires_data`                                                                                                                                                                                         | the input the feature analyses is missing (no dataset rows / personas / scenario text / interview script / artefacts). `business_description_required`: script generation on a study with no prompt (a title is not a business). `report_requires_data`: report generation on a study with no personas, interviews, evidence, segments, behavioral results or datasets — a report over nothing would be a template. `nothing_to_review` also fires when a report row is the study's ONLY artefact. |
+  | 404  | `scenario_not_found`                                                                                                                                                                                                                                                                                                                                                             | `POST …/behavioral-tests/{id}/runs` named a `scenario_id` that does not belong to that test (the run is refused, never silently substituted with the description)                                                                                                                                                                                                                                                                                                                                  |
 
   Partial outcomes are reported, never hidden: `POST /api/study/generate-personas` returns `{personas, failed_roles[{role_id, role, error_code, detail}], served_by[]}`; dataset persona generation returns `failed[]`/`failed_count`; interview completion returns `insights.source = "unavailable"` with `error_code` when synthesis failed, and `insights_dropped` (also on each `personas[id]` entry of a batch-run job) counts insight rows the database rejected — the interview itself still completes; research runs expose `summary.error_code`.
 
   Behavioral runs resolve their scenario from the request body's `scenario_text`, else the test's stored scenario (`scenario_id` if given, otherwise the most recent), else the test description; `run.scenario_id` links only to a scenario row verified to belong to the test.
+
+- **Local persona ML failures (2026-09-09, [ml_adapter.py](../apps/backend/bebshax/personas/ml_adapter.py)).** These are `APIError` envelopes with string `detail`, `error_code`, and `request_id`, not new LLM `FailureKind` values:
+
+  | HTTP | error_code | Raised when |
+  | --- | --- | --- |
+  | 503 | `ml_persona_unavailable` | The configured local artifact cannot be loaded (missing, invalid, or unreadable). Default adapter detail: "The local persona model is unavailable." |
+  | 422 | `ml_persona_unsupported_context` | Business context validation or model selection cannot support the requested context/constraints, or a selected record lacks the required age. Default adapter detail: "The local persona model cannot support the requested context or constraints." |
+
+  Persona generation does not silently fall back to an LLM. Chat, role suggestions, and interviews retain their existing LLM routing. Artifact configuration and the absence of a supplied production artifact are documented in [SETUP.md](SETUP.md#persona-ml-artifact).
 
 ---
 
@@ -300,75 +309,39 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
     ]
   }
   ```
-- **Response `201 Created`:**
-  ```json
-  {
-    "id": "per_sarah_01",
-    "business_id": "biz_fintech_01",
-    "name": "Sarah Chen",
-    "status": "active",
-    "version": 1,
-    "archetype": "The Resilient Gig Maximizer",
-    "tagline": "Balancing three platforms while building a 3-month safety buffer.",
-    "demographics": {
-      "age": 29,
-      "gender": "Female",
-      "occupation": "Full-time Rideshare & Grocery Courier",
-      "income_bracket": "$38,000 - $46,000 / year (unpredictable)",
-      "location": "Austin, TX (Suburban)",
-      "education": "Associate Degree in Graphic Design"
-    },
-    "attributes": [
-      {
-        "category": "Goals",
-        "title": "Predictable Cashflow Smoothing",
-        "description": "Needs an automated tool that sets aside tax deductions and vehicle repair reserves immediately upon weekly payout.",
-        "provenance_class": "OBSERVED",
-        "evidence": {
-          "source": "PersonaHub (Financial Segment)",
-          "quote": "Couriers consistently mention sudden repair costs as their #1 emergency failure point.",
-          "confidence": 0.94
-        }
-      },
-      {
-        "category": "Pain Points",
-        "title": "Traditional Banking Overdraft Traps",
-        "description": "Standard banking algorithms misjudge pending payout deposits, triggering punitive $35 overdraft fees.",
-        "provenance_class": "INFERRED",
-        "evidence": {
-          "source": "EmpatheticDialogues & Reviews",
-          "quote": "Overdraft fees feel punitive when money is literally arriving tomorrow.",
-          "confidence": 0.88
-        }
-      },
-      {
-        "category": "Behaviors",
-        "title": "Multiple App Switching",
-        "description": "Keeps 4 distinct apps open simultaneously while navigating shifts; needs frictionless glanceable UI.",
-        "provenance_class": "SYNTHETIC",
-        "evidence": null
-      }
-    ],
-    "consistency_score": 0.96,
-    "grounding_ratio": 0.78,
-    "critic_notes": "Passed consistency rules: Income bracket matches multi-app delivery occupation. Tax reserve goal matches gig profile.",
-    "generation_model": "pollinations/deepseek-r1",
-    "data_source": "live",
-    "created_at": "2026-08-22T08:15:00.000Z"
-  }
-  ```
+- **Response `201 Created`:** a `PersonaProfile` serialized by [api/personas.py](../apps/backend/bebshax/api/personas.py), with the source-derived ML fields below. This is a schema description, not a live inference result.
+
+  | Field | Local ML value / meaning |
+  | --- | --- |
+  | `name`, `age`, `occupation`, `location`, `education`, `description` | Top-level identity fields from the selected synthetic record. Missing location/education remain "Not available in training data"; a missing name uses a synthetic record identifier. |
+  | `income_range`, `personality` | "Not available in training data" and `null` respectively; the adapter does not infer measurements. |
+  | `generation_model` | `bebshax-persona-ml/<model_version>`, not an LLM serving route. |
+  | `attributes[]` | Every generated claim has `provenance_class: "SYNTHETIC"`, `evidence_ids: []`, and `confidence: null`. |
+  | `evidence` | `[]`; training membership is not observed customer evidence. |
+  | `detailed_attributes.ml_provenance` | `{source, revision, record_id, model_version, selection_score, topic}` from the selected record/model. Selection score is a relevance score, not empirical confidence or customer demand. |
+  | `detailed_attributes.source_documents` | The selected record's complete source-document mapping. |
+  | `detailed_attributes.claim_provenance` | `goals`, `pain_points`, and `behaviors` arrays of `{value, provenance: "SYNTHETIC", evidence_ids: []}`. |
+  | `detailed_attributes.validation_warnings`, `warnings` | Synthetic-USA-proxy disclosure, missing-field warnings, and any selection limitations. |
 
 #### `GET /api/personas/{id}`
 
 - **Response `200 OK`:** Full `Persona` profile.
 
+#### Shared local ML provenance (2026-09-09)
+
+The study, workflow, and dataset persona-generation paths use the same [ML adapter](../apps/backend/bebshax/personas/ml_adapter.py) and retain their existing response envelopes. Study/workflow records also carry `dataset_refs` containing the same ML provenance object; workflow personas expose `is_synthetic: true`, `grounding_basis: "synthetic_training_proxy"`, and synthetic attributes with empty evidence links. Context claims used to select a record do not make that record's attributes observed evidence.
+
+`POST /api/study/generate-personas` still returns `{personas, failed_roles, served_by}`. `served_by[]` contains the successful `bebshax-persona-ml/<model_version>` identifiers. If some roles fail, HTTP 200 retains their `{role_id, role, error_code, detail}` entries in `failed_roles`; if all fail, the last coded error is raised with its HTTP status (including the ML 503/422 errors in section 1).
+
+These fields describe the pending integration's serialization contract, not a supplied trained artifact, completed training, or measured live quality. Synthetic-selection scope and limitations remain in [ml_persona/ARCHITECTURE.md](../ml_persona/ARCHITECTURE.md).
+
 #### `data_source` — demo honesty label (audit H3 piece 2)
 
-Every serialized `Persona` carries `data_source`, one of:
+Study-scoped persona records expose `data_source`, one of the values below. The legacy `PersonaProfile` response above does not include this field.
 
 | Value      | Meaning                                                                            |
 | ---------- | ---------------------------------------------------------------------------------- |
-| `"live"`   | The content was produced by an inference pass against a routed provider or Ollama. |
+| `"live"`   | Runtime-generated content, including local ML synthetic selection; not a demo fixture or a claim of observed evidence. |
 | `"cached"` | The content came from the demo seeder — pre-seeded fixtures, not model output.     |
 
 The value is **persisted on the row at creation time**, not derived from `demo_mode` at read time: the flag flips independently of the rows already in the table, so deriving it would mislabel every persona created before the last flip. Existing rows were backfilled to `"live"` by migration `9f0a1b2c3d4e`, which is correct — the demo seeder is the only cached producer and it did not previously exist as a distinct category.
@@ -640,12 +613,30 @@ The reviewing model (`TaskType.CRITIC`, routed like every other call) scores wha
 {
   "study_id": "study_…",
   "overall_score": 0,
-  "dimension_scores": { "grounding": 0, "specificity": 0, "consistency": 0, "honesty": 0, "actionability": 0 },
+  "dimension_scores": {
+    "grounding": 0,
+    "specificity": 0,
+    "consistency": 0,
+    "honesty": 0,
+    "actionability": 0
+  },
   "strengths": ["…"],
-  "issues": [{ "severity": "high|medium|low", "artifact": "persona:<id>|report|interview:<id>|segment:<id>|evidence", "detail": "…" }],
+  "issues": [
+    {
+      "severity": "high|medium|low",
+      "artifact": "persona:<id>|report|interview:<id>|segment:<id>|evidence",
+      "detail": "…"
+    }
+  ],
   "verdict": "…",
   "scope": "study|persona",
-  "reviewed_artifacts": { "personas": 0, "segments": 0, "evidence_claims": 0, "interviews": 0, "reports": 0 },
+  "reviewed_artifacts": {
+    "personas": 0,
+    "segments": 0,
+    "evidence_claims": 0,
+    "interviews": 0,
+    "reports": 0
+  },
   "served_by": "provider/model",
   "llm_request_id": "…",
   "attempts": 1,

@@ -482,12 +482,17 @@ async def suggest_persona_roles(
     return _roles_from(parsed)
 
 
+class PersonaGenerationRole(PersonaRoleSuggestion):
+    min_age: int | None = Field(default=None, ge=18, le=95, strict=True)
+    max_age: int | None = Field(default=None, ge=18, le=95, strict=True)
+
+
 class GeneratePersonasRequest(BaseModel):
     study_id: Optional[str] = Field(default=None, max_length=64)
     study_prompt: Optional[str] = Field(default=None, max_length=8000)
     study_title: Optional[str] = Field(default=None, max_length=256)
     # One LLM call per selected role.
-    roles: list[PersonaRoleSuggestion] = Field(default_factory=list, max_length=10)
+    roles: list[PersonaGenerationRole] = Field(default_factory=list, max_length=10)
 
 
 def _get_initials(name: str) -> str:
@@ -827,7 +832,7 @@ async def generate_study_personas(
     used_names: set[str] = set()
 
     async def _one_role(
-        role: PersonaRoleSuggestion,
+        role: PersonaGenerationRole,
     ) -> tuple[list[dict[str, Any]], Optional[FailedRole], Optional[BaseException]]:
         try:
             context = build_business_context(
@@ -835,9 +840,12 @@ async def generate_study_personas(
                 target_audience=(study_row.target_audience if study_row else None) or "",
                 price_range=(study_row.pricing_hypothesis if study_row else None) or "",
                 role=role.role,
+                min_age=role.min_age,
+                max_age=role.max_age,
                 research=[
                     json.dumps({
                         "title": body.study_title or (study_row.title if study_row else None),
+                        "stored_study_prompt": study_row.prompt if study_row else None,
                         "goal": study_row.goal if study_row else None,
                         "copilot_messages": study_row.copilot_messages if study_row else None,
                         "findings": study_row.findings if study_row else None,

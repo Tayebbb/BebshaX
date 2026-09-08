@@ -264,44 +264,46 @@ async def test_generate_personas_rejects_out_of_range_role_counts(api_test_app: 
     assert len(_fake_adapter(api_test_app.app).requests) == calls_before  # refused before any LLM spend
 
 
-async def test_generate_personas_accepts_the_maximum_count(api_test_app: TestClient, auth_headers):
-    adapter = _fake_adapter(api_test_app.app)
+async def test_generate_personas_accepts_the_maximum_count(ml_api_app: TestClient, ml_auth_headers):
+    adapter = _fake_adapter(ml_api_app.app)
     calls_before = len(adapter.requests)
 
-    res = api_test_app.post(
+    res = ml_api_app.post(
         "/api/study/generate-personas",
-        json={"study_prompt": "A dog-walking app for busy professionals in Berlin", "roles": [_role(3)]},
-        headers=auth_headers,
+        json={"study_prompt": "Food delivery and meal planning", "roles": [_role(3)]},
+        headers=ml_auth_headers,
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body["personas"] and body["failed_roles"] == []
-    assert len(adapter.requests) == calls_before + 1
-    # The count reaches the model unchanged.
-    assert "Generate 3 synthetic user personas" in adapter.requests[-1].messages[-1].content
+    assert len(body["personas"]) == 3 and body["failed_roles"] == []
+    assert len(adapter.requests) == calls_before
+    assert {persona["role_id"] for persona in body["personas"]} == {"r1"}
+    assert len({persona["detailed_attributes"]["ml_provenance"]["record_id"] for persona in body["personas"]}) == 3
 
 
-async def test_generate_personas_ignores_unselected_zero_count_roles(api_test_app: TestClient, auth_headers):
-    adapter = _fake_adapter(api_test_app.app)
+async def test_generate_personas_ignores_unselected_zero_count_roles(ml_api_app: TestClient, ml_auth_headers):
+    adapter = _fake_adapter(ml_api_app.app)
     calls_before = len(adapter.requests)
 
-    res = api_test_app.post(
+    res = ml_api_app.post(
         "/api/study/generate-personas",
         json={
-            "study_prompt": "A dog-walking app for busy professionals in Berlin",
+            "study_prompt": "Food delivery and meal planning",
             "roles": [
                 _role(0, selected=False, role_id="r0", title="Professional walker"),
                 _role(2, role_id="r1", title="Dog owner"),
             ],
         },
-        headers=auth_headers,
+        headers=ml_auth_headers,
     )
     assert res.status_code == 200, res.text
     assert res.json()["failed_roles"] == []
-    # Exactly one role was generated: the unselected one was skipped, not rejected.
-    assert len(adapter.requests) == calls_before + 1
-    assert "Generate 2 synthetic user personas" in adapter.requests[-1].messages[-1].content
-    assert "Target Persona Role: Dog owner" in adapter.requests[-1].messages[-1].content
+    assert len(adapter.requests) == calls_before
+    personas = res.json()["personas"]
+    assert len(personas) == 2
+    assert {persona["role_id"] for persona in personas} == {"r1"}
+    assert {persona["role_title"] for persona in personas} == {"Dog owner"}
+    assert len({persona["detailed_attributes"]["ml_provenance"]["record_id"] for persona in personas}) == 2
 
 
 def test_model_proposed_role_counts_are_normalised_to_the_limit():

@@ -6,7 +6,7 @@
 
 | Action                       | Command (Windows dev machine)                                                                                 |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Install backend              | `.venv\Scripts\pip install -e "apps/backend[dev]"`                                                            |
+| Install backend              | `.venv\Scripts\pip install -e ml_persona -e "apps/backend[dev]"`                                              |
 | Test (unit)                  | `.venv\Scripts\python -m pytest apps/backend/tests -q`                                                        |
 | Test (integration, needs db) | `.venv\Scripts\python -m pytest apps/backend/tests -m integration -q`                                         |
 | Run full stack               | `node scripts/dev.js`                                                                                         |

@@ -110,8 +110,8 @@ async def test_fourth_concurrent_job_for_the_same_user_is_429(jobs_cap_app, monk
     release = asyncio.Event()
 
     class BlockingService:
-        def __init__(self, session, llm_service=None):
-            pass
+        def __init__(self, session, llm_service=None, *, ml_generator=None):
+            assert ml_generator is not None
 
         async def create_generation_run(self, *, study_id, user_id, **_):
             await release.wait()

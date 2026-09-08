@@ -42,9 +42,9 @@ Before adding any dependency or vendored repo, record in the relevant doc (`docs
 
 ## R9 — Datasets
 
-- Only through `scripts/setup_datasets.py` with a named profile (`minimal`/`development`/`evaluation`/`full`). No manual dumps into `data/`.
+- Only through `scripts/setup_datasets.py` with a named profile (`minimal`/`development`/`evaluation`/`full`/`ml_persona`). No manual dumps into `data/`.
 - Every dataset documented in `data/DATASETS.md`: source URL, license, size estimate, purpose, download+preprocessing method, required/optional.
-- Streaming/subsets over bulk downloads. **No model training/fine-tuning with them.**
+- Streaming/subsets over bulk downloads. Existing datasets remain grounding/evaluation only. **Owner-approved exception (2026-09-08):** the isolated non-LLM persona subsystem may train on reviewed public synthetic datasets explicitly allowlisted for the `ml_persona` profile. No private studies, uploads, or conversations in training; no LLM fine-tuning. Training membership is not observed customer evidence.
 
 ## R10 — Working style
 

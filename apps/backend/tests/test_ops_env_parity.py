@@ -11,11 +11,16 @@ No docker/network involved — plain file parsing, so it runs in the unit suite.
 from __future__ import annotations
 
 import re
+import shlex
+import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 import yaml
 
 from bebshax.config import Settings
+from scripts import setup as setup_script
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
@@ -128,3 +133,90 @@ def test_ci_keeps_hardening_steps() -> None:
     assert 'test "$head_count" = "1"' in drift_runs, "multi-head alembic chains must fail CI"
     compose_runs = " ".join(step.get("run", "") for step in jobs["compose-config"]["steps"])
     assert "docker compose --profile full config --quiet" in compose_runs
+
+
+def _ci_commands(job_name: str) -> list[list[str]]:
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    return [
+        shlex.split(command)
+        for step in workflow["jobs"][job_name]["steps"]
+        for command in step.get("run", "").splitlines()
+        if command.strip()
+    ]
+
+
+@pytest.mark.parametrize("job_name", ["backend", "typecheck", "migration-drift"])
+def test_ci_python_job_installs_editable_ml_package_with_backend(job_name: str) -> None:
+    assert [
+        "pip", "install", "-e", "ml_persona", "-e", "apps/backend[dev]",
+    ] in _ci_commands(job_name), f"{job_name} must install both local packages"
+
+
+def test_ci_backend_runs_ml_tests_in_isolation() -> None:
+    assert ["python", "-m", "pytest", "ml_persona/tests", "-q"] in _ci_commands("backend")
+
+
+def test_ci_lints_ml_source_and_tests_with_shared_bug_tier_config() -> None:
+    lint_command = next(
+        command for command in _ci_commands("backend")
+        if command[:4] == ["python", "-m", "ruff", "check"]
+    )
+    assert {"ml_persona/src", "ml_persona/tests"} <= set(lint_command)
+    assert "--config" in lint_command
+    assert lint_command[lint_command.index("--config") + 1] == "apps/backend/pyproject.toml"
+
+
+def test_ci_backend_preserves_coverage_floor() -> None:
+    assert [
+        "python", "-m", "pytest", "apps/backend/tests", "-q",
+        "--cov=bebshax", "--cov-fail-under=68",
+    ] in _ci_commands("backend")
+
+
+def test_ci_typecheck_keeps_separate_pyright_install() -> None:
+    assert ["pip", "install", "pyright"] in _ci_commands("typecheck")
+
+
+@pytest.mark.parametrize(
+    ("source", "destination"),
+    [
+        ("ml_persona/pyproject.toml", "./ml_persona/"),
+        ("ml_persona/src", "./ml_persona/src"),
+    ],
+)
+def test_backend_image_copies_ml_package_before_install(source: str, destination: str) -> None:
+    dockerfile = (REPO_ROOT / "apps" / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    copy_command = f"COPY {source} {destination}"
+    assert copy_command in dockerfile
+    assert dockerfile.index(copy_command) < dockerfile.index("RUN pip install")
+
+
+def test_backend_image_installs_both_local_packages() -> None:
+    dockerfile = (REPO_ROOT / "apps" / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    assert "RUN pip install ./ml_persona ." in dockerfile.splitlines()
+
+
+def test_local_setup_installs_editable_ml_package_with_backend() -> None:
+    with patch.object(
+        setup_script.subprocess, "run", return_value=subprocess.CompletedProcess([], 0),
+    ) as subprocess_run:
+        setup_script.install_backend()
+
+    subprocess_run.assert_called_once_with(
+        [
+            str(setup_script.VENV_PY), "-m", "pip", "install",
+            "-e", str(setup_script.ROOT / "ml_persona"),
+            "-e", str(setup_script.ROOT / "apps" / "backend") + "[dev]",
+        ],
+        cwd=setup_script.ROOT,
+        check=True,
+    )
+
+
+def test_local_setup_propagates_backend_install_failure() -> None:
+    failure = subprocess.CalledProcessError(1, ["pip", "install"])
+    with patch.object(setup_script.subprocess, "run", side_effect=failure):
+        with pytest.raises(subprocess.CalledProcessError) as raised:
+            setup_script.install_backend()
+
+    assert raised.value is failure

@@ -113,6 +113,11 @@ async def save_persona(
             evidence_citations=[
                 {"id": e.id, "source": e.source, "type": e.type, "relevance": e.relevance} for e in profile.evidence
             ],
+            dataset_refs=(
+                [dict(profile.detailed_attributes["ml_provenance"])]
+                if isinstance(profile.detailed_attributes.get("ml_provenance"), dict)
+                else []
+            ),
         )
     )
 
@@ -181,6 +186,10 @@ async def load_persona(session: AsyncSession, persona_id: str) -> PersonaProfile
         status=persona.status,
         version=persona.version,
         generation_model=persona.generation_model,
+        tagline=persona.tagline,
+        country_code=persona.country_code,
+        personality=persona.personality or None,
+        detailed_attributes=dict(persona.detailed_attributes or {}),
         age=details.age,
         occupation=details.occupation,
         location=details.location,

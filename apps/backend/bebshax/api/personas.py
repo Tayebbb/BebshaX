@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.jobs import get_job, start_job
 from bebshax.api.deps import get_session, owner_accessible, require_study_access
+from bebshax.api.errors import APIError
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import MarketSegments, PersonaGenerationRuns, Personas, Studies
@@ -27,6 +28,7 @@ from bebshax.persona.store import (
     save_persona,
 )
 from bebshax.personas.service import PersonaGenerationService
+from bebshax.personas.ml_adapter import get_persona_ml
 from bebshax.tenancy import allowed_owner_ids
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,8 @@ class PersonaGenerateRequest(BaseModel):
     hints: str | None = Field(default=None, max_length=2000)
     generation_hints: list[str] | str | None = Field(default=None)
     audience_segment: str | None = Field(default=None, max_length=2000)
+    min_age: int | None = Field(default=None, ge=18, le=95, strict=True)
+    max_age: int | None = Field(default=None, ge=18, le=95, strict=True)
 
 
 class StudyGeneratePersonasRequest(BaseModel):
@@ -212,7 +216,7 @@ async def generate_study_personas_endpoint(
     await _verify_study_access(study_id, current_user, session, write=True)
 
     llm_service = getattr(request.app.state, "llm_service", None)
-    service = PersonaGenerationService(session, llm_service=llm_service)
+    service = PersonaGenerationService(session, llm_service=llm_service, ml_generator=get_persona_ml(request.app))
 
     try:
         run, personas = await service.create_generation_run(
@@ -225,7 +229,7 @@ async def generate_study_personas_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except (ContextWindowExceeded, AllCandidatesFailed):
+    except (APIError, ContextWindowExceeded, AllCandidatesFailed):
         # Rendered by the global handlers (413 / 503 with attempts) — never
         # flattened into a bare 500 by the catch-all below.
         raise
@@ -268,6 +272,7 @@ async def start_persona_generation_job(
 
     app = request.app
     llm_service = getattr(app.state, "llm_service", None)
+    ml_generator = get_persona_ml(app)
     sessionmaker_ = getattr(app.state, "db_sessionmaker", None)
     if sessionmaker_ is None:
         raise HTTPException(status_code=500, detail="Database not configured")
@@ -277,15 +282,21 @@ async def start_persona_generation_job(
     async def _runner(job: dict[str, Any]) -> None:
         # The request session is gone by now — the job owns its own session.
         async with sessionmaker_() as job_session:
-            service = PersonaGenerationService(job_session, llm_service=llm_service)
-            run, personas = await service.create_generation_run(
-                study_id=study_id,
-                user_id=user_id,
-                segmentation_run_id=cfg.segmentation_run_id,
-                personas_per_segment=cfg.personas_per_segment,
-                target_count=cfg.target_count,
-                distribution_strategy=cfg.distribution_strategy,
+            service = PersonaGenerationService(
+                job_session, llm_service=llm_service, ml_generator=ml_generator,
             )
+            try:
+                run, personas = await service.create_generation_run(
+                    study_id=study_id,
+                    user_id=user_id,
+                    segmentation_run_id=cfg.segmentation_run_id,
+                    personas_per_segment=cfg.personas_per_segment,
+                    target_count=cfg.target_count,
+                    distribution_strategy=cfg.distribution_strategy,
+                )
+            except APIError as exc:
+                job["error_code"] = exc.error_code
+                raise
             seg_stmt = select(MarketSegments.id, MarketSegments.name).where(
                 MarketSegments.study_id == study_id
             )
@@ -304,7 +315,7 @@ async def start_persona_generation_job(
         runner=_runner,
         user_id=user_id,
         # Honest domain failures (R2/R6) pass their message through.
-        user_safe_exceptions=(PersonaGenerationFailed, ContextWindowExceeded, AllCandidatesFailed),
+        user_safe_exceptions=(APIError, PersonaGenerationFailed, ContextWindowExceeded, AllCandidatesFailed),
     )
     return {"job_id": job["job_id"], "study_id": study_id, "status": job["status"]}
 
@@ -370,7 +381,7 @@ async def regenerate_study_persona_endpoint(
     await _verify_study_access(study_id, current_user, session, write=True)
 
     llm_service = getattr(request.app.state, "llm_service", None)
-    service = PersonaGenerationService(session, llm_service=llm_service)
+    service = PersonaGenerationService(session, llm_service=llm_service, ml_generator=get_persona_ml(request.app))
 
     try:
         persona = await service.regenerate_persona(
@@ -558,6 +569,10 @@ async def generate_persona_endpoint(
             business_name=business.name,
             business_description=business.description or "",
             hints=composed_hints,
+            industry=business.industry,
+            target_market=business.target_market,
+            min_age=body.min_age,
+            max_age=body.max_age,
         )
     except PersonaGenerationFailed as exc:
         raise HTTPException(

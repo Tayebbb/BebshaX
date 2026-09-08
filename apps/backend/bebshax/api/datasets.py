@@ -19,6 +19,7 @@ from bebshax.datasets.parser import DatasetParseError
 from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
 from bebshax.datasets.service import DatasetService
 from bebshax.db.models import DatasetSources, Studies
+from bebshax.personas.ml_adapter import get_persona_ml
 from bebshax.research.service import ResearchEngineService
 from bebshax.tenancy import ANONYMOUS_OWNER_ID
 
@@ -70,7 +71,7 @@ def _get_dataset_service(request: Request) -> DatasetService:
         engine = create_engine(settings)
         sessionmaker_ = create_async_sessionmaker(engine)
     llm = getattr(request.app.state, "llm_router", None)
-    return DatasetService(sessionmaker_, llm=llm)
+    return DatasetService(sessionmaker_, llm=llm, ml_generator=get_persona_ml(request.app))
 
 
 async def _get_session(request: Request) -> AsyncSession:
@@ -390,6 +391,8 @@ async def generate_personas_from_dataset(
             business_name=payload.business_name,
             business_description=payload.business_description,
         )
+    except APIError:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except Exception as exc:
