@@ -64,13 +64,53 @@ export const Footer: React.FC = () => {
           padding: '0 clamp(16px, 4vw, 32px)',
         }}
       >
+        {/* Brand Header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '20px',
+            marginBottom: '48px',
+            paddingBottom: '28px',
+            borderBottom: '1px solid var(--lp-line-faint)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <img
+              src="/logobebshax.jpeg"
+              alt="BebshaX Logo"
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '9px',
+                objectFit: 'contain',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              }}
+            />
+            <img
+              src="/Bebshax.png"
+              alt="BebshaX"
+              className="bx-brand-wordmark"
+              style={{
+                height: '28px',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
+          <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--lp-text-muted)', maxWidth: '460px' }}>
+            Evidence-grounded synthetic personas & routed multi-model research intelligence.
+          </p>
+        </div>
+
         {/* Multi-Column Sitemap Grid Matching Image */}
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 130px), 1fr))',
             gap: '36px 20px',
-            marginBottom: '100px',
+            marginBottom: '80px',
           }}
         >
           {columns.map((col, idx) => (
@@ -112,55 +152,39 @@ export const Footer: React.FC = () => {
           ))}
         </div>
 
-        {/* Large Fancy Translucent BebshaX Logo Watermark Matching Image */}
+        {/* Large Translucent BebshaX Brand Watermark */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '24px',
+            gap: 'clamp(12px, 3vw, 24px)',
             userSelect: 'none',
             pointerEvents: 'none',
-            paddingTop: '20px',
+            padding: '24px 0 12px 0',
+            opacity: 0.12,
           }}
         >
-          {/* Subtle Geometric Wireframe Emblem */}
-          <div
+          <img
+            src="/logobebshax.jpeg"
+            alt=""
             style={{
-              opacity: 0.12,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: 'clamp(44px, 7vw, 76px)',
+              height: 'clamp(44px, 7vw, 76px)',
+              borderRadius: 'clamp(10px, 1.8vw, 16px)',
+              objectFit: 'contain',
             }}
-          >
-            <svg width="100" height="100" viewBox="0 0 100 100" fill="none" stroke="var(--lp-text)" strokeWidth="2.5">
-              <polygon points="50,10 85,30 85,70 50,90 15,70 15,30" fill="none" />
-              <line x1="50" y1="10" x2="50" y2="50" />
-              <line x1="85" y1="70" x2="50" y2="50" />
-              <line x1="15" y1="70" x2="50" y2="50" />
-              <circle cx="50" cy="10" r="4" fill="var(--lp-text)" />
-              <circle cx="85" cy="30" r="4" fill="var(--lp-text)" />
-              <circle cx="85" cy="70" r="4" fill="var(--lp-text)" />
-              <circle cx="50" cy="90" r="4" fill="var(--lp-text)" />
-              <circle cx="15" cy="70" r="4" fill="var(--lp-text)" />
-              <circle cx="15" cy="30" r="4" fill="var(--lp-text)" />
-              <circle cx="50" cy="50" r="5" fill="var(--lp-text)" />
-            </svg>
-          </div>
-
-          {/* Big Stylized Wordmark */}
-          <div
+          />
+          <img
+            src="/Bebshax.png"
+            alt="BebshaX"
+            className="bx-brand-wordmark"
             style={{
-              fontSize: 'clamp(3.8rem, 11vw, 9.5rem)',
-              fontWeight: 800,
-              letterSpacing: '-0.04em',
-              color: 'rgba(var(--lp-fill-rgb), 0.07)',
-              lineHeight: 1,
-              fontFamily: 'var(--font-sans)',
+              height: 'clamp(36px, 6vw, 68px)',
+              maxWidth: '80%',
+              objectFit: 'contain',
             }}
-          >
-            Bebsha<span style={{ color: 'rgba(var(--lp-gold-rgb), 0.12)' }}>X</span>
-          </div>
+          />
         </div>
 
         {/* Bottom Micro Row */}

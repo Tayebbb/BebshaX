@@ -242,17 +242,18 @@ The two remaining H3 pieces closed and the exit criteria are now met end to end:
 - **Offline drill** documented in [DEMO.md](DEMO.md) §6 and backed by implementation: cached content renders from Postgres with `CACHED` labels regardless of network; live generation falls through remote pools to the local Ollama tier (`llama3.2:3b`/`qwen3:4b`); without the daemon it fails **explicitly** (`AllCandidatesFailed` → error turn in the chat UI), never silently (R2). Startup logs a loud "local tier DOWN" warning when Ollama is unreachable so the drill can't be attempted blind.
 - Statuses flipped in PROJECT_CONTEXT.md and PHASES.md. **423 backend + 79 frontend tests green; frontend build green.**
 
-### Maintenance (2026-09-08) — AI Prompt Box & shadcn UI Component Integration
+### Maintenance (2026-09-08) — AI Prompt Box, shadcn UI & Official Brand Asset Integration
 
 - **Component Integration:** Installed and integrated `PromptInputBox` and `DemoOne` in `apps/frontend/src/components/ui/ai-prompt-box.tsx` and `apps/frontend/src/components/ui/demo.tsx`. Exported via `src/components/ui/index.ts`.
 - **Website Theme Alignment:** Styled using BebshaX's Teal/Cyan research theme (`#080a0a` canvas base, `#0d1111`/`#111616` frosted cards, `#202727` borders, `#14b8a6` teal and `#22d3ee` cyan accents, audio pulse visualizer, accessible ARIA labels, and Unsplash stock references).
+- **Brand Assets Everywhere:** Integrated official assets from `apps/frontend/public/`: browser tab favicon and apple-touch-icon updated to `logobebshax.jpeg`; `BebshaXLogo` updated with `logobebshax.jpeg` emblem and `Bebshax.png` wordmark with theme-aware filter `.bx-brand-wordmark`; Landing Page `Navbar` and `Footer` updated to feature `Bebshax.png` and `logobebshax.jpeg` across headers, sidebars, and watermarks.
 - **shadcn Project Structure:** Added `apps/frontend/components.json` mapping `@/components/ui`, Tailwind config, and `@/*` aliases. Updated `tsconfig.json` and `vite.config.ts` with `@/*` resolution.
 - **R8 Dependency Review:**
   - `framer-motion@12` (MIT, active motion library; smooth icon rotation/spring transitions for mode toggles).
   - `@radix-ui/react-dialog@1.1` (MIT, accessible WAI-ARIA dialog primitive with modal backdrop focus containment).
   - `@radix-ui/react-tooltip@1.1` (MIT, accessible tooltip primitive with delay and positioning).
   - `lucide-react` (already present).
-- **Verification:** Unit tests added in `tests/AiPromptBox.test.tsx` (4 passed, 260/260 total frontend tests passing), `tsc && vite build` built cleanly in 10.9s.
+- **Verification:** Unit tests added in `tests/AiPromptBox.test.tsx` (all 35 test files / 265 frontend tests passing), `tsc && vite build` built cleanly in 11.3s.
 
 ### Maintenance (2026-08-28) — Fully responsive layout for all device sizes
 

@@ -933,6 +933,16 @@ html.theme-transition *::after {
   text-transform: uppercase;
 }
 
+/* BebshaX Brand Wordmark image theme alignment */
+.bx-brand-wordmark {
+  filter: brightness(0) invert(1);
+  transition: filter 0.2s ease;
+}
+
+[data-theme='light'] .bx-brand-wordmark {
+  filter: none;
+}
+
 /* Responsive Breakpoints */
 @media (max-width: 1024px) {
   .desktop-nav {
