@@ -149,11 +149,17 @@
     0 0 0 1px var(--accent-subtle),
     0 0 46px var(--accent-subtle);
 }
-.ns-textarea {
+.ns-textarea,
+.ns-textarea:focus,
+.ns-textarea:focus-visible,
+.ns-composer textarea:focus,
+.ns-composer textarea:focus-visible {
   width: 100%;
   background: transparent;
-  border: none;
-  outline: none;
+  border: none !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
   color: var(--text-main);
   font: 400 1.02rem/1.6 var(--font-sans);
   resize: none;

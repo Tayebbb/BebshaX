@@ -330,6 +330,23 @@ body {
   outline-offset: 2px;
 }
 
+/* Prompt composers and text inputs already provide outer card focus-within indication — suppress inner outline */
+.ns-composer textarea:focus,
+.ns-composer textarea:focus-visible,
+.ns-textarea:focus,
+.ns-textarea:focus-visible,
+.bx-prompt-card textarea:focus,
+.bx-prompt-card textarea:focus-visible,
+.bx-prompt-input:focus,
+.bx-prompt-input:focus-visible,
+.ai-prompt-box textarea:focus,
+.ai-prompt-box textarea:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
 /* Typography Utility Classes */
 h1, h2, h3, h4, h5, h6 {
   color: var(--text-main);

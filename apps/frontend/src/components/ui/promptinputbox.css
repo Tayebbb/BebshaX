@@ -79,12 +79,16 @@
 .bx-prompt-file-input { display: none; }
 
 /* Textarea */
-.bx-prompt-input {
+.bx-prompt-input,
+.bx-prompt-input:focus,
+.bx-prompt-input:focus-visible {
   width: 100%;
   min-height: 24px;
   resize: none;
-  border: none;
-  outline: none;
+  border: none !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
   background: transparent;
   color: var(--text-primary);
   font: 400 0.95rem/1.55 var(--font-sans);

@@ -13,6 +13,13 @@ const styles = `
     outline-offset: 0 !important;
     --ring-offset: 0 !important;
   }
+  textarea,
+  textarea:focus,
+  textarea:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
   textarea::-webkit-scrollbar {
     width: 6px;
   }

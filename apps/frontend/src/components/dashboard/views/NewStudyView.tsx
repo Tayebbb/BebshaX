@@ -132,6 +132,7 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpen
           <textarea
             ref={textareaRef}
             className="ns-textarea"
+            style={{ outline: 'none', border: 'none', boxShadow: 'none' }}
             value={prompt}
             onChange={(e) => {
               setPrompt(e.target.value);
