@@ -270,10 +270,14 @@
 
 /* ------------------------------------------------- render-cost deferral */
 
-/* below-fold sections don't exist for layout/paint until approached */
-.lp-defer {
+/* Below-fold sections don't exist for layout/paint until approached.
+   Deferral is per section, not on the wrapper: one content-visibility box
+   around all twelve makes the browser lay them all out in a single frame the
+   moment the block is approached, which is the biggest jank spike on the page.
+   Per-section boxes spread that work across the scroll. */
+.lp-defer > * {
   content-visibility: auto;
-  contain-intrinsic-size: auto 720px;
+  contain-intrinsic-size: auto 900px;
 }
 
 /* --------------------------------------------------------------- mobile */

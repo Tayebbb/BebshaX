@@ -15,9 +15,16 @@ let current = 0;
 let target = 0;
 let users = 0;
 let listening = false;
+/**
+ * Element the custom properties are written to. Custom properties inherit, so
+ * writing them to <html> invalidates the computed style of every node in the
+ * document on every scroll frame. Only the three hero layers read them, so
+ * the scope is the hero section and the invalidation stays inside the fold.
+ */
+let scope: HTMLElement | null = null;
 
 const EASE = 0.12;
-const root = () => document.documentElement;
+const root = () => scope ?? document.documentElement;
 
 function frame() {
   raf = null;
@@ -38,8 +45,9 @@ function onScroll() {
   if (raf === null) raf = requestAnimationFrame(frame);
 }
 
-export function startScrollEngine(): () => void {
+export function startScrollEngine(scopeEl?: HTMLElement | null): () => void {
   users++;
+  if (scopeEl) scope = scopeEl;
   if (!listening) {
     listening = true;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -57,6 +65,7 @@ export function startScrollEngine(): () => void {
     if (users <= 0) {
       users = 0;
       listening = false;
+      scope = null;
       window.removeEventListener('scroll', onScroll);
       if (raf !== null) cancelAnimationFrame(raf);
       raf = null;

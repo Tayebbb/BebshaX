@@ -62,13 +62,14 @@
   right: -14vmax;
   animation: ns-drift-b 64s var(--ns-ease) infinite alternate;
 }
+/* Translate only — see studies.css: scaling a blurred layer costs a re-raster. */
 @keyframes ns-drift-a {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to   { transform: translate3d(7vmax, 6vmax, 0) scale(1.1); }
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(7vmax, 6vmax, 0); }
 }
 @keyframes ns-drift-b {
-  from { transform: translate3d(0, 0, 0) scale(1.04); }
-  to   { transform: translate3d(-8vmax, -5vmax, 0) scale(0.96); }
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-8vmax, -5vmax, 0); }
 }
 
 .ns-inner {

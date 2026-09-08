@@ -133,6 +133,29 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const turnRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const pendingQuestionRef = useRef<string>('');
+  // A streamed answer arrives as dozens of small SSE chunks. Committing each one
+  // to state re-renders the entire workspace (every turn, both rails) per token,
+  // so chunks are buffered and flushed at most once per frame.
+  const streamBufferRef = useRef<string>('');
+  const streamRafRef = useRef<number | null>(null);
+
+  const cancelStreamFlush = useCallback(() => {
+    if (streamRafRef.current !== null) {
+      cancelAnimationFrame(streamRafRef.current);
+      streamRafRef.current = null;
+    }
+  }, []);
+
+  const pushStreamChunk = useCallback((chunk: string) => {
+    streamBufferRef.current += chunk;
+    if (streamRafRef.current !== null) return;
+    streamRafRef.current = requestAnimationFrame(() => {
+      streamRafRef.current = null;
+      setStreamText(streamBufferRef.current);
+    });
+  }, []);
+
+  useEffect(() => cancelStreamFlush, [cancelStreamFlush]);
 
   // Pause ambient motion when the tab is hidden (performance §33).
   useEffect(() => {
@@ -180,7 +203,14 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-  }, [turns.length, isSending, streamText]);
+  }, [turns.length, isSending]);
+
+  // While an answer streams, keep the transcript pinned without restarting a
+  // smooth-scroll animation on every flush — that fights itself and stutters.
+  useEffect(() => {
+    if (streamText === null) return;
+    endRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+  }, [streamText]);
 
   const personaName = interview?.persona_name || persona?.name || 'Synthetic Persona';
   const personaRole =
@@ -197,6 +227,8 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     setInput('');
     pendingQuestionRef.current = text;
     setIsSending(true);
+    cancelStreamFlush();
+    streamBufferRef.current = '';
     setStreamText(null);
 
     const optimistic: InterviewTurn = {
@@ -247,7 +279,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
       try {
         const res = await api.sendInterviewMessageStream(studyId, interviewId, text, (chunk) => {
           streamedAny = true;
-          setStreamText((prev) => (prev ?? '') + chunk);
+          pushStreamChunk(chunk);
         });
         applyDone(res, streamedAny);
       } catch (streamErr: any) {
@@ -272,6 +304,8 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
           : classifyFailure(err?.message || '', err?.status);
       setSendError({ kind, detail: err?.message || 'Unknown failure', requestId: fromUnknownError(err).requestId ?? null });
     } finally {
+      cancelStreamFlush();
+      streamBufferRef.current = '';
       setStreamText(null);
       setIsSending(false);
     }

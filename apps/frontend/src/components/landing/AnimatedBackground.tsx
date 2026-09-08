@@ -173,10 +173,22 @@ export const AnimatedBackground: React.FC = () => {
       }
     };
 
+    // The wrapper's viewport offset only changes on scroll/resize, so it is
+    // measured lazily instead of on every mousemove — a getBoundingClientRect
+    // per pointer event forces a synchronous layout of the whole landing page.
+    let wrapTop = 0;
+    let topStale = true;
+    const markTopStale = () => {
+      topStale = true;
+    };
+
     const onMouse = (e: MouseEvent) => {
       mx = e.clientX;
-      const rect = wrap.getBoundingClientRect();
-      my = e.clientY - rect.top;
+      if (topStale) {
+        wrapTop = wrap.getBoundingClientRect().top;
+        topStale = false;
+      }
+      my = e.clientY - wrapTop;
     };
     const onVisibility = () => {
       visible = !document.hidden;
@@ -185,6 +197,7 @@ export const AnimatedBackground: React.FC = () => {
 
     const ro = new ResizeObserver(() => {
       resize();
+      markTopStale();
       if (reduced) draw(0);
     });
     ro.observe(wrap);
@@ -200,6 +213,7 @@ export const AnimatedBackground: React.FC = () => {
     io.observe(wrap);
 
     window.addEventListener('mousemove', onMouse, { passive: true });
+    window.addEventListener('scroll', markTopStale, { passive: true });
     document.addEventListener('visibilitychange', onVisibility);
 
     // repaint in the new palette when the app theme flips
@@ -224,6 +238,7 @@ export const AnimatedBackground: React.FC = () => {
       io.disconnect();
       themeObserver.disconnect();
       window.removeEventListener('mousemove', onMouse);
+      window.removeEventListener('scroll', markTopStale);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);

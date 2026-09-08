@@ -79,12 +79,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
         alignItems: 'center',
         background: scrolled
           ? 'rgba(var(--lp-bg-rgb), 0.72)'
-          : 'transparent',
-        backdropFilter: scrolled ? 'blur(22px) saturate(160%)' : 'none',
-        WebkitBackdropFilter: scrolled ? 'blur(22px) saturate(160%)' : 'none',
+          : 'rgba(var(--lp-bg-rgb), 0)',
+        // The blur is declared unconditionally so the compositor allocates the
+        // header's backdrop layer once at load instead of creating/destroying
+        // it at the scroll threshold, which is a visible hitch. At rest the
+        // radius is 0 — backdrop-filter blurs what is *behind* the element
+        // regardless of its own background, so leaving 22px on would blur the
+        // top of the hero. 0px keeps the layer without the visual change, and
+        // the radius interpolates cleanly.
+        backdropFilter: scrolled ? 'blur(22px) saturate(160%)' : 'blur(0px) saturate(100%)',
+        WebkitBackdropFilter: scrolled ? 'blur(22px) saturate(160%)' : 'blur(0px) saturate(100%)',
         border: 'none',
         borderBottom: scrolled ? '1px solid var(--border-soft)' : '1px solid transparent',
-        transition: 'all 0.25s ease',
+        // Enumerated, so the browser never tries to interpolate layout
+        // properties on this element.
+        transition:
+          'background-color 0.25s ease, border-bottom-color 0.25s ease, backdrop-filter 0.25s ease, -webkit-backdrop-filter 0.25s ease',
       }}
     >
       <div

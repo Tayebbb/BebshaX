@@ -84,13 +84,14 @@
 .iv-root.iv-paused .iv-ambient::after {
   animation-play-state: paused;
 }
+/* Translate only — see studies.css: scaling a blurred layer costs a re-raster. */
 @keyframes iv-drift-a {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to   { transform: translate3d(-9vmax, 7vmax, 0) scale(1.12); }
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-9vmax, 7vmax, 0); }
 }
 @keyframes iv-drift-b {
-  from { transform: translate3d(0, 0, 0) scale(1.05); }
-  to   { transform: translate3d(8vmax, -6vmax, 0) scale(0.95); }
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(8vmax, -6vmax, 0); }
 }
 
 /* --------------------------------------------------------------------------

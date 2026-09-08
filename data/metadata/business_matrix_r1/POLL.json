@@ -1,0 +1,263 @@
+{
+  "label": "POLL",
+  "idea": "A network of low-cost air-quality sensors sold to municipalities in northern Italy's Po Valley, with a public dashboard and SMS smog alerts for residents, priced per sensor per month.",
+  "steps": {
+    "title": "A Network of Low-Cost Air-Quality Sensors Sold",
+    "copilot": {
+      "reply": "This is a compelling civic-tech IoT solution tailored to the Po Valley's severe air pollution challenges. To ensure the research validates the right value proposition, could you clarify which specific municipality size or demographic tier you're targeting first (e.g., small towns under 20k, mid-sized cities, or metropolitan areas like Milan/ Turin)? This will help us define the exact user personas and their decision-making dynamics.",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "MUNICIPAL ENVIRONMENTAL ENGINEER",
+        "description": "Primary technical buyer who evaluates sensor accuracy, calibration needs, and integration with existing municipal monitoring systems. Provides critical insights on data reliability thresholds and procurement compliance requirements."
+      },
+      {
+        "role": "PO VALLEY RESIDENT WITH ASTHMA",
+        "description": "End-user who relies on SMS alerts for daily health decisions. Reveals whether alert timing, SMS content, and threshold sensitivity actually influence behavior changes like staying indoors or adjusting outdoor activities."
+      },
+      {
+        "role": "REGIONAL HEALTH AUTHORITY ANALYST",
+        "description": "Secondary stakeholder who correlates air quality data with public health outcomes. Validates whether the product's data granularity and dashboard features meet epidemiological research needs and funding justification requirements."
+      },
+      {
+        "role": "SMALL BUSINESS OWNER IN INDUSTRIAL ZONE",
+        "description": "Skeptical user who questions sensor placement fairness and whether alerts unfairly impact commercial operations. Provides insights on perceived equity of monitoring and potential resistance to compliance costs."
+      },
+      {
+        "role": "TECH-SAVVY RETIRED CITIZEN",
+        "description": "Power user of the public dashboard who actively cross-references sensor data with personal weather stations and health tracking apps. Reveals feature gaps in data visualization and comparison tools."
+      },
+      {
+        "role": "ENVIRONMENTAL NGO CAMPAIGNER",
+        "description": "Influencer who uses sensor data for advocacy campaigns against industrial polluters. Validates whether the product's data transparency meets activist needs for evidence-based lobbying and public mobilization."
+      },
+      {
+        "role": "FARMER IN PERIPHERAL RURAL AREA",
+        "description": "Casual user who receives alerts but has different risk priorities than urban residents. Reveals whether SMS alerts are perceived as relevant for agricultural activities like harvesting or livestock management."
+      },
+      {
+        "role": "MUNICIPAL BUDGET OFFICER",
+        "description": "Payer who evaluates the per-sensor-per-month pricing model against competing priorities. Provides critical insights on perceived value versus cost and willingness to pay for ongoing subscription services."
+      },
+      {
+        "role": "DATA SCIENTIST AT COMPETING FIRM",
+        "description": "Edge case representing external validation of sensor accuracy claims. Provides insights on competitive positioning and potential skepticism about data quality compared to established monitoring networks."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_788e5f195823",
+        "name": "Maria Rossi",
+        "archetype": "The Pragmatic Guardian",
+        "tagline": "The Sentinel of the Smog",
+        "occupation": "Senior Environmental Engineer, Comune di Torino",
+        "location": "Turin, Piedmont, Italy",
+        "income": "€55,000 - €65,000",
+        "country_code": "IT",
+        "description": "Maria Rossi is a seasoned municipal engineer responsible for monitoring air quality in Turin. She evaluates sensor networks for compliance with EU directives, ensuring data is accurate enough to justify public health interventions and regulatory reporting.",
+        "badges": [
+          {
+            "label": "RELEVANT LABEL",
+            "value": "EU Air Quality Directive Compliance"
+          },
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "€250 per sensor"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Daily dashboard review, weekly calibration checks, monthly compliance reports"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "Sensor drift and data reliability over time"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Deploy a validated sensor network",
+            "description": "To establish a reliable, low-cost air quality monitoring network that meets national and EU reporting standards without exceeding municipal budget constraints."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Inconsistent sensor calibration",
+            "description": "Current low-cost sensors drift significantly over weeks, requiring frequent manual recalibration that strains her small team and compromises data continuity."
+          },
+          {
+            "category": "Needs",
+            "title": "Calibration transparency and API access",
+            "description": "Needs sensors with documented calibration certificates, open APIs for integration with existing municipal databases, and clear data uncertainty metrics for regulatory submissions."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_14bbd7c27594",
+        "name": "Marta Rossi",
+        "archetype": "The Vigilant Guardian",
+        "tagline": "The Breath-Watcher",
+        "occupation": "School Librarian",
+        "location": "Cremona, Italy",
+        "income": "€28,000 - €35,000",
+        "country_code": "IT",
+        "description": "Marta navigates her days in Cremona by the rhythm of her inhaler and the ping of her phone. She treats every smog alert as a weather forecast for her lungs, meticulously planning her commute, grocery runs, and afternoon walks with her son around the sensor data.",
+        "badges": [
+          {
+            "label": "ASTHMA SEVERITY",
+            "value": "Moderate, persistent"
+          },
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "€5 - €10 for health apps/alerts"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Checks SMS alerts twice daily, consults public dashboard before leaving home"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "False alarms causing alert fatigue and complacency"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Minimize Respiratory Triggers",
+            "description": "To proactively avoid high-PM2.5 zones and times to prevent asthma attacks and reduce reliance on rescue inhalers."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Unreliable Local Forecasts",
+            "description": "Current regional weather and pollution apps lack hyper-local granularity for her specific neighborhood micro-climate."
+          },
+          {
+            "category": "Needs",
+            "title": "Actionable, Timely SMS Thresholds",
+            "description": "Requires precise, location-specific alerts that specify whether to keep children indoors or reschedule outdoor activities."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "What are the current methods your municipality uses to monitor air quality in residential neighborhoods, and how frequently are these measurements taken?",
+      "When residents complain about smog or respiratory issues, what existing communication channels (e.g., websites, hotlines, apps) do you currently use to alert them, and what are the limitations of these methods?",
+      "If a system provided real-time, hyper-local air-quality data via SMS alerts and a public dashboard for a monthly fee per sensor, what specific criteria would you use to evaluate whether the cost is justified for your municipality's budget?"
+    ],
+    "interview_job": {
+      "status": "completed",
+      "completed": 1,
+      "failed": 0,
+      "personas": {
+        "per_788e5f195823": {
+          "persona_id": "per_788e5f195823",
+          "persona_name": "Maria Rossi",
+          "status": "completed",
+          "interview_id": "6ca45824252e481e880c3f468fcb938e"
+        }
+      }
+    },
+    "interview_answers": [
+      "Well, right now we rely on a network of fixed monitoring stations managed by ARPA Piemonte, the regional environmental agency. They’re spread across the city, but they’re mostly concentrated near major roads and industrial zones, so some residential areas—especially the quieter, more peripheral ones—don’t get as much coverage as we’d like. The measurements are taken continuously, with data updated every hour, but the stations themselves are expensive to maintain and hard to relocate if we need to adjust coverage. I’ve been pushing for a more flexible solution, but budget constraints and the need for regulatory-grade accuracy have made it slow to change.",
+      "We mainly rely on the ARPA Piemonte website and their open data portal, where residents can check real-time air quality maps. There’s also a general municipal hotline for environmental complaints, but it’s more for reporting issues than proactive alerts. Some people use third-party weather apps that pull from our regional data, but they’re not always timely or localized. The big limitation is that there’s no direct, instant notification system—like SMS or push alerts—so residents have to actively check the sites, which means many don’t get the info until it’s too late. We’ve talked about improving this, but funding and inter-agency coordination have held things back.",
+      "I’d need to see how the cost compares to what we already spend on maintaining our current fixed stations—those aren’t cheap, and they’re hard to move when coverage gaps pop up. If this new system could fill in the residential areas we’re missing, especially the peripheral neighborhoods, that would be a big plus. I’d also want to know how often the sensors need recalibration; if they drift too much, we’d end up with unreliable data, and that’s a dealbreaker for regulatory reporting. \n\nAnother thing is integration—can this dashboard feed into our existing systems, or would we have to build a whole new workflow? And the SMS alerts: who pays for the messages? If it’s bundled into the monthly fee, that’s better than us having to negotiate with telecom providers separately. \n\nHonestly, unless the per-sensor cost is significantly lower than what we’re spending now on maintenance and upgrades, I’d be skeptical. We’re on a tight budget, and I can’t justify spending more unless it clearly solves a problem we’re already struggling with—like getting timely, accurate data to the people who need it without extra overhead."
+    ],
+    "interview_turn_meta": [
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "openrouter/dots-studio/dots-3-note-preview:free",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "openrouter/dots-studio/dots-3-note-preview:free",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "openrouter/dots-studio/dots-3-note-preview:free",
+        "identity_drift": false
+      }
+    ],
+    "report": {
+      "title": "A Network of Low-Cost Air-Quality Sensors Sold",
+      "executive_summary": "The proposed solution addresses a critical gap in air-quality monitoring within the Po Valley region, specifically targeting peripheral residential zones currently underserved by fixed municipal stations. Research indicates a strong demand for flexible, relocatable sensor networks paired with direct resident alerting via SMS. While the core value proposition of filling spatial coverage gaps and providing proactive notifications is highly validated by interview insights, significant barriers remain regarding sensor calibration reliability for regulatory use and cost parity with existing maintenance overhead. The business model requires a bundled pricing structure (including telecom SMS fees) to overcome municipal procurement friction.",
+      "key_findings": [
+        "Fixed monitoring stations are heavily concentrated near major roads and industrial zones, leaving peripheral residential areas with poor spatial coverage.",
+        "Municipalities lack proactive, direct alerting systems (SMS/push), forcing residents to actively seek out air quality data.",
+        "Potential customers exhibit strong skepticism regarding the calibration drift of low-cost sensors and their suitability for official regulatory reporting.",
+        "Procurement decisions are strictly gated on per-sensor monthly pricing being significantly lower than current fixed-station maintenance, upgrade, and relocation costs.",
+        "There is a high operational requirement for seamless integration into existing municipal workflows and the bundling of SMS/messaging fees into the sensor subscription."
+      ],
+      "recommendations": [
+        "Develop a robust sensor calibration and auto-recalibration protocol, and partner with an accredited regional environmental agency to validate data for regulatory use.",
+        "Structure the pricing model as an all-inclusive monthly subscription (sensors, cloud hosting, data analytics, and SMS gateway fees) to eliminate separate procurement layers for municipalities.",
+        "Launch a pilot program in a specific peripheral district of Torino to demonstrate spatial coverage improvements and build empirical trust before scaling."
+      ],
+      "limitations": "The study is limited by a small sample size (1 completed interview, 2 personas). No quantitative datasets or behavioral simulation logs were provided. The findings are qualitative and represent early-stage exploratory signals rather than statistically robust market data.",
+      "risks": null,
+      "opportunities": [
+        "Public health alerts: Partnering with local schools, libraries, and healthcare providers to offer SMS alerts as a premium B2B2G service.",
+        "Dynamic reconfiguration: Offering municipal emergency services the ability to temporarily deploy sensors around specific industrial incidents or high-pollution events."
+      ],
+      "next_steps": null,
+      "validation_summary": "Demand validation is moderately strong but heavily conditional. The market clearly wants the flexibility and proactive alerting features of the proposed network. However, product-market fit is currently blocked by technical skepticism (calibration drift) and financial expectations (cost parity). Addressing these two barriers through certified data validation and a highly competitive, bundled subscription model is critical to converting interest into actual procurement."
+    },
+    "report_metrics": {
+      "attempts": 1,
+      "served_by": "openrouter/dots-studio/dots-3-note-preview:free",
+      "demand_score": 62,
+      "total_claims": 0,
+      "llm_request_id": "d528c4037e594e79a009ec4150fe8c78",
+      "total_personas": 2,
+      "confidence_score": 0.65,
+      "synthesis_source": "llm",
+      "total_interviews": 1
+    }
+  },
+  "served_by": {
+    "copilot": "openrouter/dots-studio/dots-3-note-preview:free",
+    "personas": [
+      "openrouter/dots-studio/dots-3-note-preview:free"
+    ],
+    "script": "openrouter/dots-studio/dots-3-note-preview:free",
+    "interview": [
+      "openrouter/dots-studio/dots-3-note-preview:free"
+    ],
+    "report": "openrouter/dots-studio/dots-3-note-preview:free"
+  },
+  "timings_s": {
+    "copilot": 3.7,
+    "roles": 10.4,
+    "personas": 9.7,
+    "script": 3.4,
+    "interview_start": 0.0,
+    "interview": 66.3,
+    "behavioral_create": 0.0,
+    "report": 29.1,
+    "ai_review": 83.3
+  },
+  "study_id": "study_b94338e577394ac6",
+  "elapsed_s": 208.4
+}

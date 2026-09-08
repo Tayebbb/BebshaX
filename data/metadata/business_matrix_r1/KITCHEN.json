@@ -1,0 +1,13 @@
+{
+  "label": "KITCHEN",
+  "idea": "A ghost kitchen in Lagos, Nigeria that delivers Nigerian home-style lunches (jollof, egusi, moi moi) to office workers who order over WhatsApp before 10am.",
+  "steps": {
+    "title": "A Ghost Kitchen in Lagos, Nigeria"
+  },
+  "served_by": {},
+  "timings_s": {
+    "copilot": 85.3,
+    "roles": 63.8
+  },
+  "study_id": "study_de27fa9a9a274e73"
+}

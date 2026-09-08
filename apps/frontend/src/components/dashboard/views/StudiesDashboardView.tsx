@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search,
   Plus,
@@ -29,6 +29,8 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   onOpenStudy,
 }) => {
   const [studies, setStudies] = useState<Study[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'completed' | 'in_progress'>('all');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -36,17 +38,24 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   // Only one kebab menu is open at a time, so a single ref tracks it.
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const loadStudies = async () => {
-      try {
-        const data = await api.getStudies();
-        setStudies(data);
-      } catch {
-        // fallback
-      }
-    };
-    loadStudies();
+  const loadStudies = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await api.getStudies();
+      setStudies(data);
+      setLoadError(null);
+    } catch (err: any) {
+      // A failed fetch is not "you have no studies" — saying so would invite
+      // the user to recreate work they already have.
+      setLoadError(err?.message || 'Could not load your studies.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadStudies();
+  }, [loadStudies]);
 
   // An open kebab menu closes on Escape or any outside pointer press;
   // ArrowUp/ArrowDown cycle focus through its items (mirrors the user
@@ -240,8 +249,29 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
 
         <div className="sd-label">Your Studies</div>
 
-        <div className="sd-list" role="list" ref={listRef} tabIndex={-1}>
-          {regularStudies.length === 0 ? (
+        {/* Loading and error states live outside the list: a role="list"
+            only admits listitem children, so an alert or busy region placed
+            inside it is pruned from the accessibility tree. */}
+        {isLoading ? (
+          // Showing "start your first study" to someone who already has
+          // studies is a lie, so the skeleton owns the pre-fetch frame.
+          <div className="sd-loading" role="status" aria-busy="true" aria-live="polite" aria-label="Loading your studies">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="bx-skeleton sd-loading-row" />
+            ))}
+          </div>
+        ) : loadError ? (
+          <div className="sd-empty" role="alert">
+            <div className="sd-empty-kicker">Could Not Load Studies</div>
+            <div className="sd-empty-line">Your studies are still there — this view could not reach them.</div>
+            <div className="sd-empty-sub">{loadError}</div>
+            <button type="button" className="sd-empty-cta" onClick={loadStudies}>
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="sd-list" role="list" ref={listRef} tabIndex={-1}>
+            {regularStudies.length === 0 ? (
             <div className="sd-empty">
               <div className="sd-empty-kicker">Nothing In Flight</div>
               <div className="sd-empty-line">
@@ -341,8 +371,9 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                 </div>
               );
             })
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

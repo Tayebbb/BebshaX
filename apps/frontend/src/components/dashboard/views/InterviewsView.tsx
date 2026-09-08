@@ -286,6 +286,8 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                           <img
                             src={item.persona_avatar}
                             alt={item.persona_name || 'Persona'}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full rounded-xl object-cover"
                           />
                         ) : (

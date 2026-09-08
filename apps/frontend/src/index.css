@@ -527,10 +527,13 @@ h1, h2, h3 {
    Global motion layer — every page inherits the same physicality.
    ========================================================================== */
 
-/* Buttons: shared spring feel without touching inline styles */
+/* Buttons: shared spring feel without touching inline styles.
+   `filter` is applied but not transitioned — interpolating it promotes every
+   hovered button to its own layer and re-filters its subtree for the whole
+   transition, which invalidates the cached backdrop of the glass chrome. */
 button {
   transition: transform 0.18s var(--bx-ease), box-shadow 0.25s var(--bx-ease),
-    filter 0.18s var(--bx-ease), opacity 0.18s var(--bx-ease),
+    opacity 0.18s var(--bx-ease),
     background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 button:not(:disabled):hover {
@@ -579,13 +582,16 @@ select option {
   color: var(--text-primary);
 }
 
-/* Theme switch cross-fade — .theme-transition is applied briefly on toggle */
+/* Theme switch cross-fade — .theme-transition is applied briefly on toggle.
+   box-shadow is deliberately excluded: transitioning it on every node in the
+   document repaints the whole page for 350ms, and shadows snapping mid
+   colour cross-fade is imperceptible. */
 html.theme-transition,
 html.theme-transition *,
 html.theme-transition *::before,
 html.theme-transition *::after {
   transition: background-color 0.35s ease, color 0.35s ease,
-    border-color 0.35s ease, fill 0.35s ease, box-shadow 0.35s ease !important;
+    border-color 0.35s ease, fill 0.35s ease !important;
 }
 
 /* Scroll reveal — elements with .bx-reveal rise in when they enter the viewport */
@@ -594,6 +600,11 @@ html.theme-transition *::after {
   transform: translateY(18px);
   transition: opacity 0.6s var(--bx-ease), transform 0.6s var(--bx-ease);
   transition-delay: var(--bx-reveal-delay, 0ms);
+}
+/* Promoted only while it still has motion left: .bx-reveal is applied app-wide
+   by the scroll-reveal observer, so a permanent will-change would leak a
+   compositor layer per revealed element for the life of the session. */
+.bx-reveal:not(.bx-in) {
   will-change: opacity, transform;
 }
 .bx-reveal.bx-in {
@@ -601,16 +612,27 @@ html.theme-transition *::after {
   transform: none;
 }
 
-/* Skeleton shimmer for loading placeholders */
+/* Skeleton shimmer for loading placeholders. The sweep is a transform on a
+   child layer: animating background-position repaints every placeholder on
+   the main thread, and a loading grid can hold well over a hundred of them. */
 .bx-skeleton {
-  background: linear-gradient(90deg, var(--bg-card-hover) 25%, var(--border-subtle) 50%, var(--bg-card-hover) 75%);
-  background-size: 200% 100%;
-  animation: bx-shimmer 1.4s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-card-hover);
   border-radius: 6px;
 }
+.bx-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 15%, var(--border-subtle) 50%, transparent 85%);
+  transform: translateX(-100%);
+  animation: bx-shimmer 1.4s ease-in-out infinite;
+}
 @keyframes bx-shimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
 }
 
 /* Modal choreography: the page behind frosts over (the "sheet" effect),
@@ -710,7 +732,8 @@ html.theme-transition *::after {
   .bx-modal,
   .bx-pop,
   .bx-fade,
-  .bx-skeleton {
+  .bx-skeleton,
+  .bx-skeleton::after {
     animation: none;
   }
   .bx-lift,

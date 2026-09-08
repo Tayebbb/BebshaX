@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
 import { startScrollEngine } from './scrollEngine';
@@ -7,10 +7,25 @@ interface HeroProps {
   onOpenApp?: () => void;
 }
 
-/** Counts up when the element enters the viewport; respects reduced motion. */
+/**
+ * Counts up when the element enters the viewport; respects reduced motion.
+ * The tween writes textContent directly rather than setState: three counters
+ * at 60fps for 1.1s would otherwise push ~200 React commits through the hero
+ * during the exact window the rest of the page is still hydrating.
+ */
 const CountUp: React.FC<{ to: number }> = ({ to }) => {
   const ref = useRef<HTMLSpanElement | null>(null);
-  const [value, setValue] = useState(0);
+
+  // Seeding the text runs before paint: a plain useEffect fires after it, so
+  // the three above-the-fold stat numbers would paint zero-width and shift on
+  // the next frame — CLS on the exact page this is optimizing.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    // The span is rendered childless so React provably owns nothing inside it;
+    // the tween below writes textContent directly and a reconcile can never
+    // reset it out from under the animation.
+    if (el) el.textContent = '0';
+  }, []);
 
   useEffect(() => {
     const el = ref.current;
@@ -19,7 +34,7 @@ const CountUp: React.FC<{ to: number }> = ({ to }) => {
       typeof IntersectionObserver === 'undefined' ||
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ) {
-      setValue(to);
+      el.textContent = String(to);
       return;
     }
     let raf = 0;
@@ -32,7 +47,7 @@ const CountUp: React.FC<{ to: number }> = ({ to }) => {
         const tick = (t: number) => {
           const p = Math.min(1, (t - t0) / dur);
           const eased = 1 - Math.pow(1 - p, 4); // strong decel — numbers land softly
-          setValue(Math.round(to * eased));
+          el.textContent = String(Math.round(to * eased));
           if (p < 1) raf = requestAnimationFrame(tick);
         };
         raf = requestAnimationFrame(tick);
@@ -46,7 +61,7 @@ const CountUp: React.FC<{ to: number }> = ({ to }) => {
     };
   }, [to]);
 
-  return <span ref={ref}>{value}</span>;
+  return <span ref={ref} />;
 };
 
 const STATS: Array<{ value: number; label: React.ReactNode }> = [
@@ -80,8 +95,9 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
   const { isAuthenticated } = useAuth();
   const { navigate } = useNavigation();
   const ctaRef = useRef<HTMLButtonElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => startScrollEngine(), []);
+  useEffect(() => startScrollEngine(sectionRef.current), []);
 
   const handlePrimaryAction = () => {
     if (isAuthenticated) {
@@ -91,18 +107,30 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
     navigate('/auth/signup');
   };
 
-  // magnetic pull: the button leans toward a nearby cursor and settles back
+  // magnetic pull: the button leans toward a nearby cursor and settles back.
+  // The box is measured once per hover — measuring per mousemove forces a
+  // synchronous layout on every pointer event.
+  const ctaBox = useRef<{ cx: number; cy: number } | null>(null);
+  const measureCta = () => {
+    const el = ctaRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    ctaBox.current = { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+  };
   const onCtaMove = (e: React.MouseEvent<HTMLButtonElement>) => {
     const el = ctaRef.current;
     if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const r = el.getBoundingClientRect();
-    const dx = e.clientX - (r.left + r.width / 2);
-    const dy = e.clientY - (r.top + r.height / 2);
+    if (!ctaBox.current) measureCta();
+    const box = ctaBox.current;
+    if (!box) return;
+    const dx = e.clientX - box.cx;
+    const dy = e.clientY - box.cy;
     el.style.setProperty('--lp-mx', `${dx * 0.14}px`);
     el.style.setProperty('--lp-my', `${dy * 0.22}px`);
   };
   const onCtaLeave = () => {
     const el = ctaRef.current;
+    ctaBox.current = null;
     if (!el) return;
     el.style.setProperty('--lp-mx', '0px');
     el.style.setProperty('--lp-my', '0px');
@@ -110,6 +138,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
 
   return (
     <section
+      ref={sectionRef}
       style={{
         position: 'relative',
         height: '100vh',

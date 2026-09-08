@@ -127,6 +127,8 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
                 <img
                   src={persona.avatar_url}
                   alt={persona.name}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full rounded-xl object-cover"
                 />
               ) : (

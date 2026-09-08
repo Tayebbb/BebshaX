@@ -1,4 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+// Dashboard-only assets: kept out of the landing critical path and loaded
+// with this (lazy) chunk. Space Grotesk and Unbounded are used by the
+// new-study and interview stylesheets; ui.css by the bx-* component kit.
+import '@fontsource/space-grotesk/latin-600.css';
+import '@fontsource/space-grotesk/latin-700.css';
+import '@fontsource/unbounded/latin-800.css';
+import '../ui/ui.css';
 import {
   Menu,
   PenSquare,

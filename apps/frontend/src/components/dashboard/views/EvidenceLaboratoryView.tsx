@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   Sparkles,
@@ -118,25 +118,38 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
     }
   };
 
-  const filteredClaims = claims.filter((c) => {
-    const matchStatus = statusFilter === 'all' || c.status === statusFilter;
-    const matchCategory = categoryFilter === 'all' || c.category === categoryFilter;
-    const matchSearch =
-      !searchQuery ||
-      c.claim_text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.rationale && c.rationale.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchStatus && matchCategory && matchSearch;
-  });
+  // Re-filtering (and re-lowercasing) every claim and source on unrelated
+  // re-renders is the single hottest thing in this view once a study has real
+  // evidence in it.
+  const normalizedQuery = searchQuery.toLowerCase();
 
-  const filteredSources = sources.filter((s) => {
-    const matchType = sourceTypeFilter === 'all' || s.source_type === sourceTypeFilter;
-    const matchSearch =
-      !searchQuery ||
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.publisher.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchType && matchSearch;
-  });
+  const filteredClaims = useMemo(
+    () =>
+      claims.filter((c) => {
+        const matchStatus = statusFilter === 'all' || c.status === statusFilter;
+        const matchCategory = categoryFilter === 'all' || c.category === categoryFilter;
+        const matchSearch =
+          !normalizedQuery ||
+          c.claim_text.toLowerCase().includes(normalizedQuery) ||
+          (c.rationale && c.rationale.toLowerCase().includes(normalizedQuery));
+        return matchStatus && matchCategory && matchSearch;
+      }),
+    [claims, statusFilter, categoryFilter, normalizedQuery]
+  );
+
+  const filteredSources = useMemo(
+    () =>
+      sources.filter((s) => {
+        const matchType = sourceTypeFilter === 'all' || s.source_type === sourceTypeFilter;
+        const matchSearch =
+          !normalizedQuery ||
+          s.title.toLowerCase().includes(normalizedQuery) ||
+          s.content.toLowerCase().includes(normalizedQuery) ||
+          s.publisher.toLowerCase().includes(normalizedQuery);
+        return matchType && matchSearch;
+      }),
+    [sources, sourceTypeFilter, normalizedQuery]
+  );
 
   const getStatusBadge = (status: EvidenceStatus) => {
     if (status === 'supported') {

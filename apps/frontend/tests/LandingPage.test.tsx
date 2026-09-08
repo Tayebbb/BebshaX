@@ -76,7 +76,7 @@ describe('BebshaX Premium Landing Page', () => {
     ).toBeInTheDocument();
   });
 
-  it('allows navigating to dedicated auth page and returning', () => {
+  it('allows navigating to dedicated auth page and returning', async () => {
     render(<App />);
 
     const signInButtons = screen.getAllByRole('button', { name: /Sign In/i });
@@ -84,7 +84,7 @@ describe('BebshaX Premium Landing Page', () => {
     fireEvent.click(signInButtons[0]);
 
     expect(
-      screen.getByRole('heading', { name: /Welcome back/i })
+      await screen.findByRole('heading', { name: /Welcome back/i })
     ).toBeInTheDocument();
 
     const backBtn = screen.getByRole('button', { name: /Back to BebshaX/i });
@@ -95,7 +95,7 @@ describe('BebshaX Premium Landing Page', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('sends a signed-out visitor from the hero CTA to the sign-up page', () => {
+  it('sends a signed-out visitor from the hero CTA to the sign-up page', async () => {
     render(<App />);
 
     const cta = within(heroSection()).getByRole('button', {
@@ -104,7 +104,7 @@ describe('BebshaX Premium Landing Page', () => {
     fireEvent.click(cta);
 
     expect(
-      screen.getByRole('heading', { name: /Create your account/i })
+      await screen.findByRole('heading', { name: /Create your account/i })
     ).toBeInTheDocument();
   });
 

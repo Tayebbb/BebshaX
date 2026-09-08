@@ -1,15 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { api } from './services/api';
 import { HealthResponse } from './types';
 import { LandingPage } from './components/landing/LandingPage';
-import { DashboardLayout } from './components/dashboard/DashboardLayout';
-import { AuthPage } from './components/auth/AuthPage';
-import { AuthModal } from './components/auth/AuthModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NavigationProvider, useNavigation } from './context/NavigationContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { initScrollReveal } from './utils/scrollReveal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+
+// Route roots are split out of the first paint: a visitor on the landing page
+// should never download the dashboard bundle. Named exports are re-mapped
+// because React.lazy resolves the module's `default`.
+const DashboardLayout = React.lazy(() =>
+  import('./components/dashboard/DashboardLayout').then((m) => ({ default: m.DashboardLayout }))
+);
+const AuthPage = React.lazy(() =>
+  import('./components/auth/AuthPage').then((m) => ({ default: m.AuthPage }))
+);
+const AuthModal = React.lazy(() =>
+  import('./components/auth/AuthModal').then((m) => ({ default: m.AuthModal }))
+);
+
+// Painted while a route chunk streams in. Deliberately just the page
+// background: a spinner that shows for 40ms reads as a flash, not as progress.
+const RouteFallback: React.FC = () => (
+  <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-pure)' }} />
+);
 
 const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -71,10 +87,16 @@ const AppContent: React.FC = () => {
     // authenticated this user, verifying is a follow-up, not a gate.
     if (isAuthenticated && !currentPath.includes('/verify') && !currentPath.includes('/otp')) {
       return (
-        <DashboardLayout onOpenLandingPage={() => navigate('/')} health={health} />
+        <Suspense fallback={<RouteFallback />}>
+          <DashboardLayout onOpenLandingPage={() => navigate('/')} health={health} />
+        </Suspense>
       );
     }
-    return <AuthPage />;
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <AuthPage />
+      </Suspense>
+    );
   }
 
   // Check if current URL is an App / Dashboard route
@@ -98,6 +120,9 @@ const AppContent: React.FC = () => {
 
   // Only the authenticated app waits on the session check — the landing and
   // auth pages must paint immediately, without blocking on a network call.
+  // Skipping this for a locally-hydrated user was measured as a win but lets a
+  // server-side-revoked session mount the whole dashboard, fire a burst of
+  // doomed requests and flash the cached identity before bouncing. Not worth it.
   if (isLoading && isAppRoute) {
     return (
       <div
@@ -132,7 +157,11 @@ const AppContent: React.FC = () => {
 
   if (isAppRoute) {
     if (!isAuthenticated) {
-      return <AuthPage initialMode="signin" />;
+      return (
+        <Suspense fallback={<RouteFallback />}>
+          <AuthPage initialMode="signin" />
+        </Suspense>
+      );
     }
     return (
       <>
@@ -157,7 +186,9 @@ const AppContent: React.FC = () => {
         </div>
 
         {/* Dashboard Shell Application */}
-        <DashboardLayout onOpenLandingPage={() => navigate('/')} health={health} />
+        <Suspense fallback={<RouteFallback />}>
+          <DashboardLayout onOpenLandingPage={() => navigate('/')} health={health} />
+        </Suspense>
       </>
     );
   }
@@ -191,11 +222,15 @@ const AppContent: React.FC = () => {
       />
 
       {/* Modal Fallback */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        initialView={authInitialView}
-        onClose={() => setIsAuthModalOpen(false)}
-      />
+      {isAuthModalOpen && (
+        <Suspense fallback={null}>
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            initialView={authInitialView}
+            onClose={() => setIsAuthModalOpen(false)}
+          />
+        </Suspense>
+      )}
     </>
   );
 };

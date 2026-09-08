@@ -86,6 +86,9 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
   useEffect(() => {
     if (activeRun && (activeRun.status === 'pending' || activeRun.status === 'running')) {
       pollTimerRef.current = setInterval(async () => {
+        // A background tab keeps hitting the API every 2.5s for a screen nobody
+        // is looking at; the next tick after refocus picks the state back up.
+        if (typeof document !== 'undefined' && document.hidden) return;
         try {
           const updated = await api.getBehavioralRunResults(studyId, activeRun.id);
           setActiveRun(updated);

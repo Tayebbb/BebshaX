@@ -66,13 +66,15 @@
   left: -16vmax;
   animation: sd-drift-b 70s var(--sd-ease) infinite alternate;
 }
+/* Translate only: scaling a blur(110px) layer re-rasterises a ~1150px surface
+   every frame and invalidates the backdrop cache of the glass chrome above. */
 @keyframes sd-drift-a {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(-6vmax, 5vmax, 0) scale(1.12); }
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-6vmax, 5vmax, 0); }
 }
 @keyframes sd-drift-b {
-  from { transform: translate3d(0, 0, 0) scale(1.08); }
-  to { transform: translate3d(5vmax, -4vmax, 0) scale(1); }
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(5vmax, -4vmax, 0); }
 }
 
 .sd-content { position: relative; z-index: 1; }
@@ -317,6 +319,8 @@
 }
 
 .sd-list { display: flex; flex-direction: column; gap: 10px; outline: none; }
+.sd-loading { display: flex; flex-direction: column; gap: 10px; }
+.sd-loading-row { height: 92px; border-radius: 14px; }
 
 .sd-row {
   position: relative;

@@ -102,6 +102,31 @@ const TIMEOUT_MS = {
 let forceMockMode: boolean | null = null;
 let lastKnownLive = false;
 
+/** Study-list read coalescing.
+ *
+ * Three independent consumers (dashboard sidebar, studies view, persona library)
+ * call `getStudies()` on the same mount, and the sidebar re-runs on every tab
+ * switch. Without this, one navigation costs 3 identical round trips and each
+ * tab click costs another. The cache is deliberately short-lived and is dropped
+ * outright by any study mutation, so freshness after create/update/delete is
+ * unchanged. */
+const STUDIES_CACHE_TTL_MS = 2000;
+// Carries its own key so a caller can never be joined onto a request that was
+// issued for a different account.
+let studiesInFlight: { key: string; promise: Promise<Study[]> } | null = null;
+let studiesCache: { at: number; key: string; value: Study[] } | null = null;
+/** Bumped by every mutation so a read that was already in flight when the
+ * mutation landed can never install its stale result into the cache. */
+let studiesGeneration = 0;
+
+const invalidateStudiesCache = () => {
+  studiesGeneration += 1;
+  studiesCache = null;
+  // Dropping the shared promise too: a caller arriving after a delete must not
+  // be handed the pre-delete read and render the study that just went away.
+  studiesInFlight = null;
+};
+
 /** Auth failures the caller must surface verbatim. The `code` marks the error
  * as "the server answered" so the Neon fallback (for an unreachable backend)
  * is skipped instead of masking a real 4xx/5xx. */
@@ -678,6 +703,9 @@ export const api = {
   },
 
   setStoredUser(user: User | null) {
+    // The identity behind the studies cache key just changed (sign in, sign out,
+    // account switch) — anything still held is another account's data.
+    invalidateStudiesCache();
     try {
       if (user) {
         localStorage.setItem('bebshax_auth_user', JSON.stringify(user));
@@ -1098,16 +1126,61 @@ export const api = {
     return _mocksSync ? [..._mocksSync.mockStore.studies] : [];
   },
 
-  saveStoredUserStudies(studies: Study[]) {
+  /** Write-through used by reads. Deliberately does NOT invalidate: a read
+   * persisting what it just fetched is not a mutation, and treating it as one
+   * made the cache below unfillable.
+   *
+   * `expectedKey` is the storage key the caller resolved *before* the fetch. A
+   * read started as user A can resolve after a sign-out/sign-in as user B, and
+   * without this guard it would write A's studies into B's bucket — which B's
+   * next create/update/delete then persists back as B's own. */
+  persistStoredUserStudies(studies: Study[], expectedKey?: string) {
     try {
       const key = this.getUserStudiesStorageKey();
+      if (expectedKey !== undefined && expectedKey !== key) return;
       localStorage.setItem(key, JSON.stringify(studies));
     } catch {
       // ignore
     }
   },
 
+  saveStoredUserStudies(studies: Study[]) {
+    // Every create/update/delete path funnels through here, so this is the one
+    // place the coalescing cache has to be dropped.
+    invalidateStudiesCache();
+    this.persistStoredUserStudies(studies);
+  },
+
   async getStudies(): Promise<Study[]> {
+    // Keyed by user: signing out and back in as someone else must never be
+    // served the previous account's studies out of a process-global cache.
+    const key = this.getUserStudiesStorageKey();
+    if (studiesCache && studiesCache.key === key && Date.now() - studiesCache.at < STUDIES_CACHE_TTL_MS) {
+      // Copy: the three dashboard consumers share this entry for the TTL
+      // window, and one in-place sort would corrupt the other two views.
+      return studiesCache.value.slice();
+    }
+    if (studiesInFlight && studiesInFlight.key === key) {
+      return studiesInFlight.promise.then((value) => value.slice());
+    }
+    const generation = studiesGeneration;
+    const promise = this.fetchStudies(key)
+      .then((value) => {
+        if (generation === studiesGeneration) {
+          studiesCache = { at: Date.now(), key, value };
+        }
+        return value;
+      })
+      .finally(() => {
+        // Only clear our own entry: an invalidation mid-flight may already have
+        // started a newer request, and clearing unconditionally would drop it.
+        if (studiesInFlight?.promise === promise) studiesInFlight = null;
+      });
+    studiesInFlight = { key, promise };
+    return promise.then((value) => value.slice());
+  },
+
+  async fetchStudies(expectedKey?: string): Promise<Study[]> {
     if (!this.isMockMode()) {
       try {
         const user = this.getStoredUser();
@@ -1122,7 +1195,7 @@ export const api = {
           const data = await res.json();
           if (Array.isArray(data)) {
             lastKnownLive = true;
-            this.saveStoredUserStudies(data);
+            this.persistStoredUserStudies(data, expectedKey);
             return data;
           }
         }
