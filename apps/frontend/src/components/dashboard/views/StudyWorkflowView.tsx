@@ -122,7 +122,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const roleSelectionRef = useRef<HTMLDivElement | null>(null);
   const copilotChatRef = useRef<HTMLDivElement | null>(null);
   const interviewChatRef = useRef<HTMLDivElement | null>(null);
-  const step1InputRef = useRef<HTMLInputElement | null>(null);
+  const step1InputRef = useRef<HTMLTextAreaElement | null>(null);
   const personaModalTriggerRef = useRef<HTMLElement | null>(null);
   const personaModalRef = useRef<HTMLDivElement | null>(null);
 
@@ -1044,7 +1044,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         </div>
 
         {/* 5-Step Stepper */}
-        <nav aria-label="Study steps" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <nav aria-label="Study steps" className="bx-stepper">
           <span className="bx-step-count" aria-hidden="true">
             Step {currentStep} of {stepLabels.length}
           </span>
@@ -1065,12 +1065,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                   aria-label={`Step ${s.num}: ${s.label}${isDone ? ' (done)' : ''}`}
                   tabIndex={unlocked ? 0 : -1}
                   title={unlocked ? s.sub : stepLockReason(s.num)}
+                  className="bx-step"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
                     padding: '6px 12px',
-                    borderRadius: '8px',
+                    borderRadius: '999px',
                     border: isCurrent ? '1px solid var(--accent-teal)' : '1px solid transparent',
                     background: isCurrent ? 'var(--accent-subtle)' : isDone ? 'var(--fill-soft)' : 'transparent',
                     color: isCurrent ? 'var(--accent-cyan)' : isDone ? 'var(--accent-teal)' : 'var(--text-secondary)',
@@ -1078,6 +1079,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
                     fontWeight: isCurrent || isDone ? 600 : 400,
                     cursor: unlocked ? 'pointer' : 'not-allowed',
                     opacity: unlocked ? 1 : 0.45,
+                    flexShrink: 0,
                   }}
                 >
                   <div

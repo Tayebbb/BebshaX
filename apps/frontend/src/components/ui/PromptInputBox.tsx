@@ -12,6 +12,8 @@ export interface PromptInputBoxProps {
   onStop?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
+  /** Shown as the send button's title while `disabled` (explains why). */
+  disabledReason?: string;
   placeholder?: string;
   /** Enables the paperclip, drag-drop and paste of a single image. */
   allowAttachments?: boolean;
@@ -35,6 +37,7 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
   onStop,
   isLoading = false,
   disabled = false,
+  disabledReason,
   placeholder = 'Type your message…',
   allowAttachments = false,
   leftActions,
@@ -141,7 +144,7 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
       }
     : {};
 
-  const primaryLabel = isLoading ? 'Stop generation' : sendLabel;
+  const primaryLabel = isLoading ? (onStop ? 'Stop generation' : 'Waiting for reply') : sendLabel;
 
   return (
     <div className={['bx-prompt-wrap', className].filter(Boolean).join(' ')}>
@@ -185,6 +188,7 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           disabled={disabled}
+          title={disabled ? disabledReason : undefined}
           aria-label={ariaLabel}
         />
 
@@ -223,6 +227,7 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
               className={['bx-prompt-send', canSend ? 'bx-prompt-send--ready' : ''].filter(Boolean).join(' ')}
               onClick={isLoading ? onStop : submit}
               disabled={isLoading ? !onStop : !canSend}
+              title={disabled ? disabledReason : undefined}
               aria-label={primaryLabel}
             >
               {isLoading ? (

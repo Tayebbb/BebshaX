@@ -10,89 +10,92 @@
 @tailwind utilities;
 
 :root {
-  /* Core Color Palette: High-Craft Dark with #080A0A Base */
-  --bg-pure: #080a0a;
-  --bg-primary: #080a0a;
-  --bg-secondary: #0d1111;
-  --bg-card: #111616;
-  --bg-card-hover: #161c1c;
-  --bg-glass: rgba(8, 10, 10, 0.85);
+  /* Core Color Palette — iOS/macOS dark system palette. The canvas is a
+     true near-black (OLED feel); grouped surfaces step up in luminance
+     rather than being outlined. */
+  --bg-pure: #000000;
+  --bg-primary: #000000;
+  --bg-secondary: #0d0d0f;
+  --bg-card: #1c1c1e;
+  --bg-card-hover: #242426;
+  --bg-glass: rgba(18, 18, 20, 0.82);
 
-  /* Borders & Dividers */
-  --border-subtle: #202727;
-  --border-medium: #2a3333;
-  --border-hover: rgba(20, 184, 166, 0.35);
-  --border-soft: rgba(255, 255, 255, 0.08);
+  /* Borders & Dividers — iOS separators: hairlines, never outlines */
+  --border-subtle: rgba(84, 84, 88, 0.42);
+  --border-medium: rgba(84, 84, 88, 0.65);
+  --border-hover: rgba(48, 209, 199, 0.45);
+  --border-soft: rgba(255, 255, 255, 0.07);
 
-  /* Soft fills (decorative surfaces on the canvas) */
-  --fill-soft: rgba(255, 255, 255, 0.05);
-  --fill-soft-2: rgba(255, 255, 255, 0.08);
+  /* Soft fills — iOS system fill tiers */
+  --fill-soft: rgba(120, 120, 128, 0.16);
+  --fill-soft-2: rgba(120, 120, 128, 0.24);
 
-  /* Frosted glass tiers (backdrop-blur surfaces) */
-  --glass-strong: rgba(13, 17, 17, 0.9);
-  --glass-mid: rgba(13, 17, 17, 0.65);
-  --glass-soft: rgba(13, 17, 17, 0.5);
+  /* Frosted glass tiers — thick / regular / thin system materials */
+  --glass-strong: rgba(28, 28, 30, 0.9);
+  --glass-mid: rgba(28, 28, 30, 0.68);
+  --glass-soft: rgba(28, 28, 30, 0.5);
 
   /* Glass material physics — one blur/saturation recipe app-wide */
-  --glass-blur: 26px;
-  --glass-saturate: 150%;
+  --glass-blur: 30px;
+  --glass-saturate: 180%;
   /* Top-edge light reflection (the hairline highlight on raised surfaces) */
-  --reflect: rgba(255, 255, 255, 0.07);
-  --reflect-strong: rgba(255, 255, 255, 0.12);
+  --reflect: rgba(255, 255, 255, 0.06);
+  --reflect-strong: rgba(255, 255, 255, 0.1);
   /* Dialog scrim behind frosted backdrops */
-  --scrim: rgba(4, 6, 6, 0.55);
-  /* Ambient canvas glow — static washes the glass surfaces pick up */
-  --ambient-a: rgba(20, 184, 166, 0.07);
-  --ambient-b: rgba(34, 211, 238, 0.05);
-  --ambient-c: rgba(16, 185, 129, 0.045);
+  --scrim: rgba(0, 0, 0, 0.5);
+  /* Ambient canvas glow — barely-there washes the glass picks up */
+  --ambient-a: rgba(48, 209, 199, 0.05);
+  --ambient-b: rgba(100, 210, 255, 0.035);
+  --ambient-c: rgba(48, 209, 199, 0.03);
 
-  /* Typography Palette */
+  /* Typography Palette — iOS label hierarchy */
   --text-main: #ffffff;
-  --text-primary: #f4f7f7;
-  --text-secondary: #8d9999;
-  --text-muted: #5f6b6b;
-  --text-faint: #535d5d;
-  --text-label: #b6c2c2;
-  /* Text sitting on the teal accent (CTAs) — dark in BOTH themes. */
-  --text-on-accent: #071010;
+  --text-primary: #f5f5f7;
+  --text-secondary: rgba(235, 235, 245, 0.6);
+  --text-muted: rgba(235, 235, 245, 0.38);
+  --text-faint: rgba(235, 235, 245, 0.26);
+  --text-label: rgba(235, 235, 245, 0.78);
+  /* Text sitting on the accent (CTAs) — white on a saturated tint */
+  --text-on-accent: #ffffff;
 
-  /* Primary Accent: Teal / Cyan */
-  --accent-primary: #14b8a6;
-  --accent-hover: #22d3ee;
-  --accent-subtle: rgba(20, 184, 166, 0.12);
-  --accent-glow: rgba(20, 184, 166, 0.25);
+  /* Primary Accent: system teal (iOS-vivid) */
+  --accent-primary: #30d1c7;
+  --accent-hover: #5ce1d8;
+  --accent-subtle: rgba(48, 209, 199, 0.14);
+  --accent-glow: rgba(48, 209, 199, 0.28);
 
   /* Secondary Accent & Status (readable variants flip per theme) */
-  --accent-cyan: #22d3ee;
-  --accent-teal: #14b8a6;
-  --accent-teal-bright: #2dd4bf;
-  --accent-emerald: #10b981;
-  --accent-amber: #f59e0b;
-  --accent-rose: #ef4444;
-  --status-success-text: #34d399;
-  --status-error-text: #fca5a5;
-  --status-warn-text: #f6c878;
+  --accent-cyan: #64d2ff;
+  --accent-teal: #30d1c7;
+  --accent-teal-bright: #5ce1d8;
+  --accent-emerald: #30d158;
+  --accent-amber: #ffd60a;
+  --accent-rose: #ff453a;
+  --status-success-text: #30d158;
+  --status-error-text: #ff6961;
+  --status-warn-text: #ffd60a;
 
   /* Component chrome */
-  --google-btn-bg: #f4f7f7;
-  --google-btn-fg: #111616;
-  --scrollbar-thumb: #232d2d;
-  --scrollbar-thumb-hover: #31403f;
+  --google-btn-bg: #ffffff;
+  --google-btn-fg: #1c1c1e;
+  --scrollbar-thumb: rgba(120, 120, 128, 0.35);
+  --scrollbar-thumb-hover: rgba(120, 120, 128, 0.55);
 
   /* Legacy Accent Mappings for backward compatibility */
-  --accent-gold-primary: #14b8a6;
-  --accent-gold-hover: #22d3ee;
+  --accent-gold-primary: #30d1c7;
+  --accent-gold-hover: #5ce1d8;
 
-  /* Typography Fonts */
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  /* Typography Fonts — the system UI face first (SF on Apple hardware),
+     Plus Jakarta Sans as the loaded cross-platform fallback. */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Plus Jakarta Sans', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 
-  /* Elevation Shadows — layered (tight contact + soft diffuse) for real depth */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.42);
-  --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.52);
-  --shadow-glow: 0 0 24px rgba(20, 184, 166, 0.2);
+  /* Elevation Shadows — soft, wide, low-contrast (iOS sheet shadows) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.3), 0 14px 36px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.34), 0 28px 72px rgba(0, 0, 0, 0.48);
+  --shadow-glow: 0 0 28px rgba(48, 209, 199, 0.18);
 }
 
 /* ==========================================================================
@@ -100,64 +103,68 @@
    <html data-theme="light">; every token above has a light counterpart.
    ========================================================================== */
 [data-theme='light'] {
-  --bg-pure: #f6f8f8;
-  --bg-primary: #f6f8f8;
-  --bg-secondary: #eef2f2;
+  /* iOS grouped light: cool grey canvas, white cells */
+  --bg-pure: #f2f2f7;
+  --bg-primary: #f2f2f7;
+  --bg-secondary: #e9e9ee;
   --bg-card: #ffffff;
-  --bg-card-hover: #f1f5f5;
-  --bg-glass: rgba(255, 255, 255, 0.88);
+  --bg-card-hover: #f7f7fa;
+  --bg-glass: rgba(249, 249, 251, 0.86);
 
-  --border-subtle: #e2e8e8;
-  --border-medium: #cfd9d9;
-  --border-hover: rgba(13, 148, 136, 0.45);
-  --border-soft: rgba(10, 30, 28, 0.1);
+  --border-subtle: rgba(60, 60, 67, 0.16);
+  --border-medium: rgba(60, 60, 67, 0.26);
+  --border-hover: rgba(0, 150, 140, 0.4);
+  --border-soft: rgba(60, 60, 67, 0.1);
 
-  --fill-soft: rgba(10, 30, 28, 0.045);
-  --fill-soft-2: rgba(10, 30, 28, 0.08);
+  --fill-soft: rgba(120, 120, 128, 0.1);
+  --fill-soft-2: rgba(120, 120, 128, 0.16);
 
-  --glass-strong: rgba(255, 255, 255, 0.92);
-  --glass-mid: rgba(255, 255, 255, 0.75);
-  --glass-soft: rgba(255, 255, 255, 0.6);
+  --glass-strong: rgba(249, 249, 251, 0.92);
+  --glass-mid: rgba(249, 249, 251, 0.74);
+  --glass-soft: rgba(249, 249, 251, 0.6);
 
-  --reflect: rgba(255, 255, 255, 0.85);
+  --reflect: rgba(255, 255, 255, 0.9);
   --reflect-strong: rgba(255, 255, 255, 1);
-  --scrim: rgba(15, 23, 42, 0.35);
-  --ambient-a: rgba(13, 148, 136, 0.06);
-  --ambient-b: rgba(14, 116, 144, 0.05);
-  --ambient-c: rgba(5, 150, 105, 0.04);
+  --scrim: rgba(0, 0, 0, 0.28);
+  --ambient-a: rgba(0, 150, 140, 0.05);
+  --ambient-b: rgba(0, 122, 255, 0.035);
+  --ambient-c: rgba(0, 150, 140, 0.03);
 
-  --text-main: #0e1515;
-  --text-primary: #1c2626;
-  --text-secondary: #5c6b6b;
-  --text-muted: #7c8989;
-  --text-faint: #97a3a3;
-  --text-label: #3d4a4a;
-  --text-on-accent: #071010;
+  --text-main: #000000;
+  --text-primary: #1d1d1f;
+  --text-secondary: rgba(60, 60, 67, 0.6);
+  --text-muted: rgba(60, 60, 67, 0.42);
+  --text-faint: rgba(60, 60, 67, 0.3);
+  --text-label: rgba(60, 60, 67, 0.82);
+  --text-on-accent: #ffffff;
 
-  --accent-hover: #0e7490;
-  --accent-subtle: rgba(13, 148, 136, 0.1);
-  --accent-glow: rgba(13, 148, 136, 0.2);
+  --accent-primary: #00968c;
+  --accent-hover: #007f76;
+  --accent-subtle: rgba(0, 150, 140, 0.1);
+  --accent-glow: rgba(0, 150, 140, 0.22);
 
-  --accent-cyan: #0e7490;
-  --accent-teal: #0d9488;
-  --accent-teal-bright: #0d9488;
-  --accent-emerald: #059669;
-  --status-success-text: #047857;
-  --status-error-text: #b91c1c;
-  --status-warn-text: #a16207;
+  --accent-cyan: #0071e3;
+  --accent-teal: #00968c;
+  --accent-teal-bright: #00968c;
+  --accent-emerald: #34c759;
+  --accent-amber: #ff9f0a;
+  --accent-rose: #ff3b30;
+  --status-success-text: #248a3d;
+  --status-error-text: #d70015;
+  --status-warn-text: #b25000;
 
   --google-btn-bg: #ffffff;
-  --google-btn-fg: #1f2937;
-  --scrollbar-thumb: #c9d4d4;
-  --scrollbar-thumb-hover: #aebcbc;
+  --google-btn-fg: #1d1d1f;
+  --scrollbar-thumb: rgba(60, 60, 67, 0.22);
+  --scrollbar-thumb-hover: rgba(60, 60, 67, 0.36);
 
-  --accent-gold-primary: #0d9488;
-  --accent-gold-hover: #0e7490;
+  --accent-gold-primary: #00968c;
+  --accent-gold-hover: #007f76;
 
-  --shadow-sm: 0 1px 2px rgba(15, 30, 30, 0.05), 0 2px 8px rgba(15, 30, 30, 0.06);
-  --shadow-md: 0 2px 4px rgba(15, 30, 30, 0.05), 0 10px 28px rgba(15, 30, 30, 0.09);
-  --shadow-lg: 0 2px 6px rgba(15, 30, 30, 0.06), 0 18px 48px rgba(15, 30, 30, 0.12);
-  --shadow-glow: 0 0 24px rgba(13, 148, 136, 0.14);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.05), 0 14px 36px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.06), 0 28px 72px rgba(0, 0, 0, 0.12);
+  --shadow-glow: 0 0 28px rgba(0, 150, 140, 0.14);
 }
 
 /* ==========================================================================
@@ -188,15 +195,16 @@
   --page-x: clamp(16px, 4vw, 40px);
   --page-max: 1280px;
 
-  --r-xs: 6px;
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-xl: 20px;
+  /* iOS continuous-corner scale: controls 10, cells 14, cards 18, sheets 24 */
+  --r-xs: 8px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 24px;
   --r-pill: 999px;
 
-  /* The one CTA gradient — every primary action, both themes */
-  --accent-gradient: linear-gradient(135deg, var(--accent-teal) 0%, #0d9488 100%);
+  /* The one CTA fill — a flat, saturated tint with a whisper of top light */
+  --accent-gradient: linear-gradient(180deg, #3ddad0 0%, var(--accent-teal) 100%);
 
   /* Semantic status surfaces (bg + border pair with the *-text tokens above) */
   --status-success-bg: rgba(16, 185, 129, 0.1);
@@ -221,13 +229,13 @@
   --trait-n: #ec4899;
 }
 [data-theme='light'] {
-  --accent-gradient: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
-  --status-success-bg: rgba(5, 150, 105, 0.09);
-  --status-success-border: rgba(5, 150, 105, 0.35);
-  --status-warn-bg: rgba(161, 98, 7, 0.09);
-  --status-warn-border: rgba(161, 98, 7, 0.35);
-  --status-error-bg: rgba(185, 28, 28, 0.07);
-  --status-error-border: rgba(185, 28, 28, 0.35);
+  --accent-gradient: linear-gradient(180deg, #06a89c 0%, #00968c 100%);
+  --status-success-bg: rgba(52, 199, 89, 0.1);
+  --status-success-border: rgba(52, 199, 89, 0.3);
+  --status-warn-bg: rgba(255, 159, 10, 0.1);
+  --status-warn-border: rgba(255, 159, 10, 0.3);
+  --status-error-bg: rgba(255, 59, 48, 0.08);
+  --status-error-border: rgba(255, 59, 48, 0.3);
   --prov-inferred: #b45309;
   --trait-o: #0284c7;
   --trait-e: #b45309;
@@ -282,9 +290,22 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  /* No rubber-band bounce behind the frosted chrome on iOS/Android */
+  overscroll-behavior-y: none;
   /* clip, not hidden: hidden creates a scroll container and can disable
      position:sticky descendants (dashboard sidebar). */
   overflow-x: clip;
+}
+
+/* Touch devices: comfortable form controls, and no hover-only tooltips on tap */
+@media (pointer: coarse) {
+  main input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  main select {
+    min-height: 44px;
+  }
+  .bx-tip::after { display: none; }
 }
 
 /* ==========================================================================
@@ -315,18 +336,18 @@ body {
 }
 
 ::selection {
-  background: rgba(20, 184, 166, 0.35);
+  background: var(--accent-glow);
   color: var(--text-main);
 }
 
 :focus-visible {
-  outline: 2px solid #0d9488 !important;
+  outline: 3px solid var(--accent-glow) !important;
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
 }
-/* Solid teal-600 meets >=3:1 on both dark and light canvases. */
+/* Solid teal meets >=3:1 on both dark and light canvases. */
 [data-theme='light'] :focus-visible {
-  outline: 2px solid #0d9488 !important;
+  outline: 3px solid rgba(0, 150, 140, 0.45) !important;
   outline-offset: 2px;
 }
 
@@ -347,11 +368,12 @@ body {
   border: none !important;
 }
 
-/* Typography Utility Classes */
+/* Typography Utility Classes — SF-style: semibold, tight tracking */
 h1, h2, h3, h4, h5, h6 {
   color: var(--text-main);
-  letter-spacing: -0.03em;
-  font-weight: 700;
+  letter-spacing: -0.022em;
+  font-weight: 600;
+  font-family: var(--font-display);
 }
 
 /* Multi-line headlines break evenly instead of leaving orphan words */
@@ -408,12 +430,11 @@ h1, h2, h3 {
   -webkit-text-fill-color: transparent;
 }
 
-/* Minimalist Dark Cards without Outlines */
+/* Grouped cells — depth from luminance step, hairline only */
 .clean-card {
   background: var(--bg-card);
-  background-image: linear-gradient(180deg, var(--fill-soft) 0%, transparent 55%);
-  border: 1px solid var(--border-subtle);
-  border-radius: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
   box-shadow: inset 0 1px 0 var(--reflect), var(--shadow-sm);
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease,
     box-shadow 0.25s var(--bx-ease);
@@ -421,7 +442,6 @@ h1, h2, h3 {
 
 .clean-card:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-hover);
   box-shadow: inset 0 1px 0 var(--reflect), var(--shadow-md);
 }
 
@@ -506,7 +526,8 @@ h1, h2, h3 {
    ========================================================================== */
 
 :root {
-  --bx-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Apple's standard sheet/spring curve */
+  --bx-ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* View switch: every dashboard tab rises in when it mounts */
@@ -535,9 +556,8 @@ h1, h2, h3 {
     box-shadow 0.25s var(--bx-ease), background 0.25s var(--bx-ease);
 }
 .bx-lift:hover {
-  transform: translateY(-3px);
-  border-color: var(--border-hover) !important;
-  box-shadow: inset 0 1px 0 var(--reflect-strong), var(--shadow-lg), 0 0 0 1px var(--accent-subtle);
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 var(--reflect-strong), var(--shadow-md);
 }
 
 /* ==========================================================================
@@ -554,11 +574,12 @@ button {
     background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 button:not(:disabled):hover {
-  filter: brightness(1.06);
+  filter: brightness(1.04);
 }
+/* iOS press: a quick, shallow scale-down */
 button:not(:disabled):active {
-  transform: scale(0.975);
-  filter: brightness(0.97);
+  transform: scale(0.97);
+  filter: brightness(0.94);
 }
 
 /* Inputs settle smoothly between states */
@@ -577,12 +598,12 @@ input, textarea, select {
 select {
   appearance: none;
   -webkit-appearance: none;
-  background-color: var(--bg-card);
+  background-color: var(--fill-soft);
   background-image: var(--select-chevron);
   background-repeat: no-repeat;
   background-position: right 10px center;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
   color: var(--text-primary);
   font-family: inherit;
   font-size: 0.8rem;
@@ -711,10 +732,35 @@ html.theme-transition *::after {
   text-transform: uppercase;
   color: var(--text-muted);
   margin-right: 4px;
+  flex-shrink: 0;
 }
+/* Workflow stepper — a single row that scrolls sideways instead of wrapping */
+.bx-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  padding: 2px;
+}
+.bx-stepper::-webkit-scrollbar { display: none; }
+.bx-step { scroll-snap-align: center; transition: background 220ms var(--bx-ease, ease), color 220ms var(--bx-ease, ease); }
+.bx-step-rule { flex-shrink: 0; }
 @media (max-width: 720px) {
+  .bx-stepper {
+    flex: 1 1 100%;
+    padding: 6px 4px;
+    border-radius: 999px;
+    background: var(--fill-soft);
+    border: 1px solid var(--border-subtle);
+  }
   .bx-step-count {
     display: inline;
+    margin-left: 10px;
   }
   .bx-step-label:not(.bx-step-label--current) {
     display: none !important;
@@ -789,16 +835,14 @@ html.theme-transition *::after {
 
 .glass-card {
   background: var(--bg-card);
-  background-image: linear-gradient(180deg, var(--fill-soft) 0%, transparent 55%);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
   box-shadow: inset 0 1px 0 var(--reflect);
   transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.25s var(--bx-ease);
 }
 
 .glass-card:hover {
   background: var(--bg-card-hover);
-  border-color: var(--border-hover);
   box-shadow: inset 0 1px 0 var(--reflect-strong), var(--shadow-sm);
 }
 

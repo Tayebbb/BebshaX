@@ -6,6 +6,7 @@
   margin: 0 auto;
   width: 100%;
 }
+.bx-prompt-wrap--full { max-width: none; }
 
 .bx-prompt {
   position: relative;
@@ -79,16 +80,12 @@
 .bx-prompt-file-input { display: none; }
 
 /* Textarea */
-.bx-prompt-input,
-.bx-prompt-input:focus,
-.bx-prompt-input:focus-visible {
+.bx-prompt-input {
   width: 100%;
   min-height: 24px;
   resize: none;
-  border: none !important;
-  outline: none !important;
-  outline-offset: 0 !important;
-  box-shadow: none !important;
+  border: none;
+  outline: none;
   background: transparent;
   color: var(--text-primary);
   font: 400 0.95rem/1.55 var(--font-sans);

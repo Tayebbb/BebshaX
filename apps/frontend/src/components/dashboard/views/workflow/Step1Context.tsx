@@ -1,9 +1,10 @@
 import React from 'react';
-import { AlertTriangle, ArrowRight, Check, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Send, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Sparkles } from 'lucide-react';
 import { PersonaRoleSuggestion } from '../../../../types';
 import { CopilotMessage, MAX_PERSONAS_PER_ROLE, READ_ONLY_TITLE } from './types';
 import { EvidenceProbe } from './evidenceProbe';
 import { RequestIdTag } from '../../../common/RequestIdTag';
+import { PromptInputBox } from '../../../ui/PromptInputBox';
 
 /** Why a template-produced goal card cannot be approved. */
 export const TEMPLATE_APPROVAL_BLOCKED =
@@ -20,7 +21,7 @@ interface Step1ContextProps {
   handleApproveGoal: (summary?: string) => Promise<void>;
   handleSendCopilotMessage: (text?: string) => void;
   handleRetryCopilotMessage: (errorMessageId: string) => void;
-  step1InputRef: React.MutableRefObject<HTMLInputElement | null>;
+  step1InputRef: React.MutableRefObject<HTMLTextAreaElement | null>;
   step1Prompt: string;
   setStep1Prompt: React.Dispatch<React.SetStateAction<string>>;
   roleSelectionRef: React.MutableRefObject<HTMLDivElement | null>;
@@ -178,16 +179,17 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
             <div
               ref={copilotChatRef}
               style={{
-                background: 'var(--bg-card)',
+                background: 'var(--glass-soft)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: '16px',
-                padding: '24px',
-                minHeight: '340px',
-                maxHeight: '480px',
+                borderRadius: '22px',
+                padding: 'clamp(14px, 3vw, 24px)',
+                minHeight: copilotMessages.length === 0 ? '220px' : '300px',
+                maxHeight: 'min(480px, 55dvh)',
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '16px',
+                gap: '14px',
+                boxShadow: 'inset 0 1px 0 var(--reflect)',
               }}
             >
               {copilotMessages.length === 0 && (
@@ -208,11 +210,11 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                   className="bx-pop"
                   style={{
                     alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                    maxWidth: '80%',
+                    maxWidth: 'min(85%, 640px)',
                     background: msg.role === 'user' ? 'var(--accent-gradient)' : 'var(--bg-card-hover)',
                     color: 'var(--text-main)',
-                    padding: '14px 18px',
-                    borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                    padding: '12px 16px',
+                    borderRadius: msg.role === 'user' ? '18px 18px 6px 18px' : '18px 18px 18px 6px',
                     border: msg.role === 'user' ? 'none' : '1px solid var(--border-subtle)',
                   }}
                 >
@@ -353,57 +355,24 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
             </div>
 
             {/* Input Bar */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendCopilotMessage();
-              }}
-              style={{ display: 'flex', gap: '10px' }}
-            >
-              <input
-                ref={step1InputRef}
-                type="text"
-                value={step1Prompt}
-                onChange={(e) => setStep1Prompt(e.target.value)}
-                placeholder={
-                  isReadOnly
-                    ? 'Example study — read-only. Create your own study to chat with the copilot.'
-                    : 'Type here to answer or give more context...'
-                }
-                disabled={isReadOnly}
-                title={isReadOnly ? READ_ONLY_TITLE : undefined}
-                style={{
-                  flex: 1,
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '12px',
-                  padding: '12px 18px',
-                  color: 'var(--text-main)',
-                  fontSize: '0.9rem',
-                  outline: 'none',
-                  opacity: isReadOnly ? 0.6 : 1,
-                }}
-              />
-              <button
-                type="submit"
-                aria-label="Send prompt"
-                disabled={isCopilotTyping || !step1Prompt.trim() || isReadOnly}
-                title={isReadOnly ? READ_ONLY_TITLE : undefined}
-                style={{
-                  background: '#14B8A6',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '0 24px',
-                  color: 'var(--text-on-accent)',
-                  fontWeight: 700,
-                  fontSize: '0.9rem',
-                  cursor: isCopilotTyping || !step1Prompt.trim() || isReadOnly ? 'not-allowed' : 'pointer',
-                  opacity: isReadOnly ? 0.55 : 1,
-                }}
-              >
-                <Send size={16} />
-              </button>
-            </form>
+            <PromptInputBox
+              textareaRef={step1InputRef}
+              value={step1Prompt}
+              onValueChange={setStep1Prompt}
+              onSend={(text) => handleSendCopilotMessage(text)}
+              isLoading={isCopilotTyping}
+              disabled={isReadOnly}
+              disabledReason={isReadOnly ? READ_ONLY_TITLE : undefined}
+              maxHeight={160}
+              placeholder={
+                isReadOnly
+                  ? 'Example study — read-only. Create your own study to chat with the copilot.'
+                  : 'Type here to answer or give more context...'
+              }
+              aria-label="Describe your idea or answer the copilot"
+              sendLabel="Send prompt"
+              className="bx-prompt-wrap--full"
+            />
 
             {/* Role Selection Drawer when ready */}
             {showRoleSelection && (

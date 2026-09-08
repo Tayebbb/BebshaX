@@ -5,19 +5,19 @@
    ========================================================================== */
 
 .ns-root {
-  --ns-line: rgba(32, 39, 39, 0.9);
-  --ns-line-soft: rgba(32, 39, 39, 0.55);
-  --ns-accent: #14b8a6;
-  --ns-accent-line: rgba(20, 184, 166, 0.4);
+  --ns-line: var(--border-soft);
+  --ns-line-soft: var(--border-soft);
+  --ns-accent: var(--accent-teal);
+  --ns-accent-line: rgba(48, 209, 199, 0.45);
   --ns-accent-soft: var(--accent-subtle);
   --ns-text-dim: var(--text-secondary);
-  --ns-text-faint: var(--text-faint);
-  --ns-glass: var(--glass-mid);
-  --ns-glass-soft: var(--glass-soft);
-  --ns-glass-card: var(--glass-mid);
-  --ns-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
-  --ns-heading-tail: #99f6e4;
-  --ns-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ns-text-faint: var(--text-muted);
+  --ns-glass: var(--bg-card);
+  --ns-glass-soft: var(--fill-soft);
+  --ns-glass-card: var(--bg-card);
+  --ns-shadow: var(--shadow-md);
+  --ns-heading-tail: var(--text-main);
+  --ns-ease: var(--bx-ease);
 
   position: relative;
   flex: 1;
@@ -25,7 +25,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px 64px;
+  padding: 48px 20px 72px;
   width: 100%;
   isolation: isolate;
   overflow: hidden;
@@ -46,18 +46,18 @@
   width: 55vmax;
   height: 55vmax;
   border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.13;
+  filter: blur(110px);
+  opacity: 0.09;
   will-change: transform;
 }
 .ns-ambient::before {
-  background: radial-gradient(circle, rgba(20, 184, 166, 0.55), transparent 65%);
+  background: radial-gradient(circle, rgba(48, 209, 199, 0.5), transparent 65%);
   top: -30vmax;
   left: -12vmax;
   animation: ns-drift-a 52s var(--ns-ease) infinite alternate;
 }
 .ns-ambient::after {
-  background: radial-gradient(circle, rgba(34, 211, 238, 0.35), transparent 65%);
+  background: radial-gradient(circle, rgba(100, 210, 255, 0.3), transparent 65%);
   bottom: -32vmax;
   right: -14vmax;
   animation: ns-drift-b 64s var(--ns-ease) infinite alternate;
@@ -87,38 +87,36 @@
   to   { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
-/* Header */
+/* Header — SF Display: large, semibold, tight; no gradient ink */
 .ns-kicker {
-  font: 600 0.72rem var(--font-mono);
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--ns-text-faint);
-  margin-bottom: 14px;
+  font: 600 0.8rem var(--font-sans);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--ns-accent);
+  margin-bottom: 12px;
 }
 .ns-title {
-  font: 700 clamp(2rem, 4vw, 2.9rem) 'Space Grotesk', var(--font-sans);
+  font: 700 clamp(2.1rem, 4.4vw, 3.2rem) var(--font-display);
   letter-spacing: -0.03em;
-  line-height: 1.12;
-  margin: 0 0 12px;
+  line-height: 1.06;
+  margin: 0 0 14px;
   text-align: center;
-  background: linear-gradient(135deg, var(--text-main) 30%, var(--ns-heading-tail) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-main);
 }
 .ns-sub {
-  font: 400 0.95rem/1.55 var(--font-sans);
+  font: 400 1.05rem/1.5 var(--font-sans);
+  letter-spacing: -0.005em;
   color: var(--ns-text-dim);
-  margin: 0 0 34px;
+  margin: 0 0 36px;
   text-align: center;
 }
 
 /* Error banner */
 .ns-error {
   width: 100%;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  border-radius: 12px;
+  background: var(--status-error-bg);
+  border: none;
+  border-radius: var(--r-md);
   padding: 12px 18px;
   margin-bottom: 16px;
   display: flex;
@@ -129,25 +127,23 @@
   animation: ns-scene-in 0.3s var(--ns-ease) both;
 }
 
-/* Composer — frosted glass instrument */
+/* Composer — an elevated grouped cell */
 .ns-composer {
   width: 100%;
-  border-radius: 22px;
+  border-radius: var(--r-xl);
   border: 1px solid var(--ns-line);
   background: var(--ns-glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   padding: 22px 24px 16px;
-  box-shadow: var(--ns-shadow);
-  transition: border-color 0.25s var(--ns-ease), box-shadow 0.45s var(--ns-ease);
+  box-shadow: inset 0 1px 0 var(--reflect), var(--ns-shadow);
+  transition: border-color 0.25s var(--ns-ease), box-shadow 0.35s var(--ns-ease);
   margin-bottom: 14px;
 }
 .ns-composer:focus-within {
   border-color: var(--ns-accent-line);
   box-shadow:
+    inset 0 1px 0 var(--reflect),
     var(--ns-shadow),
-    0 0 0 1px var(--accent-subtle),
-    0 0 46px var(--accent-subtle);
+    0 0 0 4px var(--accent-subtle);
 }
 .ns-textarea,
 .ns-textarea:focus,
@@ -177,7 +173,7 @@
   border-top: 1px solid var(--ns-line-soft);
 }
 .ns-hint {
-  font: 500 0.72rem var(--font-mono);
+  font: 500 0.74rem var(--font-sans);
   color: var(--ns-text-faint);
   display: flex;
   align-items: center;
@@ -186,59 +182,60 @@
 .ns-kbd {
   padding: 2px 7px;
   border-radius: 5px;
-  border: 1px solid var(--ns-line);
-  background: var(--fill-soft);
-  font: 600 0.72rem var(--font-mono);
+  border: none;
+  background: var(--fill-soft-2);
+  font: 600 0.7rem var(--font-sans);
   color: var(--ns-text-dim);
 }
+/* Send: an iOS filled circle button */
 .ns-send {
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   border: none;
   display: grid;
   place-items: center;
-  background: linear-gradient(140deg, var(--accent-teal-bright), #0d9488);
+  background: var(--accent-teal);
   color: var(--text-on-accent);
   cursor: pointer;
   flex-shrink: 0;
-  transition: opacity 0.2s var(--ns-ease), box-shadow 0.2s var(--ns-ease), filter 0.2s var(--ns-ease);
-  box-shadow: 0 4px 16px var(--border-hover);
+  transition: opacity 0.2s var(--ns-ease), background 0.2s var(--ns-ease), transform 0.2s var(--ns-ease);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
-.ns-send:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 6px 22px rgba(20, 184, 166, 0.42); }
+.ns-send:hover:not(:disabled) { background: var(--accent-hover); }
 .ns-send:disabled {
-  background: var(--fill-soft);
+  background: var(--fill-soft-2);
   color: var(--ns-text-faint);
   cursor: default;
   box-shadow: none;
 }
 
-/* Example prompt chips */
+/* Example prompt chips — iOS suggestion pills */
 .ns-examples {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
-  margin-bottom: 40px;
+  margin-bottom: 44px;
 }
 .ns-example {
-  padding: 7px 14px;
+  padding: 8px 15px;
   border-radius: 999px;
-  border: 1px solid var(--ns-line-soft);
+  border: none;
   background: var(--ns-glass-soft);
-  color: var(--ns-text-dim);
-  font: 500 0.74rem var(--font-sans);
+  color: var(--text-primary);
+  font: 500 0.78rem var(--font-sans);
+  letter-spacing: -0.005em;
   cursor: pointer;
-  transition: color 0.2s var(--ns-ease), border-color 0.2s var(--ns-ease), background 0.2s var(--ns-ease);
+  transition: color 0.2s var(--ns-ease), background 0.2s var(--ns-ease);
   max-width: 320px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .ns-example:hover:not(:disabled) {
-  color: var(--accent-teal-bright);
-  border-color: var(--ns-accent-line);
-  background: var(--ns-accent-soft);
+  color: var(--text-main);
+  background: var(--fill-soft-2);
 }
 .ns-example:disabled { opacity: 0.4; cursor: default; }
 
@@ -258,19 +255,20 @@
 }
 .ns-demo-link:hover { border-bottom-color: var(--ns-accent-line); }
 
-/* Study-type selector */
+/* Study-type selector — iOS grouped section */
 .ns-section-label {
   align-self: flex-start;
-  font: 600 0.72rem var(--font-mono);
-  letter-spacing: 0.2em;
+  font: 600 0.78rem var(--font-sans);
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--ns-text-faint);
-  margin-bottom: 12px;
+  color: var(--ns-text-dim);
+  margin-bottom: 10px;
+  padding-left: 4px;
 }
 .ns-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 216px), 1fr));
-  gap: 14px;
+  gap: 12px;
   width: 100%;
 }
 .ns-card {
@@ -278,20 +276,21 @@
   text-align: left;
   background: var(--ns-glass-card);
   border: 1px solid var(--ns-line);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   padding: 18px 17px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 12px;
   font-family: inherit;
-  transition: background 0.22s var(--ns-ease), border-color 0.22s var(--ns-ease), box-shadow 0.22s var(--ns-ease);
+  box-shadow: inset 0 1px 0 var(--reflect);
+  transition: background 0.22s var(--ns-ease), border-color 0.22s var(--ns-ease), box-shadow 0.22s var(--ns-ease), transform 0.22s var(--ns-ease);
 }
-.ns-card:hover { background: var(--bg-card); border-color: var(--border-hover); }
+.ns-card:hover { background: var(--bg-card-hover); transform: translateY(-1px); }
 .ns-card.ns-selected {
-  background: var(--ns-accent-soft);
+  background: var(--ns-glass-card);
   border-color: var(--ns-accent-line);
-  box-shadow: 0 4px 20px var(--accent-subtle), inset 0 0 0 1px var(--accent-subtle);
+  box-shadow: inset 0 1px 0 var(--reflect), 0 0 0 3px var(--accent-subtle);
 }
 .ns-card-icon {
   width: 40px;
@@ -302,13 +301,13 @@
   flex-shrink: 0;
 }
 .ns-card-title {
-  font: 600 0.92rem 'Space Grotesk', var(--font-sans);
+  font: 600 0.95rem var(--font-display);
   color: var(--text-main);
-  margin: 0 0 6px;
-  letter-spacing: -0.01em;
+  margin: 0 0 5px;
+  letter-spacing: -0.015em;
 }
 .ns-card-desc {
-  font: 400 0.76rem/1.5 var(--font-sans);
+  font: 400 0.78rem/1.45 var(--font-sans);
   color: var(--ns-text-dim);
   margin: 0;
 }
@@ -316,8 +315,8 @@
   position: absolute;
   top: 13px;
   right: 13px;
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -331,23 +330,18 @@
 
 @media (max-width: 720px) {
   .ns-root { padding: 26px 14px 44px; justify-content: flex-start; }
-  .ns-composer { padding: 16px 16px 12px; border-radius: 17px; }
+  .ns-composer { padding: 16px 16px 12px; border-radius: var(--r-lg); }
   .ns-hint { display: none; }
   .ns-examples { margin-bottom: 28px; }
 }
 
-/* Light theme — frosted glass flips via the global glass tokens */
+/* Light theme — tokens flip via the global system palette */
 [data-theme='light'] .ns-root {
-  --ns-line: rgba(15, 35, 33, 0.14);
-  --ns-line-soft: rgba(15, 35, 33, 0.09);
-  --ns-accent: #0d9488;
-  --ns-accent-line: rgba(13, 148, 136, 0.45);
-  --ns-shadow: 0 18px 44px rgba(15, 30, 30, 0.1);
-  --ns-heading-tail: #0d9488;
+  --ns-accent-line: rgba(0, 150, 140, 0.45);
 }
 [data-theme='light'] .ns-ambient::before,
 [data-theme='light'] .ns-ambient::after {
-  opacity: 0.09;
+  opacity: 0.06;
 }
 
 @media (prefers-reduced-motion: reduce) {

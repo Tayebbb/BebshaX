@@ -668,7 +668,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           background: isMobile ? 'var(--glass-strong)' : 'var(--bg-glass)',
           backdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
           WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
-          borderRight: '1px solid var(--border-subtle)',
+          borderRight: '1px solid var(--border-soft)',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
@@ -730,7 +730,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 border: '1px solid transparent',
                 color: 'var(--text-muted)',
                 cursor: 'pointer',
-                borderRadius: '6px',
+                borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -739,12 +739,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'var(--fill-soft)';
                 e.currentTarget.style.color = 'var(--text-main)';
-                e.currentTarget.style.borderColor = 'var(--border-subtle)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = 'transparent';
                 e.currentTarget.style.color = 'var(--text-muted)';
-                e.currentTarget.style.borderColor = 'transparent';
               }}
             >
               <PanelLeft size={15} />
@@ -977,7 +975,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         <div
           style={{
             position: 'relative',
-            borderTop: '1px solid var(--border-subtle)',
+            borderTop: '1px solid var(--border-soft)',
             paddingTop: '10px',
             display: 'flex',
             flexDirection: 'column',
@@ -1025,12 +1023,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   fontSize: '0.66rem',
                   fontWeight: 600,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  background: 'var(--fill-soft)',
-                  color: 'var(--text-muted)',
-                  border: '1px solid var(--border-subtle)',
+                  letterSpacing: '0.02em',
+                  padding: '2px 7px',
+                  borderRadius: '999px',
+                  background: 'var(--fill-soft-2)',
+                  color: 'var(--text-secondary)',
                 }}
               >
                 {theme === 'dark' ? 'Dark' : 'Light'}
@@ -1052,20 +1049,18 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               fontFamily: 'inherit',
               textAlign: 'left',
               padding: isSidebarCollapsed ? '6px 0' : '6px 8px',
-              borderRadius: '10px',
+              borderRadius: '12px',
               background: showUserMenu ? 'var(--fill-soft-2)' : 'var(--fill-soft)',
-              border: '1px solid var(--border-subtle)',
+              border: 'none',
               outline: 'none',
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'var(--fill-soft-2)';
-              e.currentTarget.style.borderColor = 'var(--border-medium)';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = showUserMenu ? 'var(--fill-soft-2)' : 'var(--fill-soft)';
-              e.currentTarget.style.borderColor = 'var(--border-subtle)';
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '9px', minWidth: 0 }}>
@@ -1080,7 +1075,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     height: '28px',
                     borderRadius: '50%',
                     objectFit: 'cover',
-                    border: '1px solid var(--border-subtle)',
+                    border: 'none',
                     outline: 'none',
                     flexShrink: 0,
                   }}
@@ -1096,13 +1091,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     borderRadius: '50%',
                     background: 'linear-gradient(135deg, var(--accent-teal) 0%, var(--accent-cyan) 100%)',
                     color: 'var(--text-on-accent)',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     fontSize: '0.78rem',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                   }}
                 >
                   {displayName.charAt(0).toUpperCase()}
@@ -1162,9 +1156,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
                 border: '1px solid var(--border-soft)',
                 outline: 'none',
-                borderRadius: '14px',
+                borderRadius: '16px',
                 padding: '8px',
-                boxShadow: 'inset 0 1px 0 var(--reflect), var(--shadow-lg)',
+                boxShadow: 'inset 0 1px 0 var(--reflect-strong), var(--shadow-lg)',
                 zIndex: 50,
               }}
             >
@@ -1342,9 +1336,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               onClick={() => setIsMobileNavOpen(true)}
               style={{
                 background: 'var(--fill-soft)',
-                border: '1px solid var(--border-subtle)',
+                border: 'none',
                 color: 'var(--text-primary)',
-                borderRadius: '9px',
+                borderRadius: '10px',
                 width: '36px',
                 height: '36px',
                 display: 'flex',
@@ -1418,13 +1412,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               justifyContent: 'space-between',
               gap: '14px',
               background: 'var(--accent-subtle)',
-              border: '1px solid var(--accent-glow)',
-              borderRadius: '12px',
+              border: 'none',
+              borderRadius: '14px',
               padding: '12px 16px',
             }}
           >
-            <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)', lineHeight: 1.55 }}>
-              <strong style={{ color: 'var(--accent-teal-bright)' }}>New here? The 3-minute tour:</strong>{' '}
+            <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.55 }}>
+              <strong style={{ color: 'var(--accent-teal)', fontWeight: 600 }}>New here? The 3-minute tour:</strong>{' '}
               1. Describe your idea → 2. Approve the research goal → 3. Generate personas → 4. Interview one → 5. Generate the report.
             </div>
             <button
@@ -1457,8 +1451,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               justifyContent: 'space-between',
               gap: '14px',
               background: 'var(--status-error-bg)',
-              border: '1px solid var(--status-error-border)',
-              borderRadius: '12px',
+              border: 'none',
+              borderRadius: '14px',
               padding: '12px 16px',
             }}
           >
@@ -1496,10 +1490,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               justifyContent: 'space-between',
               gap: '14px',
               flexWrap: 'wrap',
-              background: 'var(--fill-soft)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '12px',
+              background: 'var(--bg-card)',
+              border: 'none',
+              borderRadius: '14px',
               padding: '12px 16px',
+              boxShadow: 'inset 0 1px 0 var(--reflect)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
@@ -1511,11 +1506,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                 type="button"
                 onClick={() => navigate('/auth/verify')}
                 style={{
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--accent-teal)',
-                  color: 'var(--accent-cyan)',
-                  borderRadius: '8px',
-                  padding: '6px 14px',
+                  background: 'var(--accent-subtle)',
+                  border: 'none',
+                  color: 'var(--accent-teal)',
+                  borderRadius: '999px',
+                  padding: '7px 14px',
                   fontSize: '0.8rem',
                   fontWeight: 600,
                   cursor: 'pointer',
