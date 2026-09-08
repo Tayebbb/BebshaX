@@ -48,3 +48,7 @@ Thumbs.db
 htmlcov/
 coverage.xml
 .neon
+
+# AI Agent Skills (restorable via skills-lock.json)
+.agents/skills/
+

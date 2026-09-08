@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
 import { startScrollEngine } from './scrollEngine';
@@ -139,6 +139,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
   return (
     <section
       ref={sectionRef}
+      className="lp-hero-section"
       style={{
         position: 'relative',
         height: '100vh',

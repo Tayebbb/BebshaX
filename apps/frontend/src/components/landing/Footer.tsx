@@ -61,14 +61,14 @@ export const Footer: React.FC = () => {
         style={{
           maxWidth: '1280px',
           margin: '0 auto',
-          padding: '0 32px',
+          padding: '0 clamp(16px, 4vw, 32px)',
         }}
       >
         {/* Multi-Column Sitemap Grid Matching Image */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 130px), 1fr))',
             gap: '36px 20px',
             marginBottom: '100px',
           }}
@@ -169,6 +169,8 @@ export const Footer: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
             marginTop: '30px',
             paddingTop: '20px',
             borderTop: '1px solid var(--lp-line-faint)',

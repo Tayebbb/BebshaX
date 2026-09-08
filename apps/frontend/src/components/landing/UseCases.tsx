@@ -154,13 +154,13 @@ export const UseCases: React.FC = () => {
             background: 'var(--lp-surface)',
             border: 'none',
             outline: 'none',
-            padding: '36px',
+            padding: 'clamp(20px, 4vw, 36px)',
           }}
         >
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
               gap: '40px',
               alignItems: 'center',
             }}

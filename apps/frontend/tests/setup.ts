@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 
 // Polyfill scrollTo and scrollIntoView for jsdom environment
 if (typeof window !== 'undefined') {

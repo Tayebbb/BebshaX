@@ -552,11 +552,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenApp, onOpenAuth }) => {
             right: 0,
             background: 'var(--lp-drawer)',
             border: 'none',
-            padding: '24px 32px',
+            padding: '20px 20px 32px 20px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px',
+            gap: '14px',
             boxShadow: 'var(--lp-shadow-drawer)',
+            maxHeight: 'calc(100vh - 68px)',
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
             zIndex: 60,
           }}
         >

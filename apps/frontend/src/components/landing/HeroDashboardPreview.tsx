@@ -49,6 +49,7 @@ export const HeroDashboardPreview: React.FC = () => {
           dark in BOTH themes (dark product shot on a light page); only the
           frame shadow is theme-aware. */}
       <div
+        className="lp-preview-card"
         style={{
           position: 'relative',
           zIndex: 1,
@@ -101,6 +102,7 @@ export const HeroDashboardPreview: React.FC = () => {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
+              className="lp-preview-header-extra"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -136,7 +138,7 @@ export const HeroDashboardPreview: React.FC = () => {
         </div>
 
         {/* Console Grid Content */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '14px' }}>
+        <div className="lp-console-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '14px' }}>
 
           {/* Persona Identity Card */}
           <div
@@ -174,6 +176,7 @@ export const HeroDashboardPreview: React.FC = () => {
 
           {/* Attribute Provenance Rows (No Outlines) */}
           <div
+            className="lp-console-main"
             style={{
               gridColumn: 'span 8',
               background: '#0D0D11',
@@ -238,6 +241,7 @@ export const HeroDashboardPreview: React.FC = () => {
 
           {/* Right Routing Strip (No Outlines) */}
           <div
+            className="lp-console-side"
             style={{
               gridColumn: 'span 4',
               display: 'flex',

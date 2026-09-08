@@ -1423,7 +1423,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--trait-o)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <Briefcase size={16} /> Work, Commute & Schedule Context
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
                           {[
                             { key: 'work_schedule', label: 'Work Schedule' },
                             { key: 'workplace_setting', label: 'Workplace Setting' },
@@ -1448,7 +1448,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-emerald)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <Coffee size={16} /> Living, Meals & Household Structure
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
                           {[
                             { key: 'food_source', label: 'Food Source' },
                             { key: 'meal_timing', label: 'Meal Timing' },
@@ -1473,7 +1473,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--trait-e)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <Compass size={16} /> Mindset, Psychology & Communication Style
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
                           {[
                             { key: 'communication_style', label: 'Communication Style' },
                             { key: 'activity_level', label: 'Activity Level' },
@@ -1502,7 +1502,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--trait-a)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <Globe size={16} /> Culture, Beliefs & Life Priorities
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
                           {[
                             { key: 'language_preferences', label: 'Language Preferences' },
                             { key: 'cultural_affiliations', label: 'Cultural Affiliations' },
@@ -1534,7 +1534,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--trait-n)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
                           <DollarSign size={16} /> Financial Mindset & Technology Adoption
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
                           {[
                             { key: 'payment_method', label: 'Preferred Payment Method' },
                             { key: 'financial_attitude', label: 'Financial Attitude' },
@@ -1566,7 +1566,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               {/* TAB 2: COMMERCIAL & WTP */}
               {inspectorTab === 'commercial' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '14px' }}>
                     <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Estimated Monthly Budget</div>
                       <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-teal)' }}>

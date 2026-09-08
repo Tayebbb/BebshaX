@@ -43,11 +43,11 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
             background: 'var(--lp-surface)',
             border: 'none',
             outline: 'none',
-            padding: '56px 48px',
+            padding: 'clamp(32px, 6vw, 56px) clamp(20px, 5vw, 48px)',
             overflow: 'hidden',
             position: 'relative',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
             gap: '40px',
             alignItems: 'center',
           }}

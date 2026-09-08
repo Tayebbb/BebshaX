@@ -67,7 +67,7 @@
   "raw_sha256": "a7bb20f1c51fd18cc51b2adc942220994e302b237053110b04fce7b413c812da",
   "processed_sha256": "f6b42b1f18bdfde255c51343e817c8012b3088e86a3f86a265e4c0f498a3748c",
   "actual_raw_sha256": "a7bb20f1c51fd18cc51b2adc942220994e302b237053110b04fce7b413c812da",
-  "actual_processed_sha256": "f6b42b1f18bdfde255c51343e817c8012b3088e86a3f86a265e4c0f498a3748c",
+  "actual_processed_sha256": "7d94f385178ac948b25cc1cbac431c4fa712965777a8c14036ba71f853c8f7cf",
   "processed_record_count": 9906,
-  "processed_size_bytes": 4346214
+  "processed_size_bytes": 4336308
 }

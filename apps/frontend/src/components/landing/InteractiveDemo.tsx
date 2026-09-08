@@ -112,14 +112,14 @@ export const InteractiveDemo: React.FC<InteractiveDemoProps> = ({ onOpenApp }) =
             background: 'var(--lp-surface)',
             border: 'none',
             outline: 'none',
-            padding: '40px',
+            padding: 'clamp(20px, 5vw, 40px)',
           }}
         >
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: '48px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
+              gap: 'clamp(24px, 4vw, 48px)',
               alignItems: 'center',
             }}
           >
