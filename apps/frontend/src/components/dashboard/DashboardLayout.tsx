@@ -703,13 +703,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           >
             {!isSidebarCollapsed ? (
               <BebshaXLogo
-                size={26}
-                textSize="1.15rem"
+                size={28}
+                showIcon={false}
                 onClick={() => navigate('/create-study')}
               />
             ) : (
               <BebshaXLogo
-                size={26}
+                size={28}
                 showText={false}
                 onClick={() => navigate('/create-study')}
               />

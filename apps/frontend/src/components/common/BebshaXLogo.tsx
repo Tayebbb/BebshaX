@@ -63,7 +63,7 @@ export const BebshaXLogo: React.FC<BebshaXLogoProps> = ({
       )}
 
       {/* Brand Wordmark (Bebshax.png) */}
-      {showText && (
+      {showText ? (
         <div style={{ display: 'inline-flex', alignItems: 'center' }}>
           {useImageWordmark ? (
             <img
@@ -106,6 +106,22 @@ export const BebshaXLogo: React.FC<BebshaXLogoProps> = ({
             BebshaX
           </span>
         </div>
+      ) : (
+        <span
+          style={{
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            padding: 0,
+            margin: '-1px',
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0,
+          }}
+        >
+          BebshaX
+        </span>
       )}
     </div>
   );
