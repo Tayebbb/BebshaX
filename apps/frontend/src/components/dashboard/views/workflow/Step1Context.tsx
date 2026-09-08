@@ -134,21 +134,9 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                 <button
                   type="button"
                   onClick={onRunEvidence}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background: 'var(--accent-subtle)',
-                    border: '1px solid var(--accent-teal)',
-                    borderRadius: '6px',
-                    padding: '3px 10px',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: 'var(--accent-teal-bright)',
-                    cursor: 'pointer',
-                  }}
+                  className="bx-btn bx-btn--tinted bx-btn--sm"
                 >
-                  <FlaskConical size={12} />
+                  <FlaskConical size={13} aria-hidden="true" />
                   Run evidence research
                 </button>
               )}
@@ -156,21 +144,10 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                 <button
                   type="button"
                   onClick={onNavigateToEvidence}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    fontSize: '0.82rem',
-                    fontWeight: 600,
-                    color: 'var(--accent-cyan)',
-                    cursor: 'pointer',
-                  }}
+                  className="bx-btn bx-btn--ghost bx-btn--sm"
                 >
                   Open Evidence Laboratory
-                  <ArrowRight size={12} />
+                  <ArrowRight size={13} aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -259,17 +236,8 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRetryCopilotMessage(msg.id)}
-                      style={{
-                        marginTop: '10px',
-                        background: 'var(--accent-subtle)',
-                        border: '1px solid var(--accent-teal)',
-                        borderRadius: '8px',
-                        padding: '7px 14px',
-                        color: 'var(--accent-teal-bright)',
-                        fontWeight: 600,
-                        fontSize: '0.82rem',
-                        cursor: 'pointer',
-                      }}
+                      className="bx-btn bx-btn--tinted bx-btn--sm"
+                      style={{ marginTop: '10px' }}
                     >
                       Retry
                     </button>
@@ -308,27 +276,10 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                         disabled={isReadOnly || !!msg.isTemplate}
                         aria-disabled={isReadOnly || !!msg.isTemplate}
                         title={isReadOnly ? READ_ONLY_TITLE : msg.isTemplate ? TEMPLATE_APPROVAL_BLOCKED : undefined}
-                        style={{
-                          marginTop: '14px',
-                          width: '100%',
-                          background: showRoleSelection
-                            ? 'var(--accent-subtle)'
-                            : 'var(--accent-gradient)',
-                          border: showRoleSelection ? '1px solid var(--accent-teal)' : 'none',
-                          borderRadius: '8px',
-                          padding: '10px 16px',
-                          color: showRoleSelection ? 'var(--accent-teal-bright)' : 'var(--bg-pure)',
-                          fontWeight: 700,
-                          fontSize: '0.85rem',
-                          cursor: isReadOnly || msg.isTemplate ? 'not-allowed' : 'pointer',
-                          opacity: isReadOnly || msg.isTemplate ? 0.55 : 1,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '6px',
-                        }}
+                        className={`bx-btn bx-btn--block ${showRoleSelection ? 'bx-btn--tinted' : 'bx-btn--primary'}`}
+                        style={{ marginTop: '14px' }}
                       >
-                        <CheckCircle2 size={16} />
+                        <CheckCircle2 size={16} aria-hidden="true" />
                         {showRoleSelection ? 'Goal Approved — View Suggested Roles ↓' : 'Approve Goal & Discover Personas'}
                       </button>
                       {msg.isTemplate && (

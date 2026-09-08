@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Check, Lock } from 'lucide-react';
+import { Check, ChevronLeft, Lock } from 'lucide-react';
 import {
   Study,
   StudyType,
@@ -1013,18 +1013,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           <button
             type="button"
             onClick={onExit}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-secondary)',
-              borderRadius: '8px',
-              padding: '6px 12px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
+            className="bx-btn bx-btn--secondary bx-btn--sm"
           >
-            ← Exit Study
+            <ChevronLeft size={15} aria-hidden="true" />
+            Exit Study
           </button>
           <div
             title={study?.title || 'Research Workflow'}
