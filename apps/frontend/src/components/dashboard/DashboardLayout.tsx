@@ -655,7 +655,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       {isMobile && isMobileNavOpen && (
         <div
           onClick={() => setIsMobileNavOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'var(--scrim)', backdropFilter: 'blur(18px) saturate(130%)', WebkitBackdropFilter: 'blur(18px) saturate(130%)', zIndex: 120 }}
+          style={{ position: 'fixed', inset: 0, background: 'var(--scrim)', backdropFilter: 'blur(6px) saturate(120%)', WebkitBackdropFilter: 'blur(6px) saturate(120%)', zIndex: 120 }}
         />
       )}
 

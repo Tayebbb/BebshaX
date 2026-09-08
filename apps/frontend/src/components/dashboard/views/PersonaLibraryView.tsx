@@ -1155,7 +1155,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             </div>
 
             {/* Modal Tabs Bar */}
-            <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', padding: '0 28px', background: 'var(--bg-pure)', overflowX: 'auto' }}>
+            <div className="bx-tabs-scroll" style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', padding: '0 28px', background: 'var(--bg-pure)', overflowX: 'auto' }}>
               {[
                 { id: 'profile', label: 'Persona Profile', icon: <User size={14} /> },
                 { id: 'personality', label: 'Personality (Big Five)', icon: <Brain size={14} /> },
