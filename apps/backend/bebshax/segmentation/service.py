@@ -6,6 +6,7 @@ deterministic clustering, LLM interpretation, evidence linking, and database per
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -21,10 +22,13 @@ from bebshax.db.models import (
     Studies,
 )
 from bebshax.llm.service import LLMService
-from bebshax.segmentation.clusterer import cluster_dataset_populations
+from bebshax.segmentation.clusterer import SEGMENTATION_REQUIRES_DATA, cluster_dataset_populations
 from bebshax.segmentation.interpreter import interpret_market_segments
 from bebshax.segmentation.pre_check import check_segmentation_readiness
 from bebshax.segmentation.variable_selector import select_segmentation_variables
+from bebshax.utils.explicit_failures import ExplicitFailure, InsufficientInput
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -77,12 +81,12 @@ class SegmentationEngineService:
         study_ctx = {
             "title": study.title,
             "prompt": study.prompt or study.title,
-            "target_audience": study.target_audience or "Target Market",
-            "pricing_hypothesis": study.pricing_hypothesis or "Market Standard",
+            "target_audience": study.target_audience or "",
+            "pricing_hypothesis": study.pricing_hypothesis or "",
         }
         readiness = check_segmentation_readiness(study_id, datasets, claims, study_ctx)
         if not readiness.can_run:
-            raise ValueError(readiness.guidance_message)
+            raise InsufficientInput(SEGMENTATION_REQUIRES_DATA, readiness.guidance_message)
 
         # 5. Create segmentation run record
         run_id = f"segrun_{uuid.uuid4().hex[:16]}"
@@ -141,7 +145,7 @@ class SegmentationEngineService:
                 desired_clusters=desired_clusters,
             )
 
-            # 8. Interpret segments with LLM or fallback
+            # 8. Interpret segments — model-written from the observed statistics
             seg_run.status = "interpreting_segments"
             await self.session.commit()
             interpreted = await interpret_market_segments(
@@ -187,7 +191,15 @@ class SegmentationEngineService:
 
         except Exception as err:
             seg_run.status = "failed"
-            seg_run.error_message = str(err)
+            # Explicit failures carry a user-facing message; anything else is
+            # reduced to its class name (details go to the server log).
+            if isinstance(err, ExplicitFailure):
+                seg_run.error_message = err.detail
+                seg_run.configuration = {**(seg_run.configuration or {}), "error_code": err.error_code}
+            else:
+                logger.warning("segmentation run %s failed", run_id, exc_info=True)
+                seg_run.error_message = f"Segmentation stopped on an internal error ({type(err).__name__})."
+                seg_run.configuration = {**(seg_run.configuration or {}), "error_code": "run_failed"}
             seg_run.completed_at = _utcnow()
             await self.session.commit()
             raise err
@@ -213,14 +225,20 @@ class SegmentationEngineService:
 
         comparison_matrix = []
         for s in segments:
-            econ = s.characteristics.get("economics", {}).get("monthly_budget", {})
-            demo = s.characteristics.get("demographics", {})
-            behav = s.characteristics.get("behavior", {})
-
-            budget_str = f"৳{econ.get('min', 300)}–৳{econ.get('max', 600)}" if isinstance(econ, dict) else "N/A"
-            median_budget = f"৳{econ.get('median', 450)}" if isinstance(econ, dict) else "N/A"
-            age_range = f"{demo.get('age_range', [18, 24])[0]}–{demo.get('age_range', [18, 24])[1]}" if isinstance(demo, dict) else "N/A"
-            tech_fam = behav.get("technology_familiarity", "Medium") if isinstance(behav, dict) else "Medium"
+            chars = s.characteristics or {}
+            observed = chars.get("observed") or s.variable_distributions or {}
+            partition_variable = chars.get("partition_variable")
+            primary = observed.get(partition_variable) if partition_variable else None
+            # Only what was measured is shown; absent measurements stay None.
+            headline_range = (
+                f"{primary['min']:g}–{primary['max']:g}" if isinstance(primary, dict) and "min" in primary else None
+            )
+            headline_median = primary.get("median") if isinstance(primary, dict) else None
+            top_categories = {
+                name: dist["top_categories"][0]["category"]
+                for name, dist in observed.items()
+                if isinstance(dist, dict) and dist.get("top_categories")
+            }
 
             comparison_matrix.append({
                 "segment_id": s.id,
@@ -230,10 +248,11 @@ class SegmentationEngineService:
                 "population_percentage": s.population_percentage,
                 "confidence_score": s.confidence_score,
                 "status": s.status,
-                "median_budget": median_budget,
-                "budget_range": budget_str,
-                "age_range": age_range,
-                "tech_familiarity": tech_fam,
+                "partition_variable": partition_variable,
+                "headline_range": headline_range,
+                "headline_median": headline_median,
+                "top_categories": top_categories,
+                "observed_variables": sorted(observed.keys()),
                 "evidence_citations_count": len(s.evidence_citations or []),
                 "differentiation": s.differentiation_summary or s.description,
             })

@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
 
 from bebshax.api.errors import APIError
+from bebshax.utils.explicit_failures import ExplicitFailure
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,7 @@ def start_job(
         "status": "running",
         "result": None,
         "error": None,
+        "error_code": None,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "finished_at": None,
     }
@@ -106,6 +108,12 @@ def start_job(
             job["status"] = "failed"
             job["error"] = "cancelled (server shutting down)"
             raise
+        except ExplicitFailure as exc:
+            # "The AI could not do this" (R2) — always user-facing, with its code.
+            job["status"] = "failed"
+            job["error"] = exc.detail
+            job["error_code"] = exc.error_code
+            logger.warning("%s job %s refused: %s", kind, job["job_id"], exc.error_code)
         except (ValueError, *user_safe_exceptions) as exc:
             # Input/state/domain problems are user-actionable — surface them.
             job["status"] = "failed"

@@ -3,7 +3,7 @@ utility that replaced seven duplicated inline variants."""
 
 import pytest
 
-from bebshax.llm.json_utils import parse_llm_json, strip_md_fences
+from bebshax.llm.json_utils import parse_llm_json, strip_md_fences, unwrap_list
 
 
 class TestStripMdFences:
@@ -69,3 +69,33 @@ class TestParseLlmJson:
     def test_broken_json_raises_value_error(self):
         with pytest.raises(ValueError):
             parse_llm_json('{"a": 1')
+
+
+class TestUnwrapList:
+    """json_object mode forbids a top-level array, so models wrap (or, observed
+    live, return one item). The list is recovered without adding anything."""
+
+    def test_bare_list_is_returned_as_is(self):
+        assert unwrap_list([1, 2]) == [1, 2]
+
+    def test_preferred_key_wins(self):
+        parsed = {"note": ["ignored"], "roles": [{"role": "A"}]}
+        assert unwrap_list(parsed, keys=("roles",)) == [{"role": "A"}]
+
+    def test_only_list_value_is_used_for_unknown_wrappers(self):
+        parsed = {"persona_role_suggestions": [{"role": "A"}], "count": 1}
+        assert unwrap_list(parsed, keys=("roles",), item_keys=("role",)) == [{"role": "A"}]
+
+    def test_single_item_object_becomes_a_one_item_list(self):
+        item = {"id": "role_1", "role": "INDEPENDENT PIANO PEDAGOGUE", "count": 3}
+        assert unwrap_list(item, keys=("roles",), item_keys=("role",)) == [item]
+
+    def test_item_with_its_own_list_field_is_still_one_item(self):
+        item = {"name": "Lars", "attributes": [{"category": "Goals"}]}
+        assert unwrap_list(item, keys=("personas",), item_keys=("name",)) == [item]
+
+    def test_ambiguous_or_foreign_shapes_yield_nothing(self):
+        assert unwrap_list({"a": [1], "b": [2]}, keys=("roles",)) == []
+        assert unwrap_list({"answer": "no list here"}, keys=("roles",), item_keys=("role",)) == []
+        assert unwrap_list("text") == []
+        assert unwrap_list(None) == []

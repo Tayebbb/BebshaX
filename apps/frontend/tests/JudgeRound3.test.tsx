@@ -299,8 +299,22 @@ describe('Blocker 4 — step 1 reports the evidence attempt', () => {
     renderStep1({ state: 'empty' });
 
     expect(
-      screen.getByText(/No evidence found — personas will be inferred from your description/i)
+      screen.getByText(/No evidence claims were extracted — personas will be inferred from your description/i)
     ).toBeInTheDocument();
+  });
+
+  it('names the live provider and says nothing was substituted when the search returned no sources', () => {
+    renderStep1({ state: 'empty', noLiveEvidence: true, provider: 'WikipediaResearchProvider' });
+
+    expect(screen.getByText(/live search \(WikipediaResearchProvider\) returned no sources/i)).toBeInTheDocument();
+    expect(screen.getByText(/no claims were written in their place/i)).toBeInTheDocument();
+  });
+
+  it('shows the run error code when the evidence run failed', () => {
+    renderStep1({ state: 'failed', message: 'Research planning needs the AI routing layer', errorCode: 'llm_unavailable' });
+
+    expect(screen.getByText(/\[llm_unavailable\]/)).toBeInTheDocument();
+    expect(screen.getByText(/nothing was substituted/i)).toBeInTheDocument();
   });
 
   it('says no run has happened yet and links to the evidence laboratory', () => {

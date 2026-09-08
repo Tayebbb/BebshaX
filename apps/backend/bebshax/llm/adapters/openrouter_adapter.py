@@ -1,11 +1,14 @@
 """OpenRouterAdapter — direct OpenRouter provider adapter (RULES.md R1).
 
-Provides access to OpenRouter's vast multi-model routing table (DeepSeek-R1,
-Llama-3.3-70B, Gemini 2.0 Flash, Claude, GPT-4o-mini, etc.).
+Routes to whatever free chat models OpenRouter currently lists: the catalogue
+is discovered live (public /models endpoint) because a hard-coded list of
+``:free`` ids drifts to 404s within weeks.
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import re
 import time
@@ -17,18 +20,28 @@ from bebshax.llm.failures import AttemptFailed, FailureKind
 from bebshax.llm.latency import attempt_timeout_s
 from bebshax.llm.types import LLMRequest, TokenUsage
 
+logger = logging.getLogger(__name__)
+
 PROVIDER = "openrouter"
-# Measured-fast first (session data 2026-08-26). deepseek-r1 (CoT) and other
-# reasoning-heavy free routes are intentionally NOT in the defaults — they
-# burned 100s+ per interactive turn; pin them explicitly when needed.
-# `openrouter/auto` is deliberately absent: it routes to PAID models, which
-# breaks the $0 thesis (an operator can still pin it via BEBSHAX_OPENROUTER_MODELS).
+# Seed list ONLY — used when the live catalogue cannot be fetched (offline) and
+# no BEBSHAX_OPENROUTER_MODELS pin is set. OpenRouter's free catalogue drifts
+# (the previous three seeds all 404'd within weeks), so production discovers
+# the current ``:free`` models from the public catalogue instead; see
+# ``discover_free_models``. Reasoning-heavy routes are avoided on purpose: they
+# burned 100 s+ per interactive turn. ``openrouter/auto`` is deliberately absent:
+# it routes to PAID models, which breaks the $0 thesis.
 DEFAULT_MODELS = [
-    "google/gemini-2.0-flash-exp:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "mistralai/mistral-small-24b-instruct-2501:free",
+    "google/gemma-4-31b-it:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-4-26b-a4b-it:free",
 ]
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models"
+CATALOGUE_TTL_S = 30 * 60
+CATALOGUE_MAX_MODELS = 4
+# Free routes that are the wrong tool for persona work: safety classifiers,
+# code-only models and chain-of-thought "reasoning" variants (slow, verbose).
+_CATALOGUE_EXCLUDE_RE = re.compile(r"safety|guard|code|reasoning|thinking|-r1", re.IGNORECASE)
 RESPONSE_FORMAT_DROPPED_NOTE = "response_format dropped after 400"
 
 # OpenRouter reports prompt overflow as 400 (sometimes 413) with a prose body,
@@ -36,6 +49,19 @@ RESPONSE_FORMAT_DROPPED_NOTE = "response_format dropped after 400"
 _CONTEXT_OVERFLOW_BODY_RE = re.compile(
     r"context|maximum.*tokens|too long|token limit", re.IGNORECASE | re.DOTALL
 )
+# A 429 whose body names the UPSTREAM shared pool of one model ("<model> is
+# temporarily rate-limited upstream", limit_source=upstream_provider_shared_pool)
+# is that model's problem, not our account's: benching every OpenRouter route
+# for it (provider-wide RATE_LIMITED) blacked out three healthy models live.
+_UPSTREAM_MODEL_LIMIT_RE = re.compile(
+    r"upstream_provider_shared_pool|rate-limited upstream", re.IGNORECASE
+)
+# The account's free-tier DAY cap ("Rate limit exceeded: free-models-per-day",
+# limit_source=openrouter_free_tier_daily, X-RateLimit-Reset in the body). A
+# quota, not a burst: nothing will succeed until the reset, so the route is
+# cooled until then instead of being re-probed every minute.
+_DAILY_QUOTA_RE = re.compile(r"free-models-per-day|openrouter_free_tier_daily|per-day", re.IGNORECASE)
+_RESET_MS_RE = re.compile(r'X-RateLimit-Reset\\?"?\s*:\s*\\?"?(\d{10,16})')
 
 
 def _configured_models() -> list[str]:
@@ -47,13 +73,42 @@ def _configured_models() -> list[str]:
     return models or list(DEFAULT_MODELS)
 
 
+def _pinned_models() -> list[str]:
+    raw = os.environ.get("BEBSHAX_OPENROUTER_MODELS", "")
+    return [m.strip() for m in raw.split(",") if m.strip()]
+
+
+def rank_free_catalogue(catalogue: list[dict], *, limit: int = CATALOGUE_MAX_MODELS) -> list[dict]:
+    """Pick the free chat models worth routing to, from a /models payload.
+
+    Pure function over the catalogue rows (``id``, ``context_length``,
+    ``supported_parameters``): keeps ``:free`` ids, drops the excluded
+    families, prefers routes that accept ``response_format`` (structured
+    output is most of this product's traffic) and then larger context windows.
+    """
+    rows: list[tuple[int, int, str, dict]] = []
+    for row in catalogue:
+        model_id = str(row.get("id") or "")
+        if not model_id.endswith(":free") or _CATALOGUE_EXCLUDE_RE.search(model_id):
+            continue
+        params = set(row.get("supported_parameters") or [])
+        context = int(row.get("context_length") or 0)
+        rows.append((0 if "response_format" in params else 1, -context, model_id, row))
+    rows.sort()
+    return [row for _, _, _, row in rows[:limit]]
+
+
 def _is_context_overflow_body(body: str | None) -> bool:
     return bool(body) and _CONTEXT_OVERFLOW_BODY_RE.search(body) is not None
 
 
 def _map_http_status(status: int | None, body: str | None = None) -> FailureKind:
     if status == 429:
-        return FailureKind.RATE_LIMITED
+        if body and _UPSTREAM_MODEL_LIMIT_RE.search(body):
+            return FailureKind.MODEL_UNAVAILABLE  # route-scoped cooldown; siblings stay usable
+        if body and _DAILY_QUOTA_RE.search(body):
+            return FailureKind.QUOTA_EXHAUSTED  # the day's allowance is gone — account-level
+        return FailureKind.RATE_LIMITED  # our account/key: provider-scoped
     if status == 402:
         return FailureKind.QUOTA_EXHAUSTED  # credits/free allowance gone — account-level
     if status == 408:
@@ -69,19 +124,59 @@ def _map_http_status(status: int | None, body: str | None = None) -> FailureKind
     return FailureKind.PROVIDER_UNAVAILABLE
 
 
+def _retry_after_hint(headers, body: str | None, *, now: float | None = None) -> float | None:
+    """Seconds until the provider says it will serve again, from a Retry-After
+    header or the ``X-RateLimit-Reset`` epoch-ms OpenRouter embeds in quota
+    errors. None when the provider gave no usable hint."""
+    raw = None
+    try:
+        raw = headers.get("Retry-After") if headers is not None else None
+    except Exception:  # noqa: BLE001 — header containers vary between transports
+        raw = None
+    if raw:
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            pass
+    match = _RESET_MS_RE.search(body or "")
+    if match:
+        reset_ms = int(match.group(1))
+        current = time.time() if now is None else now
+        reset_s = reset_ms / 1000.0 if reset_ms > 10**11 else float(reset_ms)
+        remaining = reset_s - current
+        return max(0.0, remaining) if remaining > 0 else None
+    return None
+
+
 class OpenRouterAdapter(ProviderAdapter):
     """Adapter for OpenRouter chat completions."""
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = "meta-llama/llama-3.3-70b-instruct:free",
+        default_model: str = DEFAULT_MODELS[0],
         timeout: float = 30.0,
+        *,
+        discover_catalogue: bool = False,
+        catalogue_ttl_s: float = CATALOGUE_TTL_S,
     ) -> None:
         self._api_key = api_key
         self._default_model = default_model
         self._timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None
+        # Live catalogue discovery is opt-in (production wiring turns it on) so
+        # unit tests and offline tools never touch the network by accident.
+        self._discover = discover_catalogue
+        self._catalogue_ttl = catalogue_ttl_s
+        self._catalogue: list[RouteCandidate] | None = None
+        self._catalogue_fetched_at: float = 0.0
+        self._catalogue_error: str | None = None
+        self._catalogue_lock = asyncio.Lock()
+        # Models whose catalogue entry exposes the `reasoning` toggle. Free
+        # reasoning models spend the whole output budget thinking and return
+        # an EMPTY message (observed live: 254 reasoning tokens, content ""),
+        # so those routes are asked for a plain answer explicitly.
+        self._reasoning_toggle_models: set[str] = set()
 
     def _get_api_key(self) -> str | None:
         if self._api_key is not None:
@@ -99,8 +194,64 @@ class OpenRouterAdapter(ProviderAdapter):
             self._client = None
 
     def configured_models(self) -> list[str]:
-        """Models this adapter would offer (env override or defaults) — no network."""
+        """Models this adapter would offer without discovery (env pin or seed) — no network."""
         return _configured_models()
+
+    def catalogue_status(self) -> dict:
+        """What the live catalogue produced (for health/observability): the
+        discovered routes, when they were fetched, and the last fetch error."""
+        return {
+            "discovery_enabled": self._discover,
+            "pinned": _pinned_models(),
+            "discovered": [c.model for c in (self._catalogue or [])],
+            "fetched_at": self._catalogue_fetched_at or None,
+            "error": self._catalogue_error,
+        }
+
+    async def discover_free_models(self) -> list[RouteCandidate]:
+        """Fetch OpenRouter's public catalogue (no key needed) and turn the
+        currently listed free chat models into route candidates. Cached for
+        ``catalogue_ttl_s``; a failed refresh keeps the previous catalogue and
+        records the error instead of raising."""
+        async with self._catalogue_lock:
+            fresh = self._catalogue is not None and (
+                time.monotonic() - self._catalogue_fetched_at
+            ) < self._catalogue_ttl
+            if fresh:
+                return list(self._catalogue or [])
+            try:
+                client = await self._get_client()
+                resp = await client.get(OPENROUTER_MODELS_ENDPOINT)
+                resp.raise_for_status()
+                rows = resp.json().get("data") or []
+                ranked = rank_free_catalogue(rows)
+                self._catalogue = [
+                    RouteCandidate(
+                        provider=PROVIDER,
+                        model=str(row["id"]),
+                        context_window=int(row.get("context_length") or 128_000),
+                        supports_json="response_format" in set(row.get("supported_parameters") or []),
+                        supports_tools="tools" in set(row.get("supported_parameters") or []),
+                    )
+                    for row in ranked
+                ]
+                self._reasoning_toggle_models = {
+                    str(row["id"]) for row in ranked if "reasoning" in set(row.get("supported_parameters") or [])
+                }
+                self._catalogue_fetched_at = time.monotonic()
+                self._catalogue_error = None
+                logger.info(
+                    "openrouter catalogue: %d free route(s) discovered: %s",
+                    len(self._catalogue),
+                    ", ".join(c.model for c in self._catalogue),
+                )
+            except Exception as exc:  # noqa: BLE001 — discovery must degrade, never crash routing
+                self._catalogue_error = f"{type(exc).__name__}: {exc}"[:200]
+                self._catalogue_fetched_at = time.monotonic()  # do not hammer a failing endpoint
+                if self._catalogue is None:
+                    self._catalogue = []
+                logger.warning("openrouter catalogue discovery failed: %s", self._catalogue_error)
+            return list(self._catalogue or [])
 
     def configuration_status(self, model: Optional[str] = None) -> dict:
         """Configuration report with NO network call and no LLM spend: is a key
@@ -136,16 +287,26 @@ class OpenRouterAdapter(ProviderAdapter):
         if not key or not key.strip():
             return []  # No key configured; cleanly skip to next adapter in pool
 
-        return [
-            RouteCandidate(
-                provider=PROVIDER,
-                model=m,
-                context_window=128_000,
-                supports_json=True,
-                supports_tools=False,
-            )
-            for m in _configured_models()
-        ]
+        def _static(models: list[str]) -> list[RouteCandidate]:
+            return [
+                RouteCandidate(
+                    provider=PROVIDER,
+                    model=m,
+                    context_window=128_000,
+                    supports_json=True,
+                    supports_tools=False,
+                )
+                for m in models
+            ]
+
+        pinned = _pinned_models()
+        if pinned:
+            return _static(pinned)  # operator pin always wins
+        if self._discover:
+            discovered = await self.discover_free_models()
+            if discovered:
+                return discovered
+        return _static(list(DEFAULT_MODELS))
 
     async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
         key = self._get_api_key()
@@ -169,6 +330,11 @@ class OpenRouterAdapter(ProviderAdapter):
             payload["max_tokens"] = request.max_output_tokens
         if request.json_mode:
             payload["response_format"] = {"type": "json_object"}
+        if candidate.model in self._reasoning_toggle_models:
+            # Persona/structured work wants the answer, not the chain of thought;
+            # verified live: with the toggle off the same model returns content
+            # with 0 reasoning tokens instead of an empty, budget-exhausted reply.
+            payload["reasoning"] = {"enabled": False}
 
         headers = {
             "Authorization": f"Bearer {key.strip()}",
@@ -177,7 +343,6 @@ class OpenRouterAdapter(ProviderAdapter):
             "Content-Type": "application/json",
         }
 
-        t0 = time.perf_counter()
         # Per-attempt budget by task class overrides the client-wide default.
         req_timeout = httpx.Timeout(attempt_timeout_s(request.task), connect=10.0)
         degradation_notes: list[str] = []
@@ -210,6 +375,7 @@ class OpenRouterAdapter(ProviderAdapter):
                 PROVIDER,
                 candidate.model,
                 f"OpenRouter HTTP {resp.status_code}: {resp.text[:300]}",
+                retry_after_s=_retry_after_hint(resp.headers, resp.text) if resp.status_code in (429, 402) else None,
             )
 
         try:
@@ -234,12 +400,16 @@ class OpenRouterAdapter(ProviderAdapter):
         msg = choices[0].get("message", {})
         content = msg.get("content", "")
         if not content or not content.strip():
-            raise AttemptFailed(
-                FailureKind.MALFORMED_RESPONSE,
-                PROVIDER,
-                candidate.model,
-                "Empty text in OpenRouter message choice",
+            reasoning_tokens = (
+                ((data.get("usage") or {}).get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
             )
+            detail = "Empty text in OpenRouter message choice"
+            if reasoning_tokens:
+                detail = (
+                    f"reply had no content: the model spent {reasoning_tokens} reasoning tokens "
+                    f"(finish_reason={choices[0].get('finish_reason')}) and never answered"
+                )
+            raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, detail)
 
         # Mechanical truncation signal: the model ran out of output budget
         # (reasoning models burning the cap on chain-of-thought leak raw,

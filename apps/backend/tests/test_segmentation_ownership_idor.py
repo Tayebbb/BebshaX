@@ -5,14 +5,33 @@ and all unowned access returns 404 to avoid leaking existence or metadata.
 """
 
 import io
+import json
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from bebshax.auth.models import Users
 from bebshax.auth.security import create_access_token
-from bebshax.db.models import Base, DatasetSources, EvidenceClaims, Studies
+from bebshax.db.models import Base
+from bebshax.llm.adapters.base import RouteCandidate
+from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
+from bebshax.llm.router import PoolRouter
 from bebshax.main import app
+
+_SEGMENTS_REPLY = json.dumps(
+    {
+        "segments": [
+            {"cluster_label": "cluster_0", "name": "Lower-budget planners", "description": "Lower half of budgets.", "differentiation_summary": "Spend less."},
+            {"cluster_label": "cluster_1", "name": "Higher-budget planners", "description": "Upper half of budgets.", "differentiation_summary": "Spend more."},
+        ]
+    }
+)
+
+
+def _fake_llm():
+    fake = FakeAdapter(routes=[FakeRoute(candidate=RouteCandidate(provider="pollinations", model="deepseek-r1"), reply=_SEGMENTS_REPLY)])
+    return PoolRouter({n: fake for n in ("openrouter", "freellmpool", "ollama", "pollinations")})
 
 
 @pytest.mark.asyncio
@@ -24,6 +43,7 @@ async def test_segmentation_multi_user_idor_isolation():
 
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
     app.state.db_sessionmaker = session_maker
+    app.state.llm_service = _fake_llm()
 
     # 1. Create User A and User B
     async with session_maker() as session:
@@ -48,8 +68,9 @@ async def test_segmentation_multi_user_idor_isolation():
         assert res_study_a.status_code == 201
         study_a_id = res_study_a.json()["id"]
 
-        # 3. User A uploads Dataset A
-        csv_content = b"age,monthly_budget,study_hours\n20,350,4.5\n21,400,5.0\n22,800,6.5\n24,1200,8.0\n19,300,3.5\n"
+        # 3. User A uploads Dataset A (24 observed respondents; budgets rise with age)
+        csv_rows = "\n".join(f"{18 + i // 2},{300 + i * 50},{3.0 + i * 0.25}" for i in range(24))
+        csv_content = ("age,monthly_budget,study_hours\n" + csv_rows + "\n").encode()
         files = {"file": ("student_survey.csv", io.BytesIO(csv_content), "text/csv")}
         res_upload = await client.post(
             f"/api/studies/{study_a_id}/datasets/upload",
@@ -64,7 +85,7 @@ async def test_segmentation_multi_user_idor_isolation():
         assert res_ready_a.status_code == 200
         ready_data = res_ready_a.json()
         assert ready_data["can_run"] is True
-        assert ready_data["total_records"] == 5
+        assert ready_data["total_records"] == 24
 
         # 5. User A triggers segmentation run
         res_run_a = await client.post(
@@ -72,11 +93,13 @@ async def test_segmentation_multi_user_idor_isolation():
             headers=headers_a,
             json={"desired_clusters": 2},
         )
-        assert res_run_a.status_code == 201
+        assert res_run_a.status_code == 201, res_run_a.text
         run_data = res_run_a.json()
         run_id = run_data["run"]["id"]
         segments = run_data["segments"]
         assert len(segments) == 2
+        assert [s["name"] for s in segments] == ["Lower-budget planners", "Higher-budget planners"]
+        assert sum(s["population_count"] for s in segments) == 24  # every observed row is placed
         seg_1_id = segments[0]["id"]
         seg_2_id = segments[1]["id"]
         assert run_data["run"]["dataset_versions"] is not None

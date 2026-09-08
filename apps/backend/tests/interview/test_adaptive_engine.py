@@ -1,10 +1,9 @@
 import pytest
 from sqlalchemy import select
 
-from bebshax.db.models import Businesses, MarketSegments, Personas, Studies
+from bebshax.db.models import MarketSegments, Personas, Studies
 from bebshax.interview.engine import InterviewEngine, InterviewFinished
-from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
-from bebshax.llm import TaskType
+from bebshax.interview.orm import InterviewInsights
 
 
 @pytest.fixture
@@ -102,7 +101,7 @@ async def test_adaptive_interview_grounded_composition(
     sys_content = req1.messages[0].content
     assert "Nadia Rahman" in sys_content
     assert "Dhanmondi, Dhaka" in sys_content
-    assert "Monthly discretionary budget ৳400 BDT" in sys_content
+    assert "Monthly discretionary budget 400 BDT" in sys_content
     assert "Budget-Conscious Students" in sys_content
     assert "Pricing & Pain Point Exploration" in sys_content
     assert "BBS Student Living Survey" in sys_content
@@ -188,16 +187,17 @@ async def test_interview_length_limit_and_completion_synthesis(
         await engine.ask(interview.id, "One more question!")
 
 
-async def test_failed_synthesis_falls_back_honestly(
+async def test_failed_synthesis_is_explicit_not_mechanical(
     session_maker, memory_service, llm_factory, full_study_context
 ):
-    """When insight synthesis returns unparseable output, the fallback must be
-    labeled mechanical with confidence 0.0 — never dressed up as analysis
-    with an invented confidence (M-series honesty)."""
+    """When insight synthesis returns unusable output twice, the interview is
+    closed WITHOUT a summary or insights and the reason is reported — no
+    mechanical summary or placeholder insight is dressed up as analysis (R2)."""
     study_id, persona_id = full_study_context
     llm, adapter = llm_factory([
         "The mess food is quite repetitive honestly.",
         "THIS IS NOT JSON AT ALL — synthesis reply that cannot parse",
+        "still not json",
     ])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
     interview = await engine.start(
@@ -210,10 +210,11 @@ async def test_failed_synthesis_falls_back_honestly(
 
     synthesis = await engine.complete(interview.id)
     assert synthesis["status"] == "completed"
-    assert synthesis["summary"].startswith("Automated synthesis unavailable")
-    [insight] = synthesis["structured_insights"]
-    assert insight["title"] == "Unanalyzed excerpt (synthesis unavailable)"
-    assert insight["confidence"] == 0.0
+    assert synthesis["summary"] is None and synthesis["key_findings"] == []
+    assert synthesis["structured_insights"] == []
+    assert synthesis["source"] == "unavailable"
+    assert synthesis["error_code"] == "interview_synthesis_unparseable"
+    assert len(adapter.requests) == 3  # one turn + two synthesis attempts
 
     async with session_maker() as session:
         rows = list(
@@ -221,5 +222,4 @@ async def test_failed_synthesis_falls_back_honestly(
                 select(InterviewInsights).where(InterviewInsights.interview_id == interview.id)
             )).scalars()
         )
-        assert len(rows) == 1
-        assert rows[0].confidence == 0.0  # persisted, not the ORM default
+        assert rows == []  # nothing invented was persisted

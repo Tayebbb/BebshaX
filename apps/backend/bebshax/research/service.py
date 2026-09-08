@@ -7,21 +7,19 @@ relevance evaluation, and automated dataset ingestion.
 
 from __future__ import annotations
 
+import copy
 import datetime
 from datetime import timezone
-import hashlib
-import json
+import logging
 from pathlib import Path
 import uuid
 from typing import Any, Optional
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
-from bebshax.datasets.discovery.engine import DatasetDiscoveryEngine
-from bebshax.datasets.parser import parse_dataset_bytes
-from bebshax.datasets.profiler import profile_dataset
-from bebshax.datasets.segmenter import discover_segments
+from bebshax.datasets.discovery.engine import DatasetDiscoveryEngine, materialize_candidate
 from bebshax.db.models import (
     DatasetCandidates,
     DatasetSources,
@@ -31,31 +29,56 @@ from bebshax.db.models import (
     ResearchPlans,
     ResearchRuns,
     Studies,
-    _utcnow,
 )
 from bebshax.llm.service import LLMService
+from bebshax.llm.failures import LLMError
 from bebshax.research.chunker import chunk_document
-from bebshax.research.claim_extractor import (
-    extract_claims_with_llm,
-    extract_deterministic_claims,
-)
+from bebshax.research.claim_extractor import extract_claims_with_llm
 from bebshax.research.planner import (
     ResearchPlanResult,
     generate_structured_research_plan,
 )
 from bebshax.research.query_generator import generate_research_queries
 from bebshax.research.search_provider import (
-    CuratedResearchProvider,
     SearchProvider,
+    WikipediaResearchProvider,
 )
 from bebshax.research.vector_search import VectorSearchEngine
 from bebshax.config import get_settings
 from bebshax.tenancy import ANONYMOUS_OWNER_ID
+from bebshax.utils.explicit_failures import ExplicitFailure, LLMUnavailable
+
+logger = logging.getLogger(__name__)
 
 
 def _upload_dir() -> Path:
     """Configured upload root (BEBSHAX_UPLOAD_DIR / BEBSHAX_DATA_DIR), resolved at call time."""
     return get_settings().upload_dir_path
+
+
+def _safe_error(exc: BaseException) -> tuple[str, str]:
+    """(error_code, user-facing message) for a failed run. Internal exception
+    text (connection strings, stack details) never reaches the stored record."""
+    if isinstance(exc, ExplicitFailure):
+        return exc.error_code, exc.detail
+    if isinstance(exc, LLMError):
+        kind = getattr(exc, "kind", None)
+        kind_name = getattr(kind, "value", None) or type(exc).__name__
+        return "llm_error", f"The language-model layer failed ({kind_name}); the run was stopped instead of substituting content."
+    return "run_failed", f"The research run stopped on an internal error ({type(exc).__name__})."
+
+
+def _note_served_by(summary: dict[str, Any], served_by: Optional[str]) -> None:
+    if served_by and served_by not in summary["served_by"]:
+        summary["served_by"].append(served_by)
+
+
+def _mark_progress(run: ResearchRuns, step_progress: dict[str, Any]) -> None:
+    """Persist an in-place-mutated progress dict. SQLAlchemy's JSON column only
+    flushes on identity/equality change, so a mutated dict that is re-assigned
+    would otherwise be silently dropped."""
+    run.step_progress = copy.deepcopy(step_progress)
+    flag_modified(run, "step_progress")
 
 
 class ResearchEngineService:
@@ -68,7 +91,7 @@ class ResearchEngineService:
         llm_service: Optional[LLMService] = None,
         discovery_engine: Optional[DatasetDiscoveryEngine] = None,
     ) -> None:
-        self.search_provider = search_provider or CuratedResearchProvider()
+        self.search_provider = search_provider or WikipediaResearchProvider()
         self.vector_engine = vector_engine or VectorSearchEngine()
         self.llm_service = llm_service
         self.discovery_engine = discovery_engine or DatasetDiscoveryEngine()
@@ -93,7 +116,19 @@ class ResearchEngineService:
             "evaluating_datasets": {"status": "pending", "label": "Evaluating dataset quality & relevance"},
             "importing_datasets": {"status": "pending", "label": "Processing & profiling datasets"},
             "extracting_evidence": {"status": "pending", "label": "Synthesizing evidence claims"},
+            # Honesty markers for consumers: where each artefact came from and
+            # what was NOT produced. Never a substitute for the artefact itself.
+            "summary": {
+                "plan_source": None,
+                "queries_source": None,
+                "evidence_provider": self.search_provider.name,
+                "no_live_evidence": None,
+                "claims_status": None,
+                "served_by": [],
+                "error_code": None,
+            },
         }
+        summary = step_progress["summary"]
 
         run = ResearchRuns(
             id=run_id,
@@ -114,7 +149,7 @@ class ResearchEngineService:
             run.current_step = "building_research_plan"
             step_progress["understanding_idea"]["status"] = "completed"
             step_progress["building_research_plan"]["status"] = "in_progress"
-            run.step_progress = step_progress
+            _mark_progress(run, step_progress)
             await session.commit()
 
             plan_result: ResearchPlanResult = await generate_structured_research_plan(
@@ -143,6 +178,8 @@ class ResearchEngineService:
             )
             session.add(plan_record)
             run.research_plan = plan_result.model_dump()
+            summary["plan_source"] = plan_result.source
+            _note_served_by(summary, plan_result.served_by)
             step_progress["building_research_plan"]["status"] = "completed"
 
             # -------------------------------------------------------------
@@ -150,20 +187,24 @@ class ResearchEngineService:
             # -------------------------------------------------------------
             run.current_step = "searching_evidence"
             step_progress["searching_evidence"]["status"] = "in_progress"
-            run.step_progress = step_progress
+            _mark_progress(run, step_progress)
             await session.commit()
 
-            queries = await generate_research_queries(
+            query_set = await generate_research_queries(
                 idea=prompt,
                 target_audience=study.target_audience,
                 pricing_hypothesis=study.pricing_hypothesis,
                 llm_service=self.llm_service,
             )
+            queries = query_set.queries
             run.queries = queries
             run.query_count = len(queries)
+            summary["queries_source"] = query_set.source
+            _note_served_by(summary, query_set.served_by)
 
             discovered_sources = await self.search_provider.search(queries)
             run.source_count = len(discovered_sources)
+            summary["no_live_evidence"] = not discovered_sources
 
             # Chunk, embed, and store sources
             sources_to_insert: list[EvidenceSources] = []
@@ -232,7 +273,7 @@ class ResearchEngineService:
             # -------------------------------------------------------------
             run.current_step = "discovering_datasets"
             step_progress["discovering_datasets"]["status"] = "in_progress"
-            run.step_progress = step_progress
+            _mark_progress(run, step_progress)
             await session.commit()
 
             try:
@@ -244,13 +285,18 @@ class ResearchEngineService:
                     idea=prompt,
                     queries=queries,
                     requirements=plan_result.dataset_requirements,
+                    countries=plan_result.target_countries,
                 )
                 run.dataset_candidate_count = len(candidates)
                 run.dataset_imported_count = len(imported_ds)
+                summary["target_countries"] = plan_result.target_countries
+                summary["no_datasets_found"] = not candidates
                 step_progress["discovering_datasets"]["status"] = "completed"
                 step_progress["evaluating_datasets"]["status"] = "completed"
                 step_progress["importing_datasets"]["status"] = "completed"
             except Exception as ds_err:
+                logger.warning("dataset discovery step failed for run %s: %s", run_id, type(ds_err).__name__)
+                summary["dataset_discovery_error"] = type(ds_err).__name__
                 step_progress["discovering_datasets"]["status"] = "completed_with_warnings"
                 step_progress["evaluating_datasets"]["status"] = "completed_with_warnings"
                 step_progress["importing_datasets"]["status"] = "completed_with_warnings"
@@ -260,22 +306,26 @@ class ResearchEngineService:
             # -------------------------------------------------------------
             run.current_step = "extracting_evidence"
             step_progress["extracting_evidence"]["status"] = "in_progress"
-            run.step_progress = step_progress
+            _mark_progress(run, step_progress)
             await session.commit()
 
-            if self.llm_service:
+            if not sources_to_insert:
+                # Nothing was found for these queries: say so. No hypothesis
+                # list is written in place of evidence (RULES.md R2).
+                claims_data: list[dict[str, Any]] = []
+                summary["claims_status"] = "no_evidence"
+            else:
+                if self.llm_service is None:
+                    raise LLMUnavailable("Evidence claim extraction")
                 claims_data = await extract_claims_with_llm(
                     idea=prompt,
                     sources=sources_to_insert,
                     chunks=chunks_to_insert,
                     llm_service=self.llm_service,
                 )
-            else:
-                claims_data = extract_deterministic_claims(
-                    idea=prompt,
-                    sources=sources_to_insert,
-                    chunks=chunks_to_insert,
-                )
+                summary["claims_status"] = "extracted"
+                for cd in claims_data:
+                    _note_served_by(summary, cd.get("served_by"))
 
             claims_to_insert: list[EvidenceClaims] = []
             for cd in claims_data:
@@ -288,7 +338,7 @@ class ResearchEngineService:
                     claim_text=cd["claim_text"],
                     status=cd["status"],
                     category=cd.get("category", "general"),
-                    confidence=cd.get("confidence", 0.75),
+                    confidence=cd.get("confidence", 0.0),
                     supporting_source_ids=cd.get("supporting_source_ids", []),
                     supporting_chunk_ids=cd.get("supporting_chunk_ids", []),
                     contradicting_source_ids=cd.get("contradicting_source_ids", []),
@@ -303,7 +353,7 @@ class ResearchEngineService:
             # Finalize run
             run.status = "completed"
             run.current_step = "completed"
-            run.step_progress = step_progress
+            _mark_progress(run, step_progress)
             run.completed_at = datetime.datetime.now(timezone.utc)
             study.status = "in_progress"
             await session.commit()
@@ -311,9 +361,20 @@ class ResearchEngineService:
             return run
 
         except Exception as exc:
+            error_code, message = _safe_error(exc)
+            # Full detail to the server log only; the stored message is user-facing.
+            logger.warning(
+                "research run %s failed at %s: %s",
+                run_id,
+                run.current_step,
+                type(exc).__name__,
+                exc_info=not isinstance(exc, ExplicitFailure),
+            )
+            summary["error_code"] = error_code
             run.status = "failed"
             run.current_step = "failed"
-            run.error_message = str(exc)
+            run.error_message = message
+            _mark_progress(run, step_progress)
             run.completed_at = datetime.datetime.now(timezone.utc)
             await session.commit()
             await session.refresh(run)
@@ -330,15 +391,16 @@ class ResearchEngineService:
         plan = res.scalar_one_or_none()
         if not plan:
             return None
-        # The plan table predates the honesty marker; the run that produced the
-        # plan stores the full ResearchPlanResult dump (incl. source/fallback_reason).
-        source, fallback_reason = "unknown", None
+        # The plan table predates the provenance markers; the run that produced
+        # the plan stores the full ResearchPlanResult dump (incl. source/served_by).
+        source, fallback_reason, served_by = "unknown", None, None
         if plan.run_id:
             run = await session.get(ResearchRuns, plan.run_id)
             dumped = (run.research_plan if run is not None else None) or {}
             if isinstance(dumped, dict):
                 source = dumped.get("source") or source
                 fallback_reason = dumped.get("fallback_reason")
+                served_by = dumped.get("served_by")
         return {
             "id": plan.id,
             "study_id": plan.study_id,
@@ -352,6 +414,7 @@ class ResearchEngineService:
             "dataset_requirements": plan.dataset_requirements,
             "summary": plan.summary,
             "source": source,
+            "served_by": served_by,
             "fallback_reason": fallback_reason,
             "created_at": plan.created_at.isoformat() if plan.created_at else None,
         }
@@ -405,7 +468,12 @@ class ResearchEngineService:
         candidate_id: str,
         user_id: str,
     ) -> DatasetSources:
-        """Manually trigger import of a discovered dataset candidate into dataset_sources."""
+        """Import a discovered candidate by fetching its published resource.
+
+        Raises ``ValueError`` (unknown candidate), ``DatasetDownloadFailed`` (no
+        resource URL / network / size / HTTP status) or ``DatasetParseError``
+        (not tabular). Nothing is generated in place of the download.
+        """
         stmt = select(DatasetCandidates).where(
             DatasetCandidates.id == candidate_id,
             DatasetCandidates.study_id == study_id,
@@ -415,51 +483,23 @@ class ResearchEngineService:
         if not candidate:
             raise ValueError("Dataset candidate not found")
 
-        # Ingest candidate into DatasetSources
-        raw_csv = (
-            "id,category,value_bdt,score,timestamp\n"
-            + "\n".join(f"ROW_{100 + i},Category_{i % 3},{500 + i * 50},{70.0 + (i % 25)},2024-01-01" for i in range(100))
-        )
-        content_bytes = raw_csv.encode("utf-8")
-        content_hash = hashlib.sha256(content_bytes).hexdigest()
-        columns, rows = parse_dataset_bytes(content_bytes, file_type=candidate.format or "csv")
-        schema_metadata, stats = profile_dataset(columns, rows)
-        segments = discover_segments(columns, rows, schema_metadata, stats)
-
-        ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-        file_path = str(_upload_dir() / f"{ds_id}.json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(rows, f)
-
-        imported_ds = DatasetSources(
-            id=ds_id,
-            user_id=user_id,
+        imported_ds = await materialize_candidate(
+            session=session,
             study_id=study_id,
+            user_id=user_id,
             name=candidate.name,
-            source_type="url",
-            source_url=candidate.url,
-            file_path=file_path,
-            file_type=candidate.format or "csv",
-            description=(
-                f"{candidate.description}"
-                "\n\nIllustrative sample catalog — modeled on public sources, not fetched live."
-                f"\n\nSource: {candidate.source} ({candidate.publisher}) | License: {candidate.license}"
-            ),
-            status="ready",
-            row_count=len(rows),
-            column_count=len(columns),
-            # The imported content is generated placeholder rows, never a live
-            # fetch — always mark it as a sample.
-            schema_metadata={**schema_metadata, "is_sample": True},
-            statistics=stats,
-            segments=segments,
-            content_hash=content_hash,
-            persona_count_generated=0,
-            last_processed_at=_utcnow(),
+            description=candidate.description or "",
+            source=candidate.source,
+            publisher=candidate.publisher or candidate.source,
+            license_text=candidate.license or "",
+            url=candidate.url,
+            download_url=candidate.download_url,
+            declared_format=candidate.format,
         )
-        session.add(imported_ds)
-        candidate.imported_dataset_id = ds_id
+        candidate.imported_dataset_id = imported_ds.id
         candidate.selection_status = "imported"
+        candidate.sample_rows = imported_ds.row_count
+        candidate.sample_columns = imported_ds.column_count
         await session.commit()
         await session.refresh(imported_ds)
         return imported_ds

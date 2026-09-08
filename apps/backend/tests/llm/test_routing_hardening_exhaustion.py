@@ -249,10 +249,11 @@ async def test_generator_surfaces_llm_errors_instead_of_templating(error) -> Non
         )
 
 
-async def test_generator_still_templates_a_successful_but_unparseable_reply() -> None:
-    """The template path is reserved for parse/validation problems of a reply
-    that WAS produced — that behaviour is unchanged."""
-    from bebshax.personas.generator import TEMPLATE_FALLBACK_MODEL, generate_personas_for_study
+async def test_generator_fails_explicitly_on_a_successful_but_unparseable_reply() -> None:
+    """A reply that WAS produced but cannot be used is retried once, then the run
+    fails with an explicit UnusableModelOutput — the former template path is gone."""
+    from bebshax.personas.generator import generate_personas_for_study
+    from bebshax.utils.explicit_failures import UnusableModelOutput
 
     class _GarbageLLM:
         async def complete(self, request):
@@ -261,13 +262,13 @@ async def test_generator_still_templates_a_successful_but_unparseable_reply() ->
                 provenance=SimpleNamespace(served_by_provider="fake", served_by_model="m"),
             )
 
-    drafts = await generate_personas_for_study(
-        study=_study(),
-        segments=[_Segment("seg_1", "Budget Students")],
-        target_count=2,
-        distribution_strategy="equal",
-        evidence_claims=[],
-        llm_service=_GarbageLLM(),
-    )
-    assert len(drafts) == 2
-    assert all(d.generation_model == TEMPLATE_FALLBACK_MODEL for d in drafts)
+    with pytest.raises(UnusableModelOutput) as exc_info:
+        await generate_personas_for_study(
+            study=_study(),
+            segments=[_Segment("seg_1", "Budget Students")],
+            target_count=2,
+            distribution_strategy="equal",
+            evidence_claims=[],
+            llm_service=_GarbageLLM(),
+        )
+    assert exc_info.value.error_code == "persona_generation_unparseable"

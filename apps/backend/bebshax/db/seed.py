@@ -225,6 +225,10 @@ def build_demo_persona(evidence: list[EvidenceItem]) -> PersonaProfile:
     )
     profile.id = DEMO_PERSONA_ID
     profile.status = "active"
+    # Stated by the persona itself (location above) — the platform no longer
+    # assumes a nationality for anyone.
+    profile.country_code = "BD"
+    profile.origin_country = "Bangladesh"
     profile.warnings.append(EVIDENCE_SCOPE_NOTE if evidence else CORPUS_MISSING_NOTE)
     return profile
 

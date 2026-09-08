@@ -1,4 +1,9 @@
-"""Base adapter and data structures for Dataset Discovery in BebshaX."""
+"""Base adapter and data structures for Dataset Discovery in BebshaX.
+
+Every candidate describes a dataset that exists at a real, keyless public URL.
+Attributes are what the source reports — unknown values stay ``None`` rather
+than being filled with plausible numbers.
+"""
 
 from __future__ import annotations
 
@@ -10,28 +15,30 @@ from bebshax.research.planner import DatasetRequirementSpec
 
 
 class DatasetCandidateData(BaseModel):
-    source: str = Field(..., description="Name of the public data portal or repository (e.g., BBS Open Data, World Bank, Kaggle)")
+    source: str = Field(..., description="Name of the public data portal or repository (e.g. World Bank Open Data, HDX)")
     external_id: str = Field(..., description="Unique ID within the source repository")
     name: str = Field(..., description="Official title of the dataset")
-    description: str = Field(..., description="Summary of dataset contents and collection methodology")
-    url: str = Field(..., description="Verified public URL of the dataset listing")
-    download_url: Optional[str] = Field(None, description="Direct or simulated download endpoint for automated ingestion")
+    description: str = Field("", description="Summary of dataset contents as published by the source")
+    url: str = Field(..., description="Public URL of the dataset listing")
+    download_url: Optional[str] = Field(None, description="Direct download endpoint for automated ingestion (None = listing only)")
     publisher: str = Field(..., description="Issuing authority, government body, or organization")
-    license: str = Field("Open Access / Public Domain", description="License or usage terms")
+    license: str = Field("", description="License or usage terms as published")
     license_url: Optional[str] = Field(None, description="License terms URL")
-    format: str = Field("csv", description="File format (csv, json, xlsx, tsv)")
-    size_bytes: int = Field(default=102400, description="Approximate byte size")
-    sample_rows: int = Field(default=1000, description="Total record count")
-    sample_columns: int = Field(default=10, description="Total variable count")
-    geographic_coverage: str = Field("Bangladesh", description="Geographic scope of the data")
-    population_coverage: str = Field("National Population", description="Target population group covered")
-    relevant_variables: list[str] = Field(default_factory=list, description="Variables matching the research requirements")
+    format: str = Field("csv", description="File format (csv, json, jsonl, tsv, xlsx)")
+    size_bytes: Optional[int] = Field(default=None, description="Byte size reported by the source, if any")
+    sample_rows: Optional[int] = Field(default=None, description="Record count when known (e.g. after a live fetch)")
+    sample_columns: Optional[int] = Field(default=None, description="Variable count when known")
+    geographic_coverage: str = Field("", description="Geographic scope as published")
+    population_coverage: str = Field("", description="Target population group as published")
+    relevant_variables: list[str] = Field(default_factory=list, description="Variables/tags reported by the source")
     category: str = Field("general", description="Primary dataset category")
+    tags: list[str] = Field(default_factory=list, description="Source tags/keywords")
+    modified_at: Optional[str] = Field(None, description="Last-modified timestamp reported by the source (ISO 8601)")
     is_sample: bool = Field(
         False,
-        description="True when the candidate comes from the BebshaX illustrative sample catalog rather than a live source fetch",
+        description="Always False for live sources; kept so clients can still render a sample badge if a test corpus is wired",
     )
-    raw_data_content: Optional[str] = Field(None, description="Structured CSV content string for automated import")
+    raw_data_content: Optional[str] = Field(None, description="Tabular content already fetched from the source (e.g. API series)")
 
 
 class DatasetEvaluationResult(BaseModel):
@@ -58,6 +65,11 @@ class DatasetSourceAdapter(ABC):
         self,
         queries: list[str],
         requirements: list[DatasetRequirementSpec],
+        *,
+        countries: Optional[list[str]] = None,
     ) -> list[DatasetCandidateData]:
-        """Search repository for dataset candidates matching research requirements."""
+        """Search the repository for candidates matching the study's queries and
+        requirements. ``countries`` are ISO-3166 alpha-3 codes of the study's
+        target market (from the research plan); adapters that are country-bound
+        return nothing when it is empty instead of assuming a country."""
         pass

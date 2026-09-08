@@ -1,0 +1,567 @@
+{
+  "generated_at": "2026-09-08T04:02:47.613514+00:00",
+  "verdict": "PASS",
+  "checks_passed": 56,
+  "checks_total": 56,
+  "questions_per_script": 3,
+  "repeat": false,
+  "checks": [
+    {
+      "name": "A: signup",
+      "passed": true,
+      "detail": "audit+13c2bb8e3b@bebshax.local"
+    },
+    {
+      "name": "A: create study",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: copilot reply",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: copilot names its route",
+      "passed": true,
+      "detail": "openrouter/dots-studio/dots-3-note-preview:free"
+    },
+    {
+      "name": "A: copilot reply is about the idea",
+      "passed": true,
+      "detail": "That’s a highly specific and promising niche — a subscription service tailored to recreational sea anglers in Norway, fo"
+    },
+    {
+      "name": "A: suggest roles",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: roles are idea-specific",
+      "passed": true,
+      "detail": "RECREATIONAL SEA ANGLER; SEASONAL TACKLE ENTHUSIAST; FISHERY GUIDE; SKEPTICAL CASUAL ANGLER; LOCAL BAIT SUPPLIER; COASTAL RETIREE; YOUNG URBAN ANGLER; FISHERY C"
+    },
+    {
+      "name": "A: generate personas",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: at least one persona",
+      "passed": true,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "A: persona generation names its routes",
+      "passed": true,
+      "detail": "['openrouter/dots-studio/dots-3-note-preview:free']"
+    },
+    {
+      "name": "A: no persona defaulted to a forbidden country",
+      "passed": true,
+      "detail": "country_codes=['NO']"
+    },
+    {
+      "name": "A: personas reference the idea's domain",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: generate script",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: script source is the model",
+      "passed": true,
+      "detail": "source='llm' served_by='openrouter/dots-studio/dots-3-note-preview:free'"
+    },
+    {
+      "name": "A: script has the requested 3 questions",
+      "passed": true,
+      "detail": "3 questions"
+    },
+    {
+      "name": "A: script is idea-specific",
+      "passed": true,
+      "detail": "How do you currently acquire your fishing bait and tackle before heading out on a sea angling trip along the Norwegian c"
+    },
+    {
+      "name": "A: start batch interview",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: interview completed",
+      "passed": true,
+      "detail": "status='completed' personas={'per_4f81cff9302a': {'persona_id': 'per_4f81cff9302a', 'persona_name': 'Magnus Halvorsen', 'status': 'completed', 'interview_id': '02525d9a8ebf4abe8f39b24451375b41'}}"
+    },
+    {
+      "name": "A: interview answers are on-topic",
+      "passed": true,
+      "detail": "3 persona turns"
+    },
+    {
+      "name": "A: generate report",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: report synthesis is model-written",
+      "passed": true,
+      "detail": "synthesis_source='llm' served_by='openrouter/dots-studio/dots-3-note-preview:free'"
+    },
+    {
+      "name": "A: report summary is idea-specific",
+      "passed": true,
+      "detail": "This study evaluates the demand for a subscription box delivering fresh, locally sourced bait and seasonal tackle to recreational sea angler"
+    },
+    {
+      "name": "A: AI review",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: review carries dimension scores",
+      "passed": true,
+      "detail": "{'grounding': 20, 'specificity': 60, 'consistency': 70, 'honesty': 90, 'actionability': 75}"
+    },
+    {
+      "name": "A: review names its route",
+      "passed": true,
+      "detail": "openrouter/dots-studio/dots-3-note-preview:free"
+    },
+    {
+      "name": "B: signup",
+      "passed": true,
+      "detail": "audit+97c152b2b6@bebshax.local"
+    },
+    {
+      "name": "B: create study",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: copilot reply",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: copilot names its route",
+      "passed": true,
+      "detail": "openrouter/dots-studio/dots-3-note-preview:free"
+    },
+    {
+      "name": "B: copilot reply is about the idea",
+      "passed": true,
+      "detail": "That's a highly specific and practical niche — solving real pain points for independent music educators. Independent pia"
+    },
+    {
+      "name": "B: suggest roles",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: roles are idea-specific",
+      "passed": true,
+      "detail": "INDEPENDENT PIANO TEACHER; STUDIO OWNER; PARENT PAYOR; RECITAL COORDINATOR; TECH-SKEPTIC TEACHER; POWER USER ENTREPRENEUR; SEASONAL TEACHER; MUSIC SCHOOL ADMINI"
+    },
+    {
+      "name": "B: generate personas",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: at least one persona",
+      "passed": true,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "B: persona generation names its routes",
+      "passed": true,
+      "detail": "['openrouter/dots-studio/dots-3-note-preview:free']"
+    },
+    {
+      "name": "B: no persona defaulted to a forbidden country",
+      "passed": true,
+      "detail": "country_codes=['US']"
+    },
+    {
+      "name": "B: personas reference the idea's domain",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: generate script",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: script source is the model",
+      "passed": true,
+      "detail": "source='llm' served_by='openrouter/dots-studio/dots-3-note-preview:free'"
+    },
+    {
+      "name": "B: script has the requested 3 questions",
+      "passed": true,
+      "detail": "3 questions"
+    },
+    {
+      "name": "B: script is idea-specific",
+      "passed": true,
+      "detail": "When a student has to miss a scheduled piano lesson due to illness or family conflict, what is the exact sequence of act"
+    },
+    {
+      "name": "B: start batch interview",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: interview completed",
+      "passed": true,
+      "detail": "status='completed' personas={'per_ff35e6d0835a': {'persona_id': 'per_ff35e6d0835a', 'persona_name': 'Maria Chen', 'status': 'completed', 'interview_id': '0df4d403687b44be987196c28f236f90'}}"
+    },
+    {
+      "name": "B: interview answers are on-topic",
+      "passed": true,
+      "detail": "3 persona turns"
+    },
+    {
+      "name": "B: generate report",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: report synthesis is model-written",
+      "passed": true,
+      "detail": "synthesis_source='llm' served_by='openrouter/dots-studio/dots-3-note-preview:free'"
+    },
+    {
+      "name": "B: report summary is idea-specific",
+      "passed": true,
+      "detail": "The research study focuses on validating the demand for a specialized scheduling and billing application designed for independent piano teac"
+    },
+    {
+      "name": "B: AI review",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: review carries dimension scores",
+      "passed": true,
+      "detail": "{'grounding': 55, 'specificity': 60, 'consistency': 30, 'honesty': 70, 'actionability': 75}"
+    },
+    {
+      "name": "B: review names its route",
+      "passed": true,
+      "detail": "openrouter/dots-studio/dots-3-note-preview:free"
+    },
+    {
+      "name": "A/B: persona names differ",
+      "passed": true,
+      "detail": "['Magnus Halvorsen', 'Magnus Nordahl'] vs ['Maria Chen']"
+    },
+    {
+      "name": "A/B: scripts are not copies (jaccard 0.07 < 0.35)",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A/B: report summaries differ (jaccard 0.14 < 0.35)",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A/B: AI reviews are written per study",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: no leakage of the other idea's domain",
+      "passed": true,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "B: no leakage of the other idea's domain",
+      "passed": true,
+      "detail": "leaked=[]"
+    }
+  ],
+  "runs": [
+    {
+      "label": "A",
+      "idea": "A subscription box that delivers fresh, locally sourced fishing bait and seasonal tackle to recreational sea anglers along the coast of Norway.",
+      "steps": {
+        "copilot": {
+          "reply": "That’s a highly specific and promising niche — a subscription service tailored to recreational sea anglers in Norway, focusing on locally sourced bait and seasonal tackle. This combines passion-driven consumer behavior with regional logistics and sustainability angles. To make sure we design the right study, could you clarify: are you targeting primarily weekend hobbyists, semi-professional anglers, or tourists who fish while visiting the Norwegian coast? Also, do you have a specific region in mind (e.g., Western fjords, Northern Tromsø area), or is it nationwide?",
+          "goal_card": null
+        },
+        "roles": [
+          "RECREATIONAL SEA ANGLER",
+          "SEASONAL TACKLE ENTHUSIAST",
+          "FISHERY GUIDE",
+          "SKEPTICAL CASUAL ANGLER",
+          "LOCAL BAIT SUPPLIER",
+          "COASTAL RETIREE",
+          "YOUNG URBAN ANGLER",
+          "FISHERY CONSERVATIONIST",
+          "GIFT PURCHASER",
+          "WINTER ANGLER"
+        ],
+        "personas": [
+          {
+            "id": "per_4f81cff9302a",
+            "name": "Magnus Halvorsen",
+            "occupation": "Marine Biologist",
+            "country_code": "NO",
+            "description": "Magnus is a marine biologist who fishes the fjords of Western Norway every weekend to decompress and test local species. He relies on precise, biologically optimal bait and seasonal tackle to maximize his catch while respecting local marine"
+          },
+          {
+            "id": "per_b8e9a9b6115f",
+            "name": "Magnus Nordahl",
+            "occupation": "Marine Biologist",
+            "country_code": "NO",
+            "description": "Magnus is a marine biologist who spends weekends targeting cod and coalfish along the fjords. He independently researches local bait efficacy but subscribes to curated boxes to save time during peak seasons. He validates each box against hi"
+          }
+        ],
+        "failed_roles": [],
+        "script": [
+          "How do you currently acquire your fishing bait and tackle before heading out on a sea angling trip along the Norwegian coast, and what factors influence your choice of where to buy them?",
+          "When you are preparing for a fishing trip, what specific frustrations or inconveniences do you encounter in obtaining fresh bait or the right seasonal tackle, and how do you currently work around these issues?",
+          "If a subscription service delivered fresh, locally sourced bait and seasonal tackle directly to your door on a regular basis, what would need to be true regarding pricing, delivery timing, or product quality for you to consider switching from your current method of sourcing these supplies?"
+        ],
+        "interview_job": {
+          "status": "completed",
+          "completed": 1,
+          "failed": 0
+        },
+        "interview_answers": [
+          "I usually get my bait from local fishmongers in Bergen — places like the fish market at Torget or smaller shops near the harbor where they sell fresh lugworm, ragworm, or shrimp straight off the boats",
+          "The main frustration is inconsistency — sometimes the fishmongers run out of fresh lugworm or shrimp, especially if the weather’s been bad and the boats haven’t gone out. I’ve shown up at the market o",
+          "For me to consider switching, the bait would have to be genuinely fresh — not frozen or days old — and sourced the same way I get it now, straight from local boats or trusted fishmongers. If it showed"
+        ],
+        "report": {
+          "title": "A Subscription Box for Norwegian Sea Anglers",
+          "executive_summary": "This study evaluates the demand for a subscription box delivering fresh, locally sourced bait and seasonal tackle to recreational sea anglers along the Norwegian coast. Based on a single completed interview with a marine biologist persona (Magnus), the research reveals significant pain points regarding inconsistent bait availability at local fishmongers and time-consuming research for seasonal tackle. Magnus demonstrates a strong need for fresh, locally sourced bait and tailored tackle matching specific seasonal conditions. While he expresses interest in a subscription model for its convenience and reliability, his decision is heavily contingent upon competitive pricing and reliable delivery timing the day before fishing trips. The evidence base is extremely limited, consisting of only one interview and two synthetic personas, which restricts the generalizability of these findings to the broader recreational angling market in Norway.",
+          "key_findings": [
+            "Recreational anglers face high friction due to inconsistent availability of fresh, locally sourced bait at traditional retail points (fishmongers).",
+            "There is a distinct demand for curated, seasonal tackle that matches specific marine conditions, reducing the time spent on gear research.",
+            "Pricing sensitivity remains a critical barrier; potential customers will reject subscription models that significantly exceed their current discretionary spending on bait and tackle.",
+            "Reliable logistics, specifically delivery timing aligned with fishing trip schedules (e.g., day-before delivery), is a crucial decision factor for subscription adoption."
+          ],
+          "recommendations": [
+            "Conduct a larger-scale survey of recreational sea anglers along the Norwegian coast (targeting N > 50) to validate pricing thresholds and delivery preferences.",
+            "Develop a pilot 'Day-Before Delivery' logistics model using insulated, localized drop-off points to guarantee bait freshness.",
+            "Implement a flexible subscription tier that allows users to customize or opt-out of specific tackle items based on their target species."
+          ],
+          "limitations": "This study is severely constrained by its sample size. It includes only 1 completed interview and relies on 2 synthetic personas (Magnus Halvorsen and Magnus Nordahl) with a grounding score of 0.0. There are zero quantitative datasets, zero evidence claims recorded in the database, and zero behavioral simulations executed. Consequently, these findings represent an exploratory hypothesis rather than a statistically validated market demand."
+        },
+        "ai_review": {
+          "overall": 42,
+          "scores": {
+            "grounding": 20,
+            "specificity": 60,
+            "consistency": 70,
+            "honesty": 90,
+            "actionability": 75
+          },
+          "summary": "The report is honest about its limitations but overreaches in generalizing findings from a single synthetic persona to 'recreational anglers' broadly. The lack of any evidence claims or raw data means the grounding is extremely weak. Specificity is moderate because the context (Norwegian sea angling, bait/tackle subscription) is well-defined, but consistency is hampered by the unused second persona. Actionability is high due to clear recommendations, but they are built on an unvalidated foundation.",
+          "strengths": [
+            "The report explicitly discloses its severe limitations: one interview, two synthetic personas, zero evidence claims, and zero quantitative data.",
+            "The findings and recommendations are concrete and actionable (e.g., 'Day-Before Delivery' pilot, flexible subscription tiers, N>50 survey).",
+            "The persona bios and interview summary are internally consistent with each other and with the study brief (Norwegian sea anglers, marine biologist archetype, focus on bait/tackle)."
+          ],
+          "issues": [
+            {
+              "severity": "high",
+              "artifact": "report",
+              "detail": "The executive summary and key findings assert general market demand ('Recreational anglers face high friction...') but the entire evidence base is a single interview with one persona (Magnus Halvorsen). No other angler segments, regions, or user types are represented."
+            },
+            {
+              "severity": "high",
+              "artifact": "evidence",
+              "detail": "There are zero evidence claims recorded in the database. Every finding in the report is traced back to a single interview summary, which is itself a synthesis of a synthetic persona's responses. No raw transcript, audio, or verbatim quotes are provided."
+            },
+            {
+              "severity": "medium",
+              "artifact": "persona:per_b8e9a9b6115f",
+              "detail": "Magnus Nordahl is described as a separate persona (age 34, different income bracket, 'Coastal Gear Strategist') but has no associated interview, no recorded behaviors, and no evidence of his existence beyond a bio. He is not mentioned in the report's findings or limitations, creating a disconnect between the persona list and the analysis."
+            },
+            {
+              "severity": "medium",
+              "artifact": "report",
+              "detail": "The report claims 'Pricing sensitivity remains a critical barrier' and mentions 'competitive pricing' but provides no actual price points, current spending benchmarks, or willingness-to-pay thresholds. The pricing hypothesis in the study brief was left null, and the report does not fill this gap with data."
+            },
+            {
+              "severity": "low",
+              "artifact": "persona:per_4f81cff9302a",
+              "detail": "The persona's 'grounding_score' is 0.0, indicating no external data was used to ground this persona. The report relies heavily on this persona's synthesized interview but does not flag the persona itself as ungrounded in the main text."
+            }
+          ],
+          "reviewed_artifacts": {
+            "personas": 2,
+            "segments": 0,
+            "evidence_claims": 0,
+            "interviews": 1,
+            "reports": 1
+          },
+          "served_by": "openrouter/dots-studio/dots-3-note-preview:free"
+        }
+      },
+      "served_by": {
+        "copilot": "openrouter/dots-studio/dots-3-note-preview:free",
+        "personas": [
+          "openrouter/dots-studio/dots-3-note-preview:free"
+        ],
+        "script": "openrouter/dots-studio/dots-3-note-preview:free",
+        "interview": [
+          "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
+        ],
+        "report": "openrouter/dots-studio/dots-3-note-preview:free",
+        "ai_review": "openrouter/dots-studio/dots-3-note-preview:free"
+      },
+      "study_id": "study_ecebde39889343cc",
+      "elapsed_s": 200.8
+    },
+    {
+      "label": "B",
+      "idea": "A scheduling and billing app for independent piano teachers in Chicago who run student recitals and juggle make-up lessons.",
+      "steps": {
+        "copilot": {
+          "reply": "That's a highly specific and practical niche — solving real pain points for independent music educators. Independent piano teachers in Chicago often manage irregular schedules, last-minute cancellations, and the administrative burden of billing for lessons, recitals, and make-ups. To design the most useful study, I’d like to clarify: Are you targeting teachers who currently use spreadsheets, paper ledgers, or another tool — or are some still managing everything ad hoc? And are you focusing on urban Chicago (e.g., Lincoln Park, Wicker Park) or the broader metro area including suburbs like Evanston or Oak Park?",
+          "goal_card": null
+        },
+        "roles": [
+          "INDEPENDENT PIANO TEACHER",
+          "STUDIO OWNER",
+          "PARENT PAYOR",
+          "RECITAL COORDINATOR",
+          "TECH-SKEPTIC TEACHER",
+          "POWER USER ENTREPRENEUR",
+          "SEASONAL TEACHER",
+          "MUSIC SCHOOL ADMINISTRATOR",
+          "CHICAGO SPECIFIC USER"
+        ],
+        "personas": [
+          {
+            "id": "per_ff35e6d0835a",
+            "name": "Maria Chen",
+            "occupation": "Independent Piano Instructor",
+            "country_code": "US",
+            "description": "Maria runs a bustling home studio in Lincoln Park with thirty students ranging from beginners to advanced. She spends her evenings manually tracking attendance, calculating late fees, and coordinating recital slots, often losing hours to ad"
+          },
+          {
+            "id": "per_ea94fc458625",
+            "name": "Maria Chen",
+            "occupation": "Studio Owner & Piano Teacher",
+            "country_code": "US",
+            "description": "Maria runs a busy piano studio in Chicago's Lincoln Park neighborhood, managing 15 teachers and over 200 students. She spends her days coordinating schedules, tracking teacher performance, and ensuring timely payments for recitals and make-"
+          }
+        ],
+        "failed_roles": [],
+        "script": [
+          "When a student has to miss a scheduled piano lesson due to illness or family conflict, what is the exact sequence of actions you currently take to communicate the cancellation, find an open slot for a make-up lesson, and adjust your accounts receivable or refund policy, and how many minutes of administrative overhead does that entire process typically consume?",
+          "For the student recitals you organize in Chicago, what specific pain points do you encounter when coordinating multiple students' performance times, collecting and tracking recital fees, and sending out invoices or receipts, and what manual workarounds (such as spreadsheets, paper forms, or text chains) do you currently rely on to bridge the gaps in your existing tools?",
+          "If an app existed that automatically handled the rescheduling of make-up lessons based on real-time availability across your studio calendar, generated and sent itemized invoices for both regular lessons and recital fees, and provided a digital ledger of paid versus outstanding balances, what concrete features would need to be present for you to consider switching away from your current method, and what would be the maximum monthly subscription fee you would be willing to pay to save that administrative time?"
+        ],
+        "interview_job": {
+          "status": "completed",
+          "completed": 1,
+          "failed": 0
+        },
+        "interview_answers": [
+          "Oh, that process is honestly a nightmare, and it’s one of the biggest drains on my time. When a student has to cancel, usually last minute, I first text or call the family directly to confirm they’re ",
+          "I usually start by building the recital schedule in a Google Sheet—listing each student, their piece, their teacher (me, in most cases), and the rough time slot based on how long each piece runs and h",
+          "If an app existed that could truly take the pressure off my plate, I’d need a few concrete things to feel confident switching. First, it would have to sync seamlessly with my existing Google Calendar "
+        ],
+        "report": {
+          "title": "A Scheduling and Billing App for Independent Piano",
+          "executive_summary": "The research study focuses on validating the demand for a specialized scheduling and billing application designed for independent piano teachers in Chicago. Based on qualitative insights gathered from a single completed interview with an independent instructor, there is clear evidence of severe administrative friction. Teachers currently rely on a fragmented ecosystem of Google Calendars, spreadsheets, group text chains, and paper ledgers to manage student recitals, cancellations, and billing. This disjointed workflow results in high mental load and significant time waste, estimated at 20 to 30 minutes per administrative task such as a cancellation. The interviewed persona, Maria Chen, expressed a strong willingness to pay up to $30 per month for an integrated solution, provided it seamlessly integrates with her existing Google Calendar and offers a trial period. While the sample size is extremely limited (N=1 interview, N=2 persona profiles), the depth of the pain points and the specific pricing threshold suggest a viable product-market fit hypothesis that requires broader quantitative validation.",
+          "key_findings": [
+            "Administrative workflows are highly fragmented across Google Calendar, spreadsheets, group text chains, and manual email templates, leading to high overhead (20-30 minutes per cancellation).",
+            "There is a critical disconnect between recital scheduling and billing systems, causing manual errors and delays when students drop out last minute.",
+            "The target user requires automated real-time rescheduling that syncs with Google Calendar to suggest make-up lessons and allow direct parental booking.",
+            "Maximum subscription willingness is established at $30/month, contingent on saving at least five hours of administrative work monthly.",
+            "Seamless integration with Google Calendar and a low-risk trial period are crucial decision factors for switching tools."
+          ],
+          "recommendations": [
+            "Prioritize the development of a seamless, two-way Google Calendar synchronization feature to address the primary integration need.",
+            "Implement a 30-day free trial period to allow users to test the app's impact on their administrative workload without risk.",
+            "Focus the initial marketing messaging on the specific time-saving benefits (e.g., 'Save 5+ hours a month') and the $30/month price point to align with the target user's value perception."
+          ],
+          "limitations": "This study is limited by a very small sample size, consisting of only one completed interview and two persona profiles (both representing the same archetype, 'The Organized Maestro'). There are no quantitative datasets, survey results, or behavioral simulation outputs provided. Consequently, the findings are highly indicative of the specific persona's needs but cannot be statistically generalized to the entire market of independent piano teachers in Chicago without further research."
+        },
+        "ai_review": {
+          "overall": 45,
+          "scores": {
+            "grounding": 55,
+            "specificity": 60,
+            "consistency": 30,
+            "honesty": 70,
+            "actionability": 75
+          },
+          "summary": "The study has strong actionable insights from a single interview but is severely undermined by internal contradictions: two personas share the same name but describe incompatible studios (home studio vs. 15-teacher operation), and the interview summary does not match the persona it is linked to. The empty evidence_claims and segments arrays further weaken traceability. The honesty about sample size is a strength, but the consistency failures are high-severity and must be resolved before any founder should rely on this research.",
+          "strengths": [
+            "The interview summary provides concrete, actionable details: 20–30 minutes of admin overhead per cancellation, specific tools used (Google Sheets, text chains, paper ledgers), and a clear willingness-to-pay threshold ($30/month).",
+            "The report correctly identifies the core pain points (fragmented workflows, recital/billing disconnect) and translates them into specific product requirements (Google Calendar sync, automated invoicing).",
+            "The limitations section is honest: it explicitly states N=1 interview, no quantitative data, and that findings are not statistically generalizable."
+          ],
+          "issues": [
+            {
+              "severity": "high",
+              "artifact": "persona:per_ff35e6d0835a",
+              "detail": "This persona (30 students, home studio, $55k–$70k income) contradicts the interview summary and the other persona (per_ea94fc458625), which describe a studio with 15 teachers and 200+ students. The interview is linked to per_ff35e6d0835a but its summary describes a much larger operation, creating a major consistency failure."
+            },
+            {
+              "severity": "high",
+              "artifact": "persona:per_ea94fc458625",
+              "detail": "This persona is named identically to per_ff35e6d0835a ('Maria Chen') but has different demographics (age 38 vs 34, Master's vs Bachelor's, $75k–$95k vs $55k–$70k) and a different bio (studio owner with 15 teachers vs home studio with 30 students). The study treats them as the same archetype but they are contradictory profiles."
+            },
+            {
+              "severity": "high",
+              "artifact": "report",
+              "detail": "The report claims 'N=2 persona profiles' but both personas are named 'Maria Chen' with conflicting bios, incomes, and studio sizes. It fails to acknowledge this duplication or contradiction, undermining the credibility of the persona work."
+            },
+            {
+              "severity": "medium",
+              "artifact": "evidence_claims",
+              "detail": "The evidence_claims array is completely empty. All findings in the interview and report are unsupported by formal evidence claims, making it impossible to verify traceability to the study brief or raw data."
+            },
+            {
+              "severity": "medium",
+              "artifact": "segments",
+              "detail": "The segments array is empty. No segmentation analysis was performed despite having two personas; the report treats them as a single archetype without explaining why segmentation was skipped."
+            },
+            {
+              "severity": "low",
+              "artifact": "report",
+              "detail": "The report states 'maximum willingness to pay is established at $30/month' based on a single interview. While the limitation is noted, the language 'established' overstates the confidence level for a single data point."
+            }
+          ],
+          "reviewed_artifacts": {
+            "personas": 2,
+            "segments": 0,
+            "evidence_claims": 0,
+            "interviews": 1,
+            "reports": 1
+          },
+          "served_by": "openrouter/dots-studio/dots-3-note-preview:free"
+        }
+      },
+      "served_by": {
+        "copilot": "openrouter/dots-studio/dots-3-note-preview:free",
+        "personas": [
+          "openrouter/dots-studio/dots-3-note-preview:free"
+        ],
+        "script": "openrouter/dots-studio/dots-3-note-preview:free",
+        "interview": [
+          "openrouter/dots-studio/dots-3-note-preview:free"
+        ],
+        "report": "openrouter/dots-studio/dots-3-note-preview:free",
+        "ai_review": "openrouter/dots-studio/dots-3-note-preview:free"
+      },
+      "study_id": "study_9c65ca03f5d54b02",
+      "elapsed_s": 175.0
+    }
+  ]
+}

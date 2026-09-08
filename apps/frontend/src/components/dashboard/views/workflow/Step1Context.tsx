@@ -83,11 +83,13 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
       : evidenceProbe.state === 'failed'
       ? `The evidence research run failed${
           evidenceProbe.message ? ` (${evidenceProbe.message})` : ''
-        } — nothing was collected, so personas will be inferred from your description. Retry it in the Evidence Laboratory.`
+        }${evidenceProbe.errorCode ? ` [${evidenceProbe.errorCode}]` : ''} — nothing was collected and nothing was substituted. Retry it in the Evidence Laboratory.`
       : evidenceProbe.state === 'timeout'
       ? 'Still searching — this can take a few minutes. Check the Evidence Laboratory.'
       : evidenceProbe.state === 'empty'
-      ? 'No evidence found — personas will be inferred from your description.'
+      ? evidenceProbe.noLiveEvidence
+        ? `The live search${evidenceProbe.provider ? ` (${evidenceProbe.provider})` : ''} returned no sources for this idea — no claims were written in their place; personas will be inferred from your description.`
+        : 'No evidence claims were extracted — personas will be inferred from your description.'
       : evidenceProbe.state === 'not_run'
       ? 'No evidence run yet for this study — personas will be inferred from your description.'
       : 'Could not check for supporting evidence right now.';

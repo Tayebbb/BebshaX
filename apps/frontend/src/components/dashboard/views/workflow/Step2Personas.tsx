@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, FlaskConical, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { Persona, PersonaRoleSuggestion } from '../../../../types';
+import type { FailedPersonaRole } from '../../../../services/api';
 import { EvidenceBadge, TemplateBadge, countEvidenceBacked } from '../../../../utils/personaEvidence';
 import { DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE } from './types';
 import { RequestIdTag } from '../../../common/RequestIdTag';
@@ -13,6 +14,10 @@ interface Step2PersonasProps {
   personaGenError: string | null;
   /** Request id of the failed generation call, when the backend returned one. */
   personaGenRequestId?: string | null;
+  /** Roles the last generation could NOT turn into a persona (explicit partial failure). */
+  failedRoles?: FailedPersonaRole[];
+  /** Routes that served the last generation batch (provenance). */
+  personaServedBy?: string[];
   isGeneratingPersonas: boolean;
   suggestedRoles: PersonaRoleSuggestion[];
   handleGeneratePersonas: () => Promise<void>;
@@ -30,6 +35,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
   personas,
   personaGenError,
   personaGenRequestId = null,
+  failedRoles = [],
+  personaServedBy = [],
   isGeneratingPersonas,
   suggestedRoles,
   handleGeneratePersonas,
@@ -63,6 +70,39 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                   </div>
                 )}
               </div>
+            )}
+            {failedRoles.length > 0 && (
+              <div
+                role="status"
+                data-testid="persona-partial-failure"
+                style={{
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  color: 'var(--status-warning-text, #f59e0b)',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  fontSize: '0.86rem',
+                }}
+              >
+                {failedRoles.length} role{failedRoles.length === 1 ? '' : 's'} could not be generated — nothing was
+                substituted. Regenerate to try again.
+                <ul style={{ margin: '6px 0 0 0', paddingLeft: '18px' }}>
+                  {failedRoles.map((f) => (
+                    <li key={f.role_id}>
+                      <strong>{f.role}</strong>: {f.detail}{' '}
+                      <code style={{ fontSize: '0.75rem', opacity: 0.8 }}>{f.error_code}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {personaServedBy.length > 0 && personas.length > 0 && (
+              <p
+                data-testid="persona-served-by"
+                style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}
+              >
+                Written by {personaServedBy.join(', ')} from this study’s brief — regenerate and they will differ.
+              </p>
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>

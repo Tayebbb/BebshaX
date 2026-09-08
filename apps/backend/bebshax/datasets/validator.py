@@ -34,10 +34,20 @@ def validate_persona_against_constraints(
     constraints = segment.get("constraints", {})
     segment_name = segment.get("name", "Unknown Segment")
 
+    # Observed constraints are keyed by the dataset's own column names; pick the
+    # age-like and budget-like numeric summaries when present.
+    age_stats = _numeric_constraint(constraints, ("age",))
+    budget_constraints = _numeric_constraint(constraints, ("budget", "spend", "income", "pay", "price", "cost", "allowance"))
+    if age_stats and "age_range" not in constraints:
+        age_range = [age_stats.get("min"), age_stats.get("max")]
+    else:
+        age_range = constraints.get("age_range")
+    if not budget_constraints:
+        budget_constraints = constraints.get("monthly_budget", {}) if isinstance(constraints.get("monthly_budget"), dict) else {}
+
     # 1. Age Validation
     age = persona.get("age")
-    age_range = constraints.get("age_range")
-    if age is not None and isinstance(age, (int, float)) and age_range and len(age_range) == 2:
+    if age is not None and isinstance(age, (int, float)) and age_range and len(age_range) == 2 and None not in age_range:
         min_age, max_age = age_range[0], age_range[1]
         if age < min_age - 5 or age > max_age + 8:
             violations.append(
@@ -53,7 +63,6 @@ def validate_persona_against_constraints(
             details["age"] = {"status": "VALID", "actual": age}
 
     # 2. Budget / Willingness-to-pay Validation
-    budget_constraints = constraints.get("monthly_budget", {})
     max_allowed_budget = budget_constraints.get("max")
     median_budget = budget_constraints.get("median")
 
@@ -63,7 +72,7 @@ def validate_persona_against_constraints(
         # If persona budget is > 2.2x maximum observed for a budget-conscious segment
         if extracted_budget > max_allowed_budget * 2.0:
             violations.append(
-                f"Persona stated budget (৳{extracted_budget:,.0f}) contradicts segment maximum (৳{max_allowed_budget:,.0f})."
+                f"Persona stated budget ({extracted_budget:,.0f}) contradicts segment maximum ({max_allowed_budget:,.0f})."
             )
             details["budget"] = {
                 "status": "CONTRADICTION",
@@ -72,7 +81,7 @@ def validate_persona_against_constraints(
             }
         elif extracted_budget > max_allowed_budget * 1.3:
             warnings.append(
-                f"Persona budget (৳{extracted_budget:,.0f}) exceeds typical segment budget (৳{median_budget:,.0f})."
+                f"Persona budget ({extracted_budget:,.0f}) exceeds typical segment budget ({(median_budget or max_allowed_budget):,.0f})."
             )
             details["budget"] = {
                 "status": "WARNING",
@@ -115,6 +124,15 @@ def validate_persona_against_constraints(
         "warnings": warnings,
         "details": details,
     }
+
+
+def _numeric_constraint(constraints: dict[str, Any], keywords: tuple[str, ...]) -> dict[str, Any]:
+    """First observed numeric summary (dict with min/max) whose column name
+    contains one of ``keywords`` — the segmenter keys constraints by column."""
+    for key, value in constraints.items():
+        if isinstance(value, dict) and "min" in value and "max" in value and any(k in key.lower() for k in keywords):
+            return value
+    return {}
 
 
 def _extract_persona_budget(persona: dict[str, Any]) -> float | None:

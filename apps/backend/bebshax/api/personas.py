@@ -14,7 +14,7 @@ from bebshax.api.jobs import get_job, start_job
 from bebshax.api.deps import get_session, owner_accessible, require_study_access
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
-from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
+from bebshax.db.models import MarketSegments, PersonaGenerationRuns, Personas, Studies
 from bebshax.db.models import DATA_SOURCE_LIVE
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.persona.generation import PersonaGenerationFailed
@@ -83,7 +83,7 @@ def _serialize_persona(p: Personas, segment_name: Optional[str] = None) -> dict[
         "data_source": getattr(p, "data_source", DATA_SOURCE_LIVE) or DATA_SOURCE_LIVE,
         "archetype": p.archetype,
         "tagline": getattr(p, "tagline", None),
-        "country_code": getattr(p, "country_code", "BD") or "BD",
+        "country_code": getattr(p, "country_code", None) or None,
         "personality": getattr(p, "personality", {}) or {},
         "detailed_attributes": detailed,
         "domain_attributes": domain_attrs,

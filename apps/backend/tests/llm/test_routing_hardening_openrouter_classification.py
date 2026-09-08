@@ -19,8 +19,35 @@ from bebshax.llm.adapters.openrouter_adapter import (
     RESPONSE_FORMAT_DROPPED_NOTE,
     OpenRouterAdapter,
     _map_http_status,
+    _retry_after_hint,
 )
 from bebshax.llm.failures import FAILURE_POLICIES
+
+_QUOTA_BODY = (
+    '{"error":{"message":"Rate limit exceeded: free-models-per-day","code":429,'
+    '"metadata":{"headers":{"X-RateLimit-Reset":"1788825600000"},"limit_source":"openrouter_free_tier_daily"}}}'
+)
+
+
+def test_retry_after_hint_prefers_the_header_then_the_reset_timestamp() -> None:
+    assert _retry_after_hint({"Retry-After": "42"}, "") == 42.0
+    # 1788825600000 ms = 2026-09-08T00:00:00Z; 1 h before that the hint is 3600 s.
+    assert _retry_after_hint({}, _QUOTA_BODY, now=1788825600.0 - 3600) == 3600.0
+    assert _retry_after_hint({}, _QUOTA_BODY, now=1788825600.0 + 5) is None  # already reset
+    assert _retry_after_hint({}, "no hint here") is None
+    assert _retry_after_hint(None, "") is None
+
+
+@pytest.mark.asyncio
+async def test_quota_failure_carries_the_reset_hint() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, text=_QUOTA_BODY, headers={"Retry-After": "1800"})
+
+    adapter = _adapter(handler)
+    with pytest.raises(AttemptFailed) as info:
+        await adapter.complete(_CAND, _request())
+    assert info.value.kind == FailureKind.QUOTA_EXHAUSTED
+    assert info.value.retry_after_s == 1800.0
 
 _CTX_BODY = json.dumps(
     {
@@ -37,7 +64,20 @@ _CTX_BODY = json.dumps(
     ("status", "body", "expected"),
     [
         (429, "", FailureKind.RATE_LIMITED),
+        (429, '{"error":{"message":"Rate limit exceeded: free-models-per-min"}}', FailureKind.RATE_LIMITED),
+        # Upstream per-model saturation (observed live): the model's shared pool, not our key.
+        (
+            429,
+            '{"error":{"message":"Provider returned error","code":429,"metadata":{"raw":"google/gemma-4-26b-a4b-it:free is temporarily rate-limited upstream. Please retry shortly","limit_source":"upstream_provider_shared_pool"}}}',
+            FailureKind.MODEL_UNAVAILABLE,
+        ),
         (402, '{"error":{"message":"Insufficient credits"}}', FailureKind.QUOTA_EXHAUSTED),
+        # The account's free-tier day cap (observed live after ~50 calls): a quota, not a burst.
+        (
+            429,
+            '{"error":{"message":"Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day","code":429,"metadata":{"headers":{"X-RateLimit-Limit":"50","X-RateLimit-Remaining":"0","X-RateLimit-Reset":"1788825600000"},"limit_source":"openrouter_free_tier_daily"}}}',
+            FailureKind.QUOTA_EXHAUSTED,
+        ),
         (408, "", FailureKind.TIMEOUT),
         (401, "", FailureKind.AUTH_INVALID),
         (403, "", FailureKind.AUTH_INVALID),

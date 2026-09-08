@@ -60,6 +60,12 @@ class LLMRequest(BaseModel):
     preferred_provider: str | None = None
     preferred_model: str | None = None
 
+    def retry_copy(self) -> "LLMRequest":
+        """The same request under a NEW request_id. Application-level retries
+        (an unusable reply is re-asked once) must not reuse the id: every
+        ``complete()`` call writes its own provenance row keyed by it."""
+        return self.model_copy(update={"request_id": uuid.uuid4().hex})
+
 
 class LLMResult(BaseModel):
     text: str

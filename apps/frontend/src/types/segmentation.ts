@@ -9,7 +9,9 @@ export interface UsableVariableSummary {
 }
 
 export interface SegmentationReadiness {
-  status: 'ready' | 'limited_data' | 'no_data';
+  /** `ready` only with >=20 observed records and a usable variable; otherwise
+   * segmentation cannot run — the platform never invents segments. */
+  status: 'ready' | 'insufficient_records' | 'no_data' | string;
   can_run: boolean;
   dataset_count: number;
   total_records: number;
@@ -27,7 +29,23 @@ export interface EvidenceCitation {
   category: string;
   status: string;
   confidence: number;
+  relevance?: number;
   rationale?: string;
+}
+
+/** Numeric summary or categorical frequencies computed from the cluster's rows. */
+export interface ObservedDistribution {
+  count?: number;
+  min?: number;
+  max?: number;
+  mean?: number;
+  median?: number;
+  p25?: number;
+  p75?: number;
+  std?: number;
+  unique_categories?: number;
+  top_categories?: Array<{ category: string; count: number; percentage: number }>;
+  percentages?: Record<string, number>;
 }
 
 export interface MarketSegment {
@@ -42,34 +60,23 @@ export interface MarketSegment {
   population_percentage: number;
   confidence_score: number;
   status?: 'data_backed' | 'inference_assisted' | 'insufficient_evidence' | string;
+  /** Observed-only characteristics. `partition_method` is `quantile_bands`
+   * (numeric bands over the real rows) or `categorical_grouping` (a grouping
+   * column in the dataset). `observed` holds per-variable distributions
+   * computed inside this cluster; nothing here is assumed. */
   characteristics: {
     name_hint?: string;
-    demographics?: {
-      age_range?: [number, number] | number[];
-      median_age?: number;
-      dominant_occupation?: string;
-      [key: string]: any;
-    };
-    economics?: {
-      monthly_budget?: {
-        min?: number;
-        median?: number;
-        max?: number;
-        currency?: string;
-        [key: string]: any;
-      };
-      [key: string]: any;
-    };
-    behavior?: {
-      study_hours_per_day?: number;
-      technology_familiarity?: string;
-      [key: string]: any;
-    };
-    needs?: string[];
+    partition_method?: 'quantile_bands' | 'categorical_grouping' | string;
+    partition_variable?: string;
+    band?: { lower: number; upper: number };
+    observed?: Record<string, ObservedDistribution>;
+    observed_constraints?: Record<string, any>;
     rule_description?: string;
+    interpretation_source?: string;
+    served_by?: string;
     [key: string]: any;
   };
-  variable_distributions: Record<string, any>;
+  variable_distributions: Record<string, ObservedDistribution | any>;
   evidence_citations: EvidenceCitation[];
   differentiation_summary?: string;
   created_at: string;
@@ -118,10 +125,14 @@ export interface ComparedSegmentMatrixItem {
   population_percentage: number;
   confidence_score: number;
   status: string;
-  median_budget: string;
-  budget_range: string;
-  age_range: string;
-  tech_familiarity: string;
+  /** The numeric variable the clusters were partitioned on (null for categorical groups). */
+  partition_variable: string | null;
+  /** `min–max` of the partition variable inside this segment, when measured. */
+  headline_range: string | null;
+  headline_median: number | null;
+  /** Dominant category per observed categorical variable. */
+  top_categories: Record<string, string>;
+  observed_variables: string[];
   evidence_citations_count: number;
   differentiation: string;
 }

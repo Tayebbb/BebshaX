@@ -15,9 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import get_session, user_can_write_study, user_owns_study
+from bebshax.api.errors import APIError
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
-from bebshax.behavioral.engine import BehavioralRunNotFound, BehavioralSimulationEngine, BehavioralTestNotFound
+from bebshax.behavioral.engine import BehavioralSimulationEngine
 from bebshax.behavioral.orm import (
     BehavioralInsights,
     BehavioralTestResults,
@@ -27,6 +28,7 @@ from bebshax.behavioral.orm import (
 )
 from bebshax.db.models import Personas, Studies
 from bebshax.llm.failures import LLMError
+from bebshax.utils.explicit_failures import LLMUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -258,9 +260,15 @@ async def create_behavioral_test(
     )
     session.add(test)
 
-    # Initial scenario
+    # Initial scenario — the researcher's own words; nothing is written for them.
     scenario_title = payload.scenario_title or payload.name
-    scenario_text = payload.scenario_text or payload.description or f"Evaluate {payload.test_type.replace('_', ' ')}"
+    scenario_text = (payload.scenario_text or payload.description or "").strip()
+    if not scenario_text:
+        raise APIError(
+            400,
+            "Describe the scenario the personas should react to (scenario_text or description).",
+            error_code="scenario_required",
+        )
     scenario = BehavioralTestScenarios(
         id=f"bts_{uuid.uuid4().hex[:16]}",
         behavioral_test_id=test_id,
@@ -560,10 +568,17 @@ async def trigger_behavioral_test_run(
             detail=f"Behavioral test '{test_id}' not found.",
         )
 
-    # Determine scenario snapshot
+    # Determine scenario snapshot — only the researcher's own text.
+    scenario_text = (payload.scenario_text or test.description or "").strip()
+    if not scenario_text:
+        raise APIError(
+            400,
+            "This test has no scenario text; add scenario_text before running it.",
+            error_code="scenario_required",
+        )
     scenario_snapshot = {
         "title": payload.scenario_title or test.name,
-        "scenario_text": payload.scenario_text or test.description or f"Evaluate {test.test_type}",
+        "scenario_text": scenario_text,
         "structured_parameters": payload.parameters or test.configuration or {},
     }
 
@@ -597,6 +612,23 @@ async def trigger_behavioral_test_run(
             )
         target_persona_ids = resolved
 
+    if not target_persona_ids:
+        raise APIError(
+            400,
+            "This study has no personas to simulate. Generate personas first; BebshaX does not simulate invented respondents.",
+            error_code="behavioral_requires_personas",
+        )
+
+    engine: Optional[BehavioralSimulationEngine] = getattr(request.app.state, "behavioral_engine", None)
+    if engine is None:
+        llm = getattr(request.app.state, "llm_router", None)
+        sm = getattr(request.app.state, "db_sessionmaker", None)
+        if llm and sm:
+            engine = BehavioralSimulationEngine(llm, sm)
+    if engine is None:
+        # Never create a run that nothing will execute.
+        raise LLMUnavailable("Behavioral simulation")
+
     run_id = f"btr_{uuid.uuid4().hex[:16]}"
     run = BehavioralTestRuns(
         id=run_id,
@@ -616,20 +648,12 @@ async def trigger_behavioral_test_run(
     session.add(run)
     await session.commit()
 
-    engine: Optional[BehavioralSimulationEngine] = getattr(request.app.state, "behavioral_engine", None)
-    if engine is None:
-        llm = getattr(request.app.state, "llm_router", None)
-        sm = getattr(request.app.state, "db_sessionmaker", None)
-        if llm and sm:
-            engine = BehavioralSimulationEngine(llm, sm)
-
-    if engine:
-        _track_run_task(
-            asyncio.create_task(
-                engine.execute_test_run(run_id=run_id, user_id=user.id if user else None)
-            ),
-            run_id,
-        )
+    _track_run_task(
+        asyncio.create_task(
+            engine.execute_test_run(run_id=run_id, user_id=user.id if user else None)
+        ),
+        run_id,
+    )
 
     return _serialize_run(run)
 

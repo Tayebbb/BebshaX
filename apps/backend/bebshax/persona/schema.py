@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -147,8 +147,10 @@ class PersonaProfile(BaseModel):
     version: int = 1
     generation_model: str | None = None
     tagline: str | None = None
-    country_code: str | None = "BD"
-    origin_country: str | None = "Bangladesh"
+    # Where the persona lives is the model's statement or unknown — never a
+    # platform default nationality.
+    country_code: str | None = None
+    origin_country: str | None = None
     personality: BigFivePersonality | None = None
     detailed_attributes: dict[str, Any] = Field(default_factory=dict)
     attributes: list[PersonaAttribute] = Field(default_factory=list)
@@ -256,8 +258,8 @@ def coerce_provenance(
         description=generated.description,
         generation_model=generation_model,
         tagline=getattr(generated, "tagline", None),
-        country_code=getattr(generated, "country_code", "BD") or "BD",
-        origin_country=getattr(generated, "origin_country", "Bangladesh") or "Bangladesh",
+        country_code=getattr(generated, "country_code", None) or None,
+        origin_country=getattr(generated, "origin_country", None) or None,
         personality=getattr(generated, "personality", None),
         detailed_attributes=getattr(generated, "detailed_attributes", {}) or {},
         attributes=attributes,

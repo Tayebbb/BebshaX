@@ -13,6 +13,7 @@ vi.mock('../src/services/api', () => {
     getEvidenceSummary: vi.fn(),
     updateStudy: vi.fn(),
     generateStudyPersonas: vi.fn(),
+    generateStudyPersonasDetailed: vi.fn(),
     triggerStudyResearch: vi.fn(),
     getConversation: vi.fn(),
   };
@@ -147,7 +148,7 @@ describe('Fix 2 — demo study is read-only in the workflow', () => {
     (api.getStudy as any).mockResolvedValue(study({ id: 'study_own', is_demo: false, step: 2 }));
     const refusalMsg =
       'This is a read-only example study — create your own study to generate personas.';
-    (api.generateStudyPersonas as any).mockRejectedValue(
+    (api.generateStudyPersonasDetailed as any).mockRejectedValue(
       Object.assign(new Error(refusalMsg), { status: 403 })
     );
 

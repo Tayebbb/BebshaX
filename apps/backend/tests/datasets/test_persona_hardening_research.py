@@ -20,6 +20,8 @@ class _StubLLM:
 
         class _Result:
             text = self._text
+            provider = "fake"
+            model = "stub"
 
         return _Result()
 

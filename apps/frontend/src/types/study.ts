@@ -112,6 +112,12 @@ export interface StudyReport {
     total_claims?: number;
     confidence_score?: number;
     demand_score?: number;
+    /** Always "llm" — a report is model-written or does not exist. */
+    synthesis_source?: string;
+    /** `provider/model` that synthesised this report version. */
+    served_by?: string | null;
+    llm_request_id?: string | null;
+    attempts?: number;
     [key: string]: any;
   };
   sentiment_score?: number;

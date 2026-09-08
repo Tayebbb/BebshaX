@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Optional
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.utils.safe_errors import safe_error_summary
@@ -17,7 +17,6 @@ from bebshax.db.models import (
     MarketSegments,
     PersonaGenerationRuns,
     Personas,
-    SegmentationRuns,
     Studies,
     _utcnow,
 )
@@ -235,17 +234,13 @@ class PersonaGenerationService:
             valid_count = 0
             warning_count = 0
 
-            # Match drafts to segments
-            seg_map = {s.name: s.id for s in segments}
+            # Drafts know their segment; fall back to the first segment only for
+            # drafts produced by callers that did not stamp one.
+            seg_ids = {s.id for s in segments}
             seg_id_fallback = segments[0].id
 
             for idx, draft in enumerate(drafts):
-                # find matching segment id
-                matched_sid = seg_id_fallback
-                for s in segments:
-                    if s.name in draft.archetype or s.name in draft.bio:
-                        matched_sid = s.id
-                        break
+                matched_sid = draft.segment_id if draft.segment_id in seg_ids else seg_id_fallback
 
                 persona_id = f"per_{uuid.uuid4().hex[:12]}"
                 p_entity = Personas(
@@ -259,9 +254,8 @@ class PersonaGenerationService:
                     status=draft.status,
                     version=1,
                     # The draft carries its true origin (provenance-derived
-                    # provider/model or the template label) — never a
-                    # fabricated constant.
-                    generation_model=draft.generation_model or "deterministic-empirical-generator",
+                    # provider/model) — never a fabricated constant.
+                    generation_model=draft.generation_model,
                     archetype=draft.archetype,
                     tagline=draft.tagline,
                     country_code=draft.country_code,
@@ -392,43 +386,47 @@ class PersonaGenerationService:
         study = await self.session.get(Studies, study_id)
 
         # Generate fresh draft
-        if segment:
-            drafts = await generate_personas_for_study(
-                study=study,
-                segments=[segment],
-                target_count=1,
-                distribution_strategy="equal",
-                evidence_claims=claims,
-                llm_service=self.llm_service,
+        if segment is None:
+            raise ValueError(
+                f"Persona '{persona_id}' has no market segment to regenerate against; run segmentation first."
             )
-            if drafts:
-                draft = drafts[0]
-                persona.version += 1
-                persona.name = draft.name
-                persona.archetype = draft.archetype
-                persona.tagline = draft.tagline
-                persona.country_code = draft.country_code
-                persona.personality = draft.personality
-                persona.detailed_attributes = draft.detailed_attributes
-                persona.demographics = draft.demographics
-                persona.bio = draft.bio
-                persona.quote = draft.quote
-                persona.goals = draft.goals
-                persona.needs = draft.needs
-                persona.pain_points = draft.pain_points
-                persona.behaviors = draft.behaviors
-                persona.preferences = draft.preferences
-                persona.motivations = draft.motivations
-                persona.objections = draft.objections
-                persona.commercial_profile = draft.commercial_profile
-                persona.technology_profile = draft.technology_profile
-                persona.evidence_citations = draft.evidence_citations
-                persona.dataset_refs = draft.dataset_refs
-                persona.grounding_score = draft.grounding_score
-                persona.confidence = draft.confidence
-                persona.status = draft.status
-                persona.validation_warnings = draft.validation_warnings
-                persona.updated_at = _utcnow()
-                await self.session.commit()
+        drafts = await generate_personas_for_study(
+            study=study,
+            segments=[segment],
+            target_count=1,
+            distribution_strategy="equal",
+            evidence_claims=claims,
+            llm_service=self.llm_service,
+        )
+        if drafts:
+            draft = drafts[0]
+            persona.version += 1
+            persona.name = draft.name
+            persona.generation_model = draft.generation_model
+            persona.archetype = draft.archetype
+            persona.tagline = draft.tagline
+            persona.country_code = draft.country_code
+            persona.personality = draft.personality
+            persona.detailed_attributes = draft.detailed_attributes
+            persona.demographics = draft.demographics
+            persona.bio = draft.bio
+            persona.quote = draft.quote
+            persona.goals = draft.goals
+            persona.needs = draft.needs
+            persona.pain_points = draft.pain_points
+            persona.behaviors = draft.behaviors
+            persona.preferences = draft.preferences
+            persona.motivations = draft.motivations
+            persona.objections = draft.objections
+            persona.commercial_profile = draft.commercial_profile
+            persona.technology_profile = draft.technology_profile
+            persona.evidence_citations = draft.evidence_citations
+            persona.dataset_refs = draft.dataset_refs
+            persona.grounding_score = draft.grounding_score
+            persona.confidence = draft.confidence
+            persona.status = draft.status
+            persona.validation_warnings = draft.validation_warnings
+            persona.updated_at = _utcnow()
+            await self.session.commit()
 
         return persona

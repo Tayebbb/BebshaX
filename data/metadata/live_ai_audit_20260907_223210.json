@@ -1,0 +1,135 @@
+{
+  "generated_at": "2026-09-07T22:32:10.923959+00:00",
+  "verdict": "FAIL",
+  "checks_passed": 9,
+  "checks_total": 20,
+  "questions_per_script": 3,
+  "repeat": false,
+  "checks": [
+    {
+      "name": "A: signup",
+      "passed": true,
+      "detail": "audit+c1c7a4494d@bebshax.local"
+    },
+    {
+      "name": "A: create study",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: copilot reply",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: copilot names its route",
+      "passed": true,
+      "detail": "kilo/stepfun/step-3.7-flash:free"
+    },
+    {
+      "name": "A: copilot reply is about the idea",
+      "passed": true,
+      "detail": "That's a really targeted, high-potential idea for an underserved segment of recreational sea anglers in Norway — most cu"
+    },
+    {
+      "name": "A: suggest roles",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "A: generate personas",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "A: generate script",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "A: generate report",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "A: AI review",
+      "passed": false,
+      "detail": "HTTP 400 error_code='nothing_to_review' detail='This study has no personas, evidence, interviews, segments or report yet — run the pipeline first, then ask for an AI review.'"
+    },
+    {
+      "name": "B: signup",
+      "passed": true,
+      "detail": "audit+1d7fca3824@bebshax.local"
+    },
+    {
+      "name": "B: create study",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: copilot reply",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "B: suggest roles",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "B: generate personas",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "B: generate script",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "B: generate report",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "B: AI review",
+      "passed": false,
+      "detail": "HTTP 400 error_code='nothing_to_review' detail='This study has no personas, evidence, interviews, segments or report yet — run the pipeline first, then ask for an AI review.'"
+    },
+    {
+      "name": "A: no leakage of the other idea's domain",
+      "passed": true,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "B: no leakage of the other idea's domain",
+      "passed": true,
+      "detail": "leaked=[]"
+    }
+  ],
+  "runs": [
+    {
+      "label": "A",
+      "idea": "A subscription box that delivers fresh, locally sourced fishing bait and seasonal tackle to recreational sea anglers along the coast of Norway.",
+      "steps": {
+        "copilot": {
+          "reply": "That's a really targeted, high-potential idea for an underserved segment of recreational sea anglers in Norway — most current bait and tackle purchasing is done in-person at local coastal shops, which often have limited seasonal stock and inconsistent freshness of live bait. For this, User Interviews are the best first study type to validate core demand, willingness to pay, and key friction points with current purchasing habits. To narrow the study focus: are you initially targeting casual weekend recreational anglers, or more frequent avid anglers who fish 2+ times per month along the Norwegian coast?",
+          "goal_card": null
+        }
+      },
+      "served_by": {
+        "copilot": "kilo/stepfun/step-3.7-flash:free"
+      },
+      "study_id": "study_9328dfc0456c4e3a",
+      "elapsed_s": 134.9
+    },
+    {
+      "label": "B",
+      "idea": "A scheduling and billing app for independent piano teachers in Chicago who run student recitals and juggle make-up lessons.",
+      "steps": {},
+      "served_by": {},
+      "study_id": "study_0a51c9cccf5e4aeb",
+      "elapsed_s": 6.3
+    }
+  ]
+}

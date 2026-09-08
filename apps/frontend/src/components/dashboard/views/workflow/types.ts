@@ -38,8 +38,13 @@ export interface CopilotMessage {
   requestId?: string | null;
 }
 
-/** The backend's keyword-template copilot engine — a reply served by it is NOT AI output. */
+/** Legacy keyword-template copilot route — a reply served by it is NOT AI output.
+ *  Current backends never emit it (there is no template path any more); the
+ *  predicate stays so an older backend build can still be labelled honestly. */
 export const TEMPLATE_COPILOT_ROUTE = 'bebshax/copilot-engine';
 
+/** True only for the legacy template route. `fallback_reason` is NOT a template
+ *  signal: today it carries `retried_after_unparseable_reply`, i.e. a genuine
+ *  model reply that needed one retry — approvable like any other. */
 export const isTemplateReply = (r: { served_by?: string; fallback_reason?: string | null }): boolean =>
-  r.served_by === TEMPLATE_COPILOT_ROUTE || (typeof r.fallback_reason === 'string' && r.fallback_reason.length > 0);
+  r.served_by === TEMPLATE_COPILOT_ROUTE;

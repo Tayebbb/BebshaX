@@ -55,17 +55,23 @@ def test_datasets_upload_profiling_and_persona_generation_flow(
     assert all(d["id"] != ds_id for d in anon_list.json())
     assert api_test_app.get(f"/api/datasets/{ds_id}").status_code == 404
 
-    # 4. Generate grounded personas from dataset
+    # 4. Generate grounded personas from dataset — every persona is written by
+    # the (fake) model. The shared route's scripted interview lines are cleared
+    # so it answers persona JSON for all four; there is no offline template.
+    fake_adapter = api_test_app.app.state.llm_adapters["pollinations"]
+    for route in fake_adapter._routes.values():
+        route.replies.clear()
     gen_res = api_test_app.post(
         f"/api/datasets/{ds_id}/generate-personas",
         json={"requested_count": 4, "business_name": "Price Tracker"},
         headers=auth_headers,
     )
-    assert gen_res.status_code == 200
+    assert gen_res.status_code == 200, gen_res.text
     gen_data = gen_res.json()
     assert gen_data["requested_count"] == 4
-    assert gen_data["generated_count"] == 4
+    assert gen_data["generated_count"] == 4 and gen_data["failed_count"] == 0
     assert len(gen_data["personas"]) == 4
+    assert gen_data["served_by"] == ["pollinations/deepseek-r1"]
     assert "distribution" in gen_data
     assert "validation_summary" in gen_data
 

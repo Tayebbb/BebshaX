@@ -23,7 +23,7 @@ from bebshax.api.deps import (
     user_can_write_study,
     user_owns_study,
 )
-from bebshax.api.errors import request_id_of
+from bebshax.api.errors import APIError, request_id_of
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
@@ -31,6 +31,7 @@ from bebshax.interview.engine import ConversationNotFound, InterviewEngine, Inte
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.tenancy import ANONYMOUS_OWNER_ID
+from bebshax.utils.explicit_failures import LLMUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -366,8 +367,8 @@ async def get_study_interview_detail(
     )
     insights = list((await session.execute(ins_stmt)).scalars())
 
-    # Generate current suggested questions
-    suggested = request.app.state.interview_engine.generate_suggested_questions(
+    # Suggested follow-ups, written by the model from this transcript (empty when unavailable).
+    suggested = await request.app.state.interview_engine.generate_suggested_questions(
         conversation, persona, turns
     )
 
@@ -769,6 +770,23 @@ def _batch_registry(app) -> dict[str, dict[str, Any]]:
     return reg
 
 
+_BATCH_TURN_RETRY_DELAY_S = 20.0  # one provider-wide cooldown window is 30-60 s
+
+
+async def _ask_with_one_retry(engine, conversation_id: str, question: str, entry: dict[str, Any]) -> None:
+    """One interview turn; a transient route exhaustion (every candidate cooling
+    or timing out at once) is retried ONCE after a pause and recorded in the
+    job entry. Anything else — and a second exhaustion — propagates: the turn
+    is never faked and the interview is marked failed honestly."""
+    try:
+        await engine.ask(conversation_id, question)
+    except AllCandidatesFailed:
+        entry["retried_turns"] = int(entry.get("retried_turns") or 0) + 1
+        logger.info("batch turn exhausted all routes for %s; retrying once in %.0fs", conversation_id, _BATCH_TURN_RETRY_DELAY_S)
+        await asyncio.sleep(_BATCH_TURN_RETRY_DELAY_S)
+        await engine.ask(conversation_id, question)
+
+
 async def _run_batch_job(
     app,
     job: dict[str, Any],
@@ -797,7 +815,7 @@ async def _run_batch_job(
                 length_tier="standard",
             )
             for q in questions:
-                await engine.ask(conv.id, q)
+                await _ask_with_one_retry(engine, conv.id, q, entry)
             await engine.complete(conv.id)
             entry["status"] = "completed"
             entry["interview_id"] = conv.id
@@ -849,22 +867,26 @@ async def batch_run_study_interviews(
     if not personas:
         raise HTTPException(status_code=400, detail="No personas available for this study")
 
-    # 2. Resolve questions
-    questions = (payload and payload.questions) or study.script_questions or []
+    # 2. Resolve questions — the study's generated script or the caller's own
+    # list. There is no default questionnaire: a script must exist first (R2).
+    questions = [q for q in ((payload and payload.questions) or study.script_questions or []) if str(q).strip()]
     if not questions:
-        questions = [
-            f"How do you currently handle challenges related to {study.prompt or study.title}?",
-            "What solutions or tools have you tried in the past, and what was missing?",
-            f"What is your reaction to a solution priced around {study.pricing_hypothesis or 'standard market rates'}?",
-            "What would be your biggest hesitation or barrier before adopting this?",
-        ]
+        raise APIError(
+            400,
+            "This study has no interview script yet. Generate the script (or pass your own questions) before running interviews.",
+            error_code="script_required",
+        )
 
     if getattr(request.app.state, "interview_engine", None) is None:
         llm_router = getattr(request.app.state, "llm_router", None)
         session_maker = getattr(request.app.state, "db_sessionmaker", None)
         memory = getattr(request.app.state, "memory_service", None)
         if session_maker and llm_router:
-            request.app.state.interview_engine = InterviewEngine(llm_router, session_maker, memory=memory)
+            request.app.state.interview_engine = InterviewEngine(
+                llm_router, session_maker, memory=memory, suggest_questions=True
+            )
+    if getattr(request.app.state, "interview_engine", None) is None:
+        raise LLMUnavailable("Batch interviews")
 
     # Detach plain values before the request session closes.
     personas_data = [{"id": p.id, "name": p.name} for p in personas]

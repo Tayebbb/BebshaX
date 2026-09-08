@@ -21,6 +21,7 @@ import { api } from '../../../services/api';
 import { useDialogA11y } from '../../../utils/useDialogA11y';
 import {
   MarketSegment,
+  ObservedDistribution,
   SegmentationReadiness,
   SegmentationRun,
   SegmentComparisonResult,
@@ -31,6 +32,39 @@ interface SegmentationViewProps {
   onNavigateToEvidence?: () => void;
   onProceedToPersonas?: (selectedSegmentId?: string) => void;
 }
+
+const fmt = (n: number | undefined | null): string =>
+  typeof n === 'number' && Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
+
+/** What the dataset actually measured for a segment — the partition variable's
+ * range/median and the dominant category per observed categorical variable.
+ * Segments carry no assumed demographics, currency or tech level. */
+const observedFacts = (segment: MarketSegment) => {
+  const chars = segment.characteristics || {};
+  const observed = (chars.observed || segment.variable_distributions || {}) as Record<string, ObservedDistribution>;
+  const partitionVariable = chars.partition_variable as string | undefined;
+  const primary = partitionVariable ? observed[partitionVariable] : undefined;
+  const dominant = Object.entries(observed)
+    .filter(([, d]) => d && Array.isArray(d.top_categories) && d.top_categories.length > 0)
+    .map(([name, d]) => `${name}: ${d.top_categories![0].category}`)
+    .slice(0, 3);
+  const constraints = (chars.observed_constraints || {}) as Record<string, unknown>;
+  const constraintBits = Object.entries(constraints)
+    .filter(([k, v]) => k !== 'rule_description' && (typeof v === 'string' || typeof v === 'number'))
+    .map(([k, v]) => `${k}: ${String(v)}`)
+    .slice(0, 3);
+  return {
+    partitionLabel: partitionVariable ? `${partitionVariable.replace(/_/g, ' ')} range` : 'Grouping',
+    headline: primary && typeof primary.min === 'number' && typeof primary.max === 'number'
+      ? `${fmt(primary.min)}–${fmt(primary.max)}`
+      : chars.partition_method === 'categorical_grouping'
+      ? String(chars.name_hint || segment.cluster_label)
+      : '—',
+    median: primary && typeof primary.median === 'number' ? fmt(primary.median) : '—',
+    dominant: (dominant.length ? dominant : constraintBits).join(' · ') || 'No categorical variables observed',
+    observedVariables: Object.keys(observed),
+  };
+};
 
 export const SegmentationView: React.FC<SegmentationViewProps> = ({
   studyId,
@@ -57,7 +91,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
   // Selection & Deep Dive
   const [selectedSegment, setSelectedSegment] = useState<MarketSegment | null>(null);
-  const [modalTab, setModalTab] = useState<'overview' | 'demographics' | 'economics' | 'evidence' | 'provenance'>('overview');
+  const [modalTab, setModalTab] = useState<'overview' | 'observed' | 'evidence' | 'provenance'>('overview');
   const [comparedSegmentIds, setComparedSegmentIds] = useState<string[]>([]);
   const [comparisonResult, setComparisonResult] = useState<SegmentComparisonResult | null>(null);
   const [isComparing, setIsComparing] = useState<boolean>(false);
@@ -260,12 +294,12 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 className={`text-sm font-semibold capitalize mt-0.5 block ${
                   readiness?.status === 'ready'
                     ? 'text-emerald-400'
-                    : readiness?.status === 'limited_data'
+                    : readiness?.status === 'insufficient_records'
                     ? 'text-amber-400'
                     : 'text-rose-400'
                 }`}
               >
-                {readiness?.status?.replace('_', ' ') || 'Checking...'}
+                {readiness?.status?.replace(/_/g, ' ') || 'Checking...'}
               </span>
             </div>
             <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-lg">
@@ -300,14 +334,14 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 className={`p-2 rounded-lg mt-0.5 ${
                   readiness.status === 'ready'
                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : readiness.status === 'limited_data'
+                    : readiness.status === 'insufficient_records'
                     ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
                     : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
                 }`}
               >
                 {readiness.status === 'ready' ? (
                   <CheckCircle2 className="w-5 h-5" />
-                ) : readiness.status === 'limited_data' ? (
+                ) : readiness.status === 'insufficient_records' ? (
                   <HelpCircle className="w-5 h-5" />
                 ) : (
                   <AlertCircle className="w-5 h-5" />
@@ -320,12 +354,12 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     className={`text-xs px-2.5 py-0.5 rounded-full font-medium uppercase tracking-wider ${
                       readiness.status === 'ready'
                         ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                        : readiness.status === 'limited_data'
+                        : readiness.status === 'insufficient_records'
                         ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
                         : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
                     }`}
                   >
-                    {readiness.status.replace('_', ' ')}
+                    {readiness.status.replace(/_/g, ' ')}
                   </span>
                 </div>
                 <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-3xl leading-relaxed">
@@ -532,15 +566,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-testid="segments-grid">
           {filteredSegments.map((segment) => {
             const isCompared = comparedSegmentIds.includes(segment.id);
-            const econ = segment.characteristics?.economics?.monthly_budget;
-            const demo = segment.characteristics?.demographics;
-            const behav = segment.characteristics?.behavior;
-
-            const medianBudget = econ?.median ? `৳${econ.median.toLocaleString()}` : 'N/A';
-            const budgetRange =
-              econ?.min && econ?.max ? `৳${econ.min}–৳${econ.max}` : medianBudget;
-            const ageRange =
-              demo?.age_range ? `${demo.age_range[0]}–${demo.age_range[1]} yrs` : '—';
+            const facts = observedFacts(segment);
 
             return (
               <div
@@ -611,21 +637,21 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     {segment.description}
                   </p>
 
-                  {/* Key Attribute Pills */}
+                  {/* Observed facts — only what the dataset measured for this cluster */}
                   <div className="grid grid-cols-2 gap-2 bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg mb-4 text-xs">
                     <div>
-                      <span className="text-[0.72rem] text-[var(--text-secondary)] block">Budget Range</span>
-                      <span className="font-semibold text-teal-400 font-mono">{budgetRange}</span>
-                    </div>
-                    <div>
-                      <span className="text-[0.72rem] text-[var(--text-secondary)] block">Age Cohort</span>
-                      <span className="font-semibold text-[var(--text-primary)] font-mono">{ageRange}</span>
-                    </div>
-                    <div>
-                      <span className="text-[0.72rem] text-[var(--text-secondary)] block">Tech Familiarity</span>
-                      <span className="font-semibold text-[var(--text-primary)]">
-                        {behav?.technology_familiarity || 'Not stated'}
+                      <span className="text-[0.72rem] text-[var(--text-secondary)] block">
+                        {facts.partitionLabel}
                       </span>
+                      <span className="font-semibold text-teal-400 font-mono">{facts.headline}</span>
+                    </div>
+                    <div>
+                      <span className="text-[0.72rem] text-[var(--text-secondary)] block">Median</span>
+                      <span className="font-semibold text-[var(--text-primary)] font-mono">{facts.median}</span>
+                    </div>
+                    <div>
+                      <span className="text-[0.72rem] text-[var(--text-secondary)] block">Dominant traits</span>
+                      <span className="font-semibold text-[var(--text-primary)] line-clamp-2">{facts.dominant}</span>
                     </div>
                     <div>
                       <span className="text-[0.72rem] text-[var(--text-secondary)] block">Confidence</span>
@@ -755,34 +781,44 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[var(--text-secondary)] font-medium">Median Budget</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Partition variable</td>
                     {comparisonResult.comparison_matrix.map((c) => (
                       <td key={c.segment_id} className="p-3 font-mono text-[var(--accent-cyan)] font-bold">
-                        {c.median_budget}
+                        {c.partition_variable ? c.partition_variable.replace(/_/g, ' ') : 'categorical grouping'}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[var(--text-secondary)] font-medium">Budget Range</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Observed range</td>
                     {comparisonResult.comparison_matrix.map((c) => (
                       <td key={c.segment_id} className="p-3 text-[var(--text-primary)] font-mono">
-                        {c.budget_range}
+                        {c.headline_range ?? '— not measured'}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[var(--text-secondary)] font-medium">Age Cohort</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Observed median</td>
                     {comparisonResult.comparison_matrix.map((c) => (
                       <td key={c.segment_id} className="p-3 text-[var(--text-primary)] font-mono">
-                        {c.age_range}
+                        {c.headline_median != null ? fmt(c.headline_median) : '— not measured'}
                       </td>
                     ))}
                   </tr>
                   <tr>
-                    <td className="p-3 text-[var(--text-secondary)] font-medium">Tech Familiarity</td>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Dominant categories</td>
                     {comparisonResult.comparison_matrix.map((c) => (
                       <td key={c.segment_id} className="p-3 text-[var(--text-primary)]">
-                        {c.tech_familiarity}
+                        {Object.entries(c.top_categories || {}).length
+                          ? Object.entries(c.top_categories).map(([k, v]) => `${k}: ${v}`).join(' · ')
+                          : '— none observed'}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr>
+                    <td className="p-3 text-[var(--text-secondary)] font-medium">Variables measured</td>
+                    {comparisonResult.comparison_matrix.map((c) => (
+                      <td key={c.segment_id} className="p-3 text-[var(--text-secondary)] font-mono text-xs">
+                        {(c.observed_variables || []).join(', ') || '—'}
                       </td>
                     ))}
                   </tr>
@@ -867,8 +903,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             <div className="flex items-center gap-2 px-6 pt-3 border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)] overflow-x-auto">
               {[
                 { id: 'overview', label: 'Overview' },
-                { id: 'demographics', label: 'Demographics' },
-                { id: 'economics', label: 'Economics & WTP' },
+                { id: 'observed', label: 'Observed variables' },
                 { id: 'evidence', label: `Evidence (${selectedSegment.evidence_citations?.length || 0})` },
                 { id: 'provenance', label: 'Dataset Provenance' },
               ].map((t) => (
@@ -913,124 +948,78 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
                   <div>
                     <h4 className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
-                      Identified Needs & Pain Points
+                      Interpretation provenance
                     </h4>
-                    {(selectedSegment.characteristics?.needs?.length ?? 0) > 0 ? (
-                      <div className="space-y-2">
-                        {(selectedSegment.characteristics?.needs ?? []).map(
-                          (need, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-center gap-2.5 bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg"
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0" />
-                              <span>{need}</span>
-                            </div>
-                          )
-                        )}
-                      </div>
-                    ) : (
-                      <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg text-[var(--text-secondary)]">
-                        No needs identified from the data yet.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {modalTab === 'demographics' && (
-                <div className="space-y-4" data-testid="tab-content-demographics">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
-                      <span className="text-[0.72rem] text-[var(--text-secondary)] block uppercase font-bold">Age Range</span>
-                      <span className="text-base font-bold text-teal-400 font-mono mt-1 block">
-                        {selectedSegment.characteristics?.demographics?.age_range
-                          ? `${selectedSegment.characteristics.demographics.age_range[0]} – ${selectedSegment.characteristics.demographics.age_range[1]} years`
-                          : '—'}
-                      </span>
-                    </div>
-                    <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
-                      <span className="text-[0.72rem] text-[var(--text-secondary)] block uppercase font-bold">Median Age</span>
-                      <span className="text-base font-bold text-[var(--text-primary)] font-mono mt-1 block">
-                        {selectedSegment.characteristics?.demographics?.median_age != null
-                          ? `${selectedSegment.characteristics.demographics.median_age} years old`
-                          : '—'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
-                    <span className="text-[0.72rem] text-[var(--text-secondary)] block uppercase font-bold">Dominant Role / Occupation</span>
-                    <span className="text-sm font-semibold text-[var(--text-primary)] mt-1 block">
-                      {selectedSegment.characteristics?.demographics?.dominant_occupation || 'Not stated'}
-                    </span>
-                  </div>
-
-                  <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
-                    <span className="text-[0.72rem] text-[var(--text-secondary)] block uppercase font-bold">Study Intensity</span>
-                    <span className="text-sm font-semibold text-cyan-400 mt-1 block font-mono">
-                      {selectedSegment.characteristics?.behavior?.study_hours_per_day != null
-                        ? `${selectedSegment.characteristics.behavior.study_hours_per_day} hours/day`
-                        : '—'}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {modalTab === 'economics' && (
-                <div className="space-y-4" data-testid="tab-content-economics">
-                  {selectedSegment.characteristics?.economics?.monthly_budget ? (
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg">
-                        <span className="text-[0.72rem] text-[var(--text-secondary)] block">Min Budget</span>
-                        <span className="text-sm font-bold text-[var(--text-primary)] font-mono">
-                          {selectedSegment.characteristics.economics.monthly_budget.min != null
-                            ? `৳${selectedSegment.characteristics.economics.monthly_budget.min}`
-                            : '—'}
-                        </span>
-                      </div>
-                      <div className="bg-[var(--bg-card)] border border-teal-500/40 p-3 rounded-lg">
-                        <span className="text-[0.72rem] text-teal-400 font-semibold block">Median Budget</span>
-                        <span className="text-base font-bold text-teal-300 font-mono">
-                          {selectedSegment.characteristics.economics.monthly_budget.median != null
-                            ? `৳${selectedSegment.characteristics.economics.monthly_budget.median}`
-                            : '—'}
-                        </span>
-                      </div>
-                      <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg">
-                        <span className="text-[0.72rem] text-[var(--text-secondary)] block">Max Budget</span>
-                        <span className="text-sm font-bold text-[var(--text-primary)] font-mono">
-                          {selectedSegment.characteristics.economics.monthly_budget.max != null
-                            ? `৳${selectedSegment.characteristics.economics.monthly_budget.max}`
-                            : '—'}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg text-[var(--text-secondary)] text-center">
-                      No budget data extracted for this segment yet.
+                    <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg text-[var(--text-secondary)]">
+                      {selectedSegment.characteristics?.served_by
+                        ? `Name and description written by ${selectedSegment.characteristics.served_by} from this cluster's observed statistics.`
+                        : 'Name and description written by the model from this cluster\u2019s observed statistics.'}
                     </p>
-                  )}
+                  </div>
+                </div>
+              )}
 
-                  <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-4 rounded-lg leading-relaxed">
-                    <span className="text-[0.72rem] text-[var(--text-secondary)] block uppercase font-bold mb-1">
-                      Willingness-to-Pay Analysis
+              {modalTab === 'observed' && (
+                <div className="space-y-4" data-testid="tab-content-observed">
+                  <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
+                    <span className="text-[0.72rem] text-[var(--text-secondary)] block uppercase font-bold">How this cluster was formed</span>
+                    <span className="text-sm font-semibold text-[var(--text-primary)] mt-1 block">
+                      {selectedSegment.characteristics?.partition_method === 'quantile_bands'
+                        ? `Quantile band of ${String(selectedSegment.characteristics.partition_variable).replace(/_/g, ' ')}` +
+                          (selectedSegment.characteristics.band
+                            ? ` (${fmt(selectedSegment.characteristics.band.lower)} – ${fmt(selectedSegment.characteristics.band.upper)})`
+                            : '')
+                        : selectedSegment.characteristics?.partition_method === 'categorical_grouping'
+                        ? `Rows sharing a value of the grouping column`
+                        : 'Partition method not recorded'}
                     </span>
-                    {selectedSegment.characteristics?.economics?.monthly_budget?.median != null ? (
-                      <p className="text-[var(--text-secondary)]">
-                        Price threshold analysis indicates sensitivity above the median budget of{' '}
-                        <span className="text-teal-400 font-semibold">
-                          ৳{selectedSegment.characteristics.economics.monthly_budget.median}/mo
-                        </span>
-                        . General market guidance, not a finding from this study: micro-billing and mobile
-                        wallet integrations (bKash/Nagad) tend to maximize conversion.
-                      </p>
-                    ) : (
-                      <p className="text-[var(--text-secondary)]">
-                        Not enough pricing data to analyse willingness to pay.
+                    {selectedSegment.characteristics?.rule_description && (
+                      <p className="text-[0.72rem] text-[var(--text-secondary)] font-mono mt-1">
+                        {selectedSegment.characteristics.rule_description}
                       </p>
                     )}
                   </div>
+
+                  {Object.entries(
+                    (selectedSegment.characteristics?.observed || selectedSegment.variable_distributions || {}) as Record<string, ObservedDistribution>
+                  ).filter(([, d]) => d && typeof d === 'object').length === 0 ? (
+                    <p className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg text-[var(--text-secondary)] text-center">
+                      The dataset carried no further variables for this cluster — nothing is assumed in their place.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {Object.entries(
+                        (selectedSegment.characteristics?.observed || selectedSegment.variable_distributions || {}) as Record<string, ObservedDistribution>
+                      )
+                        .filter(([, d]) => d && typeof d === 'object')
+                        .map(([name, d]) => (
+                          <div key={name} className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3.5 rounded-lg">
+                            <span className="text-[0.72rem] text-teal-400 font-semibold block font-mono">{name}</span>
+                            {typeof d.median === 'number' ? (
+                              <div className="mt-1 grid grid-cols-3 gap-2 text-[var(--text-primary)] font-mono">
+                                <span><span className="text-[var(--text-secondary)] text-[0.7rem] block">min</span>{fmt(d.min)}</span>
+                                <span><span className="text-[var(--text-secondary)] text-[0.7rem] block">median</span>{fmt(d.median)}</span>
+                                <span><span className="text-[var(--text-secondary)] text-[0.7rem] block">max</span>{fmt(d.max)}</span>
+                              </div>
+                            ) : Array.isArray(d.top_categories) && d.top_categories.length > 0 ? (
+                              <ul className="mt-1 space-y-0.5">
+                                {d.top_categories.slice(0, 4).map((cat) => (
+                                  <li key={cat.category} className="flex justify-between text-[var(--text-primary)]">
+                                    <span className="truncate">{cat.category}</span>
+                                    <span className="font-mono text-[var(--text-secondary)]">{cat.percentage}%</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <span className="text-[var(--text-secondary)]">—</span>
+                            )}
+                            {typeof d.count === 'number' && (
+                              <span className="text-[0.7rem] text-[var(--text-secondary)] block mt-1">{d.count.toLocaleString()} observations</span>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </div>
               )}
 

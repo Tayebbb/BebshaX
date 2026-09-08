@@ -42,6 +42,46 @@ import { parseApiError, toApiErrorInstance, ApiErrorLike } from '../utils/apiErr
 
 const API_BASE = import.meta.env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 
+/** One role the backend could not turn into a persona (explicit, never faked). */
+export interface FailedPersonaRole {
+  role_id: string;
+  role: string;
+  error_code: string;
+  detail: string;
+}
+
+/** `POST /study/generate-personas` envelope. */
+export interface GeneratePersonasResult {
+  personas: Persona[];
+  failed_roles: FailedPersonaRole[];
+  served_by: string[];
+}
+
+/** One finding of the independent AI review. */
+export interface AiReviewIssue {
+  severity: 'high' | 'medium' | 'low' | string;
+  artifact: string;
+  detail: string;
+}
+
+/** `POST /studies/{id}/ai-review` — rubric-scored verdict written by a separate
+ * CRITIC model pass; `served_by` names the route that reviewed. */
+export interface AiReviewVerdict {
+  study_id: string;
+  persona_id?: string;
+  overall_score: number;
+  dimension_scores: Record<string, number>;
+  strengths: string[];
+  issues: AiReviewIssue[];
+  verdict: string;
+  scope: 'study' | 'persona' | string;
+  reviewed_artifacts: Record<string, number>;
+  served_by: string | null;
+  llm_request_id: string | null;
+  attempts: number;
+  reviewed_at: string;
+}
+
 /** Timeout budgets (ms). Endpoints that transit the LLM path regularly measure
  * 30-120s+ on free-tier providers — aborting earlier silently killed real
  * replies. Pure CRUD stays snappy so failures surface fast. */
@@ -1401,6 +1441,19 @@ export const api = {
     roles?: PersonaRoleSuggestion[],
     title?: string
   ): Promise<Persona[]> {
+    const result = await this.generateStudyPersonasDetailed(studyId, prompt, roles, title);
+    return result.personas;
+  },
+
+  /** Full envelope: personas written by the model for THIS study, plus the
+   * roles whose generation failed (each with its error code) and the routes
+   * that served the batch. Nothing is generated locally in live mode. */
+  async generateStudyPersonasDetailed(
+    studyId?: string,
+    prompt?: string,
+    roles?: PersonaRoleSuggestion[],
+    title?: string
+  ): Promise<GeneratePersonasResult> {
     if (!this.isMockMode()) {
       // Live mode: no silent mock substitution. A generation failure must be
       // visible to the user — fabricated personas would poison their research.
@@ -1420,19 +1473,51 @@ export const api = {
         throw await apiErrorFrom(res, 'Persona generation failed');
       }
       lastKnownLive = true;
-      const data = await res.json();
-      if (!Array.isArray(data) || data.length === 0) {
-        throw new Error('Persona generation returned no personas');
+      const data = (await res.json()) as GeneratePersonasResult | Persona[];
+      // Backend envelope {personas, failed_roles, served_by}; a bare array is
+      // tolerated for older servers.
+      const envelope: GeneratePersonasResult = Array.isArray(data)
+        ? { personas: data, failed_roles: [], served_by: [] }
+        : { personas: data.personas ?? [], failed_roles: data.failed_roles ?? [], served_by: data.served_by ?? [] };
+      if (envelope.personas.length === 0) {
+        const reasons = envelope.failed_roles.map((f) => `${f.role}: ${f.detail}`).join('; ');
+        throw new Error(reasons ? `No persona could be generated — ${reasons}` : 'Persona generation returned no personas');
       }
       const { mockStore } = await loadMocks();
-      data.forEach((p) => {
+      envelope.personas.forEach((p) => {
         mockStore.personas[p.id] = p;
       });
-      return data;
+      return envelope;
     }
 
     const { mockGeneratedPersonas } = await loadMocks();
-    return mockGeneratedPersonas(prompt, title);
+    return { personas: await mockGeneratedPersonas(prompt, title), failed_roles: [], served_by: ['mock/local'] };
+  },
+
+  // =========================================================================
+  // Independent AI review (CRITIC pass over the study's own artefacts)
+  // =========================================================================
+
+  /** Live only: a review is a fresh model judgement, never a mock. In mock mode
+   * the caller receives an explicit error instead of a canned verdict. */
+  async requestStudyAiReview(studyId: string, personaId?: string): Promise<AiReviewVerdict> {
+    if (this.isMockMode()) {
+      throw new Error('AI review needs the live backend — it is a fresh model judgement and is never mocked.');
+    }
+    const path = personaId
+      ? `${API_BASE}/studies/${studyId}/personas/${personaId}/ai-review`
+      : `${API_BASE}/studies/${studyId}/ai-review`;
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
+      signal: AbortSignal.timeout(TIMEOUT_MS.LLM),
+    });
+    if (!res.ok) {
+      lastKnownLive = false;
+      throw await apiErrorFrom(res, 'AI review failed');
+    }
+    lastKnownLive = true;
+    return (await res.json()) as AiReviewVerdict;
   },
 
   // =========================================================================
@@ -2201,10 +2286,11 @@ export const api = {
         population_percentage: idx === 0 ? 45.0 : 35.0,
         confidence_score: idx === 0 ? 0.92 : 0.88,
         status: 'data_backed',
-        median_budget: idx === 0 ? '৳350' : '৳750',
-        budget_range: idx === 0 ? '৳250–৳500' : '৳500–৳1200',
-        age_range: idx === 0 ? '18–22' : '19–23',
-        tech_familiarity: idx === 0 ? 'Medium' : 'High',
+        partition_variable: 'monthly_budget',
+        headline_range: idx === 0 ? '250–500' : '500–1200',
+        headline_median: idx === 0 ? 350 : 750,
+        top_categories: idx === 0 ? { device: 'phone' } : { device: 'laptop' },
+        observed_variables: ['monthly_budget', 'age', 'device'],
         evidence_citations_count: 1,
         differentiation: idx === 0 ? 'Lower spending tolerance and micro-subscription preference' : 'High daily urgency and readiness to pay for score improvement',
       })),

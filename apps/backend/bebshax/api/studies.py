@@ -25,9 +25,11 @@ from bebshax.api.limiter import limiter
 from bebshax.api.jobs import get_job, start_job
 from bebshax.db.models import Base, SavedAudiences, Studies, StudyReports
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
-from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.json_utils import parse_llm_json, unwrap_list
+from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.tenancy import ANONYMOUS_OWNER_ID
 from bebshax.tenancy import PUBLIC_OWNER_IDS as _PUBLIC_OWNER_IDS
+from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 from bebshax.utils.title_generator import generate_deterministic_study_title
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.research.report_service import StudyReportService
@@ -36,6 +38,9 @@ from bebshax.research.service import ResearchEngineService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["studies"])
+
+# An unusable script reply is retried once with the same request, then refused.
+_SCRIPT_MAX_ATTEMPTS = 2
 
 # Back-compat aliases: api/payments.py (frozen path) and any straggler still
 # import the old underscore-private names from this module. New code should
@@ -138,6 +143,7 @@ def _serialize_study(s: Studies) -> dict[str, Any]:
         "persona_ids": s.persona_ids or [],
         "suggested_roles": s.suggested_roles or [],
         "script_questions": s.script_questions or [],
+        "script_meta": s.script_meta,
         "findings": s.findings,
         "is_demo": s.is_demo,
         "duration_text": s.duration_text or "Just created • No personas yet",
@@ -557,67 +563,85 @@ async def generate_script_questions(
         study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
     )
 
-    prompt = (payload and payload.prompt) or study.prompt or study.title or "Business Idea"
-    target_aud = study.target_audience or "Target User"
-    pricing = study.pricing_hypothesis or "Market Pricing"
+    prompt = (payload and payload.prompt) or study.prompt or study.title
+    if not (prompt or "").strip():
+        raise HTTPException(status_code=400, detail="Describe the business idea before generating a script.")
     q_count = (payload and payload.question_count) or 5
 
     llm_service = getattr(request.app.state, "llm_service", None) if request else None
+    if llm_service is None:
+        raise LLMUnavailable("Interview script generation")
 
-    generated_questions = []
-    fallback_reason: Optional[str] = None if llm_service else "llm_service_unavailable"
-    if llm_service:
+    sys_prompt = (
+        "You are BebshaX Research Script Architect. Generate high-impact, open-ended qualitative "
+        "interview questions for validating a customer discovery hypothesis. "
+        "Do not ask leading questions. Focus on discovering current habits, existing workarounds, "
+        "frustrations, willingness to pay, and decision-making criteria. Every question must be "
+        "specific to the study context below — never generic. "
+        'Return ONLY a JSON object with one key "questions" holding an array of strings, '
+        'e.g. {"questions": ["Question 1", "Question 2"]}. '
+        + UNTRUSTED_RULE
+    )
+    context_lines = [f"BUSINESS IDEA: {prompt}"]
+    if study.target_audience:
+        context_lines.append(f"TARGET AUDIENCE: {study.target_audience}")
+    if study.pricing_hypothesis:
+        context_lines.append(f"PRICING HYPOTHESIS: {study.pricing_hypothesis}")
+    if study.goal:
+        context_lines.append(f"RESEARCH GOAL: {study.goal}")
+    user_msg = (
+        untrusted_block("STUDY_CONTEXT", "\n".join(context_lines), source="study")
+        + f"\nGenerate exactly {q_count} sequential interview questions inside the \"questions\" array."
+    )
+    req = LLMRequest(
+        task=TaskType.STRUCTURED_OUTPUT,
+        messages=[
+            ChatMessage(role="system", content=sys_prompt),
+            ChatMessage(role="user", content=user_msg),
+        ],
+        json_mode=True,
+        temperature=0.4,
+    )
+
+    def _questions_of(parsed: Any) -> list[str]:
+        items = unwrap_list(parsed, keys=("questions", "interview_questions", "script"))
+        return [str(q).strip() for q in items if isinstance(q, (str, int, float)) and str(q).strip()]
+
+    generated_questions: list[str] = []
+    res = None
+    attempts = 0
+    for attempts in range(1, _SCRIPT_MAX_ATTEMPTS + 1):
+        if attempts > 1:
+            req = req.retry_copy()
+        res = await llm_service.complete(req)  # LLMError propagates (503/413 envelope)
         try:
-            sys_prompt = (
-                "You are BebshaX Research Script Architect. Generate high-impact, open-ended qualitative "
-                "interview questions for validating a customer discovery hypothesis. "
-                "Do not ask leading questions. Focus on discovering current habits, existing workarounds, "
-                "frustrations, willingness to pay, and decision-making criteria. "
-                "Return ONLY a JSON array of strings, e.g. [\"Question 1\", \"Question 2\", ...]."
-            )
-            user_msg = (
-                f"Business Idea: {prompt}\n"
-                f"Target Audience: {target_aud}\n"
-                f"Pricing Hypothesis: {pricing}\n"
-                f"Generate exactly {q_count} sequential interview questions in JSON array format."
-            )
-            req = LLMRequest(
-                task=TaskType.STRUCTURED_OUTPUT,
-                messages=[
-                    ChatMessage(role="system", content=sys_prompt),
-                    ChatMessage(role="user", content=user_msg),
-                ],
-                json_mode=True,
-                temperature=0.4,
-            )
-            res = await llm_service.complete(req)
             parsed = parse_llm_json(res.text)
-            if isinstance(parsed, list) and len(parsed) >= 2:
-                generated_questions = [str(q).strip() for q in parsed if str(q).strip()]
-            elif isinstance(parsed, dict) and "questions" in parsed and isinstance(parsed["questions"], list):
-                generated_questions = [str(q).strip() for q in parsed["questions"] if str(q).strip()]
-            if not generated_questions:
-                fallback_reason = "llm_unusable_response"
-        except Exception as exc:
-            # Same fail-soft to template questions, but loud and marked in the
-            # payload so canned questions never impersonate LLM output.
-            logger.warning(
-                "script-question LLM generation failed for study %s — serving static template questions",
-                study_id,
-                exc_info=True,
-            )
-            fallback_reason = f"llm_error:{type(exc).__name__}"
-
+        except ValueError:
+            parsed = None
+        generated_questions = _questions_of(parsed)
+        if len(generated_questions) >= 2:
+            break
+        logger.warning("script generation reply unusable for study %s (attempt %d)", study_id, attempts)
+        generated_questions = []
     if not generated_questions:
-        generated_questions = [
-            f"How do you currently handle tasks related to {prompt}, and what is the most frustrating part of that process?",
-            f"What other tools, services, or manual workarounds have you tried, and why did they fall short?",
-            f"If an automated solution solved this completely for you, how would that change your daily or weekly workflow?",
-            f"When considering a solution like this at {pricing}, what would make it an immediate yes vs an easy pass?",
-            "What potential concerns or hesitations would you have before trusting this in your daily routine?",
-        ]
+        raise UnusableModelOutput(
+            "script_unparseable",
+            f"The model's reply could not be turned into interview questions after {attempts} attempts; "
+            "no template was substituted. Please try again.",
+            attempts=attempts,
+            served_by=f"{res.provider}/{res.model}" if res is not None else None,
+        )
 
+    served_by = f"{res.provider}/{res.model}"
+    llm_request_id = getattr(getattr(res, "provenance", None), "request_id", None)
     study.script_questions = generated_questions
+    study.script_meta = {
+        "source": "llm",
+        "served_by": served_by,
+        "llm_request_id": llm_request_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "attempts": attempts,
+    }
     study.updated_at = datetime.now(timezone.utc)
     await session.commit()
 
@@ -625,8 +649,10 @@ async def generate_script_questions(
         "study_id": study_id,
         "questions": generated_questions,
         "count": len(generated_questions),
-        "source": "fallback_static" if fallback_reason else "llm",
-        "fallback_reason": fallback_reason,
+        "source": "llm",
+        "served_by": served_by,
+        "llm_request_id": llm_request_id,
+        "fallback_reason": "retried_after_unparseable_reply" if attempts > 1 else None,
     }
 
 
@@ -654,7 +680,10 @@ async def trigger_study_research(
         # Fallback inline engine if not registered
         llm_service = getattr(request.app.state, "llm_service", None) if request else None
         vector_engine = getattr(request.app.state, "vector_engine", None) if request else None
-        research_engine = ResearchEngineService(llm_service=llm_service, vector_engine=vector_engine)
+        search_provider = getattr(request.app.state, "research_search_provider", None) if request else None
+        research_engine = ResearchEngineService(
+            llm_service=llm_service, vector_engine=vector_engine, search_provider=search_provider
+        )
 
     effective_user_id = (current_user.id if current_user else None) or study.user_id or ANONYMOUS_OWNER_ID
     run = await research_engine.run_study_research(
@@ -670,6 +699,8 @@ async def trigger_study_research(
         "source_count": run.source_count,
         "claim_count": run.claim_count,
         "dataset_candidate_count": run.dataset_candidate_count,
+        "summary": (run.step_progress or {}).get("summary") or {},
+        "error_message": run.error_message,
     }
 
 

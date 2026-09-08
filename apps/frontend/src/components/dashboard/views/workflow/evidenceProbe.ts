@@ -8,8 +8,8 @@ export type EvidenceProbe =
   | { state: 'checking' }
   | { state: 'searching' }
   | { state: 'found'; claims: number; sources: number }
-  | { state: 'empty' }
-  | { state: 'failed'; message?: string }
+  | { state: 'empty'; noLiveEvidence?: boolean; provider?: string }
+  | { state: 'failed'; message?: string; errorCode?: string }
   | { state: 'timeout' }
   | { state: 'not_run' }
   | { state: 'unavailable' };
@@ -34,16 +34,32 @@ export const nextEvidenceProbe = (
   if (!summary) return { state: 'unavailable' };
 
   const run = summary.latest_run;
+  // Provenance markers the run wrote (plan/queries source, evidence provider,
+  // no_live_evidence, claims_status, error_code) — see research/service.py.
+  const runSummary = (run?.step_progress as { summary?: Record<string, unknown> } | undefined)?.summary ?? {};
   if ((summary.total_claims ?? 0) > 0) {
     return { state: 'found', claims: summary.total_claims, sources: summary.total_sources ?? 0 };
   }
   if (run?.status === 'failed') {
-    return { state: 'failed', message: run.error_message || undefined };
+    const errorCode = typeof runSummary.error_code === 'string' ? runSummary.error_code : undefined;
+    return {
+      state: 'failed',
+      ...(run.error_message ? { message: run.error_message } : {}),
+      ...(errorCode ? { errorCode } : {}),
+    };
   }
   if (isResearchInFlight(run?.status ?? summary.research_status)) {
     // Polling is bounded, so the last attempt must resolve to something true
     // instead of leaving the line on "Looking for…" forever.
     return attemptsLeft > 0 ? { state: 'searching' } : { state: 'timeout' };
   }
-  return { state: run ? 'empty' : 'not_run' };
+  if (run) {
+    const provider = typeof runSummary.evidence_provider === 'string' ? runSummary.evidence_provider : undefined;
+    return {
+      state: 'empty',
+      ...(runSummary.no_live_evidence === true ? { noLiveEvidence: true } : {}),
+      ...(provider ? { provider } : {}),
+    };
+  }
+  return { state: 'not_run' };
 };

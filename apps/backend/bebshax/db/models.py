@@ -13,7 +13,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from bebshax.llm.adapters.embeddings import CANONICAL_DIM
-from bebshax.llm.failures import FailureKind
 from bebshax.llm.types import TaskType
 
 
@@ -210,7 +209,7 @@ class Personas(Base):
     )
     archetype: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     tagline: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    country_code: Mapped[Optional[str]] = mapped_column(String(16), default="BD")
+    country_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     personality: Mapped[dict] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=dict
     )
@@ -294,6 +293,11 @@ class Studies(Base):
     )
     script_questions: Mapped[list[str]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=list
+    )
+    # Provenance of script_questions: {source: "llm", served_by, llm_request_id,
+    # generated_at}. None = no generated script (there is no template path).
+    script_meta: Mapped[Optional[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True, default=None
     )
     findings: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True

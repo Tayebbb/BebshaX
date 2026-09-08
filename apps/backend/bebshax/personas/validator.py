@@ -65,19 +65,23 @@ def validate_synthetic_persona(
         except (ValueError, TypeError):
             warnings.append("Age is not a valid integer.")
 
-    # 2. Economic & Monthly Budget Validation
+    # 2. Economic & Monthly Budget Validation (currency-neutral: the persona's
+    # own currency label is echoed, never a hard-coded symbol).
     comm = persona_dict.get("commercial_profile", {}) or {}
-    budget = comm.get("monthly_budget_bdt")
+    budget = comm.get("monthly_budget", comm.get("monthly_budget_bdt"))
+    currency = str(comm.get("currency") or ("BDT" if "monthly_budget_bdt" in comm else "")).strip()
+    unit = f" {currency}" if currency else ""
     if budget is not None:
         try:
             budget_num = float(budget)
             seg_econ = segment_characteristics.get("economics", {}).get("monthly_budget", {}) or {}
-            if isinstance(seg_econ, dict):
-                min_b = float(seg_econ.get("min", 200)) * 0.7
-                max_b = float(seg_econ.get("max", 1500)) * 1.3
+            if isinstance(seg_econ, dict) and ("min" in seg_econ or "max" in seg_econ):
+                min_b = float(seg_econ.get("min", 0)) * 0.7
+                max_b = float(seg_econ.get("max", float("inf"))) * 1.3
                 if not (min_b <= budget_num <= max_b):
                     warnings.append(
-                        f"Monthly budget (৳{budget_num:.0f}) deviates significantly from segment bounds (৳{seg_econ.get('min', 200)}–৳{seg_econ.get('max', 1000)})."
+                        f"Monthly budget ({budget_num:.0f}{unit}) deviates significantly from segment bounds "
+                        f"({seg_econ.get('min', '?')}–{seg_econ.get('max', '?')}{unit})."
                     )
         except (ValueError, TypeError):
             pass

@@ -1,46 +1,64 @@
 """Research query generation for study ideas.
 
-Generates targeted research queries across Problem, Competition, Pricing,
-Behavior, and Complaints using LLMService with deterministic rule fallback.
+The model writes 5–7 search queries for THIS idea/audience/pricing (Problem,
+Competition, Pricing, Behaviour, Complaints). The result always says where it
+came from: ``"llm"`` for model-written queries; ``"derived"`` only when no LLM
+is wired, in which case the queries are transparent recombinations of the
+study's own words (labelled, never presented as analysis). An unusable model
+reply is retried once, then fails explicitly.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import Optional
 
+from bebshax.llm.json_utils import parse_llm_json, unwrap_list
+from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+from bebshax.utils.explicit_failures import UnusableModelOutput
 
 logger = logging.getLogger(__name__)
 
+QUERY_GENERATION_FAILED = "query_generation_failed"
+_MAX_ATTEMPTS = 2
 
-def generate_deterministic_queries(
+
+@dataclass
+class QuerySet:
+    queries: list[str] = field(default_factory=list)
+    source: str = "llm"  # "llm" | "derived"
+    served_by: Optional[str] = None
+    attempts: int = 0
+
+
+def derive_queries_from_study_text(
     idea: str,
     target_audience: Optional[str] = None,
     pricing_hypothesis: Optional[str] = None,
 ) -> list[str]:
-    """Generate 5-8 targeted search queries deterministically without LLMs."""
-    clean_idea = re.sub(r"^(i'm building|we are building|i want to build|a platform for|an app for)\s+", "", idea.strip(), flags=re.IGNORECASE)
-    # Extract core subject
+    """Transparent recombination of the study's OWN words (no LLM, no analysis).
+    Used only when no LLM service is wired and always labelled ``derived``."""
+    clean_idea = re.sub(
+        r"^(i'm building|we are building|i want to build|a platform for|an app for)\s+",
+        "",
+        idea.strip(),
+        flags=re.IGNORECASE,
+    )
     words = clean_idea.split()
     core_topic = " ".join(words[:6]) if len(words) > 6 else clean_idea
-    audience = target_audience.strip() if target_audience else "users"
-
+    audience = target_audience.strip() if target_audience else ""
     queries = [
-        f"{audience} {core_topic} pain points problems",
-        f"{core_topic} competitors alternatives solutions",
-        f"{core_topic} {audience} willingness to pay pricing",
-        f"how {audience} currently handle {core_topic}",
-        f"{core_topic} complaints friction drawbacks",
+        f"{audience} {core_topic} problems".strip(),
+        f"{core_topic} alternatives",
+        f"{core_topic} {audience} pricing".strip(),
+        f"{core_topic} adoption behaviour",
     ]
-
     if pricing_hypothesis and pricing_hypothesis.strip():
-        clean_price = pricing_hypothesis.strip()
-        queries.append(f"{core_topic} subscription cost {clean_price}")
-
+        queries.append(f"{core_topic} {pricing_hypothesis.strip()}")
     return queries
 
 
@@ -49,53 +67,60 @@ async def generate_research_queries(
     target_audience: Optional[str] = None,
     pricing_hypothesis: Optional[str] = None,
     llm_service: Optional[LLMService] = None,
-) -> list[str]:
-    """Generate high-signal research queries using LLMService with deterministic fallback."""
+) -> QuerySet:
+    """Queries for the evidence search, with their provenance."""
     if not idea or not idea.strip():
-        return generate_deterministic_queries("product research study", target_audience, pricing_hypothesis)
-
+        raise ValueError("A business idea is required to generate research queries.")
     if not llm_service:
-        return generate_deterministic_queries(idea, target_audience, pricing_hypothesis)
+        return QuerySet(
+            queries=derive_queries_from_study_text(idea, target_audience, pricing_hypothesis),
+            source="derived",
+        )
 
     system_prompt = (
         "You are an expert product researcher. Given a product idea, target audience, and pricing hypothesis, "
         "generate 5 to 7 specific, high-signal research search queries across 5 categories: "
-        "Problem, Competition, Pricing, User Behavior, Complaints. "
-        "Output ONLY a valid JSON array of strings, e.g. [\"query 1\", \"query 2\", ...]."
+        "Problem, Competition, Pricing, User Behavior, Complaints. Queries must name the concrete product "
+        "category, market and audience from the brief — never generic phrases. "
+        'Output ONLY a valid JSON object with one key "queries" holding an array of strings, '
+        'e.g. {"queries": ["query 1", "query 2"]}. '
+        + UNTRUSTED_RULE
     )
-
-    user_content = f"Product Idea: {idea}\n"
+    brief = [f"PRODUCT IDEA: {idea}"]
     if target_audience:
-        user_content += f"Target Audience: {target_audience}\n"
+        brief.append(f"TARGET AUDIENCE: {target_audience}")
     if pricing_hypothesis:
-        user_content += f"Pricing Hypothesis: {pricing_hypothesis}\n"
-
+        brief.append(f"PRICING HYPOTHESIS: {pricing_hypothesis}")
     request = LLMRequest(
         task=TaskType.STRUCTURED_OUTPUT,
         messages=[
             ChatMessage(role="system", content=system_prompt),
-            ChatMessage(role="user", content=user_content),
+            ChatMessage(role="user", content=untrusted_block("RESEARCH_BRIEF", "\n".join(brief), source="study")),
         ],
         json_mode=True,
         temperature=0.2,
         max_output_tokens=300,
     )
 
-    try:
-        result = await llm_service.complete(request)
-        text = result.text.strip()
-        # Parse JSON array
-        match = re.search(r"\[.*\]", text, re.DOTALL)
-        if match:
-            parsed = json.loads(match.group(0))
-            if isinstance(parsed, list) and len(parsed) >= 3:
-                return [str(q).strip() for q in parsed if str(q).strip()]
-    except Exception:
-        # Deterministic queries are an acceptable stand-in, but the swap must
-        # be visible in logs, not silent.
-        logger.warning(
-            "LLM research-query generation failed — using deterministic rule queries",
-            exc_info=True,
-        )
+    served_by = None
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        if attempt > 1:
+            request = request.retry_copy()
+        result = await llm_service.complete(request)  # LLMError propagates
+        served_by = f"{result.provider}/{result.model}"
+        try:
+            parsed = parse_llm_json(result.text)
+        except ValueError:
+            parsed = None
+        items = unwrap_list(parsed, keys=("queries", "search_queries"))
+        queries = [str(q).strip() for q in items if isinstance(q, (str, int, float)) and str(q).strip()]
+        if len(queries) >= 3:
+            return QuerySet(queries=queries[:8], source="llm", served_by=served_by, attempts=attempt)
+        logger.warning("research-query reply unusable (attempt %d/%d)", attempt, _MAX_ATTEMPTS)
 
-    return generate_deterministic_queries(idea, target_audience, pricing_hypothesis)
+    raise UnusableModelOutput(
+        QUERY_GENERATION_FAILED,
+        f"The model's research-query reply could not be used after {_MAX_ATTEMPTS} attempts.",
+        attempts=_MAX_ATTEMPTS,
+        served_by=served_by,
+    )

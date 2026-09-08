@@ -72,10 +72,17 @@ const mockSegments: MarketSegment[] = [
     confidence_score: 0.92,
     status: 'data_backed',
     characteristics: {
-      demographics: { age_range: [18, 22], median_age: 20, dominant_occupation: 'Undergrad Student' },
-      economics: { monthly_budget: { min: 250, median: 350, max: 500, currency: 'BDT' } },
-      behavior: { study_hours_per_day: 4.5, technology_familiarity: 'Medium' },
-      needs: ['Affordable micro-subscriptions', 'Offline mobile mode'],
+      name_hint: 'monthly_budget 250–500',
+      partition_method: 'quantile_bands',
+      partition_variable: 'monthly_budget',
+      band: { lower: 250, upper: 500 },
+      observed: {
+        monthly_budget: { count: 540, min: 250, median: 350, max: 500 },
+        age: { count: 540, min: 18, median: 20, max: 22 },
+        device: { count: 540, top_categories: [{ category: 'phone', count: 500, percentage: 92.6 }] },
+      },
+      interpretation_source: 'llm',
+      served_by: 'pollinations/deepseek-r1',
     },
     variable_distributions: { monthly_budget: { min: 250, median: 350, max: 500, count: 540 } },
     evidence_citations: [
@@ -97,10 +104,15 @@ const mockSegments: MarketSegment[] = [
     confidence_score: 0.88,
     status: 'data_backed',
     characteristics: {
-      demographics: { age_range: [19, 23], median_age: 21, dominant_occupation: 'Admission Candidate' },
-      economics: { monthly_budget: { min: 500, median: 750, max: 1200, currency: 'BDT' } },
-      behavior: { study_hours_per_day: 7.2, technology_familiarity: 'High' },
-      needs: ['Mock test analytics', 'Dynamic daily revision schedules'],
+      name_hint: 'monthly_budget 500–1200',
+      partition_method: 'quantile_bands',
+      partition_variable: 'monthly_budget',
+      band: { lower: 500, upper: 1200 },
+      observed: {
+        monthly_budget: { count: 420, min: 500, median: 750, max: 1200 },
+        age: { count: 420, min: 19, median: 21, max: 23 },
+        device: { count: 420, top_categories: [{ category: 'laptop', count: 300, percentage: 71.4 }] },
+      },
     },
     variable_distributions: { monthly_budget: { min: 500, median: 750, max: 1200, count: 420 } },
     evidence_citations: [
@@ -140,10 +152,11 @@ const mockComparison: SegmentComparisonResult = {
       population_percentage: 45.0,
       confidence_score: 0.92,
       status: 'data_backed',
-      median_budget: '৳350',
-      budget_range: '৳250–৳500',
-      age_range: '18–22 yrs',
-      tech_familiarity: 'Medium',
+      partition_variable: 'monthly_budget',
+      headline_range: '250–500',
+      headline_median: 350,
+      top_categories: { device: 'phone' },
+      observed_variables: ['monthly_budget', 'age', 'device'],
       evidence_citations_count: 1,
       differentiation: 'Lower spending tolerance',
     },
@@ -155,10 +168,11 @@ const mockComparison: SegmentComparisonResult = {
       population_percentage: 35.0,
       confidence_score: 0.88,
       status: 'data_backed',
-      median_budget: '৳750',
-      budget_range: '৳500–৳1200',
-      age_range: '19–23 yrs',
-      tech_familiarity: 'High',
+      partition_variable: 'monthly_budget',
+      headline_range: '500–1200',
+      headline_median: 750,
+      top_categories: { device: 'laptop' },
+      observed_variables: ['monthly_budget', 'age', 'device'],
       evidence_citations_count: 1,
       differentiation: 'High urgency for score improvement',
     },
@@ -209,17 +223,17 @@ describe('SegmentationView Component', () => {
     // Modal is open
     expect(await screen.findByTestId('segment-detail-modal')).toBeInTheDocument();
     expect(screen.getByTestId('tab-content-overview')).toBeInTheDocument();
+    expect(screen.getByText(/written by pollinations\/deepseek-r1/i)).toBeInTheDocument();
 
-    // Switch to Demographics tab
-    fireEvent.click(screen.getByTestId('modal-tab-demographics'));
-    expect(await screen.findByTestId('tab-content-demographics')).toBeInTheDocument();
-    expect(screen.getByText(/18 – 22 years/i)).toBeInTheDocument();
-
-    // Switch to Economics tab
-    fireEvent.click(screen.getByTestId('modal-tab-economics'));
-    const econTab = await screen.findByTestId('tab-content-economics');
-    expect(econTab).toBeInTheDocument();
-    expect(econTab.textContent).toContain('350');
+    // Observed variables tab: the real per-cluster distributions, no assumed fields
+    fireEvent.click(screen.getByTestId('modal-tab-observed'));
+    const observedTab = await screen.findByTestId('tab-content-observed');
+    expect(observedTab.textContent).toContain('Quantile band of monthly budget');
+    expect(observedTab.textContent).toContain('350');
+    expect(observedTab.textContent).toContain('phone');
+    expect(observedTab.textContent).toContain('540 observations');
+    expect(observedTab.textContent).not.toContain('৳');
+    expect(observedTab.textContent).not.toContain('Tech Familiarity');
 
     // Switch to Evidence tab
     fireEvent.click(screen.getByTestId('modal-tab-evidence'));
@@ -254,8 +268,11 @@ describe('SegmentationView Component', () => {
     });
 
     // Verify comparison modal table
-    expect(await screen.findByTestId('comparison-modal')).toBeInTheDocument();
+    const comparisonModal = await screen.findByTestId('comparison-modal');
     expect(screen.getByText('Side-by-Side Segment Comparison')).toBeInTheDocument();
+    expect(comparisonModal.textContent).toContain('250–500');
+    expect(comparisonModal.textContent).toContain('device: laptop');
+    expect(comparisonModal.textContent).not.toContain('Tech Familiarity');
   });
 
   it('filters segments using search input', async () => {
@@ -291,38 +308,27 @@ describe('SegmentationView Component', () => {
 
     render(<SegmentationView studyId="study_123" />);
 
-    // Card grid: no fabricated age cohort / tech familiarity.
+    // Card grid: no fabricated age cohort / tech familiarity / currency.
     await screen.findByText('Sparse Cluster');
     expect(screen.queryByText(/18–24 yrs/)).not.toBeInTheDocument();
     expect(screen.queryByText('Medium')).not.toBeInTheDocument();
-    expect(screen.getByText('Not stated')).toBeInTheDocument();
+    expect(screen.queryByText(/৳/)).not.toBeInTheDocument();
+    expect(screen.getByText('No categorical variables observed')).toBeInTheDocument();
 
-    // Overview: differentiation omitted, honest needs empty state.
+    // Overview: differentiation omitted, provenance stated honestly.
     fireEvent.click(screen.getByTestId('deep-dive-btn-seg_bare'));
     await screen.findByTestId('segment-detail-modal');
     expect(screen.queryByText(/Key Differentiation Rationale/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Distinct behavior and economic limits/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Affordable and distraction-free experience/i)).not.toBeInTheDocument();
-    expect(screen.getByText('No needs identified from the data yet.')).toBeInTheDocument();
 
-    // Demographics: no fabricated age / occupation / study intensity.
-    fireEvent.click(screen.getByTestId('modal-tab-demographics'));
-    const demoTab = await screen.findByTestId('tab-content-demographics');
-    expect(demoTab.textContent).not.toContain('18 – 24 years');
-    expect(demoTab.textContent).not.toContain('21 years old');
-    expect(demoTab.textContent).not.toContain('Undergraduate Student / Candidate');
-    expect(demoTab.textContent).not.toContain('4.5 hours');
-    expect(demoTab.textContent).toContain('Not stated');
-
-    // Economics: no invented ৳ amounts, honest empty + WTP lines, no bKash claim.
-    fireEvent.click(screen.getByTestId('modal-tab-economics'));
-    const econTab = await screen.findByTestId('tab-content-economics');
-    expect(econTab.textContent).not.toContain('250');
-    expect(econTab.textContent).not.toContain('400');
-    expect(econTab.textContent).not.toContain('600');
-    expect(econTab.textContent).not.toContain('৳');
-    expect(econTab.textContent).not.toContain('bKash');
-    expect(screen.getByText('No budget data extracted for this segment yet.')).toBeInTheDocument();
-    expect(screen.getByText('Not enough pricing data to analyse willingness to pay.')).toBeInTheDocument();
+    // Observed variables: nothing measured -> said plainly, no numbers invented.
+    fireEvent.click(screen.getByTestId('modal-tab-observed'));
+    const observedTab = await screen.findByTestId('tab-content-observed');
+    expect(observedTab.textContent).toContain('Partition method not recorded');
+    expect(observedTab.textContent).toContain('nothing is assumed in their place');
+    expect(observedTab.textContent).not.toContain('18 – 24 years');
+    expect(observedTab.textContent).not.toContain('৳');
+    expect(observedTab.textContent).not.toContain('bKash');
   });
 });

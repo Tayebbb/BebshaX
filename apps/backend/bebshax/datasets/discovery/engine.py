@@ -1,41 +1,125 @@
-"""Dataset Discovery Engine orchestrating search, evaluation, persistence, and automated ingestion."""
+"""Dataset Discovery Engine orchestrating search, evaluation, persistence, and automated ingestion.
+
+Sources are live and keyless (World Bank Open Data, HDX, data.gov). A selected
+candidate is imported by downloading its published resource within the
+downloader's budgets and running it through the normal parse → profile →
+segment pipeline; nothing is generated in place of a download.
+"""
 
 from __future__ import annotations
 
-import datetime
-from datetime import timezone
+import hashlib
+import json
 import logging
 import uuid
-from typing import Any, Optional
-from sqlalchemy import select
+from pathlib import Path
+from typing import Optional
+
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bebshax.datasets.discovery.base_adapter import DatasetCandidateData, DatasetEvaluationResult, DatasetSourceAdapter
-from bebshax.datasets.discovery.bbs_adapter import BBSOpenDataAdapter
+from bebshax.config import get_settings
+from bebshax.datasets.discovery.base_adapter import DatasetCandidateData, DatasetSourceAdapter
+from bebshax.datasets.discovery.ckan_adapter import CKANDatasetAdapter
+from bebshax.datasets.discovery.downloader import DatasetDownloadFailed, fetch_resource_bytes, looks_downloadable
 from bebshax.datasets.discovery.evaluator import DatasetEvaluator
-from bebshax.datasets.discovery.kaggle_adapter import KaggleOpenDataAdapter
 from bebshax.datasets.discovery.world_bank_adapter import WorldBankOpenDataAdapter
-from bebshax.datasets.service import DatasetService
-from bebshax.db.models import DatasetCandidates, DatasetSources
+from bebshax.datasets.parser import DatasetParseError, detect_format, parse_dataset_bytes
+from bebshax.datasets.profiler import profile_dataset
+from bebshax.datasets.segmenter import discover_segments
+from bebshax.db.models import DatasetCandidates, DatasetSources, _utcnow
 from bebshax.research.planner import DatasetRequirementSpec
 
 logger = logging.getLogger(__name__)
 
 
-from pathlib import Path
-import hashlib
-import json
-
-from bebshax.datasets.parser import parse_dataset_bytes
-from bebshax.datasets.profiler import profile_dataset
-from bebshax.datasets.segmenter import discover_segments
-from bebshax.config import get_settings
-from bebshax.db.models import _utcnow
-
-
 def _upload_dir() -> Path:
     """Configured upload root (BEBSHAX_UPLOAD_DIR / BEBSHAX_DATA_DIR), resolved at call time."""
     return get_settings().upload_dir_path
+
+
+def default_adapters(http_client: httpx.AsyncClient | None = None) -> list[DatasetSourceAdapter]:
+    return [
+        WorldBankOpenDataAdapter(http_client=http_client),
+        CKANDatasetAdapter.hdx(http_client=http_client),
+        CKANDatasetAdapter.datagov(http_client=http_client),
+    ]
+
+
+async def materialize_candidate(
+    *,
+    session: AsyncSession,
+    study_id: str,
+    user_id: str,
+    name: str,
+    description: str,
+    source: str,
+    publisher: str,
+    license_text: str,
+    url: Optional[str],
+    download_url: Optional[str],
+    declared_format: Optional[str],
+    raw_data_content: Optional[str] = None,
+    http_client: httpx.AsyncClient | None = None,
+) -> DatasetSources:
+    """Turn a discovered candidate into a real ``DatasetSources`` row by fetching
+    its published resource (or using content already fetched from an API) and
+    running the standard parse/profile/segment pipeline.
+
+    Raises ``DatasetDownloadFailed`` (no resource URL, network, size, HTTP) or
+    ``DatasetParseError`` — never substitutes generated rows.
+    """
+    if raw_data_content:
+        content_bytes = raw_data_content.encode("utf-8")
+        fetched_from = download_url or url or source
+        content_type = "text/csv"
+    else:
+        if not looks_downloadable(download_url):
+            raise DatasetDownloadFailed(
+                f"'{name}' has no direct download resource published; open the listing and upload the file manually.",
+                extra={"url": url},
+            )
+        content_bytes, meta = await fetch_resource_bytes(download_url, http_client=http_client)  # type: ignore[arg-type]
+        fetched_from = meta["url"]
+        content_type = meta["content_type"]
+
+    file_type = (declared_format or "").lower() or detect_format(content_bytes, filename=fetched_from, content_type=content_type)
+    columns, rows = parse_dataset_bytes(content_bytes, file_type=file_type, filename=fetched_from, content_type=content_type)
+    schema_metadata, stats = profile_dataset(columns, rows)
+    segments = discover_segments(columns, rows, schema_metadata, stats)
+    content_hash = hashlib.sha256(content_bytes).hexdigest()
+
+    ds_id = f"ds_{uuid.uuid4().hex[:16]}"
+    file_path = str(_upload_dir() / f"{ds_id}.json")
+    _upload_dir().mkdir(parents=True, exist_ok=True)
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(rows, f)
+
+    imported = DatasetSources(
+        id=ds_id,
+        user_id=user_id,
+        study_id=study_id,
+        name=name,
+        source_type="url",
+        source_url=url or download_url,
+        file_path=file_path,
+        file_type=file_type,
+        description=(
+            f"{description}\n\nSource: {source} ({publisher}) | License: {license_text or 'not stated'}"
+            f"\nFetched from: {fetched_from}"
+        ),
+        status="ready",
+        row_count=len(rows),
+        column_count=len(columns),
+        schema_metadata={**schema_metadata, "is_sample": False, "fetched_from": fetched_from},
+        statistics=stats,
+        segments=segments,
+        content_hash=content_hash,
+        persona_count_generated=0,
+        last_processed_at=_utcnow(),
+    )
+    session.add(imported)
+    return imported
 
 
 class DatasetDiscoveryEngine:
@@ -45,14 +129,11 @@ class DatasetDiscoveryEngine:
         self,
         adapters: Optional[list[DatasetSourceAdapter]] = None,
         evaluator: Optional[DatasetEvaluator] = None,
+        http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.adapters = adapters or [
-            BBSOpenDataAdapter(),
-            WorldBankOpenDataAdapter(),
-            KaggleOpenDataAdapter(),
-        ]
+        self._http_client = http_client
+        self.adapters = adapters if adapters is not None else default_adapters(http_client)
         self.evaluator = evaluator or DatasetEvaluator(max_auto_select=4)
-        _upload_dir().mkdir(parents=True, exist_ok=True)
 
     async def discover_and_process_datasets(
         self,
@@ -63,30 +144,26 @@ class DatasetDiscoveryEngine:
         idea: str,
         queries: list[str],
         requirements: list[DatasetRequirementSpec],
+        countries: Optional[list[str]] = None,
     ) -> tuple[list[DatasetCandidates], list[DatasetSources]]:
         """Search public repositories, evaluate candidates, auto-import top datasets, and persist state."""
-        # 1. Search all adapters in parallel
         all_raw_candidates: list[DatasetCandidateData] = []
         for adapter in self.adapters:
             try:
-                found = await adapter.search(queries, requirements)
+                found = await adapter.search(queries, requirements, countries=countries)
                 all_raw_candidates.extend(found)
             except Exception as exc:
-                logger.warning("Adapter %s search failed: %s", adapter.source_name, exc)
+                logger.warning("Adapter %s search failed: %s", adapter.source_name, type(exc).__name__)
 
-        # 2. Evaluate and select top candidates
-        evaluated_results = self.evaluator.evaluate_candidates(all_raw_candidates, idea, requirements)
+        evaluated_results = self.evaluator.evaluate_candidates(all_raw_candidates, idea, requirements, queries)
 
-        # 3. Persist Candidate records & Auto-Import selected datasets
         saved_candidates: list[DatasetCandidates] = []
         imported_sources: list[DatasetSources] = []
 
         for eval_res in evaluated_results:
             cand = eval_res.candidate
-            cand_id = f"cand_{uuid.uuid4().hex[:16]}"
-
             db_cand = DatasetCandidates(
-                id=cand_id,
+                id=f"cand_{uuid.uuid4().hex[:16]}",
                 study_id=study_id,
                 user_id=user_id,
                 run_id=run_id,
@@ -110,55 +187,45 @@ class DatasetDiscoveryEngine:
                 quality_score=eval_res.quality_score,
                 selection_status=eval_res.selection_status,
                 selection_reason=eval_res.selection_reason,
-                evaluation_details={**eval_res.evaluation_details, "is_sample": cand.is_sample},
+                evaluation_details={
+                    **eval_res.evaluation_details,
+                    "is_sample": cand.is_sample,
+                    "tags": cand.tags,
+                    "modified_at": cand.modified_at,
+                },
             )
 
-            # Auto-import if selected
-            if eval_res.is_selected and cand.raw_data_content:
+            if eval_res.is_selected:
                 try:
-                    content_bytes = cand.raw_data_content.encode("utf-8")
-                    content_hash = hashlib.sha256(content_bytes).hexdigest()
-                    columns, rows = parse_dataset_bytes(content_bytes, file_type=cand.format or "csv")
-                    schema_metadata, stats = profile_dataset(columns, rows)
-                    segments = discover_segments(columns, rows, schema_metadata, stats)
-
-                    ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-                    file_path = str(_upload_dir() / f"{ds_id}.json")
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        json.dump(rows, f)
-
-                    sample_note = (
-                        "\n\nIllustrative sample catalog — modeled on public sources, not fetched live."
-                        if cand.is_sample
-                        else ""
-                    )
-                    imported_ds = DatasetSources(
-                        id=ds_id,
-                        user_id=user_id,
+                    imported_ds = await materialize_candidate(
+                        session=session,
                         study_id=study_id,
+                        user_id=user_id,
                         name=cand.name,
-                        source_type="url",
-                        source_url=cand.url,
-                        file_path=file_path,
-                        file_type=cand.format or "csv",
-                        description=f"{cand.description}{sample_note}\n\nSource: {cand.source} ({cand.publisher}) | License: {cand.license}",
-                        status="ready",
-                        row_count=len(rows),
-                        column_count=len(columns),
-                        schema_metadata={**schema_metadata, "is_sample": cand.is_sample},
-                        statistics=stats,
-                        segments=segments,
-                        content_hash=content_hash,
-                        persona_count_generated=0,
-                        last_processed_at=_utcnow(),
+                        description=cand.description,
+                        source=cand.source,
+                        publisher=cand.publisher,
+                        license_text=cand.license,
+                        url=cand.url,
+                        download_url=cand.download_url,
+                        declared_format=cand.format,
+                        raw_data_content=cand.raw_data_content,
+                        http_client=self._http_client,
                     )
-                    session.add(imported_ds)
-                    db_cand.imported_dataset_id = ds_id
+                    db_cand.imported_dataset_id = imported_ds.id
                     db_cand.selection_status = "imported"
+                    db_cand.sample_rows = imported_ds.row_count
+                    db_cand.sample_columns = imported_ds.column_count
                     imported_sources.append(imported_ds)
-                except Exception as exc:
-                    logger.error("Failed to auto-import candidate %s: %s", cand.name, exc)
+                except (DatasetDownloadFailed, DatasetParseError) as exc:
+                    detail = exc.detail if isinstance(exc, DatasetDownloadFailed) else str(exc)
+                    logger.info("candidate %s not imported: %s", cand.name, detail)
                     db_cand.selection_status = "import_failed"
+                    db_cand.evaluation_details = {**db_cand.evaluation_details, "import_error": detail}
+                except Exception as exc:
+                    logger.warning("candidate %s import crashed: %s", cand.name, type(exc).__name__, exc_info=True)
+                    db_cand.selection_status = "import_failed"
+                    db_cand.evaluation_details = {**db_cand.evaluation_details, "import_error": type(exc).__name__}
 
             saved_candidates.append(db_cand)
             session.add(db_cand)

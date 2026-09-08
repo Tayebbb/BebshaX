@@ -1,16 +1,21 @@
-"""Deterministic statistical clusterer and distribution generator.
+"""Deterministic statistical clusterer over the study's observed rows.
 
-Computes exact mathematical groupings, population counts, percentages,
-numeric quantiles, and categorical frequencies without LLM hallucinations.
+Computes exact groupings, population counts, percentages, numeric quantiles and
+categorical frequencies from the dataset records themselves. Nothing here is
+assumed: no default age ranges, budgets, currencies or archetypes — without
+usable rows the caller receives an explicit ``segmentation_requires_data``.
 """
 
 from __future__ import annotations
 
+import json
 import math
+import os
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from bebshax.segmentation.variable_selector import SegmentationVariable
+from bebshax.utils.explicit_failures import InsufficientInput
 
 
 class ClusterDistribution(BaseModel):
@@ -92,221 +97,230 @@ def _compute_categorical_stats(values: list[str]) -> dict[str, Any]:
     }
 
 
+SEGMENTATION_REQUIRES_DATA = "segmentation_requires_data"
+
+# Statistical partitioning only makes sense with a minimum number of observed
+# records per band; below this the "segments" would be noise dressed as data.
+MIN_ROWS_FOR_PARTITION = 20
+MIN_ROWS_PER_BAND = 5
+_MAX_CLUSTERS = 6
+
+
+def load_dataset_rows(dataset: Any) -> list[dict[str, Any]]:
+    """Rows persisted by the dataset pipeline (``file_path`` JSON list). Missing
+    or unreadable files yield ``[]`` — the caller decides whether that is fatal."""
+    path = getattr(dataset, "file_path", None)
+    if not path or not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            records = json.load(f)
+    except (OSError, ValueError):
+        return []
+    return [r for r in records if isinstance(r, dict)] if isinstance(records, list) else []
+
+
+def _numeric(value: Any) -> Optional[float]:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", "").strip())
+    except ValueError:
+        return None
+
+
+def _band_edges(sorted_values: list[float], k: int) -> list[tuple[float, float]]:
+    """k quantile bands (lower, upper) over the observed values."""
+    edges = [_percentile(sorted_values, 100.0 * i / k) for i in range(k + 1)]
+    return [(edges[i], edges[i + 1]) for i in range(k)]
+
+
+def _assign_band(value: float, bands: list[tuple[float, float]]) -> int:
+    for i, (lo, hi) in enumerate(bands):
+        is_last = i == len(bands) - 1
+        if lo <= value < hi or (is_last and value <= hi):
+            return i
+    return len(bands) - 1
+
+
+def _row_band(row: dict[str, Any], primary: str, bands: list[tuple[float, float]]) -> Optional[int]:
+    value = _numeric(row.get(primary))
+    return None if value is None else _assign_band(value, bands)
+
+
+def _profile_rows(rows: list[dict[str, Any]], variables: list[SegmentationVariable]) -> dict[str, Any]:
+    """Distributions of every selected variable inside one band — computed, never assumed."""
+    dists: dict[str, Any] = {}
+    for var in variables:
+        raw = [r.get(var.name) for r in rows if r.get(var.name) not in (None, "")]
+        if not raw:
+            continue
+        if var.type == "numeric":
+            nums = [v for v in (_numeric(x) for x in raw) if v is not None]
+            if nums:
+                dists[var.name] = _compute_numeric_stats(nums)
+        else:
+            dists[var.name] = _compute_categorical_stats([str(x).strip() for x in raw])
+    return dists
+
+
+def _traits_from_distributions(dists: dict[str, Any], share_pct: float) -> list[str]:
+    traits = [f"Population share: {share_pct}% of observed records"]
+    for name, d in list(dists.items())[:4]:
+        if "median" in d:
+            traits.append(f"{name}: {d['min']:g}–{d['max']:g} (median {d['median']:g})")
+        elif d.get("top_categories"):
+            top = d["top_categories"][0]
+            traits.append(f"{name}: mostly {top['category']} ({top['percentage']}%)")
+    return traits
+
+
+def _explicit_segment_clusters(
+    explicit_segments: list[dict[str, Any]], total_records: int
+) -> list[ClusterDistribution]:
+    """Strategy A — segments the dataset pipeline already derived from real rows
+    (categorical grouping). Every derived group is kept so the population stays
+    complete; only observed constraints are carried, nothing is back-filled."""
+    subset = explicit_segments[:_MAX_CLUSTERS]
+    total_pop = sum(int(s.get("population_count") or 0) for s in subset) or total_records
+    clusters: list[ClusterDistribution] = []
+    for idx, seg in enumerate(subset):
+        pop_count = int(seg.get("population_count") or 0)
+        pop_pct = seg.get("population_percentage")
+        if pop_pct is None:
+            pop_pct = round((pop_count / total_pop) * 100, 1) if total_pop else 0.0
+        constraints = seg.get("constraints") or {}
+        observed = {k: v for k, v in constraints.items() if v not in (None, "", [], {})}
+        characteristics: dict[str, Any] = {
+            "name_hint": seg.get("name") or f"Segment {idx + 1}",
+            "observed_constraints": observed,
+            "rule_description": constraints.get("rule_description", ""),
+            "confidence_basis": "population_size_heuristic",
+            "partition_method": "categorical_grouping",
+        }
+        clusters.append(
+            ClusterDistribution(
+                cluster_label=f"cluster_{idx}",
+                population_count=pop_count,
+                population_percentage=float(pop_pct),
+                confidence_score=0.92 if pop_count >= 100 else 0.85,
+                status="data_backed",
+                characteristics=characteristics,
+                variable_distributions={"segment_name": seg.get("name"), **(seg.get("distributions") or {})},
+                distinctive_traits=[f"{k}: {v}" for k, v in observed.items() if not isinstance(v, (dict, list))][:4],
+            )
+        )
+    return clusters
+
+
 def cluster_dataset_populations(
     datasets: list[Any],
     variables: list[SegmentationVariable],
     claims: list[Any],
     study_context: Optional[dict[str, Any]] = None,
     desired_clusters: Optional[int] = None,
+    rows_by_dataset: Optional[dict[str, list[dict[str, Any]]]] = None,
 ) -> list[ClusterDistribution]:
-    """Deterministically partition empirical population into 2 to 4 data-grounded clusters."""
-    total_records = sum((getattr(d, "row_count", 0) or 0) for d in datasets)
+    """Partition the study's OBSERVED population into 2–6 data-backed clusters.
 
-    # Strategy A: Dataset with explicit segments already defined in metadata
-    explicit_segments_found: list[dict[str, Any]] = []
+    Strategy A: segments already derived by the dataset pipeline (categorical
+    grouping of real rows). Strategy B: quantile bands on the highest-ranked
+    numeric variable over the actual rows, with every other selected variable
+    profiled inside each band. No rows and no derived segments →
+    ``InsufficientInput(segmentation_requires_data)``; there is no archetype
+    list to fall back on (RULES.md R2).
+    """
+    total_records = sum(int(getattr(d, "row_count", 0) or 0) for d in datasets)
+
+    explicit_segments: list[dict[str, Any]] = []
     for ds in datasets:
         segs = getattr(ds, "segments", []) or []
         if isinstance(segs, list) and len(segs) >= 2:
-            explicit_segments_found.extend(segs)
+            explicit_segments.extend(s for s in segs if isinstance(s, dict))
 
-    if explicit_segments_found:
-        clusters: list[ClusterDistribution] = []
-        seg_subset = explicit_segments_found[:desired_clusters] if desired_clusters else explicit_segments_found[:4]
-        total_pop = sum(s.get("population_count", 0) for s in seg_subset) or total_records or 100
-        for idx, seg in enumerate(seg_subset):
-            pop_count = seg.get("population_count", 0) or int(total_pop / len(seg_subset))
-            pop_pct = round(seg.get("population_percentage", (pop_count / total_pop) * 100), 1)
-            constraints = seg.get("constraints", {}) or {}
+    rows: list[dict[str, Any]] = []
+    for ds in datasets:
+        ds_id = getattr(ds, "id", "")
+        rows.extend((rows_by_dataset or {}).get(ds_id) or load_dataset_rows(ds))
+    numeric_vars = [v for v in variables if v.type == "numeric"]
+    primary = next((v for v in numeric_vars if v.category == "economic"), None) or (numeric_vars[0] if numeric_vars else None)
+    can_partition = primary is not None and len(rows) >= MIN_ROWS_FOR_PARTITION
 
-            # Build characteristic summary
-            characteristics: dict[str, Any] = {
-                "name_hint": seg.get("name", f"Segment {idx + 1}"),
-                "demographics": {
-                    "age_range": constraints.get("age_range", [19, 24]),
-                    "median_age": constraints.get("median_age", 21),
-                },
-                "economics": {
-                    "monthly_budget": constraints.get("monthly_budget", {"min": 300, "median": 450, "max": 600, "currency": "BDT"}),
-                },
-                "behavior": {
-                    "technology_familiarity": constraints.get("technology_familiarity", "Medium"),
-                },
-                "needs": constraints.get("observed_needs", []),
-                "rule_description": constraints.get("rule_description", ""),
-                # confidence_score is a population-size heuristic, not a statistical measure
-                "confidence_basis": "population_size_heuristic",
-            }
+    # Derived categorical groups win unless the caller asked for a different
+    # number of clusters AND a statistical partition is possible.
+    if explicit_segments and not (desired_clusters and desired_clusters != len(explicit_segments) and can_partition):
+        return _explicit_segment_clusters(explicit_segments, total_records)
 
-            clusters.append(
-                ClusterDistribution(
-                    cluster_label=f"cluster_{idx}",
-                    population_count=pop_count,
-                    population_percentage=pop_pct,
-                    # population-size heuristic: >=100 records -> 0.92, else 0.85
-                    confidence_score=0.92 if pop_count >= 100 else 0.85,
-                    status="data_backed",
-                    characteristics=characteristics,
-                    variable_distributions={"segment_name": seg.get("name")},
-                    distinctive_traits=[f"{k}: {v}" for k, v in constraints.items() if not isinstance(v, (dict, list))][:4],
-                )
-            )
-        return clusters
+    # Strategy B — real rows, real quantiles.
+    if not can_partition:
+        raise InsufficientInput(
+            SEGMENTATION_REQUIRES_DATA,
+            "Segmentation needs an imported dataset with at least "
+            f"{MIN_ROWS_FOR_PARTITION} records and one numeric variable (found {len(rows)} usable records"
+            f"{'' if primary else ', no numeric variable'}). Upload or import a dataset before segmenting; "
+            "BebshaX does not invent segments.",
+        )
 
-    # Strategy B: Partition from dataset statistics and numeric distributions
-    if total_records > 0:
-        # Determine number of clusters based on desired_clusters or record count
-        if desired_clusters and 2 <= desired_clusters <= 6:
-            k = desired_clusters
-        else:
-            k = 4 if total_records >= 1000 else (3 if total_records >= 100 else 2)
+    values = sorted(v for v in (_numeric(r.get(primary.name)) for r in rows) if v is not None)
+    if len(values) < MIN_ROWS_FOR_PARTITION or values[0] == values[-1]:
+        raise InsufficientInput(
+            SEGMENTATION_REQUIRES_DATA,
+            f"Variable '{primary.name}' has too little variation across {len(values)} records to form segments.",
+        )
 
-        # Find primary economic variable if present, else first numeric
-        econ_var = next((v for v in variables if v.category == "economic" and v.type == "numeric"), None)
-        demo_var = next((v for v in variables if v.category == "demographic" and v.type == "numeric"), None)
-        behav_var = next((v for v in variables if v.category == "behavioral"), None)
-
-        clusters = []
-        if k == 2:
-            pop_distribution = [0.55, 0.45]
-        elif k == 3:
-            pop_distribution = [0.38, 0.35, 0.27]
-        elif k == 4:
-            pop_distribution = [0.32, 0.28, 0.24, 0.16]
-        else:
-            pop_distribution = [round(1.0 / k, 2)] * k
-
-        econ_stats = econ_var.summary_stats if econ_var else {"min": 250, "max": 1500, "mean": 650, "median": 500, "p25": 350, "p75": 850}
-        demo_stats = demo_var.summary_stats if demo_var else {"min": 18, "max": 30, "median": 22, "mean": 22.5}
-
-        min_budget = float(econ_stats.get("min", 200))
-        p25_budget = float(econ_stats.get("p25", min_budget + 150))
-        median_budget = float(econ_stats.get("median", p25_budget + 200))
-        p75_budget = float(econ_stats.get("p75", median_budget + 300))
-        max_budget = float(econ_stats.get("max", p75_budget + 500))
-
-        budget_bands = [
-            (min_budget, p25_budget, "Budget-Conscious / Price Sensitive"),
-            (p25_budget, p75_budget, "Moderate Core / Standard Budget"),
-            (p75_budget, max_budget, "High-Engagement / Premium Tier"),
-            (median_budget * 1.5, max_budget * 1.2, "Enterprise / Power User"),
-            (max_budget, max_budget * 1.5, "Custom Institutional Tier"),
-            (max_budget * 1.5, max_budget * 2.0, "Global Scaler"),
-        ]
-
-        assigned_total = 0
-        for i in range(k):
-            share = pop_distribution[i] if i < len(pop_distribution) else round(1.0 / k, 2)
-            count = int(total_records * share) if i < k - 1 else (total_records - assigned_total)
-            assigned_total += count
-            pct = round((count / total_records) * 100, 1)
-
-            band_min, band_max, label_hint = budget_bands[min(i, len(budget_bands) - 1)]
-            cluster_median = round((band_min + band_max) / 2.0, 1)
-
-            cluster_characteristics = {
-                "name_hint": label_hint,
-                "demographics": {
-                    "age_range": [18 + i * 2, 22 + i * 3],
-                    "median_age": 20 + i * 2,
-                },
-                "economics": {
-                    "monthly_budget": {
-                        "min": band_min,
-                        "median": cluster_median,
-                        "max": band_max,
-                        "currency": "BDT",
-                    },
-                },
-                "behavior": {
-                    "study_hours_per_day": round(4.5 + i * 1.2, 1) if behav_var else round(3.5 + i * 1.0, 1),
-                    "technology_familiarity": "High" if i >= 1 else "Medium",
-                },
-                "needs": [
-                    "Affordable structured plans" if i == 0 else ("Comprehensive exam tracking" if i == 1 else "Advanced multi-device analytics")
-                ],
-                # confidence_score is a population-size heuristic, not a statistical measure
-                "confidence_basis": "population_size_heuristic",
-            }
-
-            var_dists: dict[str, Any] = {
-                "monthly_budget": {
-                    "min": band_min,
-                    "median": cluster_median,
-                    "max": band_max,
-                    "mean": cluster_median,
-                    "count": count,
-                },
-                "age": {
-                    "min": 18 + i * 2,
-                    "median": 20 + i * 2,
-                    "max": 22 + i * 3,
-                },
-            }
-
-            distinctive = [
-                f"Monthly budget: ৳{band_min:.0f}–৳{band_max:.0f}",
-                f"Average age: {20 + i * 2} years",
-                f"Population share: {pct}% of surveyed cohort",
-            ]
-
-            # population-size heuristic: >=100 records -> 0.90, else 0.80
-            confidence = 0.90 if count >= 100 else 0.80
-
-            clusters.append(
-                ClusterDistribution(
-                    cluster_label=f"cluster_{i}",
-                    population_count=count,
-                    population_percentage=pct,
-                    confidence_score=confidence,
-                    status="data_backed",
-                    characteristics=cluster_characteristics,
-                    variable_distributions=var_dists,
-                    distinctive_traits=distinctive,
-                )
-            )
-        return clusters
-
-    # Strategy C: Evidence-assisted qualitative segmentation (when no dataset attached)
-    clusters = []
-    if desired_clusters == 2:
-        archetypes = [
-            ("Price-Sensitive Students", 60.0, "High demand for exam planning but strictly budget-constrained below ৳300/mo."),
-            ("Performance-Driven Candidates", 40.0, "University admission seekers with strong willingness to pay for proven score improvement."),
-        ]
-    elif desired_clusters == 4:
-        archetypes = [
-            ("Price-Sensitive Students", 35.0, "Strictly budget-constrained below ৳300/mo."),
-            ("Performance-Driven Candidates", 30.0, "Admission seekers with strong willingness to pay for score improvement."),
-            ("Casual Learners", 20.0, "Sporadic productivity tool users requiring minimal onboarding."),
-            ("Power Organizers", 15.0, "Multi-device power users managing heavy extracurriculars and academics."),
-        ]
+    if desired_clusters and 2 <= desired_clusters <= _MAX_CLUSTERS:
+        k = desired_clusters
     else:
-        archetypes = [
-            ("Price-Sensitive Students", 45.0, "High demand for exam planning but strictly budget-constrained below ৳300/mo."),
-            ("Performance-Driven Candidates", 35.0, "University admission seekers with strong willingness to pay for proven score improvement."),
-            ("Casual Learners", 20.0, "Sporadic productivity tool users requiring minimal onboarding."),
-        ]
+        k = 4 if len(values) >= 1000 else (3 if len(values) >= 100 else 2)
+    k = max(2, min(k, len(values) // MIN_ROWS_PER_BAND))
 
-    for idx, (name, pct, desc) in enumerate(archetypes):
+    bands = _band_edges(values, k)
+    # Merge bands whose edges collapsed onto the same value (heavily tied data).
+    merged: list[tuple[float, float]] = []
+    for lo, hi in bands:
+        if merged and merged[-1][1] == lo and lo == hi:
+            continue
+        merged.append((lo, hi))
+    bands = merged
+
+    band_rows: list[list[dict[str, Any]]] = [[] for _ in bands]
+    for row in rows:
+        idx = _row_band(row, primary.name, bands)
+        if idx is not None:
+            band_rows[idx].append(row)
+    observed_total = sum(len(b) for b in band_rows)
+
+    clusters: list[ClusterDistribution] = []
+    label_idx = 0
+    for (lo, hi), members in zip(bands, band_rows):
+        if not members:
+            continue
+        share_pct = round(len(members) / observed_total * 100, 1)
+        dists = _profile_rows(members, variables)
+        primary_stats = dists.get(primary.name) or _compute_numeric_stats(
+            [v for v in (_numeric(r.get(primary.name)) for r in members) if v is not None]
+        )
+        characteristics = {
+            "name_hint": f"{primary.name} {lo:g}–{hi:g}",
+            "partition_method": "quantile_bands",
+            "partition_variable": primary.name,
+            "band": {"lower": lo, "upper": hi},
+            "observed": dists,
+            "confidence_basis": "population_size_heuristic",
+        }
         clusters.append(
             ClusterDistribution(
-                cluster_label=f"cluster_{idx}",
-                population_count=int(pct * 10),
-                population_percentage=pct,
-                # population-size heuristic: no real data available for strategy C
-                confidence_score=0.75,
-                status="inference_assisted",
-                characteristics={
-                    "name_hint": name,
-                    "demographics": {"age_range": [18, 24], "median_age": 21},
-                    "economics": {"monthly_budget": {"min": 250, "median": 400, "max": 600, "currency": "BDT"}},
-                    "behavior": {"technology_familiarity": "Medium"},
-                    "needs": [desc],
-                    # confidence_score is a population-size heuristic, not a statistical measure
-                    "confidence_basis": "population_size_heuristic",
-                },
-                variable_distributions={"archetype": name},
-                distinctive_traits=[name, f"{pct}% estimated share", desc],
+                cluster_label=f"cluster_{label_idx}",
+                population_count=len(members),
+                population_percentage=share_pct,
+                confidence_score=0.90 if len(members) >= 100 else 0.80,
+                status="data_backed",
+                characteristics=characteristics,
+                variable_distributions={**dists, primary.name: primary_stats},
+                distinctive_traits=_traits_from_distributions({primary.name: primary_stats, **dists}, share_pct),
             )
         )
+        label_idx += 1
     return clusters

@@ -25,6 +25,20 @@ export type ResearchStatus =
   | 'completed'
   | 'failed';
 
+/** Provenance markers a research run writes (research/service.py). */
+export interface ResearchRunSummary {
+  plan_source?: 'llm' | string | null;
+  queries_source?: 'llm' | 'derived' | string | null;
+  evidence_provider?: string;
+  no_live_evidence?: boolean | null;
+  claims_status?: 'extracted' | 'no_evidence' | string | null;
+  served_by?: string[];
+  error_code?: string | null;
+  dataset_discovery_error?: string;
+  target_countries?: string[];
+  no_datasets_found?: boolean;
+}
+
 export interface ResearchRun {
   id: string;
   study_id: string;
@@ -36,7 +50,9 @@ export interface ResearchRun {
   claim_count: number;
   dataset_candidate_count?: number;
   dataset_imported_count?: number;
-  step_progress?: Record<string, string | number | boolean>;
+  step_progress?: Record<string, { status?: string; label?: string } | ResearchRunSummary | string | number | boolean>;
+  /** Same object as `step_progress.summary`, mirrored by the serializer. */
+  summary?: ResearchRunSummary;
   research_plan?: Record<string, any> | null;
   queries: string[];
   error_message?: string | null;
@@ -163,6 +179,9 @@ export interface EvidenceSummary {
     started_at?: string | null;
     completed_at?: string | null;
     error_message?: string | null;
+    current_step?: string | null;
+    step_progress?: ResearchRun['step_progress'];
+    research_plan?: Record<string, any> | null;
   } | null;
 }
 

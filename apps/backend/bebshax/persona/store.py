@@ -69,6 +69,23 @@ async def save_persona(
     defaults to ``"live"`` because every caller except the demo seeder reaches
     here after a real inference pass; the seeder passes ``"cached"`` explicitly.
     """
+    # The Personas row is what the persona library, the interview identity card
+    # and the behavioural engine read — it must carry the same facts as the
+    # detail/attribute tables, otherwise every field shows as "not stated".
+    grouped: dict[str, list[str]] = {}
+    for attr in profile.attributes:
+        grouped.setdefault(attr.key, []).append(attr.value)
+    demographics = {
+        key: value
+        for key, value in (
+            ("age", profile.age),
+            ("occupation", profile.occupation),
+            ("location", profile.location),
+            ("income_or_budget", profile.income_range),
+            ("education", profile.education),
+        )
+        if value not in (None, "")
+    }
     session.add(
         Personas(
             id=profile.id,
@@ -79,6 +96,23 @@ async def save_persona(
             version=profile.version,
             generation_model=profile.generation_model,
             data_source=data_source,
+            tagline=profile.tagline,
+            country_code=profile.country_code,
+            bio=profile.description,
+            demographics=demographics,
+            personality=profile.personality.model_dump() if profile.personality else {},
+            detailed_attributes=dict(profile.detailed_attributes or {}),
+            goals=grouped.get("goal", []),
+            pain_points=grouped.get("pain_point", []),
+            needs=grouped.get("need", []),
+            motivations=grouped.get("motivation", []),
+            behaviors=grouped.get("behavior", []),
+            preferences=grouped.get("purchase_behavior", []),
+            technology_profile={"usage": grouped["technology_usage"]} if grouped.get("technology_usage") else {},
+            validation_warnings=list(profile.warnings),
+            evidence_citations=[
+                {"id": e.id, "source": e.source, "type": e.type, "relevance": e.relevance} for e in profile.evidence
+            ],
         )
     )
 

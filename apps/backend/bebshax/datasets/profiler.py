@@ -6,7 +6,6 @@ and categorical frequency distributions without any LLM hallucination.
 
 from __future__ import annotations
 
-import math
 import statistics
 from typing import Any
 

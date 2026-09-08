@@ -52,10 +52,15 @@ class TestLocaleAwareCurrencyCues:
         rates = _extract_money_rates("coffee runs me $5 a day", "US")
         assert rates and rates[0][0] == 5 * 30
 
-    def test_dollar_amounts_do_not_count_for_bd_default(self) -> None:
-        # Unknown/absent country must not widen what counts as a money claim.
-        assert _extract_money_rates("i spend about $45 per day on food") == []
-        assert _extract_money_rates("i spend about $45 per day on food", "XX") == []
+    def test_unknown_country_accepts_any_currency_cue(self) -> None:
+        # No country is assumed: an unknown/absent country counts every currency
+        # cue instead of silently defaulting to one locale.
+        assert _extract_money_rates("i spend about $45 per day on food")[0][0] == 45 * 30
+        assert _extract_money_rates("i spend about 450 taka per day on food", "XX")[0][0] == 450 * 30
+        assert _extract_money_rates("i spend about 45 per day on food") == []  # no cue at all
+
+    def test_dollar_amounts_do_not_count_for_bd_coded_personas(self) -> None:
+        assert _extract_money_rates("i spend about $45 per day on food", "BD") == []
 
     def test_rupee_word_counts_for_in_personas(self) -> None:
         rates = _extract_money_rates("around 900 rupees a month for tiffin", "IN")

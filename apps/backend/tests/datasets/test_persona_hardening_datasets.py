@@ -15,9 +15,8 @@ import bebshax.memory.orm  # noqa: F401
 import bebshax.persona.orm  # noqa: F401
 from bebshax.config import get_settings
 from bebshax.datasets.service import (
-    OFFLINE_FALLBACK_MODEL,
+    DATASET_PERSONA_UNPARSEABLE,
     DatasetService,
-    _generate_offline_fallback_persona,
     coerce_claim_provenance,
     record_evidence_id,
 )
@@ -26,6 +25,7 @@ from bebshax.llm import SingleAdapterLLMService
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE
+from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 
 _CLAIM_GROUPS = (
     "goals",
@@ -44,12 +44,12 @@ _SEGMENT = {
     "name": "Budget Students",
     "population_percentage": 100.0,
     "population_share": 1.0,
+    "segmentation_feature": "role",
+    # Observed per-group statistics keyed by the dataset's own columns.
     "constraints": {
-        "age_range": [20, 23],
-        "median_age": 21,
-        "monthly_budget": {"min": 300, "max": 400, "median": 350},
-        "technology_familiarity": "Medium",
-        "observed_needs": ["cheap lunch"],
+        "rule_description": "role == 'Student' (100.0% of 1 observed records)",
+        "age": {"count": 1, "min": 20, "median": 21, "max": 23, "p75": 23},
+        "monthly_budget": {"count": 1, "min": 300, "median": 350, "max": 400, "p75": 400},
     },
     "sample_records": [_RECORD],
 }
@@ -81,18 +81,14 @@ def _llm_persona(evidence_ids: list[str]) -> str:
 # --- pure helpers -----------------------------------------------------------------
 
 
-def test_persona_hardening_offline_fallback_is_fully_synthetic() -> None:
-    persona = _generate_offline_fallback_persona(_SEGMENT, 0)
-    for group in _CLAIM_GROUPS:
-        assert persona[group], group
-        for claim in persona[group]:
-            assert claim["provenance"] == "SYNTHETIC", (group, claim)
-            assert claim["evidence_ids"] == []
-    assert persona["model_used"] == OFFLINE_FALLBACK_MODEL
-    assert persona["fallback_reason"] == "llm_unavailable"
-    assert _generate_offline_fallback_persona(_SEGMENT, 0, reason="llm_error:TimeoutError")["fallback_reason"] == (
-        "llm_error:TimeoutError"
-    )
+def test_persona_hardening_no_offline_template_exists() -> None:
+    import inspect
+
+    from bebshax.datasets import service
+
+    src = inspect.getsource(service)
+    for remnant in ("_generate_offline_fallback_persona", "OFFLINE_FALLBACK_MODEL", "Dhaka, Bangladesh", "bKash", "Samiul Alam"):
+        assert remnant not in src, remnant
 
 
 def test_persona_hardening_record_ids_are_stable_and_content_derived() -> None:
@@ -144,23 +140,14 @@ async def dataset_session_maker(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
 
-async def test_persona_hardening_no_llm_yields_labelled_synthetic_personas(dataset_session_maker) -> None:
+async def test_persona_hardening_no_llm_fails_explicitly(dataset_session_maker) -> None:
     service = DatasetService(dataset_session_maker, llm=None)
-    result = await service.generate_personas_from_dataset("ds_test", requested_count=2, user_id="usr_test")
-
-    assert result["model_used"] == OFFLINE_FALLBACK_MODEL
-    assert len(result["personas"]) == 2
-    for persona in result["personas"]:
-        assert persona["model_used"] == OFFLINE_FALLBACK_MODEL
-        assert persona["fallback_reason"] == "llm_unavailable"
-        assert all(c["provenance"] == "SYNTHETIC" for g in _CLAIM_GROUPS for c in persona[g])
+    with pytest.raises(LLMUnavailable):
+        await service.generate_personas_from_dataset("ds_test", requested_count=2, user_id="usr_test")
 
     async with dataset_session_maker() as session:
-        rows = list((await session.execute(select(Personas))).scalars())
-        run = (await session.execute(select(DatasetPersonaRuns))).scalars().one()
-    assert {r.generation_model for r in rows} == {OFFLINE_FALLBACK_MODEL}
-    assert all(r.evidence_citations == [] for r in rows)
-    assert run.model_used == OFFLINE_FALLBACK_MODEL
+        assert list((await session.execute(select(Personas))).scalars()) == []
+        assert list((await session.execute(select(DatasetPersonaRuns))).scalars()) == []
 
 
 async def test_persona_hardening_llm_claims_are_coerced_against_shown_records(dataset_session_maker) -> None:
@@ -172,36 +159,53 @@ async def test_persona_hardening_llm_claims_are_coerced_against_shown_records(da
     result = await service.generate_personas_from_dataset("ds_test", requested_count=1, user_id="usr_test")
 
     [persona] = result["personas"]
-    assert persona["model_used"] == "m9" and "fallback_reason" not in persona
+    assert persona["model_used"] == "m9" and persona["served_by"] == "fake/m9"
+    assert result["served_by"] == ["fake/m9"] and result["failed"] == []
     assert persona["goals"][0]["provenance"] == "OBSERVED" and persona["goals"][0]["evidence_ids"] == [shown]
     assert persona["pain_points"][0]["provenance"] == "INFERRED" and persona["pain_points"][0]["evidence_ids"] == []
 
-    # the prompt shows the record under its stable id, inside an untrusted block
+    # the prompt shows the record under its stable id, inside an untrusted block,
+    # and only the OBSERVED per-group statistics — no assumed defaults
     request = adapter.requests[0]
     assert UNTRUSTED_RULE in request.messages[0].content
     prompt = request.messages[1].content
     assert f"[{shown}]" in prompt
     assert "<UNTRUSTED_DATASET_RECORDS" in prompt and prompt.count("</UNTRUSTED_DATASET_RECORDS>") == 1
+    assert '- monthly_budget: {"count": 1, "min": 300' in prompt and "- age: " in prompt
+    for assumed in ("৳", "Medium", "Core functionality", "[18, 50]"):
+        assert assumed not in prompt, assumed
 
     async with dataset_session_maker() as session:
         [row] = list((await session.execute(select(Personas))).scalars())
-    assert row.generation_model == "m9"
+    assert row.generation_model == "fake/m9"
+    assert row.country_code is None  # not stated by the model -> not assumed
 
 
-async def test_persona_hardening_llm_failure_falls_back_to_labelled_template(dataset_session_maker) -> None:
+async def test_persona_hardening_unusable_reply_is_recorded_not_replaced(dataset_session_maker) -> None:
+    shown = record_evidence_id(_RECORD)
     adapter = FakeAdapter(
-        [FakeRoute(candidate=RouteCandidate(provider="fake", model="m9"), replies=["this is not json"])]
+        [FakeRoute(candidate=RouteCandidate(provider="fake", model="m9"), replies=["this is not json", "nor this", _llm_persona([shown])])]
     )
     service = DatasetService(dataset_session_maker, llm=SingleAdapterLLMService(adapter))
-    result = await service.generate_personas_from_dataset("ds_test", requested_count=1, user_id="usr_test")
+    result = await service.generate_personas_from_dataset("ds_test", requested_count=2, user_id="usr_test")
 
-    [persona] = result["personas"]
-    assert persona["model_used"] == OFFLINE_FALLBACK_MODEL
-    assert persona["fallback_reason"].startswith("llm_error:")
-    assert all(c["provenance"] == "SYNTHETIC" for g in _CLAIM_GROUPS for c in persona[g])
+    # persona #1: two unusable replies -> recorded as failed; persona #2 succeeds.
+    assert result["failed_count"] == 1 and result["generated_count"] == 1
+    assert result["failed"][0]["error_code"] == DATASET_PERSONA_UNPARSEABLE
+    assert len(adapter.requests) == 3
     async with dataset_session_maker() as session:
-        [row] = list((await session.execute(select(Personas))).scalars())
-    assert row.generation_model == OFFLINE_FALLBACK_MODEL
+        rows = list((await session.execute(select(Personas))).scalars())
+    assert len(rows) == 1 and rows[0].generation_model == "fake/m9"
+
+
+async def test_persona_hardening_all_unusable_raises(dataset_session_maker) -> None:
+    adapter = FakeAdapter([FakeRoute(candidate=RouteCandidate(provider="fake", model="m9"), reply="garbage")])
+    service = DatasetService(dataset_session_maker, llm=SingleAdapterLLMService(adapter))
+    with pytest.raises(UnusableModelOutput) as info:
+        await service.generate_personas_from_dataset("ds_test", requested_count=1, user_id="usr_test")
+    assert info.value.error_code == DATASET_PERSONA_UNPARSEABLE
+    async with dataset_session_maker() as session:
+        assert list((await session.execute(select(Personas))).scalars()) == []
 
 
 @pytest.mark.parametrize("bad", [None, "", "   "])

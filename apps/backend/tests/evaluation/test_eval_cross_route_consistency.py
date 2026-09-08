@@ -247,9 +247,10 @@ async def test_runner_records_fallback_honestly_when_the_requested_route_fails()
 
 async def test_runner_keeps_failed_answers_as_rows():
     cand_a = RouteCandidate(provider="fakeA", model="m1")
-    # TIMEOUT: no cooldown, so the single route fails once and serves the next request.
+    # CONTENT_REFUSAL: advances without a cooldown, so the single route fails
+    # once and serves the next request (a TIMEOUT would now cool it for 30 s).
     adapter = FakeAdapter(
-        [FakeRoute(cand_a, behaviors=[FailureKind.TIMEOUT], reply="I'm Nusrat, 24 years old, a BBA undergraduate.")]
+        [FakeRoute(cand_a, behaviors=[FailureKind.CONTENT_REFUSAL], reply="I'm Nusrat, 24 years old, a BBA undergraduate.")]
     )
     router = PoolRouter({"openrouter": FakeAdapter([]), "freellmpool": adapter, "ollama": FakeAdapter([])})
     report = await run_cross_route_eval(router, [NUSRAT], [Q_ID], [ROUTE_A, ROUTE_B], seed=1)

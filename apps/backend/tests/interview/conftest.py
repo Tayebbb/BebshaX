@@ -54,6 +54,18 @@ async def stored_persona(session_maker) -> PersonaProfile:
         return profile
 
 
+@pytest_asyncio.fixture
+async def stored_persona_card(session_maker, stored_persona) -> str:
+    """The identity card the engine actually renders: save_persona mirrors the
+    profile onto the Personas row, and the engine prefers that row."""
+    from bebshax.db.models import Personas
+    from bebshax.interview.engine import build_identity_card
+
+    async with session_maker() as session:
+        row = await session.get(Personas, stored_persona.id)
+    return build_identity_card(row)
+
+
 def fake_llm(replies: list[str]):
     adapter = FakeAdapter(
         [FakeRoute(candidate=RouteCandidate(provider="fake", model="m1"), replies=list(replies))]

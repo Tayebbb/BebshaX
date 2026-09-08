@@ -42,16 +42,38 @@ def _stuck_run(run_id: str, age: timedelta, status: str = "saving_personas") -> 
     )
 
 
+class _WritesPersonas:
+    """Model stand-in: writes the requested number of personas for the segment shown."""
+
+    async def complete(self, request):
+        import json
+        from types import SimpleNamespace
+
+        content = request.messages[-1].content
+        payload = json.loads(content[content.index("{") : content.rindex("}") + 1])
+        n = payload["count_to_generate"]
+        personas = [
+            {"name": f"Model persona {i}", "age": 20 + i, "occupation": "Student",
+             "goals": ["study"], "needs": ["time"], "pain_points": ["cost"]}
+            for i in range(n)
+        ]
+        return SimpleNamespace(
+            text=json.dumps({"personas": personas}),
+            provenance=SimpleNamespace(served_by_provider="fake", served_by_model="m1"),
+        )
+
+
 async def test_stale_active_run_is_marked_failed_and_no_longer_blocks(seeded_maker):
     async with seeded_maker() as session:
         session.add(_stuck_run("pgen_stale", STALE_RUN_AFTER + timedelta(minutes=1)))
         await session.commit()
 
-        service = PersonaGenerationService(session)
+        service = PersonaGenerationService(session, llm_service=_WritesPersonas())
         run, personas = await service.create_generation_run(
             study_id="std_runs", target_count=2, distribution_strategy="equal"
         )
         assert run.status == "completed" and len(personas) == 2
+        assert all(p.generation_model == "fake/m1" for p in personas)
 
         stale = await session.get(PersonaGenerationRuns, "pgen_stale")
         assert stale.status == "failed"

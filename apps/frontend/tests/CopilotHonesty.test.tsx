@@ -29,9 +29,9 @@ const sendMessage = (text: string) => {
 };
 
 describe('isTemplateReply predicate', () => {
-  it('flags the backend template engine and any fallback_reason, nothing else', () => {
+  it('flags only the legacy template route — a retried model reply is still a model reply', () => {
     expect(isTemplateReply({ served_by: TEMPLATE_COPILOT_ROUTE })).toBe(true);
-    expect(isTemplateReply({ served_by: 'llm7/codestral-latest', fallback_reason: 'llm_error:TimeoutError' })).toBe(true);
+    expect(isTemplateReply({ served_by: 'llm7/codestral-latest', fallback_reason: 'retried_after_unparseable_reply' })).toBe(false);
     expect(isTemplateReply({ served_by: 'llm7/codestral-latest' })).toBe(false);
     expect(isTemplateReply({ served_by: 'llm7/codestral-latest', fallback_reason: null })).toBe(false);
   });

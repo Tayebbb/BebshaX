@@ -9,6 +9,7 @@ import {
   StudyReport,
 } from '../../../types';
 import { api } from '../../../services/api';
+import type { FailedPersonaRole } from '../../../services/api';
 import { useNavigation } from '../../../context/NavigationContext';
 import { useViewMotion } from '../../../motion/useViewMotion';
 import { CopilotMessage, DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE, isTemplateReply } from './workflow/types';
@@ -53,15 +54,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       ? (err as Error)?.message || READ_ONLY_TITLE
       : null;
   const [promptInput, setPromptInput] = useState<string>(initialPrompt);
-  // Seeded starter questions are a template, never generated output. The flag
-  // flips only after the generator actually returns questions.
-  const [questions, setQuestions] = useState<string[]>([
-    'How do you currently handle tasks and challenges in this area?',
-    'What is your biggest frustration or friction point with existing alternatives?',
-    'What specific features or capabilities would make this solution indispensable?',
-    'What are your pricing expectations and willingness to pay for this tool?',
-    'What hesitations or barriers would prevent you from adopting this workflow?',
-  ]);
+  // No seeded questionnaire: the script is either written by the model from
+  // this study's context or typed by the researcher. An empty list is honest.
+  const [questions, setQuestions] = useState<string[]>([]);
   const [scriptGenerated, setScriptGenerated] = useState<boolean>(() => {
     if (!studyId || typeof localStorage === 'undefined') return false;
     return localStorage.getItem(`bebshax_script_generated_${studyId}`) === '1';
@@ -74,6 +69,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [isGeneratingPersonas, setIsGeneratingPersonas] = useState<boolean>(false);
   const [personaGenError, setPersonaGenError] = useState<string | null>(null);
   const [personaGenRequestId, setPersonaGenRequestId] = useState<string | null>(null);
+  const [personaFailedRoles, setPersonaFailedRoles] = useState<FailedPersonaRole[]>([]);
+  const [personaServedBy, setPersonaServedBy] = useState<string[]>([]);
   const [viewingPersona, setViewingPersona] = useState<Persona | null>(null);
 
   // Copilot Multi-turn Conversational States (Step 1)
@@ -544,12 +541,15 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     const studyTitle = study?.title && study.title !== 'Untitled Study' ? study.title : derivedTitle;
 
     try {
-      const generated = await api.generateStudyPersonas(
+      const result = await api.generateStudyPersonasDetailed(
         study?.id || studyId,
         userPrompt,
         suggestedRoles,
         studyTitle
       );
+      const generated = result.personas;
+      setPersonaFailedRoles(result.failed_roles);
+      setPersonaServedBy(result.served_by);
 
       setPersonas(generated);
       setSelectedPersonaIds(generated.map((p) => p.id));
@@ -864,14 +864,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const isStepUnlocked = (stepNum: number): boolean => {
     if (stepNum <= currentStep) return true;
     if (stepNum <= 3) return goalApproved;
-    if (stepNum === 4) return personas.length > 0;
+    // Interviews need respondents AND questions: the backend refuses a batch
+    // run without a script (script_required) rather than asking canned ones.
+    if (stepNum === 4) return personas.length > 0 && questions.length > 0;
     return hasReportArtifact || hasInterviewActivity || personas.length > 0;
   };
   const stepLockReason = (stepNum: number): string =>
     stepNum <= 3
       ? 'Approve a research goal in Context first'
       : stepNum === 4
-        ? 'Generate personas first'
+        ? personas.length > 0
+          ? 'Generate or write interview questions first'
+          : 'Generate personas first'
         : 'Generate personas or run an interview first';
 
   // Least-grounded claims across the persona panel — surfaced in the report as
@@ -1151,6 +1155,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               personas={personas}
               personaGenError={personaGenError}
               personaGenRequestId={personaGenRequestId}
+              failedRoles={personaFailedRoles}
+              personaServedBy={personaServedBy}
               isGeneratingPersonas={isGeneratingPersonas}
               suggestedRoles={suggestedRoles}
               handleGeneratePersonas={handleGeneratePersonas}

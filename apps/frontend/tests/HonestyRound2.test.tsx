@@ -218,11 +218,11 @@ describe('Blocker 3 — step 5 agrees with step 2', () => {
 });
 
 describe('Blocker 4 — step 3 does not pass a template off as generated output', () => {
-  const renderStep3 = (scriptGenerated: boolean) =>
+  const renderStep3 = (scriptGenerated: boolean, questions: string[] = ['How do you currently handle tasks and challenges in this area?']) =>
     render(
       <Step3Script
         studyId="study_123"
-        questions={['How do you currently handle tasks and challenges in this area?']}
+        questions={questions}
         setQuestions={vi.fn()}
         newQuestion=""
         setNewQuestion={vi.fn()}
@@ -234,12 +234,22 @@ describe('Blocker 4 — step 3 does not pass a template off as generated output'
       />
     );
 
-  it('labels the seeded questions as a starting template and offers "Generate"', () => {
-    renderStep3(false);
+  it('ships no seeded questionnaire: an empty script shows an honest empty state and offers "Generate"', () => {
+    renderStep3(false, []);
 
     expect(screen.getByRole('button', { name: /^Generate Questions$/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Regenerate Questions/i })).toBeNull();
-    expect(screen.getByText(/Starting template/i)).toBeInTheDocument();
+    expect(screen.getByTestId('script-empty-state')).toBeInTheDocument();
+    expect(screen.getByText(/does not ship a generic questionnaire/i)).toBeInTheDocument();
+    expect(screen.queryByText(/How do you currently handle/i)).toBeNull();
+  });
+
+  it('labels researcher-typed questions as the researcher\u2019s own, never as generated', () => {
+    renderStep3(false);
+
+    expect(screen.getByText(/Your own questions/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Starting template/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Regenerate Questions/i })).toBeNull();
   });
 
   it('only says "Regenerate" after a real generation', () => {

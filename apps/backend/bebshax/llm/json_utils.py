@@ -64,3 +64,31 @@ def parse_llm_json(text: str) -> Any:
             except json.JSONDecodeError:
                 continue
     raise ValueError(f"no JSON payload found in LLM response ({len(text)} chars)")
+
+
+def unwrap_list(parsed: Any, *, keys: tuple[str, ...] = (), item_keys: tuple[str, ...] = ()) -> list[Any]:
+    """Recover the list a prompt asked for from whatever shape the model chose.
+
+    ``json_mode`` is OpenAI-style ``json_object`` mode: the top level MUST be an
+    object, so a model asked for an array will return ``{"roles": [...]}``,
+    ``{"items": [...]}`` — or, observed live, a single item object. Nothing is
+    added or changed here: the model's own content is returned as a list.
+
+    Resolution order: a list is returned as is; a dict is searched for one of
+    ``keys`` holding a list, then for its only list value; a dict that carries
+    one of ``item_keys`` is a single item. Anything else → ``[]``.
+    """
+    if isinstance(parsed, list):
+        return parsed
+    if not isinstance(parsed, dict):
+        return []
+    for key in keys:
+        value = parsed.get(key)
+        if isinstance(value, list):
+            return value
+    list_values = [v for v in parsed.values() if isinstance(v, list)]
+    if len(list_values) == 1 and not any(k in parsed for k in item_keys):
+        return list_values[0]
+    if item_keys and any(k in parsed for k in item_keys):
+        return [parsed]
+    return []

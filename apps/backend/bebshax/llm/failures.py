@@ -39,12 +39,17 @@ class FailurePolicy:
     # "route" cools (provider, model); "provider" cools every model of the
     # provider — for account-level signals where sibling models share the fate.
     cooldown_scope: CooldownScope = "route"
+    # None -> the router's default cooldown; a kind-specific duration otherwise
+    # (a slow route deserves a short pause, an exhausted quota a long one).
+    cooldown_seconds: float | None = None
 
 
 # Consumed by the Phase-5 router. CONTEXT_WINDOW_EXCEEDED advances only to
-# larger-context candidates; INTERNAL_ERROR never burns candidates.
+# larger-context candidates; INTERNAL_ERROR never burns candidates. A TIMEOUT
+# cools its route briefly so the next request in a batch does not wait on the
+# same stalled route again.
 FAILURE_POLICIES: dict[FailureKind, FailurePolicy] = {
-    FailureKind.TIMEOUT: FailurePolicy(False, True, False),
+    FailureKind.TIMEOUT: FailurePolicy(False, True, True, cooldown_seconds=30.0),
     FailureKind.CONNECTION: FailurePolicy(True, True, False),
     FailureKind.RATE_LIMITED: FailurePolicy(False, True, True, cooldown_scope="provider"),
     FailureKind.QUOTA_EXHAUSTED: FailurePolicy(False, True, True, cooldown_scope="provider"),
@@ -65,13 +70,26 @@ class LLMError(Exception):
 
 
 class AttemptFailed(LLMError):
-    """One provider/model attempt failed, classified by kind. Raised by adapters."""
+    """One provider/model attempt failed, classified by kind. Raised by adapters.
 
-    def __init__(self, kind: FailureKind, provider: str, model: str, detail: str = "") -> None:
+    ``retry_after_s`` is the provider's OWN recovery hint (Retry-After header,
+    quota reset timestamp) when it gave one; the router lengthens the cooldown
+    to it so an exhausted daily quota is not re-probed every minute."""
+
+    def __init__(
+        self,
+        kind: FailureKind,
+        provider: str,
+        model: str,
+        detail: str = "",
+        *,
+        retry_after_s: float | None = None,
+    ) -> None:
         self.kind = kind
         self.provider = provider
         self.model = model
         self.detail = detail
+        self.retry_after_s = retry_after_s
         super().__init__(f"{kind}: {provider}/{model}: {detail}")
 
 

@@ -3,6 +3,14 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import '@testing-library/jest-dom';
 import { StudyWorkflowView } from '../src/components/dashboard/views/StudyWorkflowView';
 import { api } from '../src/services/api';
+import type { GeneratePersonasResult } from '../src/services/api';
+
+/** The backend's generate-personas envelope around a list of personas. */
+const envelope = (personas: GeneratePersonasResult['personas']): GeneratePersonasResult => ({
+  personas,
+  failed_roles: [],
+  served_by: ['fake/test-model'],
+});
 
 describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Generation', () => {
   beforeEach(async () => {
@@ -329,7 +337,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
 
   it('closes the persona detail modal on Escape', async () => {
     type GeneratedPersonas = Awaited<ReturnType<typeof api.generateStudyPersonas>>;
-    vi.spyOn(api, 'generateStudyPersonas').mockResolvedValue([
+    vi.spyOn(api, 'generateStudyPersonasDetailed').mockResolvedValue(envelope([
       {
         id: 'per_esc_1',
         name: 'Escape Tester',
@@ -337,7 +345,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
         role_title: 'Primary User',
         description: 'A generated persona.',
       } as GeneratedPersonas[number],
-    ]);
+    ]));
 
     render(
       <StudyWorkflowView
@@ -382,10 +390,11 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
 
   it('shows loading banner and skeleton cards while persona generation is in flight, then clears them', async () => {
     type GeneratedPersonas = Awaited<ReturnType<typeof api.generateStudyPersonas>>;
+    type Envelope = Awaited<ReturnType<typeof api.generateStudyPersonasDetailed>>;
     let resolveGeneration!: (personas: GeneratedPersonas) => void;
-    vi.spyOn(api, 'generateStudyPersonas').mockReturnValue(
-      new Promise<GeneratedPersonas>((resolve) => {
-        resolveGeneration = resolve;
+    vi.spyOn(api, 'generateStudyPersonasDetailed').mockReturnValue(
+      new Promise<Envelope>((resolve) => {
+        resolveGeneration = (personas) => resolve(envelope(personas));
       })
     );
 
@@ -494,7 +503,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
 
   it('never invents demographics or claims in the persona modal — honest fallbacks only', async () => {
     type GeneratedPersonas = Awaited<ReturnType<typeof api.generateStudyPersonas>>;
-    vi.spyOn(api, 'generateStudyPersonas').mockResolvedValue([
+    vi.spyOn(api, 'generateStudyPersonasDetailed').mockResolvedValue(envelope([
       {
         id: 'per_sparse_1',
         name: 'Sparse Persona',
@@ -502,7 +511,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
         role_title: 'Primary User',
         description: 'A generated persona with no verified claims yet.',
       } as GeneratedPersonas[number],
-    ]);
+    ]));
 
     render(
       <StudyWorkflowView
@@ -541,7 +550,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
 
   it('renders the real-customer validation safeguard card with SYNTHETIC claims first, even when no report exists', async () => {
     type GeneratedPersonas = Awaited<ReturnType<typeof api.generateStudyPersonas>>;
-    vi.spyOn(api, 'generateStudyPersonas').mockResolvedValue([
+    vi.spyOn(api, 'generateStudyPersonasDetailed').mockResolvedValue(envelope([
       {
         id: 'per_prov_1',
         name: 'Provenance Persona',
@@ -558,7 +567,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
           },
         },
       } as unknown as GeneratedPersonas[number],
-    ]);
+    ]));
 
     render(
       <StudyWorkflowView

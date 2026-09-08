@@ -43,3 +43,14 @@ ATTEMPT_TIMEOUTS_S: dict[TaskType, float] = {
 
 def attempt_timeout_s(task: TaskType) -> float:
     return ATTEMPT_TIMEOUTS_S.get(task, DEFAULT_ATTEMPT_TIMEOUT_S)
+
+
+# Whole-request wall-clock budget: the fallback chain may not keep a caller
+# waiting through every slow route. After each failed attempt the loop stops
+# once this much time has elapsed and reports exhaustion with the trail so far.
+REQUEST_DEADLINE_MULTIPLIER = 2.5
+REQUEST_DEADLINE_CAP_S = 300.0
+
+
+def request_deadline_s(task: TaskType) -> float:
+    return min(REQUEST_DEADLINE_CAP_S, attempt_timeout_s(task) * REQUEST_DEADLINE_MULTIPLIER)

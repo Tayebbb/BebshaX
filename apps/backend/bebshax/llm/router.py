@@ -26,18 +26,22 @@ from bebshax.llm.adapters.base import (
     StreamDelta,
     StreamDone,
 )
+from bebshax.llm.estimator import estimate_request_tokens
 from bebshax.llm.failures import (
     FAILURE_POLICIES,
+    AllCandidatesFailed,
     AttemptFailed,
     FailureKind,
     LLMError,
 )
+from bebshax.llm.latency import request_deadline_s
 from bebshax.llm.pools import POOLS, TASK_POOL_MAP, PoolConfig
 from bebshax.llm.provenance import AttemptRecord, ProvenanceRecord
 from bebshax.llm.service import (
     Entry,
     LLMService,
     attempt_candidates,
+    capability_skip_reason,
     exhaustion_error,
     filter_eligible,
     stamp_internal_error,
@@ -45,7 +49,9 @@ from bebshax.llm.service import (
 from bebshax.llm.types import LLMRequest, LLMResult, TaskType
 
 DEFAULT_COOLDOWN_SECONDS = 60.0
+MAX_HINTED_COOLDOWN_S = 24 * 3600.0  # never trust a provider hint beyond a day
 PROVIDER_WIDE = "*"  # model slot of a provider-scoped cooldown key
+PROBE_NOTE = "cooldown probe: every usable route is cooling down, trying the soonest to recover"
 
 
 def cooldown_key(cand: RouteCandidate, kind: FailureKind) -> tuple[str, str]:
@@ -107,6 +113,10 @@ class PoolRouter(LLMService):
         # wall→deadline; on_cooldown_change receives a DURATION in seconds
         self._cooldown_until: dict[tuple[str, str], float] = dict(initial_cooldowns or {})
         self._on_cooldown_change = on_cooldown_change
+        # Routes currently being probed while cooling (half-open breaker): at
+        # most one in-flight request per route, so a struggling free provider
+        # is never stampeded by every waiting caller at once.
+        self._probing: set[tuple[str, str]] = set()
 
         for pool in self._pools.values():
             unknown = [name for name in pool.adapters if name not in adapters]
@@ -140,15 +150,54 @@ class PoolRouter(LLMService):
                 return f"cooling down for {until - now:.0f}s more{scope}"
         return None
 
-    def _start_cooldown(self, cand: RouteCandidate, kind: FailureKind) -> None:
+    def _cooldown_remaining(self, cand: RouteCandidate) -> float:
+        now = self._clock()
+        return max(
+            (self._cooldown_until.get(key, now) - now)
+            for key in ((cand.provider, cand.model), (cand.provider, PROVIDER_WIDE))
+        )
+
+    def _cooldown_probe(
+        self, entries: list[Entry], request: LLMRequest, provenance: ProvenanceRecord
+    ) -> list[Entry]:
+        """Half-open breaker: every otherwise-usable route is cooling down.
+
+        Failing in 0 ms would keep a sole keyless route dark for its whole
+        cooldown with nothing learned — one slow reply would then black out
+        every feature for 30-60 s. Instead the routes that are capable, fit
+        the context and are not already being probed are admitted in order of
+        soonest recovery. A probe that fails re-arms its cooldown normally.
+        """
+        needed = estimate_request_tokens(request)
+        probe = [
+            (adapter, cand)
+            for adapter, cand in entries
+            if self._cooling_reason(cand) is not None
+            and capability_skip_reason(cand, request) is None
+            and cand.context_window >= needed
+            and (cand.provider, cand.model) not in self._probing
+        ]
+        probe.sort(key=lambda entry: self._cooldown_remaining(entry[1]))
+        if probe:
+            provenance.routing_path.append(f"[{PROBE_NOTE}: {_compact_routes(probe)}]")
+        return probe
+
+    def _start_cooldown(
+        self, cand: RouteCandidate, kind: FailureKind, retry_after_s: float | None = None
+    ) -> None:
         provider, model = cooldown_key(cand, kind)
-        self._cooldown_until[(provider, model)] = self._clock() + self._cooldown_seconds
+        seconds = FAILURE_POLICIES[kind].cooldown_seconds or self._cooldown_seconds
+        if retry_after_s is not None and retry_after_s > seconds:
+            # The provider said when it will serve again (Retry-After / quota
+            # reset): believe it, within a day, instead of re-probing every minute.
+            seconds = min(float(retry_after_s), MAX_HINTED_COOLDOWN_S)
+        self._cooldown_until[(provider, model)] = self._clock() + seconds
         if self._on_cooldown_change is not None:
             # fire-and-forget persistence — cooldown state must survive restarts;
             # provider-scoped cooldowns persist with model "*" and load back as-is
-            self._on_cooldown_change(provider, model, self._cooldown_seconds)
+            self._on_cooldown_change(provider, model, seconds)
 
-    async def _eligible_entries(
+    async def _pool_entries(
         self, pool: PoolConfig, request: LLMRequest, provenance: ProvenanceRecord
     ) -> list[Entry]:
         entries: list[Entry] = []
@@ -165,10 +214,31 @@ class PoolRouter(LLMService):
                     f"[ranker reordered: {_compact_routes(entries)} -> {_compact_routes(ranked)}]"
                 )
             entries = ranked
-        entries = _apply_preference(entries, request, provenance)
-        return filter_eligible(
-            entries, request, provenance, extra_skip_reason=self._cooling_reason
-        )
+        return _apply_preference(entries, request, provenance)
+
+    async def _eligible_entries(
+        self, pool: PoolConfig, request: LLMRequest, provenance: ProvenanceRecord
+    ) -> tuple[list[Entry], Callable[[RouteCandidate], str | None] | None]:
+        """Eligible routes plus the per-candidate skip check the attempt loop
+        must re-run. When cooldowns alone emptied the list, the cooldown probe
+        is returned instead — with no skip check, since those routes are
+        cooling by definition."""
+        entries = await self._pool_entries(pool, request, provenance)
+        try:
+            eligible = filter_eligible(
+                entries, request, provenance, extra_skip_reason=self._cooling_reason
+            )
+        except AllCandidatesFailed:
+            probe = self._cooldown_probe(entries, request, provenance)
+            if not probe:
+                raise
+            return probe, None
+        return eligible, self._cooling_reason
+
+    def _mark_probing(self, entries: list[Entry]) -> set[tuple[str, str]]:
+        keys = {(cand.provider, cand.model) for _, cand in entries}
+        self._probing |= keys
+        return keys
 
     async def complete(self, request: LLMRequest) -> LLMResult:
         pool_name = self._task_pool_map.get(request.task)
@@ -184,20 +254,24 @@ class PoolRouter(LLMService):
             conversation_id=request.conversation_id,
         )
         started = time.perf_counter()
+        probing: set[tuple[str, str]] = set()
         try:
             async with self._semaphores[pool_name]:
                 self._active_requests[pool_name] += 1
                 try:
-                    eligible = await self._eligible_entries(pool, request, provenance)
+                    eligible, skip_reason = await self._eligible_entries(pool, request, provenance)
+                    if skip_reason is None:
+                        probing = self._mark_probing(eligible)
                     return await attempt_candidates(
                         eligible,
                         request,
                         provenance,
                         on_cooldown=self._start_cooldown,
-                        skip_reason=self._cooling_reason,
+                        skip_reason=skip_reason,
                     )
                 finally:
                     self._active_requests[pool_name] -= 1
+                    self._probing -= probing
         finally:
             provenance.total_latency_ms = (time.perf_counter() - started) * 1000
             if self._on_provenance is not None:
@@ -225,15 +299,20 @@ class PoolRouter(LLMService):
             conversation_id=request.conversation_id,
         )
         started = time.perf_counter()
+        probing: set[tuple[str, str]] = set()
         try:
             async with self._semaphores[pool_name]:
                 self._active_requests[pool_name] += 1
                 try:
-                    eligible = await self._eligible_entries(pool, request, provenance)
+                    eligible, skip_reason = await self._eligible_entries(pool, request, provenance)
+                    if skip_reason is None:
+                        probing = self._mark_probing(eligible)
 
+                    budget = request_deadline_s(request.task)
                     attempt_no = 0
                     for adapter, cand in eligible:
-                        cooling = self._cooling_reason(cand)  # started mid-request?
+                        # started mid-request? (never re-checked for a probe)
+                        cooling = skip_reason(cand) if skip_reason is not None else None
                         if cooling is not None:
                             provenance.routing_path.append(
                                 f"{cand.provider}/{cand.model} [skipped: {cooling}]"
@@ -300,12 +379,18 @@ class PoolRouter(LLMService):
                                 record.failure_detail = failure.detail
                                 policy = FAILURE_POLICIES[failure.kind]
                                 if policy.cooldown_route:
-                                    self._start_cooldown(cand, failure.kind)
+                                    self._start_cooldown(cand, failure.kind, failure.retry_after_s)
                                 # Deliberate order difference from attempt_candidates:
                                 # a committed route must never retry or advance — the
                                 # user already saw its words (R2).
                                 if committed or not policy.try_next_candidate:
                                     raise
+                                if time.perf_counter() - started >= budget:
+                                    record.fallback_reason = f"stopping: request budget of {budget:.0f}s spent"
+                                    provenance.routing_path.append(
+                                        f"[deadline: {budget:.0f}s request budget spent after {attempt_no} attempt(s)]"
+                                    )
+                                    raise exhaustion_error(provenance, request)
                                 if policy.retry_same_once and same_route_retries == 0:
                                     same_route_retries += 1
                                     record.fallback_reason = "retrying same route once"
@@ -317,6 +402,7 @@ class PoolRouter(LLMService):
                     raise exhaustion_error(provenance, request)
                 finally:
                     self._active_requests[pool_name] -= 1
+                    self._probing -= probing
         finally:
             provenance.total_latency_ms = (time.perf_counter() - started) * 1000
             if self._on_provenance is not None:

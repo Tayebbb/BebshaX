@@ -1,141 +1,162 @@
 """Dataset Evaluator & Diversity Ranker for BebshaX.
 
-Implements deterministic, explainable scoring formulas:
-- Relevance Score (business domain, geographic match, population alignment, variable coverage)
-- Quality Score (sample size, completeness, source authority, licensing)
-- Diversity Filter (selects complementary domain categories, prevents redundant datasets)
-- Auto-Import Thresholds & Decision Logic
+Deterministic, explainable scoring computed from what the source published and
+from THIS study's text — no fixed geography, no domain keyword bonuses, no
+credit for being a catalogue entry:
+
+- Relevance: lexical overlap between the study (idea + requirements + queries)
+  and the candidate's title/description/tags/variables, plus requirement-variable
+  coverage. Unrelated datasets score near 0.
+- Quality: direct download available, tabular format, licence stated, size
+  known and importable, recency, record count when known.
+- Selection: top candidates above both thresholds, one per category first.
 """
 
 from __future__ import annotations
 
-import re
-from typing import Any
+from datetime import datetime, timezone
+from typing import Optional
+
 from bebshax.datasets.discovery.base_adapter import DatasetCandidateData, DatasetEvaluationResult
+from bebshax.datasets.discovery.downloader import MAX_DOWNLOAD_BYTES, looks_downloadable
 from bebshax.research.planner import DatasetRequirementSpec
+from bebshax.research.search_provider import lexical_relevance, query_tokens
+
+RELEVANCE_SELECT_THRESHOLD = 0.30
+QUALITY_SELECT_THRESHOLD = 0.55
+_IMPORTABLE_FORMATS = {"csv", "tsv", "json", "jsonl", "xlsx"}
 
 
 class DatasetEvaluator:
-    """Evaluates, scores, and selects optimal dataset candidates."""
+    """Evaluates, scores, and selects dataset candidates."""
 
     def __init__(self, max_auto_select: int = 4) -> None:
         self.max_auto_select = max_auto_select
+
+    @staticmethod
+    def _study_text(idea: str, requirements: list[DatasetRequirementSpec], queries: Optional[list[str]]) -> str:
+        parts = [idea, " ".join(queries or [])]
+        for req in requirements:
+            parts.append(req.category.replace("_", " "))
+            parts.append(req.description)
+            parts.append(" ".join(req.target_variables))
+            parts.append(req.geographic_scope)
+            parts.append(req.population_scope)
+        return " ".join(p for p in parts if p)
 
     def calculate_relevance_score(
         self,
         candidate: DatasetCandidateData,
         idea: str,
         requirements: list[DatasetRequirementSpec],
+        queries: Optional[list[str]] = None,
     ) -> tuple[float, list[str]]:
-        """Calculate deterministic relevance score between 0.50 and 0.98 and reasons."""
-        score = 0.70
+        """0–1 relevance computed from token overlap with the study; reasons list what matched."""
         reasons: list[str] = []
-        lower_idea = idea.lower()
-        candidate_text = (
-            candidate.name + " " + candidate.description + " " + candidate.population_coverage + " " + candidate.category
-        ).lower()
+        candidate_text = " ".join(
+            [candidate.name, candidate.description, " ".join(candidate.tags), " ".join(candidate.relevant_variables),
+             candidate.geographic_coverage, candidate.population_coverage, candidate.category.replace("_", " ")]
+        )
+        study_text = self._study_text(idea, requirements, queries)
 
-        # 1. Geographic relevance
-        if "bangladesh" in candidate.geographic_coverage.lower() or "dhaka" in candidate.geographic_coverage.lower():
-            score += 0.12
-            reasons.append("Covers primary target geography (Bangladesh)")
-        elif "south asia" in candidate.geographic_coverage.lower():
-            score += 0.06
-            reasons.append("Covers regional South Asian market baseline")
-        else:
-            score += 0.02
-            reasons.append("Provides broader contextual macro evidence")
+        # Two directions: how much of the candidate's own vocabulary the study
+        # shares (precision) and how much of the study's key vocabulary the
+        # candidate covers (recall). Titles matter more than long notes.
+        title_hit = lexical_relevance(candidate.name, study_text)
+        body_hit = lexical_relevance(candidate_text, study_text)
+        study_cov = lexical_relevance(study_text, candidate_text)
+        score = 0.45 * title_hit + 0.30 * body_hit + 0.25 * study_cov
 
-        # 2. Population relevance
-        if "student" in lower_idea and "student" in candidate_text:
-            score += 0.08
-            reasons.append("Directly targets core demographic (University & Tertiary Students)")
-        elif any(k in lower_idea for k in ["sme", "restaurant", "business", "shop"]) and any(
-            k in candidate_text for k in ["sme", "enterprise", "firm", "retail", "pos"]
-        ):
-            score += 0.08
-            reasons.append("Directly matches target enterprise cohort (SME & Retail Operators)")
-        elif any(k in lower_idea for k in ["food", "meal", "diet"]) and any(
-            k in candidate_text for k in ["food", "diet", "meal", "expenditure"]
-        ):
-            score += 0.08
-            reasons.append("Directly matches food consumption and dietary spending behaviors")
+        shared = sorted(query_tokens(candidate.name + " " + " ".join(candidate.tags)) & query_tokens(study_text))
+        if shared:
+            reasons.append(f"Shares study vocabulary: {', '.join(shared[:6])}")
 
-        # 3. Variable requirements alignment
         matching_vars = 0
         for req in requirements:
             for tv in req.target_variables:
-                if any(rv.lower() in tv.lower() or tv.lower() in rv.lower() for rv in candidate.relevant_variables):
+                tv_l = tv.lower()
+                if any(tv_l in rv.lower() or rv.lower() in tv_l for rv in candidate.relevant_variables if rv):
                     matching_vars += 1
+        if matching_vars:
+            score += min(0.15, 0.05 * matching_vars)
+            reasons.append(f"Covers {matching_vars} variable(s) named in the research plan")
 
-        if matching_vars >= 3:
-            score += 0.06
-            reasons.append(f"Contains {matching_vars} high-signal empirical variables required for segmentation")
-        elif matching_vars >= 1:
-            score += 0.03
-            reasons.append(f"Contains key required variables: {', '.join(candidate.relevant_variables[:3])}")
+        geo_terms = query_tokens(" ".join(r.geographic_scope for r in requirements))
+        if geo_terms and geo_terms & query_tokens(candidate.geographic_coverage + " " + candidate.name):
+            score += 0.10
+            reasons.append(f"Geography matches the plan ({candidate.geographic_coverage or candidate.name})")
 
-        # Clamp between 0.50 and 0.98
-        clamped_score = max(0.50, min(0.98, round(score, 2)))
-        return clamped_score, reasons
+        if candidate.category == "macro_context":
+            reasons.append("Macro context for the target market (not a topical dataset)")
 
-    def calculate_quality_score(
-        self,
-        candidate: DatasetCandidateData,
-    ) -> tuple[float, list[str]]:
-        """Calculate deterministic dataset quality score based on authority, sample size, and license."""
-        score = 0.75
+        if not reasons:
+            reasons.append("No vocabulary shared with the study — kept for manual review only")
+        return max(0.0, min(1.0, round(score, 3))), reasons
+
+    def calculate_quality_score(self, candidate: DatasetCandidateData) -> tuple[float, list[str]]:
+        """0–1 quality from published attributes; reasons list what was actually present."""
+        score = 0.0
         reasons: list[str] = []
 
-        # 1. Source authority (labels are honest "modeled on <source>" strings —
-        # the boost ranks by the rigor of the modeled-on methodology, not by
-        # claiming real publication)
-        if "bureau of statistics" in candidate.publisher.lower() or "world bank" in candidate.publisher.lower() or "ministry" in candidate.publisher.lower():
-            score += 0.12
-            reasons.append(f"Modeled on an authoritative statistical source: {candidate.publisher}")
-        elif "verified" in candidate.publisher.lower() or "consortium" in candidate.publisher.lower() or "academic" in candidate.publisher.lower():
-            score += 0.08
-            reasons.append(f"Modeled on a verified research source: {candidate.publisher}")
+        if looks_downloadable(candidate.download_url) or candidate.raw_data_content:
+            score += 0.30
+            reasons.append("Direct download available for automated import")
         else:
-            score += 0.04
-            reasons.append("Illustrative catalog entry with documented generation methodology")
+            reasons.append("Listing only — no direct resource URL published")
 
-        # 2. Sample size
-        if candidate.sample_rows >= 5000:
-            score += 0.08
-            reasons.append(f"Large statistical sample size ({candidate.sample_rows:,} records)")
-        elif candidate.sample_rows >= 1000:
-            score += 0.05
-            reasons.append(f"Robust statistical sample size ({candidate.sample_rows:,} records)")
+        if candidate.format.lower() in _IMPORTABLE_FORMATS:
+            score += 0.15
+            reasons.append(f"Tabular format ({candidate.format.upper()})")
+
+        if candidate.license.strip():
+            score += 0.15
+            reasons.append(f"Licence stated: {candidate.license}")
         else:
-            score += 0.02
-            reasons.append(f"Standard sample size ({candidate.sample_rows:,} records)")
+            reasons.append("No licence published")
 
-        # 3. License clarity
-        if any(lic in candidate.license.lower() for lic in ["open", "creative commons", "cc-by", "public domain", "government"]):
-            score += 0.04
-            reasons.append(f"Permitted open license: {candidate.license}")
+        if candidate.size_bytes is not None:
+            if candidate.size_bytes <= MAX_DOWNLOAD_BYTES:
+                score += 0.15
+                reasons.append(f"Size known ({candidate.size_bytes:,} bytes) and within the import ceiling")
+            else:
+                reasons.append(f"Too large to import automatically ({candidate.size_bytes:,} bytes)")
 
-        # Clamp between 0.50 and 0.98
-        clamped_score = max(0.50, min(0.98, round(score, 2)))
-        return clamped_score, reasons
+        if candidate.sample_rows:
+            score += 0.10 if candidate.sample_rows >= 100 else 0.05
+            reasons.append(f"{candidate.sample_rows:,} records reported")
+
+        if candidate.modified_at:
+            try:
+                modified = datetime.fromisoformat(candidate.modified_at.replace("Z", "+00:00"))
+                if modified.tzinfo is None:
+                    modified = modified.replace(tzinfo=timezone.utc)
+                age_days = (datetime.now(timezone.utc) - modified).days
+                if age_days <= 3 * 365:
+                    score += 0.15
+                    reasons.append(f"Updated within the last three years ({modified.date().isoformat()})")
+                else:
+                    score += 0.05
+                    reasons.append(f"Last updated {modified.date().isoformat()}")
+            except ValueError:
+                pass
+        elif candidate.source.startswith("World Bank"):
+            score += 0.15
+            reasons.append("Official statistical series fetched live")
+
+        return max(0.0, min(1.0, round(score, 3))), reasons
 
     def evaluate_candidates(
         self,
         candidates: list[DatasetCandidateData],
         idea: str,
         requirements: list[DatasetRequirementSpec],
+        queries: Optional[list[str]] = None,
     ) -> list[DatasetEvaluationResult]:
-        """Evaluate, score, and select top diverse dataset candidates."""
+        """Score every candidate and auto-select the strongest, category-diverse ones."""
         evaluated: list[DatasetEvaluationResult] = []
-
         for cand in candidates:
-            rel_score, rel_reasons = self.calculate_relevance_score(cand, idea, requirements)
+            rel_score, rel_reasons = self.calculate_relevance_score(cand, idea, requirements, queries)
             qual_score, qual_reasons = self.calculate_quality_score(cand)
-
-            combined_reasons = rel_reasons + qual_reasons
-            reason_text = " • " + "\n• ".join(combined_reasons)
-
             evaluated.append(
                 DatasetEvaluationResult(
                     candidate=cand,
@@ -143,41 +164,35 @@ class DatasetEvaluator:
                     quality_score=qual_score,
                     is_selected=False,
                     selection_status="discovered",
-                    selection_reason=reason_text,
+                    selection_reason=" • " + "\n• ".join(rel_reasons + qual_reasons),
                     evaluation_details={
                         "relevance_reasons": rel_reasons,
                         "quality_reasons": qual_reasons,
-                        "composite_score": round((rel_score * 0.6) + (qual_score * 0.4), 2),
+                        "composite_score": round((rel_score * 0.6) + (qual_score * 0.4), 3),
+                        "scoring": "lexical_overlap+published_attributes",
                     },
                 )
             )
 
-        # Sort by composite score descending
         evaluated.sort(key=lambda x: x.evaluation_details["composite_score"], reverse=True)
 
-        # Diversity selection: select top candidates across distinct categories
         selected_categories: set[str] = set()
-        selected_count = 0
-
-        # Pass 1: pick highest scoring candidate per distinct category
-        for res in evaluated:
-            if selected_count >= self.max_auto_select:
+        selected = 0
+        for res in evaluated:  # pass 1: best per category
+            if selected >= self.max_auto_select:
                 break
-            if res.relevance_score >= 0.75 and res.quality_score >= 0.75:
-                if res.candidate.category not in selected_categories:
-                    res.is_selected = True
-                    res.selection_status = "selected"
-                    selected_categories.add(res.candidate.category)
-                    selected_count += 1
-
-        # Pass 2: fill remaining quota up to max_auto_select if slots remain
-        if selected_count < self.max_auto_select:
-            for res in evaluated:
-                if selected_count >= self.max_auto_select:
-                    break
-                if not res.is_selected and res.relevance_score >= 0.70 and res.quality_score >= 0.70:
-                    res.is_selected = True
-                    res.selection_status = "selected"
-                    selected_count += 1
-
+            if (
+                res.relevance_score >= RELEVANCE_SELECT_THRESHOLD
+                and res.quality_score >= QUALITY_SELECT_THRESHOLD
+                and res.candidate.category not in selected_categories
+            ):
+                res.is_selected, res.selection_status = True, "selected"
+                selected_categories.add(res.candidate.category)
+                selected += 1
+        for res in evaluated:  # pass 2: fill remaining slots
+            if selected >= self.max_auto_select:
+                break
+            if not res.is_selected and res.relevance_score >= RELEVANCE_SELECT_THRESHOLD and res.quality_score >= QUALITY_SELECT_THRESHOLD:
+                res.is_selected, res.selection_status = True, "selected"
+                selected += 1
         return evaluated

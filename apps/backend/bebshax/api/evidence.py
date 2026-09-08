@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_optional_current_user
@@ -15,12 +14,9 @@ from bebshax.api.deps import get_session, require_study_access, user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import (
-    DatasetCandidates,
-    DatasetSources,
     EvidenceChunks,
     EvidenceClaims,
     EvidenceSources,
-    ResearchPlans,
     ResearchRuns,
     Studies,
 )
@@ -53,6 +49,9 @@ def _serialize_run(r: ResearchRuns) -> dict[str, Any]:
         "dataset_candidate_count": r.dataset_candidate_count,
         "dataset_imported_count": r.dataset_imported_count,
         "step_progress": r.step_progress or {},
+        # Provenance markers written by the run: plan/queries source, evidence
+        # provider, no_live_evidence, claims_status, served_by, error_code.
+        "summary": (r.step_progress or {}).get("summary") or {},
         "research_plan": r.research_plan,
         "queries": r.queries or [],
         "error_message": r.error_message,
@@ -119,7 +118,10 @@ async def start_study_research(
     )
 
     llm_service = getattr(request.app.state, "llm_service", None)
-    service = ResearchEngineService(llm_service=llm_service)
+    # Deployments/tests may pin the evidence provider (e.g. an offline sample
+    # corpus); the default is the live keyless Wikipedia provider.
+    search_provider = getattr(request.app.state, "research_search_provider", None)
+    service = ResearchEngineService(llm_service=llm_service, search_provider=search_provider)
     effective_user_id = current_user.id if current_user else study.user_id
 
     run = await service.run_study_research(session, study, user_id=effective_user_id)

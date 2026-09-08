@@ -28,6 +28,7 @@ from bebshax.llm.failures import (
     FailureKind,
     LLMError,
 )
+from bebshax.llm.latency import request_deadline_s
 from bebshax.llm.provenance import AttemptRecord, ProvenanceRecord
 from bebshax.llm.types import LLMRequest, LLMResult
 
@@ -158,6 +159,7 @@ async def attempt_candidates(
     provenance: ProvenanceRecord,
     on_cooldown: Callable[[RouteCandidate, FailureKind], None] | None = None,
     skip_reason: Callable[[RouteCandidate], str | None] | None = None,
+    deadline_s: float | None = None,
 ) -> LLMResult:
     """Policy-driven attempt loop over eligible routes. Raises
     AllCandidatesFailed with the full provenance trail on exhaustion (or
@@ -165,7 +167,13 @@ async def attempt_candidates(
 
     `skip_reason` is re-checked before EACH candidate: a cooldown started by an
     earlier attempt in this very request (e.g. a provider-wide 429) must skip
-    the sibling routes that eligibility admitted a moment ago."""
+    the sibling routes that eligibility admitted a moment ago.
+
+    `deadline_s` (default: the task's request budget) bounds the WHOLE chain:
+    after a failed attempt the loop stops advancing once the budget is spent,
+    so a caller never waits through every slow route in turn."""
+    budget = request_deadline_s(request.task) if deadline_s is None else deadline_s
+    loop_started = time.perf_counter()
     attempt_no = 0
     for adapter, cand in eligible:
         reason = skip_reason(cand) if skip_reason is not None else None
@@ -188,7 +196,14 @@ async def attempt_candidates(
                 record.failure_detail = failure.detail
                 policy = FAILURE_POLICIES[failure.kind]
                 if policy.cooldown_route and on_cooldown is not None:
-                    on_cooldown(cand, failure.kind)
+                    on_cooldown(cand, failure.kind, failure.retry_after_s)
+                elapsed = time.perf_counter() - loop_started
+                if policy.try_next_candidate and elapsed >= budget:
+                    record.fallback_reason = f"stopping: request budget of {budget:.0f}s spent"
+                    provenance.routing_path.append(
+                        f"[deadline: {budget:.0f}s request budget spent after {attempt_no} attempt(s)]"
+                    )
+                    raise exhaustion_error(provenance, request)
                 if policy.retry_same_once and same_route_retries == 0:
                     same_route_retries += 1
                     record.fallback_reason = "retrying same route once"

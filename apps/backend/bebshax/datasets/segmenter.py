@@ -1,7 +1,9 @@
 """Segment Discovery & Population Distribution Engine for BebshaX.
 
-Discovers empirical market segments from dataset columns and mathematically calculates
-exact population shares and persona allocation quotas without LLM guesswork.
+Discovers market segments that are literally present in a dataset (a grouping
+column such as role/tier/segment), with exact population shares and per-group
+observed statistics. When no grouping column exists it returns no segments:
+numeric partitioning is the segmentation engine's job and nothing is invented.
 """
 
 from __future__ import annotations
@@ -46,46 +48,40 @@ def discover_segments(
                 selected_col = col_name
                 break
 
-    # Look for age and budget columns to extract segment constraints
-    age_col = next((lower_cols[c] for c in ("age", "user_age", "respondent_age") if c in lower_cols), None)
-    budget_col = next(
-        (lower_cols[c] for c in ("budget", "monthly_budget", "spend", "income", "willingness_to_pay", "price") if c in lower_cols),
-        None,
-    )
-    tech_col = next(
-        (lower_cols[c] for c in ("tech_familiarity", "tech_savviness", "tech_usage", "technology") if c in lower_cols),
-        None,
-    )
-    needs_col = next(
-        (lower_cols[c] for c in ("primary_need", "pain_point", "problem", "goal", "needs", "motivation") if c in lower_cols),
-        None,
-    )
+    if not selected_col:
+        # No categorical grouping variable: no derived segments. The segmentation
+        # engine partitions the numeric variables statistically instead; nothing
+        # is invented here (RULES.md R2).
+        return []
+
+    # Numeric/categorical companions are profiled per group ONLY when present.
+    numeric_cols = [c for c in columns if c != selected_col and _is_numeric_column(rows, c)]
+    text_cols = [c for c in columns if c != selected_col and c not in numeric_cols]
+
+    grouped_rows: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        val = str(r.get(selected_col, "")).strip()
+        if not val or val.lower() in ("null", "none", "nan"):
+            val = "Other / Unspecified"
+        grouped_rows.setdefault(val, []).append(r)
 
     segments: list[dict[str, Any]] = []
+    sorted_groups = sorted(grouped_rows.items(), key=lambda x: len(x[1]), reverse=True)
+    for seg_idx, (seg_name, seg_rows) in enumerate(sorted_groups[:6]):
+        seg_count = len(seg_rows)
+        pop_share = round(seg_count / total_rows, 3)
+        pop_share_pct = round((seg_count / total_rows) * 100, 1)
 
-    if selected_col:
-        # Group rows by selected segmentation column
-        grouped_rows: dict[str, list[dict[str, Any]]] = {}
-        for r in rows:
-            val = str(r.get(selected_col, "General Population")).strip()
-            if not val or val.lower() in ("null", "none", "nan"):
-                val = "Other / Unspecified"
-            grouped_rows.setdefault(val, []).append(r)
+        observed_numeric = {c: s for c in numeric_cols if (s := _numeric_summary(seg_rows, c))}
+        observed_categorical = {c: s for c in text_cols if (s := _categorical_summary(seg_rows, c))}
+        constraints: dict[str, Any] = {
+            "rule_description": f"{selected_col} == {seg_name!r} ({pop_share_pct}% of {total_rows} observed records)",
+        }
+        constraints.update(observed_numeric)
+        constraints.update({c: s["dominant"] for c, s in observed_categorical.items()})
 
-        sorted_groups = sorted(grouped_rows.items(), key=lambda x: len(x[1]), reverse=True)
-        # Limit to top 6 prominent segments
-        for seg_idx, (seg_name, seg_rows) in enumerate(sorted_groups[:6]):
-            seg_count = len(seg_rows)
-            pop_share = round((seg_count / total_rows), 3)
-            pop_share_pct = round((seg_count / total_rows) * 100, 1)
-
-            # Calculate numeric constraint statistics for this segment
-            age_range, median_age = _extract_num_range(seg_rows, age_col, default_min=18, default_max=65)
-            budget_stats = _extract_budget_stats(seg_rows, budget_col)
-            tech_level = _extract_dominant_str(seg_rows, tech_col, default="Medium")
-            common_needs = _extract_top_text(seg_rows, needs_col, default=f"Validating solutions for {seg_name}")
-
-            segments.append({
+        segments.append(
+            {
                 "id": f"seg_{seg_idx + 1}",
                 "name": seg_name,
                 "population_count": seg_count,
@@ -93,95 +89,50 @@ def discover_segments(
                 "population_percentage": pop_share_pct,
                 "is_dataset_supported": True,
                 "segmentation_feature": selected_col,
-                "constraints": {
-                    "age_range": age_range,
-                    "median_age": median_age,
-                    "monthly_budget": budget_stats,
-                    "technology_familiarity": tech_level,
-                    "observed_needs": common_needs,
-                    "rule_description": f"Must represent {seg_name} ({pop_share_pct}% of population) with age {age_range[0]}-{age_range[1]} and budget ~{budget_stats.get('median', 'N/A')}.",
-                },
-                "sample_records": [
-                    {k: v for k, v in r.items() if v is not None}
-                    for r in seg_rows[:3]
-                ],
-            })
-    else:
-        # Fallback: Create structured segments based on budget/age quartiles or balanced representative tiers
-        budget_stats = _extract_budget_stats(rows, budget_col)
-        segments = [
-            {
-                "id": "seg_1",
-                "name": "Core Value / Budget-Conscious Segment",
-                "population_count": int(total_rows * 0.45),
-                "population_share": 0.45,
-                "population_percentage": 45.0,
-                "is_dataset_supported": True,
-                "segmentation_feature": "statistical_quartile",
-                "constraints": {
-                    "age_range": [18, 30],
-                    "median_age": 24,
-                    "monthly_budget": {
-                        "min": budget_stats.get("min", 100),
-                        "median": round(budget_stats.get("median", 500) * 0.7, 1),
-                        "max": budget_stats.get("median", 500),
-                        "currency": budget_stats.get("currency", "BDT"),
-                    },
-                    "technology_familiarity": "Medium",
-                    "observed_needs": ["Cost efficiency", "Reliable performance", "Transparent pricing"],
-                    "rule_description": "Price-sensitive core segment seeking high value at modest subscription cost.",
-                },
-                "sample_records": rows[:2],
-            },
-            {
-                "id": "seg_2",
-                "name": "Growth & Performance Focused Segment",
-                "population_count": int(total_rows * 0.35),
-                "population_share": 0.35,
-                "population_percentage": 35.0,
-                "is_dataset_supported": True,
-                "segmentation_feature": "statistical_quartile",
-                "constraints": {
-                    "age_range": [22, 40],
-                    "median_age": 29,
-                    "monthly_budget": {
-                        "min": budget_stats.get("median", 500),
-                        "median": budget_stats.get("median", 800),
-                        "max": round(budget_stats.get("median", 800) * 1.5, 1),
-                        "currency": budget_stats.get("currency", "BDT"),
-                    },
-                    "technology_familiarity": "High",
-                    "observed_needs": ["Speed", "Productivity workflow", "Deep insights"],
-                    "rule_description": "Active users seeking efficiency and automation.",
-                },
-                "sample_records": rows[2:4] if len(rows) > 3 else rows[:1],
-            },
-            {
-                "id": "seg_3",
-                "name": "Premium / Enterprise Power Users",
-                "population_count": int(total_rows * 0.20),
-                "population_share": 0.20,
-                "population_percentage": 20.0,
-                "is_dataset_supported": True,
-                "segmentation_feature": "statistical_quartile",
-                "constraints": {
-                    "age_range": [26, 50],
-                    "median_age": 34,
-                    "monthly_budget": {
-                        "min": round(budget_stats.get("median", 800) * 1.5, 1),
-                        "median": round(budget_stats.get("median", 800) * 2.5, 1),
-                        "max": round(budget_stats.get("median", 800) * 4.0, 1),
-                        "currency": budget_stats.get("currency", "BDT"),
-                    },
-                    "technology_familiarity": "High",
-                    "observed_needs": ["Priority support", "Custom workflows", "Comprehensive reporting"],
-                    "rule_description": "Top-tier power users with highest willingness to pay.",
-                },
-                "sample_records": rows[4:6] if len(rows) > 5 else rows[:1],
-            },
-        ]
-
+                "constraints": constraints,
+                "distributions": {**observed_numeric, **{c: s["top_categories"] for c, s in observed_categorical.items()}},
+                "sample_records": [{k: v for k, v in r.items() if v is not None} for r in seg_rows[:3]],
+            }
+        )
     return segments
+
+
+def _is_numeric_column(rows: list[dict[str, Any]], col: str) -> bool:
+    vals = [r.get(col) for r in rows if r.get(col) not in (None, "")]
+    if not vals:
+        return False
+    numeric = sum(1 for v in vals if isinstance(v, (int, float)) and not isinstance(v, bool))
+    return numeric / len(vals) >= 0.9
+
+
+def _numeric_summary(rows: list[dict[str, Any]], col: str) -> dict[str, Any] | None:
+    vals = sorted(float(r[col]) for r in rows if isinstance(r.get(col), (int, float)) and not isinstance(r.get(col), bool))
+    if not vals:
+        return None
+    n = len(vals)
+    return {
+        "count": n,
+        "min": round(vals[0], 2),
+        "median": round(statistics.median(vals), 2),
+        "max": round(vals[-1], 2),
+        "p75": round(vals[min(int(n * 0.75), n - 1)], 2),
+    }
+
+
+def _categorical_summary(rows: list[dict[str, Any]], col: str) -> dict[str, Any] | None:
+    vals = [str(r[col]).strip() for r in rows if r.get(col) is not None and str(r.get(col)).strip()]
+    if not vals:
+        return None
+    freq: dict[str, int] = {}
+    for v in vals:
+        freq[v] = freq.get(v, 0) + 1
+    ranked = sorted(freq.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "dominant": ranked[0][0],
+        "top_categories": [
+            {"category": k, "count": c, "percentage": round(c / len(vals) * 100, 2)} for k, c in ranked[:6]
+        ],
+    }
 
 
 def calculate_segment_persona_distribution(
@@ -221,54 +172,3 @@ def calculate_segment_persona_distribution(
         distribution[seg["id"]] = floored_counts[idx]
 
     return distribution
-
-
-def _extract_num_range(rows: list[dict[str, Any]], col: str | None, default_min: int = 18, default_max: int = 65) -> tuple[list[int], int]:
-    if not col:
-        return [default_min, default_max], int((default_min + default_max) / 2)
-    vals = [float(r[col]) for r in rows if r.get(col) is not None and isinstance(r.get(col), (int, float))]
-    if not vals:
-        return [default_min, default_max], int((default_min + default_max) / 2)
-    min_v = int(min(vals))
-    max_v = int(max(vals))
-    med_v = int(statistics.median(vals))
-    return [max(min_v, 1), max(max_v, min_v + 1)], med_v
-
-
-def _extract_budget_stats(rows: list[dict[str, Any]], col: str | None) -> dict[str, Any]:
-    if not col:
-        return {"min": 100, "median": 500, "max": 2000, "currency": "BDT"}
-    vals = [float(r[col]) for r in rows if r.get(col) is not None and isinstance(r.get(col), (int, float))]
-    if not vals:
-        return {"min": 100, "median": 500, "max": 2000, "currency": "BDT"}
-    vals.sort()
-    n = len(vals)
-    return {
-        "min": round(vals[0], 2),
-        "median": round(statistics.median(vals), 2),
-        "max": round(vals[-1], 2),
-        "p75": round(vals[min(int(n * 0.75), n - 1)], 2),
-        "currency": "BDT",
-    }
-
-
-def _extract_dominant_str(rows: list[dict[str, Any]], col: str | None, default: str = "Medium") -> str:
-    if not col:
-        return default
-    vals = [str(r[col]).strip() for r in rows if r.get(col) is not None and str(r.get(col)).strip()]
-    if not vals:
-        return default
-    freq: dict[str, int] = {}
-    for v in vals:
-        freq[v] = freq.get(v, 0) + 1
-    return max(freq.items(), key=lambda x: x[1])[0]
-
-
-def _extract_top_text(rows: list[dict[str, Any]], col: str | None, default: str = "") -> list[str]:
-    if not col:
-        return [default] if default else []
-    vals = [str(r[col]).strip() for r in rows if r.get(col) is not None and str(r.get(col)).strip()]
-    if not vals:
-        return [default] if default else []
-    unique_vals = list(dict.fromkeys(vals))
-    return unique_vals[:4]

@@ -18,7 +18,9 @@ from bebshax.llm.adapters.openrouter_adapter import OpenRouterAdapter
 
 def build_default_adapters() -> dict[str, ProviderAdapter]:
     return {
-        "openrouter": OpenRouterAdapter(),  # Primary: OpenRouter (direct)
+        # Primary: OpenRouter (direct). Free routes are discovered from the live
+        # catalogue at first use — the static seed list drifts to 404s.
+        "openrouter": OpenRouterAdapter(discover_catalogue=True),
         # "fast" = freellmpool's smoothed-latency-first ranking; the default
         # "fair" spreads by least-used and keeps picking measured-slow targets.
         "freellmpool": FreellmpoolAdapter(routing="fast"),

@@ -1,11 +1,10 @@
 """Unit and integration tests for synthetic persona generation engine and validator."""
 
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from bebshax.db.models import Base, MarketSegments, PersonaGenerationRuns, Personas, Studies, _utcnow
+from bebshax.db.models import Base, MarketSegments, Studies
 from bebshax.personas.generator import calculate_segment_quotas, generate_personas_for_study
 from bebshax.personas.service import PersonaGenerationService
 from bebshax.personas.validator import validate_synthetic_persona
@@ -115,7 +114,10 @@ def test_validate_synthetic_persona_out_of_bounds_warnings():
 
 
 @pytest.mark.asyncio
-async def test_generate_personas_for_study_fallback():
+async def test_generate_personas_without_llm_fails_explicitly():
+    """No LLM wired → an explicit LLMUnavailable, never template personas."""
+    from bebshax.utils.explicit_failures import LLMUnavailable
+
     segments = [
         MockSegment("seg_1", "Budget Students", 65.0),
         MockSegment("seg_2", "Ambitious Preppers", 35.0),
@@ -126,28 +128,61 @@ async def test_generate_personas_for_study_fallback():
     mock_study.target_audience = "College students"
     mock_study.pricing_hypothesis = "৳300/month"
 
-    drafts = await generate_personas_for_study(
-        study=mock_study,
-        segments=segments,
-        target_count=4,
-        distribution_strategy="equal",
-        evidence_claims=[],
-        llm_service=None,
-    )
+    with pytest.raises(LLMUnavailable) as exc_info:
+        await generate_personas_for_study(
+            study=mock_study,
+            segments=segments,
+            target_count=4,
+            distribution_strategy="equal",
+            evidence_claims=[],
+            llm_service=None,
+        )
+    assert exc_info.value.error_code == "llm_unavailable"
+    assert exc_info.value.status_code == 503
 
-    assert len(drafts) == 4
-    for d in drafts:
-        assert len(d.name) > 2
-        assert d.status in ("ready", "needs_review")
-        # Template drafts invent every claim (all SYNTHETIC) — grounding must
-        # be honestly zero and citations honestly empty, never decorated.
-        assert d.grounding_score == 0.0
-        assert d.evidence_citations == []
-        assert len(d.goals) >= 1
-        assert len(d.pain_points) >= 1
-        assert "monthly_budget_bdt" in d.commercial_profile
-        # template drafts carry their honest origin label
-        assert d.generation_model == "deterministic-template-fallback"
+
+def _payload(request) -> dict:
+    """The study/segment JSON the generator sends inside its untrusted block."""
+    import json as _json
+
+    content = request.messages[-1].content
+    return _json.loads(content[content.index("{") : content.rindex("}") + 1])
+
+
+class _SegmentAwareLLM:
+    """Writes `count_to_generate` distinct personas for whatever segment it is
+    shown — stands in for the model in service-level tests."""
+
+    def __init__(self, provider: str = "fake", model: str = "m1") -> None:
+        self._provider, self._model = provider, model
+        self.calls = 0
+
+    async def complete(self, request):
+        import json as _json
+        from types import SimpleNamespace
+
+        self.calls += 1
+        payload = _payload(request)
+        seg = payload.get("segment", {}).get("name", "Segment")
+        n = payload["count_to_generate"]
+        personas = [
+            {
+                "name": f"{seg} persona {self.calls}-{i}",
+                "age": 21 + i,
+                "occupation": "Student",
+                "location": "Dhaka",
+                "monthly_budget": 400,
+                "currency": "BDT",
+                "goals": [{"value": "pass exams", "provenance": "SYNTHETIC", "evidence_ids": []}],
+                "needs": ["cheap plans"],
+                "pain_points": ["expensive coaching"],
+            }
+            for i in range(n)
+        ]
+        return SimpleNamespace(
+            text=_json.dumps({"personas": personas}),
+            provenance=SimpleNamespace(served_by_provider=self._provider, served_by_model=self._model),
+        )
 
 
 class _FakeLLM:
@@ -211,17 +246,89 @@ async def test_llm_drafts_are_stamped_with_the_real_serving_model():
 
 
 @pytest.mark.asyncio
-async def test_malformed_llm_output_falls_back_to_labeled_templates():
-    drafts = await generate_personas_for_study(
-        study=_study_mock(),
-        segments=[MockSegment("seg_1", "Budget Students", 100.0)],
-        target_count=2,
+async def test_malformed_llm_output_is_retried_once_then_fails_explicitly():
+    """An unusable reply is retried once per batch; a second unusable reply is
+    an explicit UnusableModelOutput — never template personas."""
+    from bebshax.utils.explicit_failures import UnusableModelOutput
+
+    calls: list[int] = []
+
+    class _CountingGarbageLLM(_FakeLLM):
+        async def complete(self, request):
+            calls.append(1)
+            return await super().complete(request)
+
+    with pytest.raises(UnusableModelOutput) as exc_info:
+        await generate_personas_for_study(
+            study=_study_mock(),
+            segments=[MockSegment("seg_1", "Budget Students", 100.0)],
+            target_count=2,
+            distribution_strategy="equal",
+            evidence_claims=[],
+            llm_service=_CountingGarbageLLM("this is not json at all", provider="fake", model="m9"),
+        )
+    assert len(calls) == 2  # exactly one retry
+    err = exc_info.value
+    assert err.error_code == "persona_generation_unparseable"
+    assert err.status_code == 502
+    assert err.extra["attempts"] == 2 and err.extra["served_by"] == "fake/m9"
+    assert err.extra["segment"] == "Budget Students"
+
+
+@pytest.mark.asyncio
+async def test_absent_fields_stay_absent_no_regional_or_template_backfill():
+    """A persona the model wrote WITHOUT location/personality/quote/platforms
+    must be stored without them — never 'Dhaka, Bangladesh', Big-Five 50s,
+    bKash platforms or a stock quote stamped with the LLM's name."""
+    import json as _json
+
+    reply = _json.dumps(
+        {
+            "personas": [
+                {
+                    "name": "Dr. Elena Vargas",
+                    "age": 41,
+                    "occupation": "Dental practice owner",
+                    "goals": ["reduce no-shows"],
+                    "pain_points": ["paper reminders"],
+                }
+            ]
+        }
+    )
+    study = MagicMock()
+    study.title = "CRM for dental clinics in Texas"
+    study.prompt = "Appointment reminders and billing for small dental practices"
+    study.target_audience = "Dentists running 1-3 chair practices in Texas"
+    study.pricing_hypothesis = "$79 per month"
+
+    [d] = await generate_personas_for_study(
+        study=study,
+        segments=[MockSegment("seg_1", "Practice owners", 100.0, 30, 60, 50, 200)],
+        target_count=1,
         distribution_strategy="equal",
         evidence_claims=[],
-        llm_service=_FakeLLM("this is not json at all"),
+        llm_service=_FakeLLM(reply, provider="llm7", model="codestral-latest"),
     )
-    assert len(drafts) == 2
-    assert all(d.generation_model == "deterministic-template-fallback" for d in drafts)
+    assert d.generation_model == "llm7/codestral-latest"
+    assert "location" not in d.demographics
+    assert d.personality is None
+    assert d.quote is None and d.tagline is None and d.bio is None
+    assert d.technology_profile == {} and d.commercial_profile == {}
+    assert d.country_code is None and d.origin_country is None
+    assert d.needs == []  # not filled from a template
+    blob = _json.dumps(d.model_dump(), ensure_ascii=False).lower()
+    for forbidden in ("dhaka", "bangladesh", "bkash", "khichuri", "cost-effective service", "night caregiver"):
+        assert forbidden not in blob, forbidden
+
+
+def test_currency_hint_is_derived_from_the_study_text_only():
+    from bebshax.personas.generator import infer_currency_hint
+
+    assert infer_currency_hint({"pricing_hypothesis": "৳300/month"}) == "BDT"
+    assert infer_currency_hint({"pricing_hypothesis": "$79 per month"}) == "USD"
+    assert infer_currency_hint({"prompt": "KSh 200 weekly solar lease"}) == "KES"
+    # nothing in the text → None: the model infers from the audience, we assume nothing
+    assert infer_currency_hint({"prompt": "a planner app", "target_audience": "students"}) is None
 
 
 @pytest.mark.asyncio
@@ -279,20 +386,36 @@ async def test_claim_provenance_is_verified_and_downgrade_only():
 
 
 @pytest.mark.asyncio
-async def test_template_fallback_claims_are_all_synthetic():
-    drafts = await generate_personas_for_study(
+async def test_claims_written_by_the_model_are_all_classed():
+    """Every classed group the model wrote carries a provenance entry; a group the
+    model omitted is empty — not filled from anywhere."""
+    import json as _json
+
+    reply = _json.dumps(
+        {
+            "personas": [
+                {
+                    "name": "Tania Rahman",
+                    "age": 22,
+                    "occupation": "Student",
+                    "goals": [{"value": "pass exams", "provenance": "SYNTHETIC", "evidence_ids": []}],
+                    "pain_points": ["expensive coaching"],
+                }
+            ]
+        }
+    )
+    [d] = await generate_personas_for_study(
         study=_study_mock(),
         segments=[MockSegment("seg_1", "Budget Students", 100.0)],
-        target_count=2,
+        target_count=1,
         distribution_strategy="equal",
         evidence_claims=[],
-        llm_service=None,
+        llm_service=_FakeLLM(reply),
     )
-    for d in drafts:
-        prov = d.detailed_attributes["claim_provenance"]
-        for group in ("goals", "needs", "pain_points"):
-            assert prov[group], f"{group} classes missing"
-            assert all(c["provenance"] == "SYNTHETIC" and c["evidence_ids"] == [] for c in prov[group])
+    prov = d.detailed_attributes["claim_provenance"]
+    assert prov["goals"] == [{"value": "pass exams", "provenance": "SYNTHETIC", "evidence_ids": []}]
+    assert prov["pain_points"] == [{"value": "expensive coaching", "provenance": "SYNTHETIC", "evidence_ids": []}]
+    assert prov["needs"] == [] and d.needs == []
 
 
 @pytest.mark.asyncio
@@ -308,7 +431,7 @@ async def test_large_quota_is_sub_batched_and_never_template_ized():
         async def complete(self, request):
             from types import SimpleNamespace
 
-            payload = _json.loads(request.messages[-1].content)
+            payload = _payload(request)
             n = payload["count_to_generate"]
             calls.append(n)
             assert request.max_output_tokens <= 4000
@@ -402,7 +525,7 @@ async def test_persona_generation_service_lifecycle():
         session.add(segment)
         await session.commit()
 
-        service = PersonaGenerationService(session)
+        service = PersonaGenerationService(session, llm_service=_SegmentAwareLLM())
 
         # 1. Run generation
         run, personas = await service.create_generation_run(
@@ -456,7 +579,7 @@ async def test_concurrent_generation_preserves_segment_order():
 
         async def complete(self, request):
             from types import SimpleNamespace
-            payload = _json.loads(request.messages[-1].content)
+            payload = _payload(request)
             n = payload["count_to_generate"]
             await _asyncio.sleep(self._delay)
             personas = [
@@ -489,7 +612,6 @@ async def test_concurrent_generation_preserves_segment_order():
     mock_study.pricing_hypothesis = ""
 
     # Use a shared LLM that tracks which segment completed first via delay
-    import time
     completion_order: list[str] = []
 
     class _TrackingLLM:
@@ -499,7 +621,7 @@ async def test_concurrent_generation_preserves_segment_order():
 
         async def complete(self, request):
             from types import SimpleNamespace
-            payload = _json.loads(request.messages[-1].content)
+            payload = _payload(request)
             n = payload["count_to_generate"]
             await _asyncio.sleep(self._delay)
             completion_order.append(self._tag)
@@ -525,7 +647,7 @@ async def test_concurrent_generation_preserves_segment_order():
     class _OrderTestLLM:
         async def complete(self, request):
             from types import SimpleNamespace
-            payload = _json.loads(request.messages[-1].content)
+            payload = _payload(request)
             n = payload["count_to_generate"]
             seg_name = payload.get("segment", {}).get("name", "")
             delay = 0.05 if "Slow" in seg_name else 0.01
@@ -566,10 +688,9 @@ async def test_concurrent_generation_preserves_segment_order():
 
 
 @pytest.mark.asyncio
-async def test_one_failing_segment_does_not_abort_others():
-    """A non-critical exception in one segment must not abort the other segments.
-    The failed segment produces template personas (existing fallback behaviour).
-    This mirrors the pre-existing per-batch except-Exception path."""
+async def test_one_failing_segment_fails_the_run_explicitly():
+    """A non-LLM exception inside one segment must surface — the run must not
+    quietly deliver template personas for that segment (R2)."""
     import json as _json
 
     class _PartiallyDeadLLM:
@@ -577,7 +698,7 @@ async def test_one_failing_segment_does_not_abort_others():
 
         async def complete(self, request):
             from types import SimpleNamespace
-            payload = _json.loads(request.messages[-1].content)
+            payload = _payload(request)
             seg_name = payload.get("segment", {}).get("name", "")
             n = payload["count_to_generate"]
             if seg_name == "Bad Segment":
@@ -610,42 +731,27 @@ async def test_one_failing_segment_does_not_abort_others():
     mock_study.target_audience = "Mixed"
     mock_study.pricing_hypothesis = ""
 
-    # Should NOT raise; the bad segment is handled internally with template fallback
-    drafts = await generate_personas_for_study(
-        study=mock_study,
-        segments=segments,
-        target_count=3,
-        distribution_strategy="equal",
-        evidence_claims=[],
-        llm_service=_PartiallyDeadLLM(),
-    )
-
-    assert len(drafts) == 3
-    # Good segments produced LLM personas
-    good_a = [d for d in drafts if "Good Segment A" in d.name]
-    good_c = [d for d in drafts if "Good Segment C" in d.name]
-    assert len(good_a) == 1
-    assert len(good_c) == 1
-    # Bad segment fell back to template (deterministic fallback model label)
-    bad = [d for d in drafts if d.generation_model == "deterministic-template-fallback"]
-    assert len(bad) == 1
+    with pytest.raises(RuntimeError, match="simulated transient provider error"):
+        await generate_personas_for_study(
+            study=mock_study,
+            segments=segments,
+            target_count=3,
+            distribution_strategy="equal",
+            evidence_claims=[],
+            llm_service=_PartiallyDeadLLM(),
+        )
 
 
 @pytest.mark.asyncio
-async def test_failure_after_the_llm_call_never_silently_under_delivers():
-    """A malformed value that only blows up AFTER the LLM call (e.g. a
-    non-numeric age) escapes the per-batch guard and fails the whole segment.
-    That must not silently drop the segment: the run still delivers
-    target_count personas, with the failed segment honestly template-labeled."""
+async def test_non_numeric_age_is_stored_as_absent_not_templated():
+    """A value that cannot be normalised (age 'twenty-two') is simply absent on
+    the draft; the run still delivers exactly target_count model-written personas."""
     import json as _json
 
     class _PostCallPoisonLLM:
-        """Succeeds at the transport level, but 'Poison Segment' returns an
-        un-parseable age so int() raises outside the per-batch try/except."""
-
         async def complete(self, request):
             from types import SimpleNamespace
-            payload = _json.loads(request.messages[-1].content)
+            payload = _payload(request)
             seg_name = payload.get("segment", {}).get("name", "")
             n = payload["count_to_generate"]
             age = "twenty-two" if seg_name == "Poison Segment" else 22
@@ -685,9 +791,12 @@ async def test_failure_after_the_llm_call_never_silently_under_delivers():
         llm_service=_PostCallPoisonLLM(),
     )
 
-    assert len(drafts) == 4, "run must not silently return fewer personas than target_count"
-    templates = [d for d in drafts if d.generation_model == "deterministic-template-fallback"]
-    assert len(templates) == 2, "the failed segment's quota must be honestly labeled as templates"
+    assert len(drafts) == 4
+    assert all(d.generation_model == "fake/m1" for d in drafts)
+    poisoned = [d for d in drafts if "Poison Segment" in d.name]
+    assert len(poisoned) == 2 and all("age" not in d.demographics for d in poisoned)
+    clean = [d for d in drafts if "Clean Segment" in d.name]
+    assert all(d.demographics["age"] == 22 for d in clean)
 
 
 @pytest.mark.asyncio
@@ -733,7 +842,7 @@ async def test_evidence_snapshot_records_the_true_claim_count():
             )
         await session.commit()
 
-        service = PersonaGenerationService(session)
+        service = PersonaGenerationService(session, llm_service=_SegmentAwareLLM())
         run, _ = await service.create_generation_run(
             study_id="std_claim_count", target_count=2, distribution_strategy="equal"
         )

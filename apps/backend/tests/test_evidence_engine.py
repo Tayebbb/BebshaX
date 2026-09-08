@@ -4,12 +4,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from bebshax.auth.models import Users
 from bebshax.auth.security import create_access_token
-from bebshax.db.models import Base, Studies
+from bebshax.db.models import Base
+from bebshax.llm.types import TaskType
 from bebshax.main import app
 from bebshax.research.chunker import chunk_document, clean_text
-from bebshax.research.query_generator import generate_deterministic_queries
+from bebshax.research.query_generator import derive_queries_from_study_text
 from bebshax.research.search_provider import (
-    CuratedResearchProvider,
+    ILLUSTRATIVE_SOURCE_PUBLISHER,
+    IllustrativeSampleProvider,
+    WikipediaResearchProvider,
     compute_content_hash,
     normalize_url,
 )
@@ -39,18 +42,20 @@ def test_url_normalization_and_content_hash():
 
 
 @pytest.mark.asyncio
-async def test_search_provider_and_embeddings():
-    provider = CuratedResearchProvider()
-    queries = generate_deterministic_queries("AI study planner for Bangladeshi students", pricing_hypothesis="250 BDT/month")
+async def test_sample_provider_is_explicit_and_labelled(sample_evidence_provider):
+    with pytest.raises(ValueError):
+        IllustrativeSampleProvider(sample_evidence_provider.documents)  # never wired by accident
+    provider = sample_evidence_provider
+    queries = derive_queries_from_study_text("AI study planner for university students", pricing_hypothesis="250 BDT/month")
     assert len(queries) >= 4
 
     sources = await provider.search(queries)
-    assert len(sources) >= 3
+    assert len(sources) == 3
     for s in sources:
-        assert s.title
-        assert s.url
-        assert s.content_hash
-        assert s.relevance_score >= 0.6
+        assert s.title and s.url and s.content_hash
+        assert s.publisher == ILLUSTRATIVE_SOURCE_PUBLISHER
+        assert s.source_type == "curated_sample" and s.metadata["is_sample"] is True
+        assert 0.0 <= s.relevance_score <= 1.0  # computed, not declared
 
     # Test embeddings
     engine = VectorSearchEngine()
@@ -62,13 +67,28 @@ async def test_search_provider_and_embeddings():
 
 
 @pytest.mark.asyncio
-async def test_evidence_api_lifecycle_and_user_isolation():
+async def test_wikipedia_provider_network_failure_yields_no_sources(monkeypatch):
+    """Live provider degrades to *no evidence*, never to an invented corpus."""
+    import httpx
+
+    def _boom(request):
+        raise httpx.ConnectError("offline", request=request)
+
+    provider = WikipediaResearchProvider(http_client=httpx.AsyncClient(transport=httpx.MockTransport(_boom)))
+    assert await provider.search(["anything"]) == []
+
+
+@pytest.mark.asyncio
+async def test_evidence_api_lifecycle_and_user_isolation(research_llm, sample_evidence_provider):
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
     app.state.db_sessionmaker = session_maker
+    llm, adapter = research_llm(app)
+    app.state.llm_service = llm
+    app.state.research_search_provider = sample_evidence_provider
 
     # Create Alice & Bob
     async with session_maker() as session:
@@ -104,22 +124,33 @@ async def test_evidence_api_lifecycle_and_user_isolation():
         )
         assert res_run.status_code == 201
         run_data = res_run.json()
-        assert run_data["status"] == "completed"
+        assert run_data["status"] == "completed", run_data["error_message"]
         assert run_data["query_count"] >= 3
-        assert run_data["source_count"] >= 3
-        assert run_data["claim_count"] >= 3
+        assert run_data["source_count"] == 3
+        assert run_data["claim_count"] == 3
+        # Provenance markers: everything model-written, nothing templated.
+        summary = run_data["summary"]
+        assert summary["plan_source"] == "llm" and summary["queries_source"] == "llm"
+        assert summary["claims_status"] == "extracted" and summary["no_live_evidence"] is False
+        assert summary["served_by"] == ["pollinations/deepseek-r1"]
+        assert run_data["research_plan"]["source"] == "llm"
+        # The model was asked three times: plan, queries, claims.
+        assert [r.task for r in adapter.requests] == [
+            TaskType.STRUCTURED_OUTPUT, TaskType.STRUCTURED_OUTPUT, TaskType.EVIDENCE_EXTRACTION
+        ]
+        # The claims prompt carried this study's chunks and the idea as untrusted data.
+        claims_prompt = adapter.requests[-1].messages[-1].content
+        assert "EVIDENCE_CHUNKS" in claims_prompt and "juggling several apps" in claims_prompt
 
-        # 3. Get evidence summary — with no LLM the deterministic extractor
-        # cannot verify anything, so "supported" coverage is honestly zero.
+        # 3. Evidence summary reflects the verified citation: one supported claim.
         res_summary = await client.get(
             f"/api/studies/{study_id}/evidence/summary",
             headers={"Authorization": f"Bearer {token_alice}"},
         )
         assert res_summary.status_code == 200
         summary = res_summary.json()
-        assert summary["evidence_coverage"] == 0
-        assert summary["supported_count"] == 0
-        assert summary["total_sources"] >= 3
+        assert summary["supported_count"] == 1
+        assert summary["total_sources"] == 3
 
         # 4. Get claims list
         res_claims = await client.get(
@@ -128,14 +159,11 @@ async def test_evidence_api_lifecycle_and_user_isolation():
         )
         assert res_claims.status_code == 200
         claims = res_claims.json()
-        assert len(claims) >= 3
+        assert len(claims) == 3
         first_claim_id = claims[0]["id"]
-
-        # Deterministic fallback claims never self-declare verification —
-        # only hypothesis (inference) and unsupported classes appear.
-        statuses = {c["status"] for c in claims}
-        assert statuses <= {"inference", "unsupported"}
-        assert any(c["status"] in ("inference", "unsupported") for c in claims)
+        assert {c["status"] for c in claims} == {"supported", "inference", "unsupported"}
+        supported = next(c for c in claims if c["status"] == "supported")
+        assert supported["supporting_chunk_ids"] and supported["confidence"] > 0
 
         # 5. Get claim detail with provenance
         res_claim_detail = await client.get(
@@ -171,4 +199,21 @@ async def test_evidence_api_lifecycle_and_user_isolation():
         )
         assert bob_claims.status_code == 404
 
+        # 8. Without an LLM the run fails explicitly at the plan step — no
+        # template plan, queries or hypothesis claims are written (R2).
+        app.state.llm_service = None
+        res_nollm = await client.post(
+            f"/api/studies/{study_id}/research",
+            headers={"Authorization": f"Bearer {token_alice}"},
+        )
+        assert res_nollm.status_code == 201
+        failed = res_nollm.json()
+        assert failed["status"] == "failed" and failed["current_step"] == "failed"
+        assert failed["summary"]["error_code"] == "llm_unavailable"
+        assert failed["summary"]["plan_source"] is None
+        assert failed["claim_count"] == 0 and failed["research_plan"] is None
+        assert "Research planning" in failed["error_message"]
+
+    app.state.llm_service = None
+    app.state.research_search_provider = None
     await engine.dispose()

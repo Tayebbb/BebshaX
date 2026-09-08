@@ -102,9 +102,11 @@ _ROLES = [
 
 
 @pytest.mark.asyncio
-async def test_zero_grounding_without_evidence_is_labeled_as_an_absence():
+async def test_no_router_is_an_explicit_503_never_a_skeleton_persona():
+    """The skeleton-persona path is gone: without the routing layer the request
+    fails with the llm_unavailable envelope instead of inventing a person."""
     await _app_with_study("std_ground_none", [])
-    app.state.llm_router = None  # skeleton path
+    app.state.llm_router = None
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         res = await client.post(
@@ -113,14 +115,33 @@ async def test_zero_grounding_without_evidence_is_labeled_as_an_absence():
             headers=_OWNER_HEADERS,
         )
 
+    assert res.status_code == 503
+    body = res.json()
+    assert body["error_code"] == "llm_unavailable" and body["request_id"]
+
+
+@pytest.mark.asyncio
+async def test_zero_grounding_without_evidence_is_labeled_as_an_absence():
+    await _app_with_study("std_ground_none2", [])
+    app.state.llm_router = _CitingRouter(cite=None)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post(
+            "/api/study/generate-personas",
+            json={"study_id": "std_ground_none2", "study_prompt": "grocery app", "roles": _ROLES},
+            headers=_OWNER_HEADERS,
+        )
+
     assert res.status_code == 200
-    personas = res.json()
-    assert personas
+    body = res.json()
+    personas = body["personas"]
+    assert personas and body["failed_roles"] == []
     for p in personas:
         assert p["grounding_ratio"] == 0.0
         # The marker is what stops the UI implying a measured zero.
         assert p["grounding_basis"] == "no_evidence_retrieved"
         assert p["evidence_claim_count"] == 0
+        assert p["generation_model"] == "fake/m1"
 
 
 @pytest.mark.asyncio
@@ -140,8 +161,9 @@ async def test_grounding_is_computed_from_verified_citations_only():
 
     assert res.status_code == 200
     assert "C1: Shoppers abandon carts" in router.prompts[0], "claims must be shown to the model"
+    assert "<UNTRUSTED_STUDY_CONTEXT" in router.prompts[0], "study text is data, not instructions"
 
-    persona = res.json()[0]
+    persona = res.json()["personas"][0]
     assert persona["grounding_basis"] == "citations_verified"
     assert persona["evidence_claim_count"] == 2
     # 1 of 2 attributes cited a claim we actually showed.
@@ -167,7 +189,7 @@ async def test_uncited_llm_personas_score_zero_even_with_evidence_present():
             headers=_OWNER_HEADERS,
         )
 
-    persona = res.json()[0]
+    persona = res.json()["personas"][0]
     assert persona["grounding_ratio"] == 0.0, "self-declared OBSERVED must never count"
     assert persona["grounding_basis"] == "citations_verified"
     assert all(a["provenance_class"] == "INFERRED" for a in persona["attributes"])

@@ -1,27 +1,39 @@
-"""Study Design Copilot API — routes conversational research prompts and persona role suggestions to FreeLLMpool (Rule R3)."""
+"""Study Design Copilot API — conversational study design, persona-role
+suggestions and copilot persona generation, all through LLMService (Rule R3).
+
+No canned engine: when the routing layer is missing or the model's reply is
+unusable after one retry, the request fails explicitly with the standard error
+envelope (RULES.md R2) so the UI can say so and offer a retry.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import random
 import uuid
 from typing import Any, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 
-from bebshax.api.auth import get_current_user, get_optional_current_user
+from bebshax.api.auth import get_current_user
 from bebshax.api.deps import require_study_access, user_owns_study
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import EvidenceClaims, Personas, Studies
-from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.failures import LLMError
+from bebshax.llm.json_utils import parse_llm_json, unwrap_list
+from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
+from bebshax.utils.safe_errors import safe_error_summary
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["study_copilot"])
+
+# Unusable model replies are retried once with the same request, then refused.
+_MAX_MODEL_ATTEMPTS = 2
 
 
 class CopilotMessage(BaseModel):
@@ -57,16 +69,19 @@ class CopilotResponse(BaseModel):
     is_ready_for_approval: bool = False
     research_goal_card: Optional[ResearchGoalCard] = None
     suggested_roles: list[PersonaRoleSuggestion] = Field(default_factory=list)
-    served_by: str = "routed_llm"
-    # Set whenever the canned local engine answered instead of a routed LLM —
-    # canned content must never be mistaken for model output in provenance.
+    # Always the real provenance route ("provider/model") — there is no canned engine.
+    served_by: str
+    # Only ever "retried_after_unparseable_reply": the model's first reply was
+    # unusable and the SAME request was sent once more. Never a template marker.
     fallback_reason: Optional[str] = None
+    llm_request_id: Optional[str] = None
 
 
 class SuggestRolesRequest(BaseModel):
     study_prompt: str = Field(max_length=8000)
     goal: Optional[str] = Field(default=None, max_length=256)
     target_audience: Optional[str] = Field(default=None, max_length=2000)
+    study_title: Optional[str] = Field(default=None, max_length=256)
 
 
 SYSTEM_PROMPT = """You are BebshaX Study Design Copilot, an expert AI product researcher for synthetic persona validation.
@@ -147,14 +162,15 @@ Generate realistic, grounded personas for this SPECIFIC business context. Each p
 - Have goals, pain points, and needs tied to the specific product being researched
 - Include realistic daily behaviors, income levels, and digital habits matching the context
 
-Return ONLY a valid JSON array (no markdown, no code blocks):
-[
+Return ONLY a valid JSON object (no markdown, no code blocks) with one key, "personas", holding an array of {count} persona object(s):
+{
+  "personas": [
   {
     "id": "per_{short_name_lowercase}",
     "name": "Full Name",
     "initials": "AB",
-    "country_code": "US",
-    "country_name": "United States",
+    "country_code": "<ISO 3166-1 alpha-2 of where this person lives, taken from the study context>",
+    "country_name": "<country name matching country_code>",
     "role_id": "{role_id}",
     "role_title": "{role_title}",
     "archetype": "Descriptive Archetype",
@@ -203,32 +219,36 @@ Return ONLY a valid JSON array (no markdown, no code blocks):
     "status": "active",
     "version": 1
   }
-]
+  ]
+}
 """
 
 SUGGEST_ROLES_PROMPT = """You are BebshaX Persona Role Architect. Suggest 8-10 distinct persona roles for user research.
 
-Business/Product Context: {study_prompt}
+{study_context}
 
 Analyze the business context carefully and suggest persona roles that would provide the most valuable insights for validating this specific product. Consider:
 - Primary users of the product
 - Secondary stakeholders (payers, influencers, channel partners)
 - Edge cases and skeptical users
 - Power users vs. casual users
-- Different demographic segments relevant to this product
+- Different demographic segments relevant to this product, its stated target audience and its market/region
 
-Return ONLY a valid JSON array (no markdown):
-[
-  {
-    "id": "role_{short_id}",
-    "role": "ROLE NAME IN CAPS (max 4 words)",
-    "description": "Specific reason this persona type is essential for validating the product hypothesis. Be concrete about what insights they provide.",
-    "count": 3,
-    "selected": true
-  }
-]
+Return ONLY a valid JSON object (no markdown) with one key, "roles", holding the array:
+{
+  "roles": [
+    {
+      "id": "role_{short_id}",
+      "role": "ROLE NAME IN CAPS (max 4 words)",
+      "description": "Specific reason this persona type is essential for validating the product hypothesis. Be concrete about what insights they provide.",
+      "count": 3,
+      "selected": true
+    }
+  ]
+}
 
 RULES:
+- Return all 8-10 roles inside the "roles" array, never a single role
 - Make the first 3 roles "selected": true with "count": 3 (primary roles)
 - Remaining roles should be "selected": false with "count": 0
 - All roles must be directly relevant to the specific product context
@@ -237,168 +257,90 @@ RULES:
 """
 
 
-def _generate_fallback_response(messages: list[CopilotMessage]) -> CopilotResponse:
-    """Deterministic fallback copilot dialog — context-aware for any business idea."""
-    user_turns = [m for m in messages if m.role == "user"]
-    turn_count = len(user_turns)
-    latest_user_text = user_turns[-1].content.strip() if user_turns else ""
-    first_user_text = user_turns[0].content.strip() if user_turns else ""
-    combined_text = (first_user_text + " " + latest_user_text).lower()
+def _route_of(result: Any) -> str:
+    provider = getattr(result, "provider", None) or getattr(getattr(result, "provenance", None), "served_by_provider", None)
+    model = getattr(result, "model", None) or getattr(getattr(result, "provenance", None), "served_by_model", None)
+    return f"{provider}/{model}" if provider else "llm/unknown"
 
-    # Detect business domain from keywords
-    has_pricing = any(kw in combined_text for kw in ["taka", "dollar", "$", "price", "cost", "month", "subscription", "plan", "free"])
-    has_students = any(kw in combined_text for kw in ["student", "school", "college", "university", "study"])
-    has_food = any(kw in combined_text for kw in ["food", "restaurant", "delivery", "meal", "eat", "chef", "recipe", "cuisine"])
-    has_ecommerce = any(kw in combined_text for kw in ["shop", "sell", "buy", "product", "store", "marketplace", "ecommerce", "fashion"])
-    has_health = any(kw in combined_text for kw in ["health", "fitness", "gym", "workout", "diet", "wellness", "doctor", "medical"])
-    has_fintech = any(kw in combined_text for kw in ["payment", "banking", "finance", "loan", "invest", "money", "wallet", "crypto"])
-    has_b2b = any(kw in combined_text for kw in ["business", "enterprise", "company", "saas", "team", "office", "workflow", "productivity"])
 
-    # Build context-aware product description
-    if has_food:
-        product_type = "food/restaurant service"
-        audience_q = "Who are the primary customers — home cooks, busy professionals, families, or a specific demographic? And what region or city are you targeting first?"
-        followup_q = "What's the main value proposition — convenience, cost savings, quality, or something else? And what price point are you considering?"
-    elif has_health:
-        product_type = "health & wellness product"
-        audience_q = "Who is your primary target user — fitness enthusiasts, people with specific health conditions, or a broader wellness audience? And what geography are you focusing on?"
-        followup_q = "Is this a consumer product or B2B (e.g., gyms, clinics)? And what's the rough price point you're considering?"
-    elif has_fintech:
-        product_type = "fintech product"
-        audience_q = "Who is your primary user — individuals, small businesses, or enterprises? And what geography or income segment are you targeting?"
-        followup_q = "What is the core financial problem you're solving — payments, savings, credit, or investments? And what regulatory environment applies?"
-    elif has_ecommerce:
-        product_type = "e-commerce or marketplace"
-        audience_q = "Who are your primary buyers — consumers or businesses? And what product category or niche are you focused on?"
-        followup_q = "Are you a marketplace (connecting buyers and sellers) or a direct retailer? And what's your target geography and price range?"
-    elif has_b2b:
-        product_type = "B2B SaaS or business tool"
-        audience_q = "What size companies are you targeting — SMBs, mid-market, or enterprise? And what industry or department does this serve?"
-        followup_q = "What is the primary workflow or problem being solved? And what's your pricing model — per seat, per usage, or flat subscription?"
-    elif has_students:
-        product_type = "education or student-focused product"
-        audience_q = "What level of students — K-12, university, or professional learners? And what geography or institution type are you targeting?"
-        followup_q = "Is this a B2C product for students directly, or B2B (schools/universities)? And what's the price point you're validating?"
-    else:
-        product_type = "product or service"
-        audience_q = "Who is your primary target user — what's their age range, lifestyle, or professional context? And what geography are you launching in first?"
-        followup_q = "What's the core problem you're solving for them, and what's the price point or business model you're validating?"
+async def _complete_json(
+    llm_router: Any,
+    llm_req: LLMRequest,
+    *,
+    accept,
+    error_code: str,
+    what: str,
+) -> tuple[Any, Any, int]:
+    """Send ``llm_req``; return ``(parsed, result, attempts)`` once ``accept(parsed)``
+    is truthy. One retry with the identical request, then ``UnusableModelOutput``.
+    ``LLMError`` propagates untouched (infrastructure is never masked)."""
+    last_result = None
+    for attempt in range(1, _MAX_MODEL_ATTEMPTS + 1):
+        if attempt > 1:
+            llm_req = llm_req.retry_copy()
+        last_result = await llm_router.complete(llm_req)
+        try:
+            parsed = parse_llm_json(last_result.text)
+        except ValueError:
+            parsed = None
+        if parsed is not None and accept(parsed):
+            return parsed, last_result, attempt
+        logger.warning("%s: unusable model reply (attempt %d/%d)", what, attempt, _MAX_MODEL_ATTEMPTS)
+    raise UnusableModelOutput(
+        error_code,
+        f"The model's reply for {what} could not be used after {_MAX_MODEL_ATTEMPTS} attempts; "
+        "nothing was substituted. Please try again.",
+        attempts=_MAX_MODEL_ATTEMPTS,
+        served_by=_route_of(last_result),
+    )
 
-    if turn_count == 1:
-        reply = (
-            f"Got it — you're exploring a {product_type}{' with a target pricing model' if has_pricing else ''}. "
-            f"User Interviews are ideal here to uncover mental models, key objections, and real willingness to pay.\n\n"
-            f"{audience_q}"
+
+def _study_context_block(
+    *,
+    study_prompt: str | None,
+    title: str | None = None,
+    goal: str | None = None,
+    target_audience: str | None = None,
+    pricing_hypothesis: str | None = None,
+) -> str:
+    """Everything the model should tailor to, as DATA (prompt_safety)."""
+    lines = []
+    if title:
+        lines.append(f"STUDY TITLE: {title}")
+    lines.append(f"BUSINESS / PRODUCT IDEA: {study_prompt or ''}")
+    if goal:
+        lines.append(f"RESEARCH GOAL: {goal}")
+    if target_audience:
+        lines.append(f"TARGET AUDIENCE: {target_audience}")
+    if pricing_hypothesis:
+        lines.append(f"PRICING HYPOTHESIS: {pricing_hypothesis}")
+    return untrusted_block("STUDY_CONTEXT", "\n".join(lines), source="study")
+
+
+def _roles_from(raw_roles: Any) -> list[PersonaRoleSuggestion]:
+    roles: list[PersonaRoleSuggestion] = []
+    # json_object mode forces an object at the top level: accept {"roles": [...]},
+    # any single-list wrapper, or one bare role object (all observed live).
+    for r in unwrap_list(raw_roles, keys=("roles", "persona_roles", "suggestions"), item_keys=("role",)):
+        if not isinstance(r, dict):
+            continue
+        role = str(r.get("role") or "").strip()
+        if not role:
+            continue  # a role without a name is not a role
+        try:
+            count = int(r.get("count", 0) or 0)
+        except (TypeError, ValueError):
+            count = 0
+        roles.append(
+            PersonaRoleSuggestion(
+                id=str(r.get("id") or f"role_{len(roles) + 1}"),
+                role=role,
+                description=str(r.get("description") or ""),
+                count=max(0, min(count, 10)),
+                selected=bool(r.get("selected", False)),
+            )
         )
-        return CopilotResponse(
-            reply=reply,
-            suggested_study_type="interviews",
-            is_ready_for_approval=False,
-            research_goal_card=None,
-            suggested_roles=[],
-            served_by="bebshax/copilot-engine",
-        )
-
-    elif turn_count == 2:
-        return CopilotResponse(
-            reply=followup_q,
-            suggested_study_type="interviews",
-            is_ready_for_approval=False,
-            research_goal_card=None,
-            suggested_roles=[],
-            served_by="bebshax/copilot-engine",
-        )
-
-    else:
-        # Generate context-aware summary
-        summary = (
-            f"Validate whether your {product_type} solves a genuine need for target users "
-            f"and determine demand{' at your target price point' if has_pricing else ''}. "
-            f"Does this capture what you're looking for?"
-        )
-
-        # Generate context-aware roles
-        if has_food:
-            roles = _make_roles([
-                ("role_hungry_professional", "BUSY PROFESSIONAL", "Time-pressed professional who orders food regularly and values convenience over price — core paying customer.", 3, True),
-                ("role_home_cook", "HOME COOK", "Cooking enthusiast who compares your product against cooking at home — key value perception benchmark.", 3, True),
-                ("role_family_planner", "FAMILY MEAL PLANNER", "Parent managing family nutrition and budget — represents group/family subscription potential.", 3, True),
-                ("role_health_conscious", "HEALTH-CONSCIOUS EATER", "Health-focused user with specific dietary needs — tests premium tier and ingredient transparency demands.", 0, False),
-                ("role_price_sensitive", "PRICE-SENSITIVE DINER", "Value-maximizer who compares cost per meal vs. alternatives — tests pricing floor.", 0, False),
-                ("role_weekend_indulger", "WEEKEND INDULGER", "Casual user who treats themselves occasionally — tests occasional-use conversion.", 0, False),
-            ])
-        elif has_health:
-            roles = _make_roles([
-                ("role_fitness_enthusiast", "FITNESS ENTHUSIAST", "Regular gym-goer or active lifestyle person — primary power user who validates core features.", 3, True),
-                ("role_health_beginner", "WELLNESS BEGINNER", "Person just starting their health journey — tests onboarding ease and motivational hooks.", 3, True),
-                ("role_chronic_condition", "CHRONIC CONDITION USER", "Person managing a specific health condition — tests specialized feature depth and clinical accuracy.", 3, True),
-                ("role_time_poor_professional", "TIME-POOR PROFESSIONAL", "High-income, low-time user who values efficiency over effort — validates premium tier.", 0, False),
-                ("role_skeptic", "HEALTH SKEPTIC", "Person who has tried and failed at health apps before — reveals key churn drivers.", 0, False),
-            ])
-        elif has_fintech:
-            roles = _make_roles([
-                ("role_early_adopter_pro", "EARLY ADOPTER PRO", "Tech-savvy individual comfortable with financial apps — validates core product assumptions and API depth.", 3, True),
-                ("role_small_biz_owner", "SMALL BUSINESS OWNER", "SMB operator managing cash flow and payments — high-value B2B2C segment.", 3, True),
-                ("role_underbanked_user", "UNDERBANKED USER", "Person with limited access to traditional banking — tests financial inclusion positioning.", 3, True),
-                ("role_security_skeptic", "SECURITY SKEPTIC", "Privacy-first user concerned about data and fraud — reveals trust barriers to adoption.", 0, False),
-                ("role_high_net_worth", "HIGH NET WORTH USER", "Affluent user with complex financial needs — tests premium tier ceiling.", 0, False),
-            ])
-        elif has_ecommerce:
-            roles = _make_roles([
-                ("role_impulse_buyer", "IMPULSE BUYER", "Discovery-driven shopper who buys based on recommendations — tests conversion and merchandising.", 3, True),
-                ("role_research_first", "RESEARCH-FIRST BUYER", "Methodical shopper who compares options — tests trust signals, reviews, and pricing clarity.", 3, True),
-                ("role_loyal_repeater", "LOYAL REPEATER", "Returning customer seeking value — tests retention mechanics, loyalty programs, and subscription offers.", 3, True),
-                ("role_deal_hunter", "DEAL HUNTER", "Discount-motivated buyer — tests promotional sensitivity and price floor.", 0, False),
-                ("role_premium_seeker", "PREMIUM SEEKER", "Quality-over-price buyer — tests premium positioning and brand perception.", 0, False),
-            ])
-        elif has_b2b:
-            roles = _make_roles([
-                ("role_decision_maker", "BUDGET DECISION MAKER", "Manager or executive who approves tool purchases — validates ROI narrative and business case.", 3, True),
-                ("role_power_user", "DAILY POWER USER", "Individual contributor who uses the tool most — validates UX depth and workflow integration.", 3, True),
-                ("role_it_evaluator", "IT SECURITY EVALUATOR", "Tech/security gatekeeping role — tests compliance, integration complexity, and enterprise requirements.", 3, True),
-                ("role_champion", "INTERNAL CHAMPION", "Early adopter who advocates for the tool — tests viral/referral mechanics.", 0, False),
-                ("role_skeptic_user", "CHANGE-RESISTANT USER", "Employee reluctant to adopt new tools — reveals adoption barriers and onboarding gaps.", 0, False),
-            ])
-        elif has_students:
-            roles = _make_roles([
-                ("role_uni_student", "UNIVERSITY STUDENT", "Core target user — validates product-market fit, UX, and willingness to pay.", 3, True),
-                ("role_college_applicant", "COLLEGE APPLICANT", "High-stakes test-taker with strong motivation — validates premium tier and urgency.", 3, True),
-                ("role_busy_high_schooler", "BUSY HIGH SCHOOLER", "Time-pressed student balancing multiple priorities — tests core value delivery.", 3, True),
-                ("role_parental_buyer", "PARENTAL BUYER", "Parent paying for their child's tools — validates pricing framing and trust signals.", 0, False),
-                ("role_budget_student", "BUDGET-CONSCIOUS STUDENT", "Price-sensitive student — tests pricing floor and free tier design.", 0, False),
-            ])
-        else:
-            roles = _make_roles([
-                ("role_primary_user", "PRIMARY USER", "Core target user who will use the product most — validates product-market fit and core value proposition.", 3, True),
-                ("role_early_adopter", "EARLY ADOPTER", "Tech-forward user open to new solutions — validates initial demand and first-mover appeal.", 3, True),
-                ("role_price_conscious", "PRICE-CONSCIOUS USER", "Budget-sensitive potential customer — validates pricing model and value-to-cost ratio.", 3, True),
-                ("role_skeptic", "SKEPTICAL NON-USER", "Person who currently uses a competitor or workaround — reveals switching barriers.", 0, False),
-                ("role_power_user", "POWER USER", "Heavy user who needs advanced features — validates depth and scalability.", 0, False),
-                ("role_influencer", "INFLUENCER OR REFERRER", "Person who recommends products to others — validates viral/word-of-mouth potential.", 0, False),
-            ])
-
-        card = ResearchGoalCard(
-            title="RESEARCH GOAL",
-            summary=summary,
-            target_audience=f"Target users of the {product_type}",
-            core_hypothesis=f"Demand and product-market fit for the {product_type}",
-        )
-
-        return CopilotResponse(
-            reply="I've synthesized your inputs into a focused research goal proposal below:",
-            suggested_study_type="interviews",
-            is_ready_for_approval=True,
-            research_goal_card=card,
-            suggested_roles=roles,
-            served_by="bebshax/copilot-engine",
-        )
-
-
-def _make_roles(role_specs: list[tuple]) -> list[PersonaRoleSuggestion]:
-    return [
-        PersonaRoleSuggestion(id=id_, role=role, description=desc, count=count, selected=selected)
-        for id_, role, desc, count, selected in role_specs
-    ]
+    return roles
 
 
 @router.post("/study/copilot", response_model=CopilotResponse)
@@ -408,7 +350,7 @@ async def study_design_copilot(
     request: Request,
     current_user: Users = Depends(get_current_user),
 ) -> CopilotResponse:
-    """Conversational study design copilot running through FreeLLMpool/OpenRouter with fallback."""
+    """Conversational study design copilot. Every reply is a routed LLM reply."""
     # A study id in the body is a tenant-owned reference: read gate (this route
     # writes nothing, so the demo's public read allowance still applies).
     if body.study_id:
@@ -420,72 +362,49 @@ async def study_design_copilot(
                     raise HTTPException(status_code=404, detail="study not found")
 
     llm_router = getattr(request.app.state, "llm_router", None)
+    if llm_router is None:
+        raise LLMUnavailable("The study copilot")
 
-    if llm_router is not None:
-        try:
-            chat_messages: list[ChatMessage] = [
-                ChatMessage(role="system", content=SYSTEM_PROMPT),
-            ]
-            for m in body.messages:
-                chat_messages.append(ChatMessage(role=m.role, content=m.content))
+    chat_messages: list[ChatMessage] = [ChatMessage(role="system", content=SYSTEM_PROMPT + "\n" + UNTRUSTED_RULE)]
+    for m in body.messages:
+        chat_messages.append(ChatMessage(role=m.role, content=m.content))
+    llm_req = LLMRequest(
+        task=TaskType.STRUCTURED_OUTPUT,
+        messages=chat_messages,
+        json_mode=True,
+        temperature=0.5,
+    )
 
-            llm_req = LLMRequest(
-                task=TaskType.STRUCTURED_OUTPUT,
-                messages=chat_messages,
-                json_mode=True,
-                temperature=0.5,
-            )
-            result = await llm_router.complete(llm_req)
+    def _accept(parsed: Any) -> bool:
+        return isinstance(parsed, dict) and bool(str(parsed.get("reply") or "").strip())
 
-            parsed = parse_llm_json(result.text)
-            reply = parsed.get("reply", "")
-            study_type = parsed.get("suggested_study_type", "interviews")
-            ready = parsed.get("is_ready_for_approval", False)
-            raw_card = parsed.get("research_goal_card")
-            raw_roles = parsed.get("suggested_roles", [])
+    parsed, result, attempts = await _complete_json(
+        llm_router, llm_req, accept=_accept, error_code="copilot_reply_unparseable", what="the copilot reply"
+    )
 
-            card = None
-            if ready and raw_card:
-                card = ResearchGoalCard(
-                    title=raw_card.get("title", "RESEARCH GOAL"),
-                    summary=raw_card.get("summary", ""),
-                    target_audience=raw_card.get("target_audience", "Broad target market"),
-                    core_hypothesis=raw_card.get("core_hypothesis", "Core value proposition"),
-                )
+    ready = bool(parsed.get("is_ready_for_approval", False))
+    raw_card = parsed.get("research_goal_card")
+    card = None
+    if ready and isinstance(raw_card, dict) and str(raw_card.get("summary") or "").strip():
+        card = ResearchGoalCard(
+            title=str(raw_card.get("title") or "RESEARCH GOAL"),
+            summary=str(raw_card["summary"]),
+            target_audience=str(raw_card.get("target_audience") or ""),
+            core_hypothesis=str(raw_card.get("core_hypothesis") or ""),
+        )
+    # A "ready" flag without a real card is not approvable.
+    ready = ready and card is not None
 
-            roles: list[PersonaRoleSuggestion] = []
-            if raw_roles:
-                for r in raw_roles:
-                    roles.append(
-                        PersonaRoleSuggestion(
-                            id=r.get("id", f"role_{len(roles)}"),
-                            role=r.get("role", "TARGET USER"),
-                            description=r.get("description", ""),
-                            count=r.get("count", 0),
-                            selected=r.get("selected", False),
-                        )
-                    )
-
-            return CopilotResponse(
-                reply=reply,
-                suggested_study_type=study_type,
-                is_ready_for_approval=ready,
-                research_goal_card=card,
-                suggested_roles=roles,
-                served_by=f"{result.provider}/{result.model}",
-            )
-        except Exception as exc:
-            # Same canned-engine fail-soft (R2, R3, R6) — but loud, and marked
-            # in the payload so canned content is never mistaken for a routed
-            # LLM reply.
-            logger.warning("copilot LLM turn failed — serving local fallback engine", exc_info=True)
-            fallback = _generate_fallback_response(body.messages)
-            fallback.fallback_reason = f"llm_error:{type(exc).__name__}"
-            return fallback
-
-    fallback = _generate_fallback_response(body.messages)
-    fallback.fallback_reason = "llm_router_unavailable"
-    return fallback
+    return CopilotResponse(
+        reply=str(parsed.get("reply", "")),
+        suggested_study_type=str(parsed.get("suggested_study_type") or "interviews"),
+        is_ready_for_approval=ready,
+        research_goal_card=card,
+        suggested_roles=_roles_from(parsed.get("suggested_roles")),
+        served_by=_route_of(result),
+        fallback_reason="retried_after_unparseable_reply" if attempts > 1 else None,
+        llm_request_id=getattr(getattr(result, "provenance", None), "request_id", None),
+    )
 
 
 @router.post("/study/suggest-roles", response_model=list[PersonaRoleSuggestion])
@@ -495,61 +414,47 @@ async def suggest_persona_roles(
     request: Request,
     current_user: Users = Depends(get_current_user),
 ) -> list[PersonaRoleSuggestion]:
-    """Generates suggested persona roles for any research study context via LLM.
+    """Persona roles for THIS study (idea + goal + audience), written by the model.
 
     Authenticated only: this spends real LLM budget and is only ever reached
-    from the signed-in study workflow, so anonymous access was pure exposure.
+    from the signed-in study workflow.
     """
     llm_router = getattr(request.app.state, "llm_router", None)
+    if llm_router is None:
+        raise LLMUnavailable("Persona role suggestion")
+    if not (body.study_prompt or "").strip():
+        raise HTTPException(status_code=400, detail="Describe the business idea first.")
 
-    if llm_router is not None:
-        try:
-            # NOTE: .replace(), not .format() — the template embeds a JSON example
-            # whose braces make str.format() raise KeyError.
-            prompt = SUGGEST_ROLES_PROMPT.replace("{study_prompt}", body.study_prompt or "")
-            chat_messages = [
-                ChatMessage(role="system", content="You are a business research persona strategist. Return only valid JSON arrays."),
-                ChatMessage(role="user", content=prompt),
-            ]
-            llm_req = LLMRequest(
-                task=TaskType.STRUCTURED_OUTPUT,
-                messages=chat_messages,
-                json_mode=True,
-                temperature=0.6,
-            )
-            result = await llm_router.complete(llm_req)
-            parsed = parse_llm_json(result.text)
-            if isinstance(parsed, list) and parsed:
-                return [
-                    PersonaRoleSuggestion(
-                        id=r.get("id", f"role_{i}"),
-                        role=r.get("role", "TARGET USER"),
-                        description=r.get("description", ""),
-                        count=r.get("count", 0),
-                        selected=r.get("selected", False),
-                    )
-                    for i, r in enumerate(parsed)
-                ]
-        except Exception:
-            # Response schema is a bare list, so the log line IS the fallback
-            # record here (no payload field to mark).
-            logger.warning(
-                "suggest-roles LLM call failed — serving keyword-derived fallback roles",
-                exc_info=True,
-            )
+    context = _study_context_block(
+        study_prompt=body.study_prompt,
+        title=body.study_title,
+        goal=body.goal,
+        target_audience=body.target_audience,
+    )
+    # NOTE: .replace(), not .format() — the template embeds a JSON example
+    # whose braces make str.format() raise KeyError.
+    prompt = SUGGEST_ROLES_PROMPT.replace("{study_context}", context)
+    llm_req = LLMRequest(
+        task=TaskType.STRUCTURED_OUTPUT,
+        messages=[
+            ChatMessage(
+                role="system",
+                content="You are a business research persona strategist. Return only valid JSON. " + UNTRUSTED_RULE,
+            ),
+            ChatMessage(role="user", content=prompt),
+        ],
+        json_mode=True,
+        temperature=0.6,
+        max_output_tokens=2500,
+    )
 
-    # Fallback: generate context-aware roles based on study prompt keywords
-    fallback = _generate_fallback_response([CopilotMessage(role="user", content=body.study_prompt)])
-    if fallback.suggested_roles:
-        return fallback.suggested_roles
-    # Generic catch-all roles
-    return _make_roles([
-        ("role_primary_user", "PRIMARY USER", "Core target user for this product — validates primary product-market fit.", 3, True),
-        ("role_early_adopter", "EARLY ADOPTER", "Forward-thinking user who validates initial demand and first-mover appeal.", 3, True),
-        ("role_budget_user", "PRICE-CONSCIOUS USER", "Budget-sensitive user who validates pricing strategy.", 3, True),
-        ("role_skeptic", "SKEPTICAL USER", "Person using a competitor or workaround — reveals switching barriers.", 0, False),
-        ("role_power_user", "POWER USER", "Advanced user who validates depth and extensibility.", 0, False),
-    ])
+    def _accept(parsed: Any) -> bool:
+        return bool(_roles_from(parsed))
+
+    parsed, _result, _attempts = await _complete_json(
+        llm_router, llm_req, accept=_accept, error_code="roles_unparseable", what="persona role suggestions"
+    )
+    return _roles_from(parsed)
 
 
 class GeneratePersonasRequest(BaseModel):
@@ -610,84 +515,207 @@ def _apply_evidence_grounding(
     )
 
 
+class FailedRole(BaseModel):
+    role_id: str
+    role: str
+    error_code: str
+    detail: str
+
+
+class GeneratePersonasResponse(BaseModel):
+    personas: list[dict[str, Any]]
+    # Roles the model could not produce personas for — reported, never replaced
+    # by a skeleton. Empty when every selected role succeeded.
+    failed_roles: list[FailedRole] = Field(default_factory=list)
+    served_by: list[str] = Field(default_factory=list)
+
+
+def _clean_persona_payload(p: dict[str, Any]) -> dict[str, Any]:
+    """Drop empty/placeholder values so a missing field stays missing downstream."""
+    demographics = p.get("demographics")
+    if isinstance(demographics, dict):
+        p["demographics"] = {k: v for k, v in demographics.items() if v not in (None, "", [], {})}
+    else:
+        p["demographics"] = {}
+    for key in ("badges", "attributes"):
+        if not isinstance(p.get(key), list):
+            p[key] = []
+    p.pop("created_at", None)  # the server owns timestamps
+    return p
+
+
 async def _generate_persona_via_llm(
     llm_router: Any,
     role: PersonaRoleSuggestion,
-    study_prompt: str,
+    *,
+    context_block: str,
     count: int,
     evidence_claims: Optional[list[dict[str, Any]]] = None,
+    other_roles: Optional[list[str]] = None,
+    avoid_names: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
-    """Use LLM to generate contextual personas for the given role and study prompt."""
+    """Personas for one role, written by the model for THIS study's context.
+
+    ``other_roles`` are the sibling roles generated for the same study, so each
+    persona is written to be distinct from them; ``avoid_names`` are names the
+    study already uses (a regeneration after a duplicate)."""
     # NOTE: .replace(), not .format() — the template embeds a JSON example
-    # whose braces make str.format() raise KeyError (this silently disabled the
-    # LLM path entirely; every persona was a skeleton until 2026-08-26).
+    # whose braces make str.format() raise KeyError.
     prompt = (
         PERSONA_GENERATION_PROMPT
         .replace("{count}", str(count))
-        .replace("{study_prompt}", study_prompt or "")
+        .replace("{study_prompt}", "see STUDY_CONTEXT below")
         .replace("{role_title}", role.role or "")
         .replace("{role_description}", role.description or "")
         .replace("{role_id}", role.id or "")
     )
-    if evidence_claims:
-        claim_lines = "\n".join(
-            f"- {c['alias']}: {c['claim_text']}" for c in evidence_claims
-        )
+    prompt += "\n\n" + context_block
+    if other_roles:
         prompt += (
-            "\n\nEvidence claims retrieved for this study:\n"
-            f"{claim_lines}\n"
-            "When an attribute is directly supported by one of these claims, set its "
+            "\n\nOther persona roles being generated for this same study: "
+            + "; ".join(other_roles)
+            + ". Make this persona clearly distinct from them in name, occupation, life situation and voice."
+        )
+    if avoid_names:
+        prompt += (
+            "\n\nNames already used by other personas in this study — do NOT reuse them or close variants: "
+            + ", ".join(avoid_names)
+            + "."
+        )
+    if evidence_claims:
+        claim_lines = "\n".join(f"- {c['alias']}: {c['claim_text']}" for c in evidence_claims)
+        prompt += (
+            "\n\n"
+            + untrusted_block("EVIDENCE_CLAIMS", claim_lines, source="evidence_claims")
+            + "\nWhen an attribute is directly supported by one of these claims, set its "
             '"evidence" field to an array of the supporting claim ids (e.g. ["C1"]) and '
             'its "provenance_class" to "OBSERVED". Never invent claim ids; leave '
             '"evidence" null when no listed claim supports the attribute.'
         )
-    chat_messages = [
-        ChatMessage(role="system", content="You are a synthetic persona generator. Return ONLY a valid JSON array, no markdown. Keep every description under 40 words so the full array always fits in the response."),
-        ChatMessage(role="user", content=prompt),
-    ]
     llm_req = LLMRequest(
         task=TaskType.PERSONA_NARRATIVE,
-        messages=chat_messages,
+        messages=[
+            ChatMessage(
+                role="system",
+                content=(
+                    "You are a synthetic persona generator. Return ONLY a valid JSON object, no markdown. "
+                    "Keep every description under 40 words so the full array always fits in the response. "
+                    "Derive country, city, currency and habits from the study context — never assume a region. "
+                    + UNTRUSTED_RULE
+                ),
+            ),
+            ChatMessage(role="user", content=prompt),
+        ],
         json_mode=True,
         temperature=0.8,
         max_output_tokens=4096,
     )
-    result = await llm_router.complete(llm_req)
-    parsed = parse_llm_json(result.text)
-    if not isinstance(parsed, list):
-        parsed = [parsed]
-    # Tag each persona with generation metadata
-    for p in parsed:
+
+    def _accept(parsed: Any) -> bool:
+        items = unwrap_list(parsed, keys=("personas",), item_keys=("name",))
+        return any(isinstance(p, dict) and str(p.get("name") or "").strip() for p in items)
+
+    parsed, result, _attempts = await _complete_json(
+        llm_router,
+        llm_req,
+        accept=_accept,
+        error_code="persona_generation_unparseable",
+        what=f"personas for role '{role.role}'",
+    )
+    items = unwrap_list(parsed, keys=("personas",), item_keys=("name",))
+    served_by = _route_of(result)
+    personas: list[dict[str, Any]] = []
+    for p in items:
+        if not isinstance(p, dict) or not str(p.get("name") or "").strip():
+            continue
+        p = _clean_persona_payload(p)
         p["role_id"] = role.id
         p["role_title"] = role.role
-        p["business_id"] = "biz_default"
-        p["generation_model"] = f"{result.provider}/{result.model}"
+        p["generation_model"] = served_by  # the real route, never the prompt's example
         p["status"] = "active"
         p["version"] = 1
-        if "initials" not in p or not p["initials"]:
-            p["initials"] = _get_initials(p.get("name", "UN"))
-    return parsed
+        if not p.get("initials"):
+            p["initials"] = _get_initials(str(p["name"]))
+        personas.append(p)
+    return personas[:count]
 
 
-@router.post("/study/generate-personas", response_model=list[dict[str, Any]])
+def _attr_titles(persona: dict[str, Any], category: str) -> list[str]:
+    return [
+        str(a.get("title"))
+        for a in persona.get("attributes", [])
+        if isinstance(a, dict) and a.get("category") == category and a.get("title")
+    ]
+
+
+def _name_key(persona: dict[str, Any]) -> str:
+    return " ".join(str(persona.get("name") or "").lower().split())
+
+
+async def _dedupe_persona_names(
+    personas: list[dict[str, Any]],
+    roles: list[PersonaRoleSuggestion],
+    regenerate,
+) -> list[dict[str, Any]]:
+    """Roles are generated concurrently, so two roles can come back with the
+    same person (observed live: two 'Maria Chen's with incompatible bios). The
+    later duplicates are regenerated ONCE with the used names excluded; a
+    duplicate that survives is kept but flagged — never silently renamed."""
+    seen: dict[str, int] = {}
+    duplicates: list[int] = []
+    for index, persona in enumerate(personas):
+        key = _name_key(persona)
+        if key and key in seen:
+            duplicates.append(index)
+        elif key:
+            seen[key] = index
+    if not duplicates:
+        return personas
+
+    roles_by_id = {r.id: r for r in roles}
+    used_names = sorted({str(p.get("name")) for p in personas if p.get("name")})
+    for index in duplicates:
+        persona = personas[index]
+        role = roles_by_id.get(str(persona.get("role_id") or ""))
+        replacement: Optional[dict[str, Any]] = None
+        if role is not None:
+            regenerated, _failed, _exc = await regenerate(role, used_names)
+            fresh = [p for p in regenerated if _name_key(p) and _name_key(p) not in seen]
+            replacement = fresh[0] if fresh else None
+        if replacement is not None:
+            personas[index] = replacement
+            seen[_name_key(replacement)] = index
+            used_names.append(str(replacement.get("name")))
+        else:
+            warnings = persona.setdefault("validation_warnings", [])
+            if isinstance(warnings, list):
+                warnings.append(f"duplicate_name: another persona in this study is also named {persona.get('name')}")
+    return personas
+
+
+@router.post("/study/generate-personas", response_model=GeneratePersonasResponse)
 @limiter.limit("20/minute")
 async def generate_study_personas(
     body: GeneratePersonasRequest,
     request: Request,
     current_user: Users = Depends(get_current_user),
-) -> list[dict[str, Any]]:
-    """Generates and grounds synthetic personas conditioned on study prompt and selected roles via LLM."""
+) -> GeneratePersonasResponse:
+    """Generate synthetic personas for the selected roles from THIS study's context.
+
+    Every persona is model-written. A role whose generation fails is reported in
+    ``failed_roles`` (never replaced by a skeleton); if every role fails the
+    request fails explicitly. Superseded personas of the study are archived so
+    the study has one set of current personas.
+    """
     # Ownership gate BEFORE any LLM spend or writes: a client-supplied
     # study_id must never inject personas into another tenant's study.
     evidence_claims: list[dict[str, Any]] = []
+    study_row: Optional[Studies] = None
     if body.study_id:
         gate_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
         if gate_sessionmaker:
             async with gate_sessionmaker() as gate_session:
                 study_row = await gate_session.get(Studies, body.study_id)
-                # Readable-but-not-writable (the shared demo) is a 403 with an
-                # honest message — a study the caller is currently READING must
-                # never be reported as "not found".
                 require_study_access(
                     study_row,
                     current_user,
@@ -697,8 +725,6 @@ async def generate_study_personas(
                         "create your own study to generate personas."
                     ),
                 )
-                # Grounding must be measured, not assumed: show the study's own
-                # claims so citations can be verified below.
                 claim_rows = (
                     (
                         await gate_session.execute(
@@ -716,85 +742,110 @@ async def generate_study_personas(
                     for i, c in enumerate(claim_rows)
                 ]
 
-    llm_router = getattr(request.app.state, "llm_router", None)
-    study_prompt = body.study_prompt or "General product/service research study"
-    selected_roles = [r for r in body.roles if r.selected or r.count > 0]
+    study_prompt = (body.study_prompt or (study_row.prompt if study_row else None) or "").strip()
+    if not study_prompt:
+        raise HTTPException(status_code=400, detail="Describe the business idea before generating personas.")
+    selected_roles = [r for r in body.roles if r.selected or r.count > 0] or body.roles[:3]
     if not selected_roles:
-        selected_roles = body.roles[:3] if body.roles else []
+        raise HTTPException(status_code=400, detail="Select at least one persona role.")
+    llm_router = getattr(request.app.state, "llm_router", None)
+    if llm_router is None:
+        raise LLMUnavailable("Persona generation")
+    context_block = _study_context_block(
+        study_prompt=study_prompt,
+        title=body.study_title or (study_row.title if study_row else None),
+        goal=(study_row.goal if study_row else None),
+        target_audience=(study_row.target_audience if study_row else None),
+        pricing_hypothesis=(study_row.pricing_hypothesis if study_row else None),
+    )
 
+    async def _one_role(
+        role: PersonaRoleSuggestion, avoid_names: Optional[list[str]] = None
+    ) -> tuple[list[dict[str, Any]], Optional[FailedRole], Optional[BaseException]]:
+        count = max(1, min(role.count, 3))
+        siblings = [r.role for r in selected_roles if r.id != role.id and r.role]
+        try:
+            return await _generate_persona_via_llm(
+                llm_router,
+                role,
+                context_block=context_block,
+                count=count,
+                evidence_claims=evidence_claims,
+                other_roles=siblings,
+                avoid_names=avoid_names,
+            ), None, None
+        except UnusableModelOutput as exc:
+            return [], FailedRole(role_id=role.id, role=role.role, error_code=exc.error_code, detail=exc.detail), exc
+        except LLMError as exc:
+            logger.warning("persona generation failed for role %s: %s", role.id, safe_error_summary(exc))
+            return [], FailedRole(
+                role_id=role.id,
+                role=role.role,
+                error_code="all_candidates_failed" if type(exc).__name__ == "AllCandidatesFailed" else "llm_error",
+                detail="No AI route could serve this role right now.",
+            ), exc
+
+    results = await asyncio.gather(*(_one_role(r) for r in selected_roles))
     all_personas: list[dict[str, Any]] = []
-
-    if llm_router is not None and selected_roles:
-        async def _one_role(role: PersonaRoleSuggestion) -> list[dict[str, Any]]:
-            count = max(1, min(role.count, 3))
-            try:
-                return await _generate_persona_via_llm(
-                    llm_router, role, study_prompt, count, evidence_claims
-                )
-            except Exception:
-                logger.warning(
-                    "LLM persona generation failed for role %s; emitting skeleton fallback",
-                    role.id,
-                    exc_info=True,
-                )
-                return [_make_skeleton_persona(role, study_prompt)]
-
-        results = await asyncio.gather(*(_one_role(r) for r in selected_roles))
-        for personas in results:
-            all_personas.extend(personas)
-
+    failed_roles: list[FailedRole] = []
+    errors: list[BaseException] = []
+    for personas, failed, exc in results:
+        all_personas.extend(personas)
+        if failed is not None:
+            failed_roles.append(failed)
+        if exc is not None:
+            errors.append(exc)
+    all_personas = await _dedupe_persona_names(all_personas, selected_roles, _one_role)
     if not all_personas:
-        all_personas = [_make_skeleton_persona(r, study_prompt) for r in selected_roles[:5]]
+        # Every role failed: surface the real failure (503/413/502 envelope).
+        raise errors[-1]
 
     # Grounding is computed from verified citations only — never self-reported.
     for p in all_personas:
         _apply_evidence_grounding(p, evidence_claims)
 
-    # If study_id provided, persist personas into DB Personas table and update Studies record
+    # Persist: archive superseded personas, store ONLY what the model produced.
     db_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
-    if db_sessionmaker and body.study_id and all_personas:
+    if db_sessionmaker and body.study_id:
         try:
             async with db_sessionmaker() as db_session:
                 study = await db_session.get(Studies, body.study_id)
+                await db_session.execute(
+                    update(Personas)
+                    .where(Personas.study_id == body.study_id, Personas.status != "archived")
+                    .values(status="archived")
+                )
                 for p in all_personas:
-                    # SERVER owns persona identity. LLM-suggested ids like
-                    # "user_003" collide across studies and hijack other
-                    # studies' rows (observed live: a demo persona leaked
-                    # into a fresh study's interview batch).
+                    # SERVER owns persona identity (LLM-suggested ids collide across studies).
                     p_id = f"per_{uuid.uuid4().hex[:12]}"
                     p["id"] = p_id
                     p["study_id"] = body.study_id
-                    existing = await db_session.get(Personas, p_id)
-                    if not existing:
-                        db_p = Personas(
+                    demographics = p.get("demographics") or {}
+                    personality = p.get("personality") if isinstance(p.get("personality"), dict) else None
+                    db_session.add(
+                        Personas(
                             id=p_id,
                             study_id=body.study_id,
                             user_id=study.user_id if study else None,
                             owner_id=(study.user_id if study else None) or "usr_system_holder",
-                            name=p.get("name", "Target User"),
+                            name=str(p.get("name")),
                             status="active",
                             version=1,
-                            generation_model=p.get("generation_model", "copilot/llm"),
-                            archetype=p.get("archetype", p.get("role_title", "User")),
+                            generation_model=p.get("generation_model"),
+                            archetype=p.get("archetype") or p.get("role_title"),
                             tagline=p.get("tagline"),
-                            country_code=p.get("country_code", "BD"),
-                            personality=p.get("personality", {
-                                "openness": 55,
-                                "conscientiousness": 75,
-                                "extroversion": 50,
-                                "agreeableness": 70,
-                                "neuroticism": 45,
-                            }),
-                            detailed_attributes=p.get("detailed_attributes", {}),
-                            demographics=p.get("demographics", {}),
-                            bio=p.get("description", ""),
-                            quote=p.get("tagline", ""),
-                            goals=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Goals"] or ["Efficiency", "Convenience"],
-                            needs=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Needs"] or ["Frictionless onboarding"],
-                            pain_points=[a.get("title") for a in p.get("attributes", []) if a.get("category") == "Pain Points"] or ["Manual workarounds", "High cost"],
-                            grounding_score=float(p.get("grounding_ratio", 0.0)),  # verified citations only — never a self-score
+                            country_code=p.get("country_code"),
+                            personality=personality or None,
+                            detailed_attributes=p.get("detailed_attributes") or {},
+                            demographics=demographics,
+                            bio=p.get("description"),
+                            quote=p.get("quote"),
+                            goals=_attr_titles(p, "Goals"),
+                            needs=_attr_titles(p, "Needs"),
+                            pain_points=_attr_titles(p, "Pain Points"),
+                            grounding_score=float(p.get("grounding_ratio", 0.0)),
                         )
-                        db_session.add(db_p)
+                    )
                 if study:
                     study.personas_data = all_personas
                     study.persona_ids = [p["id"] for p in all_personas]
@@ -809,56 +860,10 @@ async def generate_study_personas(
                 body.study_id,
                 exc_info=True,
             )
+            raise HTTPException(status_code=503, detail="Personas were generated but could not be saved. Please retry.")
 
-    return all_personas
-
-
-def _make_skeleton_persona(role: PersonaRoleSuggestion, study_prompt: str) -> dict[str, Any]:
-    """Create a minimal skeleton persona when LLM is unavailable."""
-    short = role.id.replace("role_", "").replace("_", "")[:8]
-    first_names = ["Alex", "Jordan", "Sam", "Taylor", "Morgan", "Casey", "Riley", "Drew"]
-    last_names = ["Smith", "Johnson", "Lee", "Garcia", "Patel", "Chen", "Kim", "Brown"]
-    name = f"{random.choice(first_names)} {random.choice(last_names)}"
-    return {
-        "id": f"per_{short}_{random.randint(100, 999)}",
-        "business_id": "biz_default",
-        "name": name,
-        "initials": _get_initials(name),
-        "country_code": "US",
-        "country_name": "United States",
-        "role_id": role.id,
-        "role_title": role.role,
-        "archetype": role.role.title(),
-        "tagline": f"The {role.role.title().split()[0]} Profile",
-        "demographics": {
-            "age": random.randint(22, 45),
-            "gender": "Female" if random.random() > 0.5 else "Male",
-            "occupation": role.role.title(),
-            "income_bracket": "Middle income",
-            "location": "Metro area",
-            "education": "Bachelor's degree",
-        },
-        "description": f"A {role.role.lower()} persona relevant to: {study_prompt[:100]}.",
-        "badges": [
-            {"label": "ROLE", "value": role.role},
-            {"label": "CONTEXT", "value": study_prompt[:80]},
-        ],
-        "attributes": [
-            {
-                "category": "Goals",
-                "title": f"Achieve value from {role.role.lower()}",
-                "description": role.description,
-                "provenance_class": "INFERRED",
-                "evidence": None,
-            }
-        ],
-        # Honest scores: a skeleton has no evidence behind it. Never fabricate
-        # grounding/consistency for template output.
-        "consistency_score": 0.0,
-        "grounding_ratio": 0.0,
-        "critic_notes": "Skeleton persona — regenerate with LLM for full detail.",
-        "generation_model": "bebshax/skeleton-fallback",
-        "created_at": "2026-08-24T22:00:00Z",
-        "status": "active",
-        "version": 1,
-    }
+    return GeneratePersonasResponse(
+        personas=all_personas,
+        failed_roles=failed_roles,
+        served_by=sorted({p.get("generation_model") for p in all_personas if p.get("generation_model")}),
+    )

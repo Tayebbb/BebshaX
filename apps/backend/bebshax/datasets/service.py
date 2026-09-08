@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import datetime
 import hashlib
 import json
 import os
 from collections.abc import Mapping
 from pathlib import Path
-import statistics
 import uuid
 from typing import Any, Optional
 
-from sqlalchemy import delete, false as sa_false, select
+from sqlalchemy import false as sa_false, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -28,10 +26,11 @@ from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.persona.conflicts import contested_slots, shares_content_token
-from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
 from bebshax.tenancy import PUBLIC_OWNER_IDS
+from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 
-OFFLINE_FALLBACK_MODEL = "offline_fallback"
+DATASET_PERSONA_UNPARSEABLE = "dataset_persona_unparseable"
+_PERSONA_MAX_ATTEMPTS = 2
 
 _CLAIM_GROUPS = (
     "goals",
@@ -462,10 +461,18 @@ class DatasetService:
         requested_count: int = 10,
         user_id: Optional[str] = None,
         study_id: Optional[str] = None,
-        business_name: str = "BebshaX Research Initiative",
-        business_description: str = "Evidence-grounded user interview validation",
+        business_name: str = "",
+        business_description: str = "",
     ) -> dict[str, Any]:
-        """Generate evidence-grounded synthetic personas strictly allocated according to dataset segment distribution."""
+        """Generate evidence-grounded synthetic personas allocated by the dataset's
+        observed segment shares.
+
+        Every persona is written by the model from the segment's OBSERVED
+        constraints and sample records. There is no offline template: without an
+        LLM the call raises ``LLMUnavailable``; a persona whose reply is unusable
+        after one retry is recorded as failed (``failed`` list) instead of being
+        replaced by a stock character.
+        """
         # Post-verification internal fetch (API layer ran the scoped check).
         ds = await self._get_dataset_any(dataset_id)
         if not ds:
@@ -474,14 +481,15 @@ class DatasetService:
         segments = ds.segments or []
         if not segments:
             raise ValueError(f"Dataset '{dataset_id}' has no discovered segments.")
+        if self._llm is None:
+            raise LLMUnavailable("Dataset persona generation")
 
         # 1. Mathematically determine exact persona quotas per segment
         quota_distribution = calculate_segment_persona_distribution(segments, requested_count)
-        # run-level label: the last model that served a persona, or the
-        # offline template when nothing did; each persona also carries its own.
-        model_used = OFFLINE_FALLBACK_MODEL
+        served_by: list[str] = []
 
         generated_personas: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
         validation_results: list[dict[str, Any]] = []
 
         valid_count = 0
@@ -495,7 +503,7 @@ class DatasetService:
             if count_for_seg <= 0:
                 continue
 
-            constraints = seg.get("constraints", {})
+            constraints = seg.get("constraints", {}) or {}
             sample_records = seg.get("sample_records", [])
             # Only rows the model is actually SHOWN can ground a claim; they get
             # stable content-derived ids so citations are verifiable.
@@ -506,57 +514,80 @@ class DatasetService:
                 for rid, record in shown_ids.items()
             ) or "(no sample records — do not mark any claim OBSERVED)"
 
+            # Observed constraints only — whatever the dataset actually measured
+            # for this group, keyed by its own column names. Nothing is assumed.
+            observed_lines = "\n".join(
+                f"- {key}: {json.dumps(value, ensure_ascii=False, default=str)}"
+                for key, value in constraints.items()
+                if key != "rule_description" and value not in (None, "", [], {})
+            ) or "- (no per-group statistics beyond the grouping itself)"
+            context_line = f"- Context: {business_name} - {business_description}\n" if (business_name or business_description) else ""
+
             for persona_idx in range(count_for_seg):
                 prompt = (
                     f"Synthesize 1 realistic persona representing market segment: '{seg['name']}' "
-                    f"({seg.get('population_percentage', 0)}% empirical population share).\n\n"
-                    f"EVIDENCE CONSTRAINTS (MANDATORY):\n"
-                    f"- Segment: {seg['name']}\n"
-                    f"- Age range: {constraints.get('age_range', [18, 50])} (Median: {constraints.get('median_age', 25)})\n"
-                    f"- Monthly budget: ৳{constraints.get('monthly_budget', {}).get('median', 500)} "
-                    f"(Range: ৳{constraints.get('monthly_budget', {}).get('min', 100)} - ৳{constraints.get('monthly_budget', {}).get('max', 1500)})\n"
-                    f"- Tech familiarity: {constraints.get('technology_familiarity', 'Medium')}\n"
-                    f"- Observed needs: {', '.join(constraints.get('observed_needs', ['Core functionality']))}\n"
-                    f"- Context: {business_name} - {business_description}\n\n"
+                    f"({seg.get('population_percentage', 0)}% of the dataset's observed population; "
+                    f"grouped by {seg.get('segmentation_feature', 'a dataset column')}).\n\n"
+                    f"OBSERVED SEGMENT STATISTICS (MANDATORY — stay inside them; do not assume a country, currency or "
+                    f"value the data does not show; if something is unknown, say so in the description):\n"
+                    f"{observed_lines}\n"
+                    f"- Rule: {constraints.get('rule_description', '')}\n"
+                    f"{context_line}\n"
                     f"REPRESENTATIVE DATASET EVIDENCE (cite the bracketed record ids in evidence_ids for OBSERVED claims; "
                     f"never invent ids):\n"
                     + untrusted_block("DATASET_RECORDS", evidence_lines, source=f"dataset.{ds.id}")
-                    + "\n\nReturn JSON strictly matching the schema with name, age, occupation, location, income_range, education, description, goals, pain_points, needs, motivations, behaviors, technology_usage, purchase_behavior, personality_traits. "
-                    "Each claim is {\"value\": str, \"provenance\": \"OBSERVED\"|\"INFERRED\"|\"SYNTHETIC\", \"evidence_ids\": [record ids]}."
+                    + "\n\nReturn JSON strictly matching the schema with name, age, occupation, location, income_range, education, "
+                    "description, goals, pain_points, needs, motivations, behaviors, technology_usage, purchase_behavior, personality_traits, "
+                    "and commercial_profile {monthly_budget: number|null, currency: ISO code|null, price_sensitivity: str|null}. "
+                    'Each claim is {"value": str, "provenance": "OBSERVED"|"INFERRED"|"SYNTHETIC", "evidence_ids": [record ids]}.'
+                )
+                request = LLMRequest(
+                    task=TaskType.PERSONA_GENERATION,
+                    messages=[
+                        ChatMessage(
+                            role="system",
+                            content=(
+                                "You are BebshaX's evidence-grounded persona synthesis engine. Generate structured JSON "
+                                "conforming strictly to the observed constraints. " + UNTRUSTED_RULE
+                            ),
+                        ),
+                        ChatMessage(role="user", content=prompt),
+                    ],
+                    json_mode=True,
+                    temperature=0.7,
+                    max_output_tokens=2048,
                 )
 
-                if self._llm is None:
-                    persona_dict = _generate_offline_fallback_persona(seg, persona_idx, reason="llm_unavailable")
-                else:
+                persona_dict: Optional[dict[str, Any]] = None
+                last_model = None
+                for attempt in range(1, _PERSONA_MAX_ATTEMPTS + 1):
+                    if attempt > 1:
+                        request = request.retry_copy()
+                    result = await self._llm.complete(request)  # LLMError propagates
+                    last_model = f"{result.provider}/{result.model}"
                     try:
-                        result = await self._llm.complete(
-                            LLMRequest(
-                                task=TaskType.PERSONA_GENERATION,
-                                messages=[
-                                    ChatMessage(
-                                        role="system",
-                                        content=(
-                                            "You are BebshaX's evidence-grounded persona synthesis engine. Generate structured JSON "
-                                            "conforming strictly to empirical constraints. " + UNTRUSTED_RULE
-                                        ),
-                                    ),
-                                    ChatMessage(role="user", content=prompt),
-                                ],
-                                json_mode=True,
-                                temperature=0.7,
-                                max_output_tokens=2048,
-                            )
-                        )
-                        persona_dict = coerce_claim_provenance(
-                            _parse_json_object(result.text), shown_ids
-                        )
+                        parsed = _parse_json_object(result.text)
+                    except ValueError:
+                        parsed = None
+                    if isinstance(parsed, dict) and str(parsed.get("name") or "").strip():
+                        persona_dict = coerce_claim_provenance(parsed, shown_ids)
                         persona_dict["model_used"] = result.model
-                        model_used = result.model
-                    except Exception as exc:
-                        # Fallback structured generation when offline — labelled as such
-                        persona_dict = _generate_offline_fallback_persona(
-                            seg, persona_idx, reason=f"llm_error:{type(exc).__name__}"
-                        )
+                        persona_dict["served_by"] = last_model
+                        if last_model not in served_by:
+                            served_by.append(last_model)
+                        break
+                if persona_dict is None:
+                    failed.append(
+                        {
+                            "segment_id": seg_id,
+                            "segment": seg["name"],
+                            "index": persona_idx,
+                            "error_code": DATASET_PERSONA_UNPARSEABLE,
+                            "detail": f"The model's persona reply was unusable after {_PERSONA_MAX_ATTEMPTS} attempts.",
+                            "served_by": last_model,
+                        }
+                    )
+                    continue
 
                 # 3. Programmatically validate persona against segment constraints
                 val = validate_persona_against_constraints(persona_dict, seg)
@@ -586,6 +617,15 @@ class DatasetService:
                     "warnings": val["warnings"],
                 })
 
+        if not generated_personas:
+            raise UnusableModelOutput(
+                DATASET_PERSONA_UNPARSEABLE,
+                f"None of the {requested_count} requested personas could be generated from usable model replies.",
+                attempts=_PERSONA_MAX_ATTEMPTS,
+                served_by=served_by[-1] if served_by else None,
+                extra={"failed": failed},
+            )
+
         # 4. Save audit run record in database
         run_id = f"dpr_{uuid.uuid4().hex[:16]}"
         run_record = DatasetPersonaRuns(
@@ -593,7 +633,7 @@ class DatasetService:
             dataset_id=ds.id,
             user_id=user_id,
             study_id=study_id,
-            model_used=model_used,
+            model_used=", ".join(served_by),
             requested_count=requested_count,
             generated_count=len(generated_personas),
             valid_count=valid_count,
@@ -601,7 +641,7 @@ class DatasetService:
             contradiction_count=contradiction_count,
             distribution_target=quota_distribution,
             distribution_actual={s["id"]: sum(1 for p in generated_personas if p.get("segment_id") == s["id"]) for s in segments},
-            validation_results=validation_results,
+            validation_results=validation_results + [{"failed": f} for f in failed],
         )
 
         async with self._sessionmaker() as session:
@@ -614,13 +654,14 @@ class DatasetService:
 
             # Persist each persona to the Personas table for user dashboard access.
             # Only STATED values are stored: a missing age/location/budget stays
-            # missing (the identity card renders "not stated"), never a Dhaka /
-            # ৳500 / bKash literal the model never produced.
+            # missing (the identity card renders "not stated"), never a literal
+            # the model never produced.
             for p_data in generated_personas:
                 p_id = f"per_{uuid.uuid4().hex[:12]}"
                 prefs = p_data.get("preferences") or []
                 if isinstance(prefs, str):
                     prefs = [prefs]
+                commercial = p_data.get("commercial_profile") if isinstance(p_data.get("commercial_profile"), dict) else {}
                 p_entity = Personas(
                     id=p_id,
                     study_id=study_id,
@@ -631,11 +672,10 @@ class DatasetService:
                     name=p_data.get("name", "Synthetic Persona"),
                     status="ready" if p_data.get("validation", {}).get("status") == "VALID" else "needs_review",
                     version=1,
-                    # per-persona origin: an offline template is never stamped with a model name
-                    generation_model=p_data.get("model_used") or model_used,
+                    generation_model=p_data.get("served_by") or p_data.get("model_used"),
                     archetype=p_data.get("archetype") or p_data.get("occupation") or None,
                     tagline=p_data.get("tagline") or None,
-                    country_code=p_data.get("country_code", "BD"),
+                    country_code=p_data.get("country_code") or None,
                     personality=p_data.get("personality") or {},
                     detailed_attributes=p_data.get("detailed_attributes", {}),
                     demographics=_stated_only(
@@ -658,9 +698,10 @@ class DatasetService:
                     objections=[o.get("value") if isinstance(o, dict) else str(o) for o in p_data.get("objections", [])],
                     commercial_profile=_stated_only(
                         {
-                            "monthly_budget_bdt": p_data.get("monthly_budget_bdt"),
-                            "price_sensitivity": p_data.get("price_sensitivity"),
-                            "payment_preference": p_data.get("payment_preference"),
+                            "monthly_budget": commercial.get("monthly_budget") or p_data.get("monthly_budget"),
+                            "currency": commercial.get("currency") or p_data.get("currency"),
+                            "price_sensitivity": commercial.get("price_sensitivity") or p_data.get("price_sensitivity"),
+                            "payment_preference": commercial.get("payment_preference") or p_data.get("payment_preference"),
                         }
                     ),
                     technology_profile=p_data.get("technology_profile") or {},
@@ -682,9 +723,12 @@ class DatasetService:
             "run_id": run_id,
             "dataset_id": ds.id,
             "dataset_name": ds.name,
-            "model_used": model_used,
+            "model_used": ", ".join(served_by),
+            "served_by": served_by,
             "requested_count": requested_count,
             "generated_count": len(generated_personas),
+            "failed_count": len(failed),
+            "failed": failed,
             "valid_count": valid_count,
             "warning_count": warning_count,
             "contradiction_count": contradiction_count,
@@ -694,98 +738,3 @@ class DatasetService:
         }
 
 
-def _generate_offline_fallback_persona(
-    seg: dict[str, Any], idx: int, reason: str = "llm_unavailable"
-) -> dict[str, Any]:
-    """Template persona used when no model served the request. Every claim is
-    SYNTHETIC with no citations: a template cannot observe anything, and the
-    old canned OBSERVED claims cited record ids that never existed."""
-    constraints = seg.get("constraints", {})
-    age_range = constraints.get("age_range", [20, 30])
-    budget = constraints.get("monthly_budget", {}).get("median", 500)
-    names = ["Samiul Alam", "Nabila Khan", "Tanvir Hasan", "Farhana Rahman", "Arif Chowdhury", "Mehzabin Sultana"]
-    name = names[idx % len(names)]
-
-    def synthetic(value: str) -> dict[str, Any]:
-        return {"value": value, "provenance": "SYNTHETIC", "evidence_ids": []}
-
-    return {
-        "name": name,
-        "model_used": OFFLINE_FALLBACK_MODEL,
-        "fallback_reason": reason,
-        "age": int(statistics.mean(age_range)),
-        "occupation": seg.get("name", "Student / Professional"),
-        "location": "Dhaka, Bangladesh",
-        "income_range": f"৳{budget:,.0f} per month",
-        "education": "Bachelor's Degree",
-        "tagline": f"The Grounded {seg['name']} Representative",
-        "country_code": "BD",
-        "origin_country": "Bangladesh",
-        "personality": {
-            "openness": 55,
-            "conscientiousness": 78,
-            "extroversion": 52,
-            "agreeableness": 70,
-            "neuroticism": 45,
-        },
-        "detailed_attributes": {
-            "hobbies": "following local news, digital reading, and evening walks",
-            "origin_country": "Bangladesh",
-            "commute_mode": "rickshaw and local transit",
-            "food_source": "home-cooked meals with occasional canteen tea",
-            "meal_timing": "regular 3-meal timing with evening snacks",
-            "payment_method": "bKash for daily expenses, cash backup",
-            "work_schedule": "standard daytime hours",
-            "workplace_setting": "office or campus",
-            "activity_level": "moderate",
-            "adaptability_level": "moderate to high",
-            "anxiety_level": "moderate under tight deadlines",
-            "attention_focus": "practical and detail-focused",
-            "belief_system": "pragmatic and duty-oriented",
-            "communication_style": "direct, polite, and clear",
-            "community_engagement": "moderate neighborhood connection",
-            "coping_strategies": "taking tea breaks and sticking to routine",
-            "core_motivators": "protecting income and achieving personal milestones",
-            "cultural_affiliations": "urban Bangladeshi middle class",
-            "cultural_traditions": "family dinner gatherings and Eid celebrations",
-            "daily_activities": "work, commute, family check-ins, and rest",
-            "decision_style": "deliberate and value-conscious",
-            "family_dynamics": "supportive shared household",
-            "financial_attitude": "careful monthly budgeting",
-            "financial_profile": "salaried with moderate discretionary ceiling",
-            "general_risk": "low to moderate",
-            "growth_mindset": "open to practical self-improvement",
-            "household_structure": "family household",
-            "introversion_level": "balanced ambivert",
-            "language_preferences": "Bangla first, professional English",
-            "learning_style": "practical demonstration and use",
-            "life_priorities": "family stability and steady work",
-            "motivation_goals": "reduce friction and improve consistency",
-            "personal_independence": "self-directed in routine choices",
-            "personal_values": "reliability, integrity, and consideration",
-            "planning_horizon": "weekly to monthly budgeting",
-            "religious_practices": "observes standard religious occasions",
-            "schedule_flexibility": "moderate",
-            "self_discipline": "strong",
-            "sleep_schedule": "regular night sleep (11 pm - 6:30 am)",
-            "social_identity": "dependable working citizen",
-            "social_values": "respect, modest conduct, and honesty",
-            "spiritual_outlook": "grounded faith and gratitude",
-            "tech_interest": "functional and utility-driven",
-            "technology_usage": "smartphone for messaging, payments, maps",
-            "time_management": "structured and reliable",
-            "urban_living": "accustomed to city pace and delays",
-            "value_risk": "avoids unverified experimental services",
-            "work_ethic": "highly dependable and methodical",
-        },
-        "description": f"Representative member of {seg['name']} seeking reliable tools within a budget of ৳{budget:,.0f}/month.",
-        "quote": f"I need an intelligent tool that keeps my priorities on track within my ৳{budget:,.0f}/month budget.",
-        "goals": [synthetic("Optimize monthly spending")],
-        "pain_points": [synthetic("Unpredictable price changes and lack of deal alerts")],
-        "needs": [synthetic("Instant notification on price drops")],
-        "motivations": [synthetic("Maximize value for money")],
-        "behaviors": [synthetic("Compares prices across multiple retail stores")],
-        "technology_usage": [synthetic("Daily smartphone user with medium familiarity")],
-        "purchase_behavior": [synthetic(f"Budget capped at ৳{budget:,.0f}/month")],
-        "personality_traits": [synthetic("Analytical, cost-conscious, disciplined")],
-    }

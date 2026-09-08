@@ -39,6 +39,18 @@
 
   SSE streams (`…/messages/stream`) emit an `error` event with the same `error_code`, `request_id`, `llm_request_id`, `attempts` fields.
 
+- **Explicit feature failures (2026-09-08, `bebshax/utils/explicit_failures.py`).** No feature substitutes a template, skeleton, heuristic or default when the model or the data cannot produce the artefact (R2). Instead the request fails with one of these coded envelopes (all carry `detail` + `request_id`; `UnusableModelOutput` adds `attempts` and `served_by`):
+
+  | HTTP | error_code                                                                                                                                                                                                                                                  | Raised when                                                                                                          |
+  | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+  | 503  | `llm_unavailable`                                                                                                                                                                                                                                           | no LLM service is wired for a feature that needs one (`detail` names the feature, e.g. "Behavioral simulation")      |
+  | 502  | `copilot_reply_unparseable` · `roles_unparseable` · `persona_generation_unparseable` · `script_unparseable` · `claims_extraction_failed` · `query_generation_failed` · `research_plan_failed` · `report_synthesis_failed` · `segment_interpretation_failed` · `dataset_persona_unparseable` · `simulation_unparseable` · `interview_synthesis_unparseable` · `judge_unavailable` | the route answered but the reply could not be turned into the artefact after the retry budget; nothing was templated |
+  | 502  | `dataset_download_failed`                                                                                                                                                                                                                                   | a discovered dataset resource could not be fetched (non-http(s) URL, HTTP error, >6 MB)                              |
+  | 422  | `dataset_unparseable`                                                                                                                                                                                                                                       | a fetched/uploaded dataset is not a readable CSV/JSON table                                                          |
+  | 400  | `segmentation_requires_data` · `behavioral_requires_personas` · `scenario_required` · `script_required` · `nothing_to_review`                                                                                                                              | the input the feature analyses is missing (no dataset rows / personas / scenario text / interview script / artefacts) |
+
+  Partial outcomes are reported, never hidden: `POST /api/study/generate-personas` returns `{personas, failed_roles[{role_id, role, error_code, detail}], served_by[]}`; dataset persona generation returns `failed[]`/`failed_count`; interview completion returns `insights.source = "unavailable"` with `error_code` when synthesis failed; research runs expose `summary.error_code`.
+
 ---
 
 ## 2. Enumerations
@@ -613,3 +625,29 @@ Scenario names (a data table in `bebshax/api/demo_lab.py`): `provider_429_fallba
 ```
 
 `outcome` ∈ `served | served_after_fallback | explicit_failure | claims_downgraded | low_grounding`; `error_code` ∈ `null | all_candidates_failed | context_window_exceeded`. `context_overflow` returns `provenance` with only `[skipped: context …]` markers and `extra.adapter_calls` all empty — proof that nothing was sent or truncated. `prompt_injection`/`evidence_conflict` return the `<UNTRUSTED_EVIDENCE>` prompt excerpt and the before/after provenance class of each claim (`coerce_provenance` downgrades). Unknown scenario → `404 not_found`.
+
+### 3.9 AI Review — an independent model audits a study's artefacts (2026-09-08)
+
+The reviewing model (`TaskType.CRITIC`, routed like every other call) scores what the study has actually produced against a fixed, published rubric. It is a second opinion written per study, never a canned verdict.
+
+- **`GET /api/ai-review/rubric`** — `{dimensions: {grounding, specificity, consistency, honesty, actionability → criterion text}, scale}`.
+- **`POST /api/studies/{study_id}/ai-review`** (write gate, 6/min) and **`POST /api/studies/{study_id}/personas/{persona_id}/ai-review`** (12/min) → `JudgeVerdict`:
+
+```json
+{
+  "study_id": "study_…",
+  "overall_score": 0,
+  "dimension_scores": { "grounding": 0, "specificity": 0, "consistency": 0, "honesty": 0, "actionability": 0 },
+  "strengths": ["…"],
+  "issues": [{ "severity": "high|medium|low", "artifact": "persona:<id>|report|interview:<id>|segment:<id>|evidence", "detail": "…" }],
+  "verdict": "…",
+  "scope": "study|persona",
+  "reviewed_artifacts": { "personas": 0, "segments": 0, "evidence_claims": 0, "interviews": 0, "reports": 0 },
+  "served_by": "provider/model",
+  "llm_request_id": "…",
+  "attempts": 1,
+  "reviewed_at": "…"
+}
+```
+
+Failures are coded (§1): `400 nothing_to_review` (the study has no artefacts yet), `503 llm_unavailable`, `502 judge_unavailable` (the reviewer's reply could not be parsed after the retry budget). The frontend surfaces the verdict in the report step (`AiReviewCard`).

@@ -101,7 +101,9 @@ services:
         condition: service_healthy
     healthcheck:
       # busybox wget is present in nginx:alpine; --spider = HEAD, no body.
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      # 127.0.0.1, not localhost: busybox resolves localhost to ::1 first and
+      # the container sat "unhealthy" forever (observed 2026-09-08).
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
       interval: 15s
       timeout: 3s
       retries: 5

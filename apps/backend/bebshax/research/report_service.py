@@ -10,14 +10,12 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.behavioral.orm import (
-    BehavioralInsights,
     BehavioralTestResults,
     BehavioralTestRuns,
     BehavioralTests,
@@ -32,13 +30,18 @@ from bebshax.db.models import (
     StudyReports,
     _utcnow,
 )
-from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
+from bebshax.interview.orm import Conversations, InterviewInsights
 from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_json_block
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.tenancy import ANONYMOUS_OWNER_ID
+from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 
 logger = logging.getLogger(__name__)
+
+REPORT_SYNTHESIS_FAILED = "report_synthesis_failed"
+_MAX_ATTEMPTS = 2
 
 
 REPORT_SYSTEM_PROMPT = """You are BebshaX Chief Research Intelligence Officer.
@@ -184,7 +187,7 @@ class StudyReportService:
             study_id=study_id,
             user_id=effective_user_id,
             version=new_version,
-            title=report_data.get("title", study.title or "Research Synthesis Report"),
+            title=custom_title or report_data.get("title") or study.title or "Research Synthesis Report",
             executive_summary=report_data.get(
                 "executive_summary",
                 f"Validation report for {study.prompt or study.title}.",
@@ -260,10 +263,12 @@ class StudyReportService:
         version: int,
         custom_title: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Synthesize report using LLM with deterministic fallback."""
+        """Synthesize the report with the model from the stored study data.
+        Raises ``LLMUnavailable`` (no service), ``UnusableModelOutput`` (after one
+        retry) or any ``LLMError`` — there is no template report."""
         prompt_text = study.prompt or study.title or "Business Research Study"
-        target_aud = study.target_audience or "Target Market"
-        pricing_hyp = study.pricing_hypothesis or "Market Pricing"
+        target_aud = study.target_audience or ""
+        pricing_hyp = study.pricing_hypothesis or ""
 
         # Build context snapshot
         study_context = {
@@ -326,311 +331,89 @@ class StudyReportService:
             ],
         }
 
-        if self.llm_service:
+        if self.llm_service is None:
+            raise LLMUnavailable("Report synthesis")
+
+        # Stored study data is DATA for the model (persona quotes, interview
+        # answers and scraped evidence may contain instructions).
+        context_block = untrusted_json_block("STUDY_CONTEXT", study_context, source="study records")
+        title_hint = json.dumps(custom_title or study.title or "Research Synthesis Report", ensure_ascii=False)
+        user_msg = (
+            "Synthesize this research study into a complete 20-section JSON report.\n\n"
+            f"{context_block}\n\n"
+            "Output Format:\n"
+            "{\n"
+            f'  "title": {title_hint},\n'
+            '  "executive_summary": "Crisp 2-3 paragraph executive summary grounded in findings",\n'
+            '  "key_findings": ["Finding 1 with concrete data", "Finding 2", "Finding 3"],\n'
+            '  "target_market_summary": "Detailed target market overview",\n'
+            '  "market_context_summary": "Market macro and competitive context",\n'
+            '  "evidence_findings": [{"title": "...", "claim": "...", "confidence": 0.9, "source": "..."}],\n'
+            '  "dataset_findings": [{"name": "...", "insight": "...", "variables": ["..."]}],\n'
+            '  "market_segments_summary": [{"name": "...", "percentage": 35.0, "description": "..."}],\n'
+            '  "persona_overview": [{"name": "...", "archetype": "...", "segment": "...", "key_takeaway": "..."}],\n'
+            '  "interview_findings": [{"topic": "...", "finding": "...", "supporting_personas": ["..."], "turn_citations": ["Turn 2", "Turn 4"]}],\n'
+            '  "major_pain_points": [{"pain_point": "...", "severity": "High", "frequency": "Frequent"}],\n'
+            '  "customer_needs": [{"need": "...", "priority": "Crucial", "context": "..."}],\n'
+            '  "behavioral_results": [{"test_type": "...", "scenario": "...", "decision": "...", "average_likelihood": 0.78, "key_objection": "...", "key_motivator": "..."}],\n'
+            '  "pricing_signals": [{"price_point": "...", "sentiment": "...", "acceptable_range": "..."}],\n'
+            '  "major_risks": ["Risk 1", "Risk 2"],\n'
+            '  "opportunities": ["Opportunity 1", "Opportunity 2"],\n'
+            '  "strongest_segments": ["Segment A", "Segment B"],\n'
+            '  "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"],\n'
+            '  "validation_summary": "Synthesis of validation score and product-market fit signal",\n'
+            '  "limitations": "Clear disclosure of synthetic simulation boundaries and dataset coverage",\n'
+            f'  "metrics": {{"total_interviews": {len(conversations)}, "total_personas": {len(personas)}, "total_claims": {len(evidence_claims)}, '
+            '"confidence_score": <float 0.0-1.0: YOUR assessment of evidence coverage — lower it when interviews are few or claims are thin>, '
+            '"demand_score": <integer 0-100: YOUR assessment of demand strength derived ONLY from the interview answers and pricing signals above>}\n'
+            "}\n"
+            "Sections with no underlying data in STUDY_CONTEXT must be empty lists or state the absence plainly — never filled with generic statements."
+        )
+
+        llm_req = LLMRequest(
+            task=TaskType.REPORT_GENERATION,
+            messages=[
+                ChatMessage(role="system", content=REPORT_SYSTEM_PROMPT + UNTRUSTED_RULE),
+                ChatMessage(role="user", content=user_msg),
+            ],
+            json_mode=True,
+            temperature=0.4,
+            # The 20-section report JSON does not fit provider default output
+            # caps (~1024 tokens); without this the JSON is silently truncated.
+            max_output_tokens=8000,
+        )
+        served_by = None
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            if attempt > 1:
+                llm_req = llm_req.retry_copy()
+            result = await self.llm_service.complete(llm_req)  # LLMError propagates
+            served_by = f"{result.provider}/{result.model}"
             try:
-                user_msg = (
-                    f"Synthesize this research study into a complete 20-section JSON report.\n\n"
-                    f"Study Context:\n{json.dumps(study_context, indent=2)}\n\n"
-                    f"Output Format:\n"
-                    f"{{\n"
-                    f'  "title": "{custom_title or study.title}",\n'
-                    f'  "executive_summary": "Crisp 2-3 paragraph executive summary grounded in findings",\n'
-                    f'  "key_findings": ["Finding 1 with concrete data", "Finding 2", "Finding 3"],\n'
-                    f'  "target_market_summary": "Detailed target market overview",\n'
-                    f'  "market_context_summary": "Market macro and competitive context",\n'
-                    f'  "evidence_findings": [{{"title": "...", "claim": "...", "confidence": 0.9, "source": "..."}}],\n'
-                    f'  "dataset_findings": [{{"name": "...", "insight": "...", "variables": ["..."]}}],\n'
-                    f'  "market_segments_summary": [{{"name": "...", "percentage": 35.0, "description": "..."}}],\n'
-                    f'  "persona_overview": [{{"name": "...", "archetype": "...", "segment": "...", "key_takeaway": "..."}}],\n'
-                    f'  "interview_findings": [{{"topic": "...", "finding": "...", "supporting_personas": ["..."], "turn_citations": ["Turn 2", "Turn 4"]}}],\n'
-                    f'  "major_pain_points": [{{"pain_point": "...", "severity": "High", "frequency": "Frequent"}}],\n'
-                    f'  "customer_needs": [{{"need": "...", "priority": "Crucial", "context": "..."}}],\n'
-                    f'  "behavioral_results": [{{"test_type": "...", "scenario": "...", "decision": "...", "average_likelihood": 0.78, "key_objection": "...", "key_motivator": "..."}}],\n'
-                    f'  "pricing_signals": [{{"price_point": "...", "sentiment": "...", "acceptable_range": "..."}}],\n'
-                    f'  "major_risks": ["Risk 1", "Risk 2"],\n'
-                    f'  "opportunities": ["Opportunity 1", "Opportunity 2"],\n'
-                    f'  "strongest_segments": ["Segment A", "Segment B"],\n'
-                    f'  "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"],\n'
-                    f'  "validation_summary": "Synthesis of validation score and product-market fit signal",\n'
-                    f'  "limitations": "Clear disclosure of synthetic simulation boundaries and dataset coverage",\n'
-                    f'  "metrics": {{"total_interviews": {len(conversations)}, "total_personas": {len(personas)}, "total_claims": {len(evidence_claims)}, "confidence_score": <float 0.0-1.0: YOUR assessment of evidence coverage — lower it when interviews are few or claims are thin>, "demand_score": <integer 0-100: YOUR assessment of demand strength derived ONLY from the interview answers and pricing signals above>}}\n'
-                    f"}}"
-                )
-
-                llm_req = LLMRequest(
-                    task=TaskType.REPORT_GENERATION,
-                    messages=[
-                        ChatMessage(role="system", content=REPORT_SYSTEM_PROMPT),
-                        ChatMessage(role="user", content=user_msg),
-                    ],
-                    json_mode=True,
-                    temperature=0.4,
-                    # The 20-section report JSON does not fit provider default
-                    # output caps (~1024 tokens); without this the JSON was
-                    # silently truncated and every report fell back to the
-                    # deterministic template.
-                    max_output_tokens=8000,
-                )
-                result = await self.llm_service.complete(llm_req)
                 parsed = parse_llm_json(result.text)
-                if isinstance(parsed, dict) and "executive_summary" in parsed:
-                    return parsed
-            except Exception:
-                logger.warning(
-                    "LLM report synthesis failed; falling back to deterministic report",
-                    exc_info=True,
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, dict) and str(parsed.get("executive_summary") or "").strip():
+                metrics = parsed.get("metrics")
+                if not isinstance(metrics, dict):
+                    metrics = {}
+                metrics.update(
+                    {
+                        "total_interviews": len(conversations),
+                        "total_personas": len(personas),
+                        "total_claims": len(evidence_claims),
+                        "synthesis_source": "llm",
+                        "served_by": served_by,
+                        "llm_request_id": llm_req.request_id,
+                        "attempts": attempt,
+                    }
                 )
+                parsed["metrics"] = metrics
+                return parsed
+            logger.warning("report synthesis reply unusable (attempt %d/%d)", attempt, _MAX_ATTEMPTS)
 
-        # Deterministic grounded fallback
-        return self._generate_deterministic_report(
-            study=study,
-            evidence_sources=evidence_sources,
-            evidence_claims=evidence_claims,
-            datasets=datasets,
-            segments=segments,
-            personas=personas,
-            conversations=conversations,
-            interview_insights=interview_insights,
-            behavioral_tests=behavioral_tests,
-            behavioral_results=behavioral_results,
-            version=version,
-            custom_title=custom_title,
+        raise UnusableModelOutput(
+            REPORT_SYNTHESIS_FAILED,
+            f"The model's report reply could not be used after {_MAX_ATTEMPTS} attempts; no template report was written.",
+            attempts=_MAX_ATTEMPTS,
+            served_by=served_by,
         )
-
-    def _generate_deterministic_report(
-        self,
-        study: Studies,
-        evidence_sources: list[EvidenceSources],
-        evidence_claims: list[EvidenceClaims],
-        datasets: list[DatasetSources],
-        segments: list[MarketSegments],
-        personas: list[Personas],
-        conversations: list[Conversations],
-        interview_insights: list[InterviewInsights],
-        behavioral_tests: list[BehavioralTests],
-        behavioral_results: list[BehavioralTestResults],
-        version: int,
-        custom_title: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """Generate structured report deterministically using real study entities."""
-        prompt = study.prompt or study.title or "Business Idea"
-        title = custom_title or study.title or f"Research Report V{version}"
-        target_aud = study.target_audience or "target consumers"
-
-        # Segment summaries
-        seg_summary = [
-            {
-                "name": s.name,
-                "percentage": round(s.population_percentage or (100.0 / max(1, len(segments))), 1),
-                "description": s.description,
-            }
-            for s in segments
-        ]
-        if not seg_summary and personas:
-            seg_summary = [
-                {
-                    "name": "Primary Target Segment",
-                    "percentage": 60.0,
-                    "description": f"Core target audience for {prompt}.",
-                },
-                {
-                    "name": "Secondary Adopters",
-                    "percentage": 40.0,
-                    "description": "Price-conscious and convenience-focused adopters.",
-                },
-            ]
-
-        # Persona overview
-        persona_overview = [
-            {
-                "name": p.name,
-                "archetype": p.archetype or "Representative Archetype",
-                "segment": (
-                    p.demographics.get("occupation", "Target User")
-                    if p.demographics
-                    else "Target User"
-                ),
-                "key_takeaway": (
-                    p.goals[0]
-                    if p.goals
-                    else "Seeks efficiency, transparent pricing, and daily workflow integration."
-                ),
-                "grounding_score": round(p.grounding_score if p.grounding_score is not None else 0.0, 2),
-            }
-            for p in personas
-        ]
-
-        # Evidence findings
-        evidence_findings = [
-            {
-                "title": f"Empirical Claim {idx+1}",
-                "claim": c.claim_text,
-                "confidence": round(c.confidence, 2),
-                "source": (
-                    c.supporting_source_ids[0]
-                    if c.supporting_source_ids
-                    else "Discovered Evidence Source"
-                ),
-            }
-            for idx, c in enumerate(evidence_claims[:6])
-        ]
-
-        # Interview findings
-        interview_findings = [
-            {
-                "topic": i.type.title() if i.type else "General Feedback",
-                "finding": i.title + ": " + i.description,
-                "supporting_personas": (
-                    [i.persona_id] if i.persona_id else [p.name for p in personas[:2]]
-                ),
-                "turn_citations": (
-                    [f"Turn {t}" for t in (i.supporting_turn_numbers or [1, 2])]
-                ),
-            }
-            for i in interview_insights[:8]
-        ]
-        if not interview_findings and conversations:
-            # No insights extracted yet — never invent citations or claims.
-            interview_findings = [
-                {
-                    "topic": "No insights extracted yet",
-                    "finding": "Interview conversations exist but no structured insights have been extracted from them. Run the insight extraction step to populate this section.",
-                    "supporting_personas": [],
-                    "turn_citations": [],
-                },
-            ]
-
-        # Pain points & needs
-        pain_points = []
-        for p in personas:
-            for pt in p.pain_points or []:
-                if pt not in [x["pain_point"] for x in pain_points]:
-                    pain_points.append(
-                        {"pain_point": pt, "severity": "High", "frequency": "Daily / Weekly"}
-                    )
-        if not pain_points:
-            pain_points = [
-                {
-                    "pain_point": f"Manual, fragmented alternatives for {prompt}",
-                    "severity": "High",
-                    "frequency": "Daily",
-                },
-                {
-                    "pain_point": "High switching effort without clear onboarding value",
-                    "severity": "Medium",
-                    "frequency": "Initial Adoption",
-                },
-            ]
-
-        customer_needs = []
-        for p in personas:
-            for nd in p.needs or []:
-                if nd not in [x["need"] for x in customer_needs]:
-                    customer_needs.append(
-                        {
-                            "need": nd,
-                            "priority": "Crucial",
-                            "context": "Essential for ongoing retention",
-                        }
-                    )
-        # No persona needs recorded -> empty list. A deterministic template must
-        # never invent specific needs ("frictionless setup", pricing claims).
-
-        # Behavioral simulation results
-        behavioral_summary = [
-            {
-                "test_type": r.decision,
-                "scenario": f"Simulation across {r.persona_name}",
-                "decision": r.decision_label or r.decision,
-                "average_likelihood": round(r.probability, 2),
-                # None, not an invented objection/motivator, when the run recorded none.
-                "key_objection": (r.objections[0] if r.objections else None),
-                "key_motivator": (r.motivators[0] if r.motivators else None),
-            }
-            for r in behavioral_results[:6]
-        ]
-
-        # Executive summary — deterministic synthesis states what it counted,
-        # never a demand verdict it cannot compute.
-        exec_summary = (
-            f"This research validation report for '{prompt}' synthesizes evidence across "
-            f"{len(evidence_claims)} research claims, {len(segments)} market segments, "
-            f"{len(personas)} synthetic customer personas, and {len(conversations)} multi-turn simulated interviews.\n\n"
-            f"Sections below are deterministic summaries of the stored study data. Synthetic findings are "
-            f"research signals and hypotheses to validate with real users — no aggregate demand score is "
-            f"computed on this template path."
-        )
-
-        return {
-            "title": title,
-            "executive_summary": exec_summary,
-            # Grounded in stored evidence claims only — empty when none exist.
-            # Canned "Hypothesis: …" strings were invented business claims.
-            "key_findings": [c.claim_text for c in evidence_claims[:3]],
-            # Derived from the study's own inputs only — the template path must
-            # not invent engagement/price-sensitivity/motivator characteristics.
-            "target_market_summary": (
-                f"The target market comprises {target_aud}. No measured market"
-                f" characteristics are available on this template path."
-            ),
-            "market_context_summary": (
-                (
-                    f"Context drawn from {len(evidence_claims)} stored research claim(s); "
-                    f"see the evidence findings below."
-                )
-                if evidence_claims
-                else "No research evidence collected yet — market context not assessed."
-            ),
-            "evidence_findings": evidence_findings,
-            "dataset_findings": [
-                {
-                    "name": d.name,
-                    "insight": f"Profiled {d.row_count} records highlighting segment distribution across key demographics.",
-                    "variables": list(d.schema_metadata.keys())[:4] if d.schema_metadata else [],
-                }
-                for d in datasets[:3]
-            ],
-            "market_segments_summary": seg_summary,
-            "persona_overview": persona_overview,
-            "interview_findings": interview_findings,
-            "major_pain_points": pain_points[:6],
-            "customer_needs": customer_needs[:6],
-            "behavioral_results": behavioral_summary,
-            "pricing_signals": [
-                {
-                    "price_point": study.pricing_hypothesis or "Market Baseline",
-                    "sentiment": "Not scored — template synthesis",
-                    "acceptable_range": "Requires live interview evidence",
-                }
-            ],
-            "major_risks": [
-                "Over-complicating early onboarding could increase initial drop-off.",
-                "Unclear pricing framing may trigger hesitation among budget-conscious cohorts.",
-            ],
-            "opportunities": [
-                "Early market mover advantage with focused feature set.",
-                "Viral word-of-mouth potential among power users and group organizers.",
-            ],
-            "strongest_segments": [s["name"] for s in seg_summary[:2]],
-            "recommendations": [
-                f"Launch with a focused MVP directly addressing the top pain points: {', '.join([p['pain_point'] for p in pain_points[:2]])}.",
-                "Structure pricing with clear tier differentiation to capture both price-sensitive and power user segments.",
-                "Highlight speed and concrete evidence in all initial marketing copy and product onboarding.",
-            ],
-            "validation_summary": (
-                "Template synthesis — LLM report synthesis was unavailable, so no validation score was "
-                "computed. The sections above are deterministic summaries of the stored study data."
-            ),
-            "limitations": (
-                "Notice: This report combines curated sample evidence with exploratory synthetic persona "
-                "simulations. Synthetic findings are hypotheses — validate consequential decisions with real users."
-            ),
-            "metrics": {
-                "total_interviews": len(conversations),
-                "total_personas": len(personas),
-                "total_claims": len(evidence_claims),
-                # Honest absence — a deterministic template cannot score demand.
-                "confidence_score": None,
-                "demand_score": None,
-            },
-        }

@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from bebshax.llm.adapters.openrouter_adapter import OpenRouterAdapter
+from bebshax.llm.adapters.openrouter_adapter import DEFAULT_MODELS, OpenRouterAdapter
 
 
 class OpenRouterService:
@@ -42,11 +42,8 @@ class OpenRouterService:
             if configured and configured.strip():
                 return configured.strip()
 
-        # Fallback to general OPENROUTER_MODEL or default
-        return (
-            os.environ.get("OPENROUTER_MODEL")
-            or "meta-llama/llama-3.3-70b-instruct:free"
-        )
+        # Fallback to general OPENROUTER_MODEL or the first seed route
+        return os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODELS[0]
 
     def configuration_report(self) -> dict:
         """Key configured? Which models? — answered WITHOUT any network call."""

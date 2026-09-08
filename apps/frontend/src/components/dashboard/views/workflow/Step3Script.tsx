@@ -110,7 +110,9 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: 0 }}>
                   {scriptGenerated
                     ? 'Customize the core questions the AI interviewer will ask across your personas.'
-                    : 'These are generic starter questions, not generated for your study — edit them, or generate a script from your study context.'}
+                    : questions.length > 0
+                    ? 'Your own questions — edit them, or generate a script from your study context.'
+                    : 'No script yet. Generate one from your study context, or add your own questions below.'}
                 </p>
               </div>
 
@@ -194,19 +196,21 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
 
             {/* Question List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {!scriptGenerated && questions.length > 0 && (
+              {questions.length === 0 && !isGeneratingScript && (
                 <div
+                  data-testid="script-empty-state"
                   style={{
-                    fontSize: '0.8rem',
+                    fontSize: '0.84rem',
                     color: 'var(--text-secondary)',
                     background: 'var(--fill-soft)',
-                    border: '1px solid var(--border-subtle)',
+                    border: '1px dashed var(--border-subtle)',
                     borderRadius: '10px',
-                    padding: '10px 14px',
+                    padding: '16px 18px',
+                    textAlign: 'center',
                   }}
                 >
-                  Starting template — the same generic questions for every study. Edit them or press
-                  &quot;Generate Questions&quot; to write a script from your study context.
+                  No interview questions yet. BebshaX does not ship a generic questionnaire — press
+                  &quot;Generate Questions&quot; to write a script from your study context, or add your own below.
                 </div>
               )}
               {questions.map((q, idx) => (

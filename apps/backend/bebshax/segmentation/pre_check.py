@@ -9,6 +9,9 @@ from __future__ import annotations
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
+# Mirrors clusterer.MIN_ROWS_FOR_PARTITION (kept here to avoid an import cycle).
+MIN_RECORDS_FOR_SEGMENTATION = 20
+
 
 class UsableVariableSummary(BaseModel):
     name: str
@@ -21,7 +24,7 @@ class UsableVariableSummary(BaseModel):
 
 
 class SegmentationReadiness(BaseModel):
-    status: str  # ready, limited_data, prompt_grounded
+    status: str  # ready, insufficient_records, no_data
     can_run: bool
     dataset_count: int
     total_records: int
@@ -87,8 +90,11 @@ def check_segmentation_readiness(
 
     claim_count = len(claims)
     supported_claims_count = sum(1 for c in claims if getattr(c, "status", "") == "supported")
+    has_partition_variable = any(v.type in ("numeric", "categorical") for v in usable_vars)
 
-    if total_records >= 20 or (total_records > 0 and claim_count >= 2) or (claim_count >= 4):
+    # Segments are statistics over observed records. Evidence claims enrich the
+    # interpretation but can never stand in for a population (RULES.md R2).
+    if total_records >= MIN_RECORDS_FOR_SEGMENTATION and has_partition_variable:
         status = "ready"
         can_run = True
         guidance = (
@@ -96,18 +102,25 @@ def check_segmentation_readiness(
             f"({total_records:,} empirical records, {len(usable_vars)} candidate variables) "
             f"and {claim_count} research evidence claim(s)."
         )
-    elif total_records > 0 or claim_count > 0:
-        status = "limited_data"
-        can_run = True
+    elif total_records > 0:
+        status = "insufficient_records"
+        can_run = False
+        reason = (
+            f"only {total_records:,} record(s)"
+            if total_records < MIN_RECORDS_FOR_SEGMENTATION
+            else "no numeric or categorical variable to partition on"
+        )
         guidance = (
-            f"Limited data available: {len(ready_datasets)} dataset(s) ({total_records:,} records) "
-            f"and {claim_count} evidence claim(s). Segmentation can proceed, but results will reflect lower empirical confidence."
+            f"Segmentation needs at least {MIN_RECORDS_FOR_SEGMENTATION} observed records with a usable variable "
+            f"({reason} across {len(ready_datasets)} dataset(s)). Upload or import a richer dataset first."
         )
     else:
-        status = "prompt_grounded"
-        can_run = True
+        status = "no_data"
+        can_run = False
         guidance = (
-            "No uploaded empirical datasets yet — generating market segments and synthetic personas grounded on study prompt context."
+            "No dataset is attached to this study, so there is no population to segment. Upload a CSV/JSON "
+            "dataset or import a discovered one; BebshaX does not invent segments from the prompt"
+            + (f" (the {claim_count} evidence claim(s) will be linked once segments exist)." if claim_count else ".")
         )
 
     return SegmentationReadiness(

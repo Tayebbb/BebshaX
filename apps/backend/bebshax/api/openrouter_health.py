@@ -31,19 +31,30 @@ class OpenRouterHealthResponse(BaseModel):
     configured: bool
     authenticated: bool
     model: str
-    models: list[str] = Field(default_factory=list)  # configured route list (GET)
+    models: list[str] = Field(default_factory=list)  # routes currently offered (GET)
     status: str
     latency_ms: Optional[float] = None
     error_code: Optional[str] = None
     message: str
     verified_response: Optional[str] = None
+    # Live free-catalogue discovery (routing adapter): pinned/discovered routes
+    # and the last fetch error — so a drifted catalogue is visible, not guessed.
+    catalogue: Optional[dict] = None
 
 
 @router.get("", response_model=OpenRouterHealthResponse)
-async def get_openrouter_health() -> dict:
+async def get_openrouter_health(request: Request) -> dict:
     """Configuration status only — no outbound call, nothing spent."""
     service = get_openrouter_service()
-    return service.configuration_report()
+    report = service.configuration_report()
+    routing_adapter = (getattr(request.app.state, "llm_adapters", None) or {}).get("openrouter")
+    catalogue_status = getattr(routing_adapter, "catalogue_status", None)
+    if callable(catalogue_status):
+        catalogue = catalogue_status()
+        report["catalogue"] = catalogue
+        if report.get("configured"):
+            report["models"] = catalogue["pinned"] or catalogue["discovered"] or report.get("models", [])
+    return report
 
 
 @router.post("/test", response_model=OpenRouterHealthResponse)

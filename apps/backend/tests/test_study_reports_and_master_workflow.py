@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from bebshax.auth.models import Users
 from bebshax.auth.security import create_access_token
-from bebshax.db.engine import init_database
 from bebshax.db.models import (
     Base,
     Studies,
@@ -14,12 +13,6 @@ from bebshax.db.models import (
     Personas,
     EvidenceSources,
     EvidenceClaims,
-)
-from bebshax.interview.orm import (
-    Conversations,
-    ConversationTurns,
-    Interviews,
-    InterviewTurns,
 )
 from bebshax.main import app
 
@@ -92,19 +85,55 @@ async def test_study_report_generation_and_versioning():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 0. No LLM wired -> explicit 503, no template report row is written (R2).
+        app.state.llm_service = None
+        res_none = await client.post(
+            "/api/studies/std_workflow_01/reports/generate",
+            headers=headers,
+            json={"title": "Should not exist"},
+        )
+        assert res_none.status_code == 503
+        assert res_none.json()["error_code"] == "llm_unavailable"
+        assert (await client.get("/api/studies/std_workflow_01/reports", headers=headers)).json() == []
+
+        # Model-written report: the FakeAdapter stands in for the provider.
+        import json as _json
+
+        from bebshax.llm.adapters.base import RouteCandidate
+        from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
+        from bebshax.llm.router import PoolRouter
+
+        report_json = _json.dumps(
+            {
+                "executive_summary": "Students in Dhaka are price-bound; the single stored claim supports a low tier.",
+                "key_findings": ["74% of students spend under 3,000 BDT/month on lunch (src_01)."],
+                "metrics": {"confidence_score": 0.3, "demand_score": 40},
+            }
+        )
+        fake = FakeAdapter(
+            routes=[FakeRoute(candidate=RouteCandidate(provider="pollinations", model="deepseek-r1"), reply=report_json)]
+        )
+        app.state.llm_service = PoolRouter(
+            {n: fake for n in ("openrouter", "freellmpool", "ollama", "pollinations")},
+            on_provenance=getattr(app.state, "provenance_sink", None),
+        )
+
         # 1. Generate version 1 report
         res_v1 = await client.post(
             "/api/studies/std_workflow_01/reports/generate",
             headers=headers,
             json={"title": "AI Meal Planner Decision Report V1"},
         )
-        assert res_v1.status_code == 201
+        assert res_v1.status_code == 201, res_v1.text
         v1_data = res_v1.json()
         assert v1_data["version"] == 1
         assert v1_data["study_id"] == "std_workflow_01"
         assert v1_data["title"] == "AI Meal Planner Decision Report V1"
         assert len(v1_data["executive_summary"]) > 0
         assert len(v1_data["key_findings"]) > 0
+        assert v1_data["metrics"]["synthesis_source"] == "llm"
+        assert v1_data["metrics"]["served_by"] == "pollinations/deepseek-r1"
+        assert v1_data["metrics"]["total_claims"] == 1 and v1_data["metrics"]["demand_score"] == 40
         report_1_id = v1_data["id"]
 
         # 2. Generate version 2 report
@@ -137,6 +166,8 @@ async def test_study_report_generation_and_versioning():
         res_by_id = await client.get(f"/api/studies/std_workflow_01/reports/{report_1_id}", headers=headers)
         assert res_by_id.status_code == 200
         assert res_by_id.json()["version"] == 1
+
+    app.state.llm_service = None
 
 
 @pytest.mark.asyncio
@@ -226,7 +257,18 @@ async def test_dynamic_script_and_batch_interviews():
     }
     app.state.db_sessionmaker = session_maker
     fake = FakeAdapter(
-        [FakeRoute(candidate=RouteCandidate(provider="fake", model="scripted"), reply="I compare prices manually across three shops every week.")]
+        [
+            FakeRoute(
+                candidate=RouteCandidate(provider="fake", model="scripted"),
+                # 1st call = script generation (must be model-written JSON — there is
+                # no template fallback any more); later calls = interview turns.
+                replies=[
+                    '["How do you track gadget prices today?", "What made you miss a deal last time?", '
+                    '"Would 100 taka a month feel fair for instant alerts?", "What would make you cancel?"]'
+                ],
+                reply="I compare prices manually across three shops every week.",
+            )
+        ]
     )
     llm_router = PoolRouter({"openrouter": fake, "freellmpool": fake, "ollama": fake})
     app.state.llm_router = llm_router
@@ -275,6 +317,24 @@ async def test_dynamic_script_and_batch_interviews():
             script_data = res_script.json()
             assert len(script_data["questions"]) >= 3
             assert script_data["study_id"] == "std_script_01"
+
+            # 2a. No script and no questions -> explicit 400, no canned questionnaire runs.
+            async with session_maker() as s:
+                std = await s.get(Studies, "std_script_01")
+                saved_script = list(std.script_questions or [])
+                std.script_questions = []
+                await s.commit()
+            res_noscript = await client.post(
+                "/api/studies/std_script_01/interviews/batch-run",
+                headers=headers,
+                json={"persona_ids": ["per_samiul"]},
+            )
+            assert res_noscript.status_code == 400
+            assert res_noscript.json()["error_code"] == "script_required"
+            async with session_maker() as s:
+                std = await s.get(Studies, "std_script_01")
+                std.script_questions = saved_script
+                await s.commit()
 
             # 2. Start batch synthetic interviews (async job) and poll it
             res_batch = await client.post(

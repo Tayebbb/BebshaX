@@ -32,6 +32,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from bebshax.llm.failures import AllCandidatesFailed, ContextWindowExceeded, LLMError
+from bebshax.utils.explicit_failures import ExplicitFailure
 
 logger = logging.getLogger(__name__)
 access_logger = logging.getLogger("bebshax.access")
@@ -251,6 +252,20 @@ async def llm_error_handler(request: Request, exc: LLMError) -> Response:
     )
 
 
+async def explicit_failure_handler(request: Request, exc: ExplicitFailure) -> Response:
+    """Domain refusals (no LLM wired, unusable model output after retry, missing
+    precondition) — the honest alternative to templates. Detail text is authored
+    by our code, never echoed from a provider."""
+    logger.info(
+        "explicit failure %s on %s %s request_id=%s",
+        exc.error_code,
+        request.method,
+        request.url.path,
+        request_id_of(request),
+    )
+    return _envelope(request, exc.status_code, exc.detail, exc.error_code, exc.extra)
+
+
 def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
     """Sync on purpose: slowapi's middleware path falls back to its own default
     handler for coroutine handlers, and that default has no envelope fields."""
@@ -283,6 +298,7 @@ def register_exception_handlers(app) -> None:
     app.add_exception_handler(AllCandidatesFailed, all_candidates_failed_handler)
     app.add_exception_handler(ContextWindowExceeded, context_window_exceeded_handler)
     app.add_exception_handler(LLMError, llm_error_handler)
+    app.add_exception_handler(ExplicitFailure, explicit_failure_handler)
     app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 

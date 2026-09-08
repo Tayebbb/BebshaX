@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -71,19 +70,20 @@ def test_no_fabricated_interview_finding_when_no_insights():
     assert "84%" not in finding["finding"], "Must not contain invented percentages"
 
 
-def test_report_service_fallback_directly():
-    """The fabricated demand finding must be gone; the honest placeholder must be present."""
-    from bebshax.research.report_service import StudyReportService  # noqa: F401
+def test_report_service_has_no_template_path():
+    """The fabricated demand finding must be gone — and so must the template
+    report that hosted it: synthesis is model-written or fails explicitly."""
     import inspect
+
     from bebshax.research import report_service
 
     src = inspect.getsource(report_service)
     assert "Participants confirmed high interest" not in src, (
         "Fabricated demand finding must not exist in report_service.py"
     )
-    assert "No insights extracted yet" in src, (
-        "Honest placeholder must exist in report_service.py"
-    )
+    assert "_generate_deterministic_report" not in src, "template report path must be gone"
+    assert "Viral word-of-mouth" not in src
+    assert "raise LLMUnavailable(" in src and "raise UnusableModelOutput(" in src
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +154,6 @@ def test_detect_contradiction_no_contradiction_returns_none_confidence():
 def test_detect_contradiction_confidence_omitted_from_no_contradiction_metadata():
     """The metadata_json stored for a no-contradiction turn must not contain a
     'confidence' key, since no confidence was actually measured."""
-    import asyncio
     from bebshax.interview.engine import InterviewEngine
 
     engine = InterviewEngine.__new__(InterviewEngine)
@@ -182,72 +181,67 @@ def test_detect_contradiction_confidence_omitted_from_no_contradiction_metadata(
 
 
 # ---------------------------------------------------------------------------
-# Fix 5 — behavioral/engine.py: heuristic fallback is labeled
+# Fix 5 — behavioral/engine.py: no heuristic decision ever stands in for the model
 # ---------------------------------------------------------------------------
 
-def _make_behavioral_engine():
-    from bebshax.behavioral.engine import BehavioralSimulationEngine
-    from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
-    from bebshax.llm.router import PoolRouter
 
-    adapter = FakeAdapter(replies=["not valid json at all"])
-    route = FakeRoute(adapter)
-    router = PoolRouter({"behavioral_simulation": [route]}, {})
-    return BehavioralSimulationEngine(router, MagicMock())
-
-
-def test_heuristic_fallback_is_labeled_in_result_dict():
-    """When JSON parsing fails, _parse_simulation_response must return a dict
-    with is_heuristic_fallback=True so callers can distinguish it from real LLM output."""
+def test_unusable_simulation_reply_yields_no_decision():
+    """A reply that is not JSON / has no decision / has a non-numeric probability
+    is rejected (None) — the caller retries and then fails explicitly. No
+    budget-vs-price estimate is produced."""
     from bebshax.behavioral.engine import BehavioralSimulationEngine
 
-    engine = BehavioralSimulationEngine.__new__(BehavioralSimulationEngine)
-
-    persona = SimpleNamespace(
-        id="per_1",
-        name="Rafi",
-        commercial_profile={"monthly_budget_bdt": "400"},
-        segment_id=None,
-    )
-
-    # Trigger the fallback: not-JSON input, below-budget price
-    result = engine._parse_simulation_response(
-        "this is not json",
-        persona,
-        "pricing_test",
-        {"price": "200"},  # 200 < 400*0.6=240 → positive branch
-    )
-    assert result.get("is_heuristic_fallback") is True, (
-        "Fallback result must carry is_heuristic_fallback=True"
-    )
+    persona = SimpleNamespace(id="per_1", name="Rafi", commercial_profile={"monthly_budget": 400}, segment_id=None)
+    parse = BehavioralSimulationEngine._parse_simulation_response
+    assert parse("this is not json", persona) is None
+    assert parse(json.dumps({"probability": 0.4}), persona) is None
+    assert parse(json.dumps({"decision": "positive", "probability": "very"}), persona) is None
+    ok = parse(json.dumps({"decision": "negative", "probability": 1.7, "objections": "x"}), persona)
+    assert ok["decision"] == "negative" and ok["probability"] == 1.0 and ok["objections"] == []
 
 
-def test_heuristic_fallback_negative_branch_is_labeled():
-    """The budget-exceeded branch (unlikely_to_buy) must also carry the flag."""
-    from bebshax.behavioral.engine import BehavioralSimulationEngine
+@pytest.mark.asyncio
+async def test_simulation_retries_once_then_fails_explicitly():
+    from bebshax.behavioral.engine import SIMULATION_UNPARSEABLE, BehavioralSimulationEngine
+    from bebshax.utils.explicit_failures import UnusableModelOutput
 
-    engine = BehavioralSimulationEngine.__new__(BehavioralSimulationEngine)
+    class _LLM:
+        def __init__(self) -> None:
+            self.calls = 0
 
-    persona = SimpleNamespace(
-        id="per_2",
-        name="Tahmina",
-        commercial_profile={"monthly_budget_bdt": "300"},
-        segment_id=None,
-    )
+        async def complete(self, request):
+            self.calls += 1
+            return SimpleNamespace(text="no json here", provider="fake", model="stub", provenance=None)
 
-    # price 500 > 300*0.6=180 → unlikely_to_buy branch
-    result = engine._parse_simulation_response(
-        "garbage {}}}",
-        persona,
-        "pricing_test",
-        {"price": "500"},
-    )
-    assert result.get("is_heuristic_fallback") is True, (
-        "unlikely_to_buy heuristic branch must carry is_heuristic_fallback=True"
-    )
-    assert "[heuristic fallback" not in result.get("reasoning_summary", ""), (
-        "The note is appended by the caller, not by _parse_simulation_response itself"
-    )
+    llm = _LLM()
+    engine = BehavioralSimulationEngine(llm, MagicMock())
+
+    async def _ctx(session, persona, study):
+        return "PERSONA CARD", {"persona_profile": True}, []
+
+    engine._gather_simulation_context = _ctx  # type: ignore[method-assign]
+    persona = SimpleNamespace(id="per_1", name="Rafi", commercial_profile={}, demographics={}, segment_id=None, version=1)
+    with pytest.raises(UnusableModelOutput) as info:
+        await engine.simulate_persona_response(
+            persona=persona, study=None, test_type="pricing_test", scenario_title="Price",
+            scenario_text="A monthly plan.", parameters={"price": "9 EUR"}, session=MagicMock(),
+        )
+    assert llm.calls == 2
+    assert info.value.error_code == SIMULATION_UNPARSEABLE
+
+
+def test_scenario_directives_only_carry_supplied_parameters():
+    """No invented prices, currencies, offers or alternatives in the prompt."""
+    from bebshax.behavioral.engine import SIMULATORS
+
+    for sim in SIMULATORS.values():
+        text = sim.build_test_prompt_directive("Title", "Body", {})
+        for invented in ("৳", "BDT", "Bangladesh", "YouTube", "Sign Up Free", "50% off", "Immediate need", "Trust & effort"):
+            assert invented not in text, f"{sim.test_type} invented {invented!r}"
+        assert "Title" in text and "Body" in text
+    priced = SIMULATORS["pricing_test"].build_test_prompt_directive("T", "B", {"price": "9 EUR", "billing_period": "monthly"})
+    assert "Proposed Price: 9 EUR" in priced and "Billing Period: monthly" in priced
+    assert "Current Alternative" not in priced  # not supplied -> not present
 
 
 def test_behavioral_confidence_defaults_are_not_invented():
@@ -260,20 +254,20 @@ def test_behavioral_confidence_defaults_are_not_invented():
 
     assert BehavioralTestResults.__table__.c.confidence_score.default.arg == 0.0
 
-    persist_src = inspect.getsource(BehavioralSimulationEngine.execute_test_run)
+    persist_src = inspect.getsource(BehavioralSimulationEngine._execute_marked_run)
     assert 'confidence_score=r_data.get("confidence_score", 0.8)' not in persist_src
     assert 'probability=r_data.get("probability", 0.5)' not in persist_src
 
+    failed_src = inspect.getsource(BehavioralSimulationEngine._safe_simulate_single)
+    assert '"probability": 0.5' not in failed_src and '"probability": 0.0' in failed_src
 
-def test_heuristic_fallback_flag_is_not_a_dead_key():
-    """The flag has no column and no API field — it must only exist where it is
-    actually consumed (the reasoning-summary note), never as inert payload."""
+
+def test_engine_has_no_heuristic_fallback_left():
     import inspect
 
-    from bebshax.behavioral.engine import BehavioralSimulationEngine
+    from bebshax.behavioral import engine
 
-    src = inspect.getsource(BehavioralSimulationEngine.simulate_persona_response)
-    assert 'if parsed.get("is_heuristic_fallback")' in src, "the note must still be appended"
-    assert '"is_heuristic_fallback": parsed.get(' not in src, (
-        "the returned dict must not carry a key that no boundary persists"
-    )
+    src = inspect.getsource(engine)
+    for token in ("is_heuristic_fallback", "budget_num", "monthly_budget_bdt", "Standard behavioral evaluation", "budget resistance", "perceived convenience"):
+        assert token not in src, f"heuristic remnant: {token!r}"
+

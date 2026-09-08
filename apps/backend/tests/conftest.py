@@ -73,6 +73,10 @@ async def api_test_app(tmp_path, monkeypatch):
             "Speaking as Alex: That automated savings tool sounds great!",
             "Speaking as Alex: Another reply.",
         ],
+        # Once the scripted replies are consumed the route keeps answering with a
+        # valid persona document: the pipeline has no offline template, so any
+        # multi-persona test needs a model that actually answers.
+        reply=_VALID_PERSONA_JSON,
     )
     adapter = FakeAdapter(routes=[fake_route])
     adapters = {
@@ -123,4 +127,121 @@ async def auth_headers(api_test_app):
     """Return auth headers for a seeded test user — use on write endpoints."""
     headers = await seed_test_user(api_test_app.app.state.db_sessionmaker)
     return headers
+
+
+# ---------------------------------------------------------------------------
+# Research-pipeline fakes (shared: tests/ is not a package). The pipeline is
+# template-free, so tests need a "model" that answers the plan, query and claim
+# prompts from the request it receives — never a fixed reply list.
+# ---------------------------------------------------------------------------
+
+_RESEARCH_PLAN_REPLY = {
+    "business_idea": "x",
+    "target_market": ["University students"],
+    "problem_areas": ["Missed deadlines"],
+    "behavioral_questions": ["How do students plan their week?"],
+    "economic_questions": ["What monthly price is acceptable?"],
+    "competition_questions": ["Which free tools are used today?"],
+    "market_questions": ["How many students enrol yearly?"],
+    "dataset_requirements": [
+        {
+            "category": "student_spending",
+            "description": "budgets",
+            "target_variables": ["allowance"],
+            "geographic_scope": "Dhaka",
+            "population_scope": "undergraduates",
+        }
+    ],
+    "summary": "Validate demand among students.",
+    "target_countries": ["BGD"],
+}
+_RESEARCH_QUERIES_REPLY = [
+    "student study planner deadlines",
+    "study planner subscription pricing students",
+    "alternatives to study planner apps",
+]
+
+
+class TaskAwareFakeAdapter(FakeAdapter):
+    """FakeAdapter whose reply depends on the task/prompt it receives: research
+    plan -> queries -> claims (citing the chunk ids actually shown to it)."""
+
+    def __init__(self, routes, *, plan_reply: dict | None = None, queries_reply: list[str] | None = None) -> None:
+        super().__init__(routes)
+        self.plan_reply = plan_reply or _RESEARCH_PLAN_REPLY
+        self.queries_reply = queries_reply or _RESEARCH_QUERIES_REPLY
+
+    async def complete(self, candidate, request):
+        import json as _json
+
+        from bebshax.llm.adapters.base import AdapterCompletion
+        from bebshax.llm.types import TaskType, TokenUsage
+
+        prompt = " ".join(m.content for m in request.messages)
+        if request.task == TaskType.EVIDENCE_EXTRACTION:
+            tokens = [tok.strip("()") for tok in prompt.split()]
+            chunk_ids = [t for t in tokens if t.startswith("chk_")]
+            src_ids = [t for t in tokens if t.startswith("src_")]
+            text = _json.dumps(
+                [
+                    {"claim_text": "Students miss deadlines while juggling several apps.", "status": "supported",
+                     "category": "problem", "supporting_source_ids": src_ids[:1],
+                     "supporting_chunk_ids": chunk_ids[:1], "rationale": "stated in chunk"},
+                    {"claim_text": "A single planner would be adopted quickly.", "status": "inference",
+                     "category": "behavior", "supporting_source_ids": [], "supporting_chunk_ids": [],
+                     "rationale": "extrapolation"},
+                    {"claim_text": "Students will pay any price for planners.", "status": "unsupported",
+                     "category": "pricing", "supporting_source_ids": [], "supporting_chunk_ids": [],
+                     "rationale": "contradicted by pricing chunk"},
+                ]
+            )
+        elif "research plan" in prompt.lower():
+            text = _json.dumps(self.plan_reply)
+        else:
+            text = _json.dumps(self.queries_reply)
+        self.calls.append(f"{candidate.provider}/{candidate.model}")
+        self.requests.append(request)
+        return AdapterCompletion(text=text, usage=TokenUsage(), provider=candidate.provider, model=candidate.model)
+
+
+@pytest.fixture
+def research_llm():
+    """(PoolRouter, TaskAwareFakeAdapter) wired under every pool adapter name."""
+
+    def _build(app=None, **kwargs):
+        cand = RouteCandidate(provider="pollinations", model="deepseek-r1")
+        adapter = TaskAwareFakeAdapter(routes=[FakeRoute(candidate=cand)], **kwargs)
+        adapters = {name: adapter for name in ("openrouter", "freellmpool", "ollama", "pollinations")}
+        sink = getattr(app.state, "provenance_sink", None) if app is not None else None
+        return PoolRouter(adapters, on_provenance=sink), adapter
+
+    return _build
+
+
+@pytest.fixture
+def sample_evidence_provider():
+    """Explicit test-only evidence corpus (never wired in production)."""
+    from bebshax.research.search_provider import IllustrativeSampleProvider
+
+    docs = [
+        {
+            "title": "Student planners survey",
+            "url": "https://example.org/planners",
+            "content": "University students report missing deadlines and juggling several apps for study planning. "
+            "Many say a single planner with reminders would help them keep up with coursework.",
+        },
+        {
+            "title": "Subscription pricing habits",
+            "url": "https://example.org/pricing",
+            "content": "Students prefer small monthly subscriptions paid through mobile wallets and abandon tools "
+            "that cost more than a meal out per month.",
+        },
+        {
+            "title": "Study tool alternatives",
+            "url": "https://example.org/alternatives",
+            "content": "Free calendar apps and paper notebooks remain the most common alternatives to dedicated "
+            "study planners; switching costs are low.",
+        },
+    ]
+    return IllustrativeSampleProvider(docs, allow_sample=True)
 

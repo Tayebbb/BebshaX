@@ -47,7 +47,6 @@ from bebshax.api.interviews import router as interviews_router
 from bebshax.api.personas import router as personas_router
 from bebshax.api.routes import router as routes_router
 from bebshax.api.studies import router as studies_router
-from bebshax.auth.models import Users
 from bebshax.config import get_settings
 from bebshax.db.engine import create_async_sessionmaker, create_engine, init_database
 # Side-effect imports: registering every table on Base.metadata is what makes
@@ -252,7 +251,7 @@ async def _lifespan(app: FastAPI):
         llm=llm_router,
     )
     app.state.interview_engine = InterviewEngine(
-        llm_router, sessionmaker_, memory=app.state.memory_service
+        llm_router, sessionmaker_, memory=app.state.memory_service, suggest_questions=True
     )
     from bebshax.behavioral.engine import BehavioralSimulationEngine
     app.state.behavioral_engine = BehavioralSimulationEngine(
@@ -346,6 +345,7 @@ def create_app() -> FastAPI:
     app.include_router(evaluation_router, prefix="/api")
 
     # OpenRouter health verification & Dataset Sources
+    from bebshax.api.ai_review import router as ai_review_router
     from bebshax.api.datasets import router as datasets_router
     from bebshax.api.demo_lab import router as demo_lab_router
     from bebshax.api.openrouter_health import router as openrouter_health_router
@@ -358,6 +358,7 @@ def create_app() -> FastAPI:
     app.include_router(evidence_router, prefix="/api")
     app.include_router(segmentation_router, prefix="/api")
     app.include_router(payments_router, prefix="/api")
+    app.include_router(ai_review_router, prefix="/api")
     # Judge Lab: always mounted, but every route 404s unless demo_mode or a
     # development environment (see demo_lab.require_demo_lab) — not discoverable in prod.
     app.include_router(demo_lab_router, prefix="/api")

@@ -4,6 +4,7 @@ import { Persona, Study, StudyReport } from '../../../../types';
 import { ProvenanceChip } from '../PersonaLibraryView';
 import { countEvidenceBacked } from '../../../../utils/personaEvidence';
 import { READ_ONLY_TITLE } from './types';
+import { AiReviewCard } from './AiReviewCard';
 
 /** Step 5 — final decision report. Pure JSX extraction from StudyWorkflowView;
  * `verificationAssumptions` is derived in the parent from persona provenance. */
@@ -319,9 +320,13 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
               )}
             </div>
 
+            {/* Independent AI review of the whole study */}
+            <AiReviewCard studyId={study?.id} isReadOnly={isReadOnly} />
+
             {/* Methodology & Limitations Disclaimer */}
             <div style={{ background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', borderRadius: '12px', padding: '16px 20px', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              <strong style={{ color: 'var(--accent-cyan)' }}>Research Methodology Note:</strong> This report combines collected research material (clearly labeled by source, including curated samples) with exploratory synthetic persona simulations. Synthetic findings are research signals and hypotheses — validate consequential decisions with real users.
+              <strong style={{ color: 'var(--accent-cyan)' }}>Research Methodology Note:</strong> Every section above was written by a model from this study’s own inputs — live evidence (each source linked), imported datasets, and exploratory synthetic-persona interviews and simulations
+              {report?.metrics?.served_by ? ` (report synthesised by ${String(report.metrics.served_by)})` : ''}. Synthetic findings are research signals and hypotheses — validate consequential decisions with real users.
             </div>
     </>
   );

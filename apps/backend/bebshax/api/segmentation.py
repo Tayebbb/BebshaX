@@ -20,8 +20,10 @@ from bebshax.db.models import (
     SegmentationRuns,
     Studies,
 )
+from bebshax.llm.failures import LLMError
 from bebshax.segmentation.pre_check import check_segmentation_readiness
 from bebshax.segmentation.service import SegmentationEngineService
+from bebshax.utils.explicit_failures import ExplicitFailure
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +170,10 @@ async def run_segmentation(
     except ValueError as val_err:
         # Deliberate, user-facing validation messages stay verbatim.
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
+    except (ExplicitFailure, LLMError):
+        # segmentation_requires_data / llm_unavailable / segment_interpretation_failed /
+        # routing failures: the global handlers produce the coded envelope.
+        raise
     except Exception:
         logger.error("segmentation run failed for study %s", study_id, exc_info=True)
         raise HTTPException(

@@ -31,7 +31,7 @@ from bebshax.db.models import Businesses, MarketSegments, Personas, Studies
 from bebshax.interview.normalization import normalize_reply
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm import ChatMessage, LLMError, LLMRequest, LLMResult, LLMService, TaskType
-from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.json_utils import parse_llm_json, unwrap_list
 from bebshax.llm.prompt_safety import (
     UNTRUSTED_RULE,
     neutralise_tags,
@@ -61,6 +61,10 @@ class InterviewFinished(Exception):
     pass
 
 
+SYNTHESIS_UNPARSEABLE = "interview_synthesis_unparseable"
+_SYNTHESIS_MAX_ATTEMPTS = 2
+
+
 _TOPIC_DEFINITIONS = [
     ("pain_points", "Pain Points & Frustrations", ["frustrat", "problem", "struggle", "annoy", "hard", "difficult", "barrier", "issue", "waste", "slow", "complain"]),
     ("current_behavior", "Current Habits & Behavior", ["usually", "daily", "often", "routine", "currently", "habit", "today", "how do you", "workflow", "process"]),
@@ -76,12 +80,12 @@ _TOPIC_DEFINITIONS = [
 # --- Numeric self-consistency helpers (deterministic, format-level) ---------
 
 # Currency cue markers by persona country (data table, not code branches).
-# Row = (min plausible money-rate amount, cue markers). BD stays the default:
-# the platform's persona corpus is Bangladesh-first and an unknown country
-# must not silently widen what counts as a money claim. Extend by adding a
-# row + a test. Anchoring rule: purely alphanumeric markers get \b word
-# boundaries; anything else (symbols, dotted abbreviations like "kr.") is
-# matched literally — keep non-word markers unambiguous.
+# Row = (min plausible money-rate amount, cue markers). A persona whose
+# country is unknown or not in the table is checked against EVERY cue with the
+# smallest minimum — no country is assumed. Extend by adding a row + a test.
+# Anchoring rule: purely alphanumeric markers get \b word boundaries; anything
+# else (symbols, dotted abbreviations like "kr.") is matched literally — keep
+# non-word markers unambiguous.
 _CURRENCY_MARKERS: dict[str, tuple[float, tuple[str, ...]]] = {
     "BD": (10.0, ("৳", "tk", "bdt", "taka")),
     "US": (1.0, ("$", "usd", "dollar", "dollars", "buck", "bucks")),
@@ -93,16 +97,20 @@ _CURRENCY_MARKERS: dict[str, tuple[float, tuple[str, ...]]] = {
 
 @lru_cache(maxsize=16)
 def _currency_cue_for(country_code: str) -> tuple[float, re.Pattern[str]]:
-    min_amount, markers = _CURRENCY_MARKERS.get(country_code, _CURRENCY_MARKERS["BD"])
+    if country_code in _CURRENCY_MARKERS:
+        min_amount, markers = _CURRENCY_MARKERS[country_code]
+    else:
+        min_amount = min(m for m, _ in _CURRENCY_MARKERS.values())
+        markers = tuple(dict.fromkeys(m for _, ms in _CURRENCY_MARKERS.values() for m in ms))
     parts = [
         rf"\b{re.escape(m)}\b" if m.isalnum() else re.escape(m) for m in markers
     ]
     return min_amount, re.compile("|".join(parts), re.IGNORECASE)
 
 
-# Optional BDT suffix only swallows the unit token next to the number — the
+# Optional currency suffix only swallows the unit token next to the number — the
 # per-country cue regex above is what actually gates a match.
-_MONEY_NUM = re.compile(r"(\d[\d,]{0,8})(?:\s*(?:৳|tk\b|bdt\b|taka\b))?", re.IGNORECASE)
+_MONEY_NUM = re.compile(r"(\d[\d,]{0,8})(?:\s*(?:৳|tk\b|bdt\b|taka\b|usd\b|eur\b|gbp\b|inr\b|rs\b))?", re.IGNORECASE)
 _DAY_CUE = re.compile(r"per day|a day|/day|daily|each day|every day|yesterday", re.IGNORECASE)
 _MONTH_CUE = re.compile(r"per month|a month|/month|monthly|/mo\b|month\b", re.IGNORECASE)
 _SPEND_TOPIC_WORDS = ("lunch", "food", "meal", "spend", "budget", "cost", "pay", "price")
@@ -121,9 +129,9 @@ def _extract_money_rates(text: str, country_code: str | None = None) -> list[tup
     same sentence, or (day cues only) anywhere in the turn: "Yesterday I got
     biryani. It cost 120 taka." puts the cue one sentence earlier.
     Currency cues and the minimum plausible amount come from the persona's
-    country (BD default).
+    country (any currency cue when the country is unknown).
     """
-    min_amount, currency_cue = _currency_cue_for((country_code or "BD").upper())
+    min_amount, currency_cue = _currency_cue_for((country_code or "").upper())
     rates: list[tuple[float, str]] = []
     turn_has_day_cue = bool(_DAY_CUE.search(text))
     for sentence in re.split(r"[.!?]", text):
@@ -268,13 +276,18 @@ def build_identity_card(profile: Any) -> str:
         if det_lines:
             lines.append("Daily Routine & Lifestyle Context:\n" + "\n".join(det_lines))
 
-    # Commercial constraints — stated only when the record states them
-    budget = comm.get("monthly_budget_bdt") or comm.get("budget_bdt")
+    # Commercial constraints — stated only when the record states them, in the
+    # persona's own currency (legacy records carry *_bdt keys).
+    budget = comm.get("monthly_budget")
+    currency = comm.get("currency")
+    if not _known(budget):
+        budget = comm.get("monthly_budget_bdt") or comm.get("budget_bdt")
+        currency = currency or ("BDT" if _known(budget) else None)
     sensitivity = comm.get("price_sensitivity")
     payment = detailed.get("payment_method") or comm.get("payment_preference")
     commercial_bits = []
     if _known(budget):
-        commercial_bits.append(f"Monthly discretionary budget ৳{budget} BDT")
+        commercial_bits.append(f"Monthly discretionary budget {budget} {currency}" if _known(currency) else f"Monthly discretionary budget {budget}")
     if _known(sensitivity):
         commercial_bits.append(f"Price sensitivity: {sensitivity}")
     if _known(payment):
@@ -413,11 +426,16 @@ class InterviewEngine:
         sessionmaker_: sessionmaker[AsyncSession],
         memory: MemoryService | None = None,
         memory_k: int = 4,
+        *,
+        suggest_questions: bool = False,
     ) -> None:
         self._llm = llm
         self._sessionmaker = sessionmaker_
         self._memory = memory
         self._memory_k = memory_k
+        # Model-written follow-up suggestions cost one extra model call per turn;
+        # the app enables them explicitly (main.py), scripted tests keep them off.
+        self._suggest_questions = suggest_questions
         # One lock per conversation: prepare → LLM → persist must not interleave
         # (concurrent asks used to persist duplicate turn numbers).
         self._turn_locks: dict[str, asyncio.Lock] = {}
@@ -648,24 +666,27 @@ class InterviewEngine:
         were invented numbers dressed up as measurement.
         """
         comm = getattr(persona, "commercial_profile", {}) or {}
-        max_budget = _as_number(comm.get("monthly_budget_bdt") or comm.get("budget_bdt"))
+        legacy_budget = comm.get("monthly_budget_bdt") or comm.get("budget_bdt")
+        max_budget = _as_number(comm.get("monthly_budget") or legacy_budget)
+        currency = str(comm.get("currency") or ("BDT" if legacy_budget and not comm.get("monthly_budget") else "")).strip()
+        unit = f" {currency}" if currency else ""
         reply_lower = reply.lower()
         question_lower = question.lower()
 
         # Budget check only when the persona actually states a budget — a
         # phantom default (500) flagged personas against a number they never gave.
         if max_budget is not None and max_budget > 0:
-            # Extract money numbers from question/reply (e.g. ৳2000, 2000 tk, 2000 bdt, 2000 taka)
-            numbers = [int(n) for n in re.findall(r"(?:৳|tk|bdt|\$)?\s*(\d{3,6})\b", question_lower + " " + reply_lower)]
+            # Money numbers in question/reply (any currency notation)
+            numbers = [int(n) for n in re.findall(r"(?:৳|tk|bdt|\$|€|£|₹)?\s*(\d{3,6})\b", question_lower + " " + reply_lower)]
 
             # Check budget contradiction: if high amount (> 2.5x budget) and reply expresses unconditional acceptance
             for num in numbers:
                 if num >= max_budget * 2.5:
                     # If reply says yes/happy/afford/pay without expressing hesitation
-                    acceptance_words = ["i would gladly", "i will pay", "i can easily afford", "happily pay", "sure, ৳" + str(num), "no problem paying"]
+                    acceptance_words = ["i would gladly", "i will gladly", "gladly pay", "i will pay", "i can easily afford", "happily pay", "no problem paying"]
                     if any(w in reply_lower for w in acceptance_words):
-                        details = f"Persona accepted ৳{num} proposal, which exceeds stated monthly budget of ৳{max_budget:g} BDT by {round(num / max_budget, 1)}x."
-                        follow_up = f"What changed your willingness to pay from your usual ৳{max_budget:g}/month budget to ৳{num}?"
+                        details = f"Persona accepted a {num}{unit} proposal, which exceeds the stated monthly budget of {max_budget:g}{unit} by {round(num / max_budget, 1)}x."
+                        follow_up = f"What changed your willingness to pay from your usual {max_budget:g}{unit}/month budget to {num}{unit}?"
                         return True, details, follow_up, None
 
         # Numeric self-consistency: the persona's own prior spend-rate claims
@@ -696,8 +717,8 @@ class InterviewEngine:
                         if ratio >= 3.0:
                             details = (
                                 f"Numeric self-contradiction: persona earlier claimed {prior_raw} "
-                                f"(≈৳{prior_monthly:,.0f}/month) but now claims {cur_raw} "
-                                f"(≈৳{cur_monthly:,.0f}/month) — {ratio:.1f}x apart."
+                                f"(≈{prior_monthly:,.0f}{unit}/month) but now claims {cur_raw} "
+                                f"(≈{cur_monthly:,.0f}{unit}/month) — {ratio:.1f}x apart."
                             )
                             follow_up = (
                                 f"Earlier you mentioned {prior_raw}, but just now you said {cur_raw}. "
@@ -787,40 +808,66 @@ class InterviewEngine:
 
         return state
 
-    def generate_suggested_questions(
+    async def generate_suggested_questions(
         self,
         conversation: Conversations,
         persona: Any,
         prior_turns: list[ConversationTurns],
     ) -> list[str]:
-        """Generate smart, relevant questions the researcher can click to ask next."""
+        """Follow-up questions the researcher can click next, written by the model
+        from THIS transcript and the topics still unexplored. There is no canned
+        pool: when suggestions are disabled, the model layer fails or answers
+        unusably the list is empty (the UI simply shows no suggestions) —
+        nothing generic is substituted."""
+        if not self._suggest_questions:
+            return []
         topics = conversation.topics_explored or {}
+        unexplored = [label for topic_id, label, _ in _TOPIC_DEFINITIONS if topics.get(topic_id) != "explored"]
         demo = getattr(persona, "demographics", {}) or {}
-        occupation = demo.get("occupation")
-
-        suggestions = []
-        if topics.get("pain_points") != "explored":
-            role_clause = f" as a {occupation}" if _known(occupation) else ""
-            suggestions.append(f"What is the most frustrating part of your daily routine{role_clause}?")
-        if topics.get("current_behavior") != "explored":
-            suggestions.append("How do you currently handle this when it happens?")
-        if topics.get("pricing_budget") != "explored":
-            suggestions.append("How much do you typically spend on solutions like this each month?")
-        if topics.get("objections") != "explored":
-            suggestions.append("What would make you hesitate to try a new app for this?")
-        if topics.get("current_alternatives") != "explored":
-            suggestions.append("What other tools or workarounds have you tried so far?")
-        if topics.get("purchase_decision") != "explored":
-            suggestions.append("What single feature would convince you to switch?")
-
-        # Fallback pool
-        if len(suggestions) < 3:
-            suggestions.extend([
-                "Could you walk me through a specific example of when this happened recently?",
-                "If you had a magic wand, what would the ideal solution look like?",
-                "How does this problem impact your productivity or budget?",
-            ])
-        return suggestions[:4]
+        recent = [
+            {"role": t.role, "text": (t.content or "")[:400]}
+            for t in prior_turns[-6:]
+            if getattr(t, "content", None)
+        ]
+        context = {
+            "persona": {
+                "name": getattr(persona, "name", ""),
+                "occupation": demo.get("occupation"),
+                "location": demo.get("location"),
+                "pain_points": list(getattr(persona, "pain_points", []) or [])[:3],
+            },
+            "recent_turns": recent,
+            "topics_not_yet_explored": unexplored[:5],
+        }
+        request = LLMRequest(
+            task=TaskType.STRUCTURED_OUTPUT,
+            messages=[
+                ChatMessage(
+                    role="system",
+                    content=(
+                        "You coach a user researcher during a live customer interview. Write 3 short, open, "
+                        "non-leading follow-up questions the researcher could ask THIS participant next: build on "
+                        "what they just said and steer toward the topics not yet explored. Never suggest questions "
+                        "whose answer is already in the transcript. Output ONLY a JSON object with one key "
+                        '"questions" holding an array of strings.\n' + UNTRUSTED_RULE
+                    ),
+                ),
+                ChatMessage(role="user", content=untrusted_json_block("INTERVIEW_STATE", context, source="transcript")),
+            ],
+            json_mode=True,
+            temperature=0.4,
+            max_output_tokens=300,
+            persona_id=getattr(persona, "id", None),
+            conversation_id=conversation.id,
+        )
+        try:
+            result = await self._llm.complete(request)
+            parsed = parse_llm_json(result.text)
+        except Exception as exc:  # suggestions are optional UX — never block the turn
+            logger.info("suggested-question generation unavailable for %s: %s", conversation.id, type(exc).__name__)
+            return []
+        items = unwrap_list(parsed, keys=("questions", "suggestions", "follow_up_questions"))
+        return [str(q).strip() for q in items if isinstance(q, (str, int, float)) and str(q).strip()][:4]
 
     async def _prepare_turn(
         self, conversation_id: str, interviewer_message: str
@@ -997,9 +1044,14 @@ class InterviewEngine:
                 conversation_id=conversation_id,
             )
 
-        # Generate suggested questions for next turn
-        suggested_questions = self.generate_suggested_questions(
-            conversation, persona, prior_turns
+        # Suggested questions for the next turn — model-written from this
+        # transcript INCLUDING the exchange that just happened.
+        current_exchange = [
+            ConversationTurns(role="interviewer", content=interviewer_message),
+            ConversationTurns(role="persona", content=reply),
+        ]
+        suggested_questions = await self.generate_suggested_questions(
+            conversation, persona, [*prior_turns, *current_exchange]
         )
         if follow_up_guidance:
             suggested_questions.insert(0, follow_up_guidance)
@@ -1175,57 +1227,57 @@ Output valid JSON adhering strictly to this schema:
 }}
 """
 
+        request = LLMRequest(
+            task=TaskType.STRUCTURED_OUTPUT,
+            messages=[
+                ChatMessage(
+                    role="system",
+                    content=(
+                        "You are a qualitative research synthesis AI. Always output valid, parseable JSON. "
+                        + UNTRUSTED_RULE
+                    ),
+                ),
+                ChatMessage(role="user", content=analysis_prompt),
+            ],
+            json_mode=True,
+            temperature=0.3,
+            max_output_tokens=1000,
+            conversation_id=conversation_id,
+        )
+
+        # Model-written synthesis or an explicit, recorded failure. A mechanical
+        # "summary" dressed as analysis would be a template (RULES.md R2), so the
+        # interview is closed with NO summary/insights and the reason is returned
+        # — the researcher can re-run /complete once routes recover.
+        summary: Optional[str] = None
+        key_findings: list[str] = []
+        insights_raw: list[dict[str, Any]] = []
+        synthesis_source = "llm"
+        synthesis_error: Optional[str] = None
+        served_by: Optional[str] = None
         try:
-            res = await self._llm.complete(
-                LLMRequest(
-                    task=TaskType.STRUCTURED_OUTPUT,
-                    messages=[
-                        ChatMessage(
-                            role="system",
-                            content=(
-                                "You are a qualitative research synthesis AI. Always output valid, parseable JSON. "
-                                + UNTRUSTED_RULE
-                            ),
-                        ),
-                        ChatMessage(role="user", content=analysis_prompt),
-                    ],
-                    temperature=0.3,
-                    max_output_tokens=1000,
-                    conversation_id=conversation_id,
-                )
-            )
-            parsed = parse_llm_json(res.text)
-            summary = parsed.get("summary", "Interview analysis completed.")
-            key_findings = parsed.get("key_findings", [])
-            insights_raw = parsed.get("insights", [])
-            synthesis_source, synthesis_fallback_reason = "llm", None
-        except Exception as exc:
-            # Mechanical fallback — marked as such, never dressed up as
-            # analysis (M-series honesty: no fabricated confidence).
-            logger.warning(
-                "insight synthesis failed for %s — emitting mechanical fallback",
-                conversation_id,
-                exc_info=True,
-            )
-            synthesis_source = "fallback_mechanical"
-            synthesis_fallback_reason = f"synthesis_error:{type(exc).__name__}"
-            summary = (
-                f"Automated synthesis unavailable — mechanical summary: interview with "
-                f"{persona_name} covered {conversation.objective} over {len(turns)} turns."
-            )
-            key_findings = [
-                f"Completed {len(turns)} dialogue turns investigating {conversation.objective}.",
-                f"Addressed key topics: {', '.join([k for k, v in (conversation.topics_explored or {}).items() if v == 'explored'])}.",
-            ]
-            insights_raw = [
-                {
-                    "type": "pain_point",
-                    "title": "Unanalyzed excerpt (synthesis unavailable)",
-                    "description": turns[-1].content[:200] if turns else "Persona participated in interview session.",
-                    "supporting_turn_numbers": [turns[-1].turn_number] if turns else [1],
-                    "confidence": 0.0,
-                }
-            ]
+            for attempt in range(1, _SYNTHESIS_MAX_ATTEMPTS + 1):
+                if attempt > 1:
+                    request = request.retry_copy()
+                res = await self._llm.complete(request)
+                served_by = f"{res.provider}/{res.model}"
+                try:
+                    parsed = parse_llm_json(res.text)
+                except ValueError:
+                    parsed = None
+                if isinstance(parsed, dict) and str(parsed.get("summary") or "").strip():
+                    summary = str(parsed["summary"]).strip()
+                    key_findings = [str(k).strip() for k in (parsed.get("key_findings") or []) if str(k).strip()]
+                    insights_raw = [i for i in (parsed.get("insights") or []) if isinstance(i, dict) and i.get("title")]
+                    break
+                logger.warning("insight synthesis reply unusable for %s (attempt %d/%d)", conversation_id, attempt, _SYNTHESIS_MAX_ATTEMPTS)
+            else:
+                synthesis_source = "unavailable"
+                synthesis_error = SYNTHESIS_UNPARSEABLE
+        except LLMError as exc:
+            logger.warning("insight synthesis failed for %s: %s", conversation_id, type(exc).__name__)
+            synthesis_source = "unavailable"
+            synthesis_error = f"llm_error:{type(exc).__name__}"
 
         # Persist structured insights and update interview record
         saved_insights = []
@@ -1277,9 +1329,11 @@ Output valid JSON adhering strictly to this schema:
             "summary": summary,
             "key_findings": key_findings,
             "structured_insights": saved_insights,
-            # Structured marker: "llm" analysis vs a mechanical summary emitted
-            # because no route could serve the synthesis (never a prose-only hint).
+            # "llm" when the analysis below is the model's; "unavailable" when the
+            # interview was closed without analysis (error_code says why).
             "source": synthesis_source,
-            "fallback_reason": synthesis_fallback_reason,
+            "served_by": served_by,
+            "error_code": synthesis_error,
+            "fallback_reason": None,
         }
 

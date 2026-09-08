@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.deps import require_study_access
+from bebshax.api.errors import APIError
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
+from bebshax.datasets.parser import DatasetParseError
 from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
 from bebshax.datasets.service import DatasetService
 from bebshax.db.models import DatasetSources, Studies
@@ -524,9 +525,13 @@ async def import_study_dataset_candidate(
             "dataset_name": imported_ds.name,
             "row_count": imported_ds.row_count,
             "column_count": imported_ds.column_count,
+            "fetched_from": (imported_ds.schema_metadata or {}).get("fetched_from"),
         }
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except DatasetParseError as exc:
+        # The resource was fetched but is not tabular data we can profile.
+        raise APIError(422, f"The downloaded resource could not be parsed as a dataset: {exc}", error_code="dataset_unparseable")
 
 
 @router.post("/studies/{study_id}/datasets/candidates/{candidate_id}/reject")

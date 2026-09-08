@@ -22,6 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from bebshax.llm import ChatMessage, LLMRequest, LLMService, TaskType
 from bebshax.llm.adapters.embeddings import EmbeddingBackend
 from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.memory.orm import MEMORY_SOURCES, MemoryItems
 from bebshax.memory.scoring import (
     W_IMPORTANCE,
@@ -236,12 +237,16 @@ class MemoryService:
                     role="system",
                     content=(
                         "Distill the persona's observations into at most 3 durable, "
-                        'first-person insights. Reply STRICT JSON: {"insights": [str, ...]}'
+                        'first-person insights. Reply STRICT JSON: {"insights": [str, ...]} '
+                        + UNTRUSTED_RULE
                     ),
                 ),
-                ChatMessage(role="user", content=observations),
+                ChatMessage(role="user", content=untrusted_block("OBSERVATIONS", observations, source="persona memories")),
             ],
             json_mode=True,
+            # Distillation is a summarising task: low temperature keeps the
+            # insights anchored to what was actually said.
+            temperature=0.3,
             max_output_tokens=300,
             persona_id=persona_id,
         )

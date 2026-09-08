@@ -1,0 +1,282 @@
+{
+  "generated_at": "2026-09-07T23:30:30.381363+00:00",
+  "verdict": "FAIL",
+  "checks_passed": 29,
+  "checks_total": 35,
+  "questions_per_script": 3,
+  "repeat": false,
+  "checks": [
+    {
+      "name": "A: signup",
+      "passed": true,
+      "detail": "audit+415d596ecc@bebshax.local"
+    },
+    {
+      "name": "A: create study",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: copilot reply",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: copilot names its route",
+      "passed": true,
+      "detail": "openrouter/dots-studio/dots-3-note-preview:free"
+    },
+    {
+      "name": "A: copilot reply is about the idea",
+      "passed": true,
+      "detail": "That's a highly specific and promising niche idea — catering to recreational sea anglers in Norway with a curated, local"
+    },
+    {
+      "name": "A: suggest roles",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: roles are idea-specific",
+      "passed": true,
+      "detail": "COASTAL RECREATIONAL ANGLER; SEASONAL FISHING GUIDE; NORWEGIAN COASTAL RESIDENT; FREQUENT WEEKEND ANGLER; INFREQUENT SEASONAL ANGLER; TACKLE SHOP OWNER; SUSTAIN"
+    },
+    {
+      "name": "A: generate personas",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: at least one persona",
+      "passed": true,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "A: persona generation names its routes",
+      "passed": true,
+      "detail": "['openrouter/dots-studio/dots-3-note-preview:free']"
+    },
+    {
+      "name": "A: no persona defaulted to a forbidden country",
+      "passed": true,
+      "detail": "country_codes=['NO']"
+    },
+    {
+      "name": "A: personas reference the idea's domain",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: generate script",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: script source is the model",
+      "passed": true,
+      "detail": "source='llm' served_by='openrouter/dots-studio/dots-3-note-preview:free'"
+    },
+    {
+      "name": "A: script has the requested 3 questions",
+      "passed": true,
+      "detail": "3 questions"
+    },
+    {
+      "name": "A: script is idea-specific",
+      "passed": true,
+      "detail": "How do you currently acquire your fishing bait and seasonal tackle for sea angling along the Norwegian coast, and what h"
+    },
+    {
+      "name": "A: start batch interview",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "A: interview completed",
+      "passed": true,
+      "detail": "status='completed' personas={'per_0aa5fbfae368': {'persona_id': 'per_0aa5fbfae368', 'persona_name': 'Nils Hansen', 'status': 'completed', 'interview_id': 'a203253ddb7f41cea20d692c09ed3894'}}"
+    },
+    {
+      "name": "A: interview answers are on-topic",
+      "passed": true,
+      "detail": "3 persona turns"
+    },
+    {
+      "name": "A: generate report",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "A: AI review",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "B: signup",
+      "passed": true,
+      "detail": "audit+dcdb8cdb42@bebshax.local"
+    },
+    {
+      "name": "B: create study",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: copilot reply",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: copilot names its route",
+      "passed": true,
+      "detail": "kilo/stepfun/step-3.7-flash:free"
+    },
+    {
+      "name": "B: copilot reply is about the idea",
+      "passed": true,
+      "detail": "That's a really specific, high-potential niche! Independent piano teachers in Chicago have such unique, overlapping pain"
+    },
+    {
+      "name": "B: suggest roles",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "B: generate personas",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "B: generate script",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "B: generate report",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "B: report synthesis is model-written",
+      "passed": true,
+      "detail": "synthesis_source='llm' served_by='kilo/stepfun/step-3.7-flash:free'"
+    },
+    {
+      "name": "B: report summary is idea-specific",
+      "passed": true,
+      "detail": "This report outlines demand validation research for a scheduling and billing app designed for independent piano teachers in Chicago who host"
+    },
+    {
+      "name": "B: AI review",
+      "passed": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "A: no leakage of the other idea's domain",
+      "passed": true,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "B: no leakage of the other idea's domain",
+      "passed": true,
+      "detail": "leaked=[]"
+    }
+  ],
+  "runs": [
+    {
+      "label": "A",
+      "idea": "A subscription box that delivers fresh, locally sourced fishing bait and seasonal tackle to recreational sea anglers along the coast of Norway.",
+      "steps": {
+        "copilot": {
+          "reply": "That's a highly specific and promising niche idea — catering to recreational sea anglers in Norway with a curated, locally sourced bait and tackle subscription. Given the seasonal nature of fishing and the importance of local bait freshness, I’d recommend a User Interviews study to understand angler habits, preferences, and current pain points. To tailor this further, could you clarify: are you targeting novice anglers, experienced hobbyists, or a mix? And is this primarily for coastal urban areas like Bergen and Stavanger, or more remote/fjord regions?",
+          "goal_card": null
+        },
+        "roles": [
+          "COASTAL RECREATIONAL ANGLER",
+          "SEASONAL FISHING GUIDE",
+          "NORWEGIAN COASTAL RESIDENT",
+          "FREQUENT WEEKEND ANGLER",
+          "INFREQUENT SEASONAL ANGLER",
+          "TACKLE SHOP OWNER",
+          "SUSTAINABILITY-FOCUSED CONSUMER",
+          "TECH-SAVVY YOUNG ANGLER",
+          "FISHERIES REGULATOR / LOCAL AUTHORITY",
+          "SKEPTICAL SUBSCRIPTION CANCELLER"
+        ],
+        "personas": [
+          {
+            "id": "per_0aa5fbfae368",
+            "name": "Nils Hansen",
+            "occupation": "Marine Engineer",
+            "country_code": "NO",
+            "description": "Nils is a seasoned engineer who spends his weekends on the fjords, valuing local bait quality and reliable tackle delivery to maximize his limited fishing time."
+          },
+          {
+            "id": "per_c7243b9f403b",
+            "name": "Nils Arvesen",
+            "occupation": "Seasonal Fishing Guide",
+            "country_code": "NO",
+            "description": "Nils runs small-group sea fishing charters from Stavanger’s fjords during the summer months, relying on fresh, local bait to secure consistent catches for his clients. He’s deeply skeptical of mass-produced tackle but trusts proven, regiona"
+          }
+        ],
+        "failed_roles": [],
+        "script": [
+          "How do you currently acquire your fishing bait and seasonal tackle for sea angling along the Norwegian coast, and what has led you to stick with that particular method or supplier?",
+          "When you encounter limitations with your current bait or tackle—such as freshness, local availability, or suitability for specific seasonal conditions—what specific workarounds or alternative solutions do you resort to, and how satisfactory are they?",
+          "If a subscription service were to deliver fresh, locally sourced bait and seasonal tackle directly to your door on a recurring basis, what specific features, pricing structures, or delivery schedules would influence your decision to subscribe versus continuing with your current approach?"
+        ],
+        "interview_job": {
+          "status": "completed",
+          "completed": 1,
+          "failed": 0
+        },
+        "interview_answers": [
+          "I usually head down to the local tackle shop in Bergen, a place I've been going to for years. They know me, they know the fjords, and they stock the local bait like lugworms and ragworms that work bes",
+          "When the bait isn't as fresh as I'd like, or if they're out of the local lugworms, I sometimes have to settle for what's available—maybe slightly older stock or imported alternatives. It's not ideal; ",
+          "If a subscription service could deliver fresh, locally sourced bait and seasonal tackle directly to my door, I'd want to see a few key things to even consider switching from my local shop. First, the "
+        ]
+      },
+      "served_by": {
+        "copilot": "openrouter/dots-studio/dots-3-note-preview:free",
+        "personas": [
+          "openrouter/dots-studio/dots-3-note-preview:free"
+        ],
+        "script": "openrouter/dots-studio/dots-3-note-preview:free",
+        "interview": [
+          "openrouter/dots-studio/dots-3-note-preview:free"
+        ]
+      },
+      "study_id": "study_569dbde1e01e47fc",
+      "elapsed_s": 262.0
+    },
+    {
+      "label": "B",
+      "idea": "A scheduling and billing app for independent piano teachers in Chicago who run student recitals and juggle make-up lessons.",
+      "steps": {
+        "copilot": {
+          "reply": "That's a really specific, high-potential niche! Independent piano teachers in Chicago have such unique, overlapping pain points between lesson scheduling, make-up lesson coordination, recital logistics, and billing that a purpose-built tool would solve a ton of manual administrative work. The most relevant study type here is User Interviews, to validate demand, uncover specific unmet pain points, and gauge willingness to pay for an all-in-one tool that combines these features. To narrow your target segment first: Are you focusing on teachers who host in-person student recitals at external venues (like community centers, theaters) or primarily those who hold recitals in their own home studios?",
+          "goal_card": null
+        },
+        "report": {
+          "title": "Scheduling and Billing App for Independent Chicago Piano Teachers",
+          "executive_summary": "This report outlines demand validation research for a scheduling and billing app designed for independent piano teachers in Chicago who host student recitals and manage make-up lessons. As of the provided study context, no empirical research data (including user interviews, validated claims, datasets, personas, or behavioral simulations) was collected, so no validated insights into market demand, user pain points, or pricing acceptability are available. The research is in the preliminary planning stage with no evidence to assess product-market fit.",
+          "key_findings": [
+            "No validated market demand findings are available: the provided study context contains 0 completed interviews, 0 evidence claims, 0 datasets, and 0 personas, with no user-sourced insights collected to date."
+          ],
+          "recommendations": [
+            "Conduct 10+ semi-structured interviews with independent piano teachers in Chicago to validate core pain points related to recital scheduling, make-up lesson coordination, and billing workflows.",
+            "Test pricing hypotheses with target users to identify acceptable price points for a specialized scheduling and billing tool for piano educators.",
+            "Complete a competitive analysis of existing scheduling and billing tools for music teachers to identify unmet needs and differentiation opportunities for the proposed app."
+          ],
+          "limitations": "The provided study context contains no collected empirical research data: 0 completed user interviews, 0 validated evidence claims, 0 datasets, 0 user personas, and 0 behavioral simulation results. No data on user pain points, pricing acceptability, market segments, or competitive context was gathered. All sections requiring user-sourced or market data are empty, and no assessment of demand or product-market fit is possible with the available information."
+        }
+      },
+      "served_by": {
+        "copilot": "kilo/stepfun/step-3.7-flash:free",
+        "report": "kilo/stepfun/step-3.7-flash:free"
+      },
+      "study_id": "study_76f5c768884d4ce3",
+      "elapsed_s": 362.4
+    }
+  ]
+}
