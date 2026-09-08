@@ -259,6 +259,7 @@ async def create_behavioral_test(
         status="ready",
     )
     session.add(test)
+    await session.flush()
 
     # Initial scenario — the researcher's own words; nothing is written for them.
     scenario_title = payload.scenario_title or payload.name
