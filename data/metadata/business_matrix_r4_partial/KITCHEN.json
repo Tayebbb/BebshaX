@@ -1,0 +1,300 @@
+{
+  "label": "KITCHEN",
+  "idea": "A ghost kitchen in Lagos, Nigeria that delivers Nigerian home-style lunches (jollof, egusi, moi moi) to office workers who order over WhatsApp before 10am.",
+  "steps": {
+    "title": "A Ghost Kitchen in Lagos, Nigeria",
+    "copilot": {
+      "reply": "That's an interesting business idea, focusing on delivering traditional Nigerian meals to busy office workers in Lagos. To validate your hypothesis, I'd recommend conducting user interviews. Can you tell me more about the target geography and specific customer segment you're most interested in validating?",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "OFFICE WORKER",
+        "description": "Primary user who orders lunches over WhatsApp, providing insights on meal preferences and ordering habits."
+      },
+      {
+        "role": "NIGERIAN FOOD ENTHUSIAST",
+        "description": "Demographic segment relevant to product's stated target audience, providing insights on food preferences and cultural significance."
+      },
+      {
+        "role": "WHATSAPP POWER USER",
+        "description": "Primary user who frequently uses WhatsApp for ordering, providing insights on communication habits and platform usage."
+      },
+      {
+        "role": "NIGERIAN BUSINESS OWNER",
+        "description": "Secondary stakeholder who may be interested in partnering or investing in the ghost kitchen, providing insights on business strategy and market trends."
+      },
+      {
+        "role": "FOOD DELIVERY COMPETITOR",
+        "description": "Edge case who may be considering competing with the ghost kitchen, providing insights on competitive landscape and market dynamics."
+      },
+      {
+        "role": "NIGERIAN FOOD CRITIC",
+        "description": "Secondary stakeholder who may be interested in reviewing the ghost kitchen's offerings, providing insights on food quality and cultural relevance."
+      },
+      {
+        "role": "TECH-SAVVY INDIVIDUAL",
+        "description": "Edge case who may be skeptical about using WhatsApp for ordering, providing insights on technology adoption and platform usage."
+      },
+      {
+        "role": "NIGERIAN YOUNG PROFESSIONAL",
+        "description": "Demographic segment relevant to product's stated target audience, providing insights on lifestyle and career preferences."
+      },
+      {
+        "role": "LOCAL MARKET VENDOR",
+        "description": "Edge case who may be interested in partnering with the ghost kitchen to supply ingredients, providing insights on local market dynamics and supply chain management."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_160f3e601752",
+        "name": "Sofia Olu",
+        "archetype": "Administrative Assistant",
+        "tagline": "The Frustrated Worker",
+        "occupation": "Office Administrator",
+        "location": "Lagos",
+        "income": "$25,000-$35,000",
+        "country_code": "NG",
+        "description": "A busy office worker who relies on WhatsApp to order lunches before 10am. She values convenience and speed but struggles with inconsistent menu options.",
+        "badges": [
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$500"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Order 3 times a week, Monday to Thursday"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "Limited menu options"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Convenient and Consistent Lunches",
+            "description": "She wants to find a reliable ghost kitchen that can deliver Nigerian home-style lunches quickly and efficiently."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Limited Menu Options",
+            "description": "She is frustrated with the lack of options and feels like she's stuck with the same menu every day."
+          },
+          {
+            "category": "Needs",
+            "title": "Reliable Service",
+            "description": "She needs a ghost kitchen that can deliver lunches reliably and quickly, with options that meet her dietary preferences."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_624b1f4a7070",
+        "name": "Nimi Akande",
+        "archetype": null,
+        "tagline": "The Food Explorer",
+        "occupation": "Food Blogger",
+        "location": "Lagos, Nigeria",
+        "income": "$20,000 - $30,000",
+        "country_code": "NG",
+        "description": "Nimi is a passionate food blogger who spends her days exploring the culinary scene in Lagos. She's always on the lookout for new flavors and ingredients to share with her followers.",
+        "badges": [
+          {
+            "label": "FOOD BLOGGING EXPERIENCE",
+            "value": 1000
+          },
+          {
+            "label": "NIGERIAN FOOD EXPERT",
+            "value": true
+          },
+          {
+            "label": "SOCIAL MEDIA INFLUENCER",
+            "value": 500
+          },
+          {
+            "label": "HEALTH CONCERN",
+            "value": "gluten intolerance"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Increase Food Blog Reach",
+            "description": "Nimi wants to increase her food blog's reach and engagement through collaborations with local restaurants."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Difficulty Finding Authentic Ingredients",
+            "description": "Nimi faces challenges finding authentic Nigerian ingredients in her local market."
+          },
+          {
+            "category": "Needs",
+            "title": "Convenience and Variety",
+            "description": "Nimi needs a reliable delivery service that offers a variety of Nigerian dishes, including vegan and gluten-free options."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "What is your typical morning routine like when you're getting ready for work, and how do you usually decide what to eat for lunch?",
+      "Can you tell me about a recent time when you had to order food from someone else to bring into the office - was it convenient or inconvenient, and why did you choose that option?",
+      "How much would you be willing to pay for a hot, home-style meal delivered to your office before 10am, and are there any specific features or benefits that would make you more or less likely to order from this ghost kitchen?"
+    ],
+    "interview_job": {
+      "status": "completed",
+      "completed": 1,
+      "failed": 0,
+      "personas": {
+        "per_160f3e601752": {
+          "persona_id": "per_160f3e601752",
+          "persona_name": "Sofia Olu",
+          "status": "completed",
+          "interview_id": "e09ab87425a24ddeb203319aed16d593"
+        }
+      }
+    },
+    "interview_answers": [
+      "My mornings are pretty hectic, to be honest. I wake up around 6:30 am, get dressed in the dark, and rush to get some breakfast before leaving for work. Usually, it's something simple like a bowl of cereal or toast with tea. If I have time, I'll make myself an egg sandwich or scramble some eggs - nothing too fancy.\n\nAs for lunch, I rely heavily on WhatsApp to order food from this new ghost kitchen that just opened up in Lagos. They claim to deliver Nigerian home-style lunches, which sounds amazing to me. But, to be honest, their menu is a bit limited and inconsistent. Sometimes they have jollof rice or egusi soup, but not always. I'll send them a message saying \"I'd like to order lunch for delivery\" and then they'll ask what I want. If they don't have it, I'm stuck with something else.\n\nIt's frustrating because sometimes I get hung up on the website, waiting for my order, and by the time it arrives, I've already gotten hungry again. And if there are issues with the order or delivery, I just end up dealing with that instead of enjoying my lunch.",
+      "I think the last time I ordered food through this ghost kitchen was like two days ago. It was a pretty typical morning for me, rushing around trying to get everything done before my shift started at the office.\n\nI sent them a message saying \"I'd like to order lunch for delivery\" and they asked what I wanted. I told them I was in the mood for something spicy, so they recommended their jollof rice with egusi soup. It sounded good, so I went with it.\n\nThe only issue was that my phone kept losing signal in the office building, so I had to wait a bit longer than expected for the message to confirm my order. When it finally did, I got an estimated time of delivery, but then when they arrived, there were some issues with the order - they'd run out of egusi soup.\n\nIt was pretty frustrating because I was already running late for work and now I had to deal with this extra hassle. But at the same time, having food delivered to my office can be really convenient, especially on busy days when I don't have much time to spare.\n\nI guess what I would say is that while ordering from the ghost kitchen works out sometimes, it's not always reliable or convenient for me. Sometimes they're out of certain dishes, and the delivery times are sketchy...",
+      "To be honest, I'm not really sure how much I'd be willing to pay for a hot, home-style meal delivered to my office before 10am. My budget is pretty tight, and I try to stick to what I can afford.\n\nIf they could offer something that's reliable and consistent, with a wide range of menu options, maybe I'd be more willing to pay a bit more. But if it's just going to be hit-or-miss, or if the prices are too high, then I'm not sure I'd be interested.\n\nActually, the fact that they're out of egusi soup sometimes is a big turn-off for me. If they could guarantee that certain dishes would always be available, that would be really appealing. And having options like jollof rice and egusi soup being the usual suspects would make me more likely to order from them.\n\nBut if they had some kind of limited-time offer or promotion that included free delivery or a discount, maybe I'd be more willing to give it another try. I haven't thought about that much, but usually I'd probably just stick with what I know and trust."
+    ],
+    "interview_turn_meta": [
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      }
+    ],
+    "behavioral": {
+      "status": "failed",
+      "error_message": "TypeError (ref 8ba39f0b)",
+      "summary": null,
+      "aggregate_metrics": {},
+      "risks": [],
+      "opportunities": [],
+      "results": [
+        {
+          "persona_name": "Sofia Olu",
+          "decision": "strongly_negative",
+          "decision_label": "Unlikely to Buy",
+          "probability": 0.8,
+          "confidence": "medium",
+          "key_factors": [
+            {
+              "name": "Price Sensitivity",
+              "impact": "high",
+              "direction": "negative",
+              "description": "The price of ₦3,500 per lunch is significantly higher than what Sofia expects to pay for a similar service."
+            },
+            {
+              "name": "Inconsistent Menu Options",
+              "impact": "medium",
+              "direction": "negative",
+              "description": "Sofia's frustration with the ghost kitchen service stems from its limitations in terms of menu options, which may not be addressed by this pricing model."
+            }
+          ],
+          "motivators": [
+            {
+              "name": "Convenience and Speed",
+              "description": "Sofia values convenience and speed in her lunch ordering experience."
+            },
+            {
+              "name": "Consistency and Reliability",
+              "description": "Sofia prioritizes consistency and reliability in the ghost kitchen service, particularly in terms of guaranteed menu options and reliable delivery times."
+            }
+          ],
+          "objections": [
+            {
+              "name": "Price Out of Budget",
+              "description": "The price is too high for Sofia's monthly disposable budget."
+            },
+            {
+              "name": "Alternative Options Available",
+              "description": "Sofia has existing alternatives, such as WhatsApp ordering, that meet her needs at a lower cost."
+            }
+          ],
+          "reasoning_summary": "While the service offers convenience and speed, the price is too high for Sofia's budget, and she is hesitant to switch from her current alternatives.",
+          "status": "completed",
+          "error_message": null
+        }
+      ]
+    },
+    "ai_review": {
+      "overall": 20,
+      "scores": {
+        "grounding": 0,
+        "specificity": 0,
+        "consistency": 0,
+        "honesty": 0,
+        "actionability": 0
+      },
+      "verdict": "The study brief and evidence claims are not clearly supported by the personas. The personas lack specificity and grounding, which makes it difficult to understand Sofia's characteristics and pain points.",
+      "strengths": [],
+      "issues": [
+        {
+          "severity": "high",
+          "artifact": "",
+          "detail": "The personas provided lack specificity and grounding in terms of Sofia's age, income bracket, and education level."
+        }
+      ],
+      "served_by": "ollama/llama3.2:3b"
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b",
+    "interview": [
+      "ollama/llama3.2:3b"
+    ],
+    "ai_review": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 3.8,
+    "roles": 14.9,
+    "personas": 228.8,
+    "script": 10.7,
+    "interview_start": 0.0,
+    "interview": 117.6,
+    "behavioral_create": 0.0,
+    "behavioral_run_start": 0.0,
+    "behavioral": 18.1,
+    "report": 322.5,
+    "ai_review": 88.9
+  },
+  "study_id": "study_2459dcc1d2bb47ca",
+  "elapsed_s": 883.4
+}

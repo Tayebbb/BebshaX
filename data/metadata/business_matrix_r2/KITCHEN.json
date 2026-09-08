@@ -1,0 +1,187 @@
+{
+  "label": "KITCHEN",
+  "idea": "A ghost kitchen in Lagos, Nigeria that delivers Nigerian home-style lunches (jollof, egusi, moi moi) to office workers who order over WhatsApp before 10am.",
+  "steps": {
+    "title": "A Ghost Kitchen in Lagos, Nigeria",
+    "copilot": {
+      "reply": "So, you're looking to validate the demand for your ghost kitchen's lunch delivery service in Lagos, targeting office workers who primarily use WhatsApp to place orders before 10am. Can you tell me more about the target geography - are we focusing on a specific neighborhood or office complex?",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "OFFICE WORKER",
+        "description": "Primary user of the product, ordering Nigerian home-style lunches over WhatsApp for office workers."
+      },
+      {
+        "role": "WhatsApp CHAT OPERATOR",
+        "description": "Person responsible for handling customer inquiries and orders on WhatsApp for the ghost kitchen."
+      },
+      {
+        "role": "DELIVERY RIDER",
+        "description": "Primary user of the product, delivering Nigerian home-style lunches to office workers."
+      },
+      {
+        "role": "PARENT WORKING OFFICE",
+        "description": "Parent ordering for their child in the office, who is a primary user of the product."
+      },
+      {
+        "role": "INFLUENCER IN THE FOOD INDUSTRY",
+        "description": "Influencer promoting Nigerian home-style lunches to office workers, potentially driving sales for the ghost kitchen."
+      },
+      {
+        "role": "channel PARTNER MANAGER",
+        "description": "Person responsible for managing relationships with WhatsApp channels and influencers promoting the product."
+      },
+      {
+        "role": "SKEPTICAL OFFICE WORKER",
+        "description": "Office worker skeptical of ordering Nigerian home-style lunches over WhatsApp, providing insight into potential user pain points."
+      },
+      {
+        "role": "POWER USER OF WHATSAPP CHAT OPERATIONS",
+        "description": "Person with expertise in WhatsApp chat operations, potentially providing insights on efficiency and user experience improvements."
+      },
+      {
+        "role": "LOCAL FOOD CRITIC",
+        "description": "Food critic evaluating the quality of Nigerian home-style lunches delivered by the ghost kitchen, providing feedback on taste and presentation."
+      },
+      {
+        "role": "REGIONAL MARKET RESEARCHER",
+        "description": "Researcher studying regional market trends in Lagos, Nigeria, potentially providing insights on the target audience's preferences and behaviors."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_7ac442b47e9e",
+        "name": "Adesina Oluwade",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Admin's Survival Kit",
+        "occupation": "Administrative Assistant",
+        "location": "Lagos, Nigeria",
+        "income": "$2,000 - $3,000 per month",
+        "country_code": "NG",
+        "description": "Adesina is a diligent administrative assistant who relies on her WhatsApp chats with the ghost kitchen for lunch. She values convenience and affordability.",
+        "badges": [
+          {
+            "label": "daily_lunch_order",
+            "value": 5
+          },
+          {
+            "label": "monthly_budget",
+            "value": "$1,200"
+          },
+          {
+            "label": "time_saved",
+            "value": "30 minutes per day"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Convenience and Affordability",
+            "description": "Adesina wants to save time and money on lunch."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Limited Lunch Options",
+            "description": "Adesina struggles to find affordable and convenient lunch options near her office."
+          },
+          {
+            "category": "Needs",
+            "title": "Reliable Delivery",
+            "description": "Adesina needs a reliable way to receive her lunches on time."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_aaa366ff3413",
+        "name": "Aisha Bello",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Kitchen Queen",
+        "occupation": "Shift Manager at a local restaurant",
+        "location": "Lagos, Nigeria",
+        "income": "N150,000 - N200,000 per month",
+        "country_code": "NG",
+        "description": "Aisha is the backbone of our ghost kitchen's WhatsApp chat. She handles orders, answers queries, and ensures seamless delivery to office workers. Her warm smile can turn a customer's bad day around.",
+        "badges": [
+          {
+            "label": "RELEVANT LABEL",
+            "value": "5+ years of customer service experience"
+          },
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "N50,000 for phone bill and data"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Typically checks WhatsApp between 8am - 12pm daily"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "Ensuring timely delivery amidst Lagos traffic chaos"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Optimize Delivery Time",
+            "description": "Increase average delivery time to under 30 minutes"
+          },
+          {
+            "category": "Pain Points",
+            "title": "Managing Order Volume",
+            "description": "Handle a minimum of 50 orders daily without sacrificing quality"
+          },
+          {
+            "category": "Needs",
+            "title": "Training and Support",
+            "description": "Access to comprehensive training and ongoing support from the management team"
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "What do you usually do when you're running late for work and can't get to a restaurant that serves Nigerian home-style lunches?",
+      "Can you recall a time when you had to wait in line or deal with long delivery times while waiting for your lunch? How did you handle the situation?",
+      "Would you be willing to pay 20% more for a meal delivered within an hour of ordering, specifically if it's from a ghost kitchen that specializes in Nigerian home-style lunches?"
+    ],
+    "interview_job": {
+      "status": "failed",
+      "completed": 0,
+      "failed": 1,
+      "personas": {
+        "per_7ac442b47e9e": {
+          "persona_id": "per_7ac442b47e9e",
+          "persona_name": "Adesina Oluwade",
+          "status": "failed",
+          "error": "DBAPIError: interview failed"
+        }
+      }
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 7.3,
+    "roles": 15.9,
+    "personas": 49.3,
+    "script": 90.4,
+    "interview_start": 0.0,
+    "interview": 108.4,
+    "behavioral_create": 0.0,
+    "report": 25.4,
+    "ai_review": 75.0
+  },
+  "study_id": "study_1bd6c2d40ff545ec",
+  "elapsed_s": 371.9
+}

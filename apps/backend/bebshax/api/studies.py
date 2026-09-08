@@ -26,11 +26,12 @@ from bebshax.api.jobs import get_job, start_job
 from bebshax.db.models import Base, SavedAudiences, Studies, StudyReports
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.llm.json_utils import parse_llm_json, unwrap_list
+from bebshax.llm.placeholders import is_placeholder
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.tenancy import ANONYMOUS_OWNER_ID
 from bebshax.tenancy import PUBLIC_OWNER_IDS as _PUBLIC_OWNER_IDS
-from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
-from bebshax.utils.title_generator import generate_deterministic_study_title
+from bebshax.utils.explicit_failures import InsufficientInput, LLMUnavailable, UnusableModelOutput
+from bebshax.utils.title_generator import clean_client_title, generate_deterministic_study_title
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.research.report_service import StudyReportService
 from bebshax.research.service import ResearchEngineService
@@ -257,7 +258,7 @@ async def create_study(
 ) -> dict[str, Any]:
     """Create a new research study for the authenticated user with deterministic title."""
     effective_prompt = (payload.prompt or payload.product_idea or "").strip()
-    provided_title = (payload.title or "").strip()
+    provided_title = clean_client_title(payload.title)
     study_type = payload.type or payload.study_type or "interviews"
 
     # Input validation: reject empty prompt and empty title
@@ -344,7 +345,7 @@ async def update_study(
         study_user_id = current_user.id if current_user else ANONYMOUS_OWNER_ID
         prompt = (payload.prompt or payload.product_idea or "").strip()
         study_type = payload.type or payload.study_type or "interviews"
-        title = payload.title or (generate_deterministic_study_title(prompt, study_type) if prompt else "Untitled Study")
+        title = clean_client_title(payload.title) or (generate_deterministic_study_title(prompt, study_type) if prompt else "Untitled Study")
         study = Studies(
             id=study_id,
             user_id=study_user_id,
@@ -378,6 +379,10 @@ async def update_study(
     update_data.pop("id", None)
     update_data.pop("user_id", None)
     update_data.pop("is_demo", None)
+    if isinstance(update_data.get("title"), str):
+        # The frontend derives titles by slicing the raw prompt; markup in the
+        # prompt must not become markup in the title.
+        update_data["title"] = clean_client_title(update_data["title"]) or None
 
     for field, val in update_data.items():
         if val is not None and hasattr(study, field):
@@ -563,9 +568,14 @@ async def generate_script_questions(
         study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
     )
 
-    prompt = (payload and payload.prompt) or study.prompt or study.title
-    if not (prompt or "").strip():
-        raise HTTPException(status_code=400, detail="Describe the business idea before generating a script.")
+    # Never the title: a title-only study produced a script full of placeholders
+    # ("[specific metric relevant to the business idea]") — fabrication, not research.
+    prompt = ((payload.prompt if payload else None) or study.prompt or "").strip()
+    if not prompt:
+        raise InsufficientInput(
+            "business_description_required",
+            "Describe the business idea before generating a script.",
+        )
     q_count = (payload and payload.question_count) or 5
 
     llm_service = getattr(request.app.state, "llm_service", None) if request else None
@@ -605,7 +615,9 @@ async def generate_script_questions(
 
     def _questions_of(parsed: Any) -> list[str]:
         items = unwrap_list(parsed, keys=("questions", "interview_questions", "script"))
-        return [str(q).strip() for q in items if isinstance(q, (str, int, float)) and str(q).strip()]
+        questions = [str(q).strip() for q in items if isinstance(q, (str, int, float)) and str(q).strip()]
+        # The prompt's own example ("Question 1") echoed back is not a question.
+        return [q for q in questions if not is_placeholder(q)]
 
     generated_questions: list[str] = []
     res = None

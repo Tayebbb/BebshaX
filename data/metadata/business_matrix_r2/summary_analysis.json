@@ -1,0 +1,542 @@
+{
+  "generated_at": "2026-09-08T16:59:46.471429+00:00",
+  "mode": "analysis",
+  "verdict": "PASS",
+  "checks_passed": 29,
+  "checks_total": 29,
+  "warnings": 0,
+  "checks": [
+    {
+      "name": "matrix: copilot_reply differs across businesses (max pair jaccard 0.17 = POLL/TUITION, mean 0.05, threshold 0.35)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical copilot_reply",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: roles differs across businesses (max pair jaccard 0.14 = ELDER/KITCHEN, mean 0.07, threshold 0.3)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical roles",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: persona_descriptions differs across businesses (max pair jaccard 0.15 = SAVINGS/TUITION, mean 0.05, threshold 0.35)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical persona_descriptions",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: persona_attributes differs across businesses (max pair jaccard 0.13 = SAVINGS/TUITION, mean 0.07, threshold 0.35)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical persona_attributes",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: script differs across businesses (max pair jaccard 0.07 = KETTLE/POLL, mean 0.04, threshold 0.3)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical script",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: ai_review differs across businesses (max pair jaccard 0.45 = DERM/TUITION, mean 0.20, threshold 0.45)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical ai_review",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: no boilerplate 8-grams repeated across ≥3 businesses in copilot_reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in persona_descriptions",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in persona_attributes",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 8-grams repeated across ≥3 businesses in script",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 8-grams repeated across ≥3 businesses in interview_answers",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in behavioral_rationale",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in report_summary",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in report_findings",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in report_recommendations",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in ai_review",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no persona name is reused across businesses",
+      "passed": true,
+      "warn": false,
+      "detail": "{}"
+    },
+    {
+      "name": "matrix: no business's distinctive vocabulary leaked into another's artefacts",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: pollution vs food business share no role names",
+      "passed": true,
+      "warn": false,
+      "detail": "set()"
+    },
+    {
+      "name": "matrix: pollution vs food business share no persona occupations",
+      "passed": true,
+      "warn": false,
+      "detail": "set()"
+    },
+    {
+      "name": "matrix: no role name appears in EVERY business (would be a fixed list)",
+      "passed": true,
+      "warn": false,
+      "detail": "set()"
+    },
+    {
+      "name": "matrix: AI review scores are not one constant",
+      "passed": true,
+      "warn": false,
+      "detail": "[20, 60, 0, 0, 20]"
+    }
+  ],
+  "analysis": {
+    "pairwise": {
+      "copilot_reply": {
+        "ELDER/KETTLE": 0.089,
+        "ELDER/KITCHEN": 0.085,
+        "ELDER/POLL": 0.034,
+        "ELDER/SAAS": 0.018,
+        "ELDER/SAVINGS": 0.018,
+        "ELDER/TUITION": 0.021,
+        "KETTLE/KITCHEN": 0.07,
+        "KETTLE/POLL": 0.038,
+        "KETTLE/SAAS": 0.02,
+        "KETTLE/SAVINGS": 0.041,
+        "KETTLE/TUITION": 0.023,
+        "KITCHEN/POLL": 0.096,
+        "KITCHEN/SAAS": 0.039,
+        "KITCHEN/SAVINGS": 0.019,
+        "KITCHEN/TUITION": 0.07,
+        "POLL/SAAS": 0.069,
+        "POLL/SAVINGS": 0.069,
+        "POLL/TUITION": 0.17,
+        "SAAS/SAVINGS": 0.055,
+        "SAAS/TUITION": 0.041,
+        "SAVINGS/TUITION": 0.062
+      },
+      "roles": {
+        "DERM/ELDER": 0.137,
+        "DERM/KETTLE": 0.041,
+        "DERM/KITCHEN": 0.109,
+        "DERM/POLL": 0.093,
+        "DERM/SAAS": 0.063,
+        "DERM/SAVINGS": 0.066,
+        "DERM/TUITION": 0.06,
+        "ELDER/KETTLE": 0.049,
+        "ELDER/KITCHEN": 0.14,
+        "ELDER/POLL": 0.081,
+        "ELDER/SAAS": 0.123,
+        "ELDER/SAVINGS": 0.103,
+        "ELDER/TUITION": 0.078,
+        "KETTLE/KITCHEN": 0.025,
+        "KETTLE/POLL": 0.099,
+        "KETTLE/SAAS": 0.071,
+        "KETTLE/SAVINGS": 0.013,
+        "KETTLE/TUITION": 0.036,
+        "KITCHEN/POLL": 0.036,
+        "KITCHEN/SAAS": 0.128,
+        "KITCHEN/SAVINGS": 0.063,
+        "KITCHEN/TUITION": 0.058,
+        "POLL/SAAS": 0.052,
+        "POLL/SAVINGS": 0.039,
+        "POLL/TUITION": 0.073,
+        "SAAS/SAVINGS": 0.073,
+        "SAAS/TUITION": 0.058,
+        "SAVINGS/TUITION": 0.061
+      },
+      "persona_descriptions": {
+        "DERM/ELDER": 0.023,
+        "DERM/KETTLE": 0.0,
+        "DERM/KITCHEN": 0.044,
+        "DERM/POLL": 0.043,
+        "DERM/SAAS": 0.076,
+        "DERM/SAVINGS": 0.049,
+        "DERM/TUITION": 0.03,
+        "ELDER/KETTLE": 0.011,
+        "ELDER/KITCHEN": 0.0,
+        "ELDER/POLL": 0.034,
+        "ELDER/SAAS": 0.035,
+        "ELDER/SAVINGS": 0.083,
+        "ELDER/TUITION": 0.036,
+        "KETTLE/KITCHEN": 0.014,
+        "KETTLE/POLL": 0.074,
+        "KETTLE/SAAS": 0.029,
+        "KETTLE/SAVINGS": 0.036,
+        "KETTLE/TUITION": 0.0,
+        "KITCHEN/POLL": 0.028,
+        "KITCHEN/SAAS": 0.029,
+        "KITCHEN/SAVINGS": 0.036,
+        "KITCHEN/TUITION": 0.03,
+        "POLL/SAAS": 0.074,
+        "POLL/SAVINGS": 0.114,
+        "POLL/TUITION": 0.148,
+        "SAAS/SAVINGS": 0.024,
+        "SAAS/TUITION": 0.03,
+        "SAVINGS/TUITION": 0.151
+      },
+      "persona_attributes": {
+        "DERM/ELDER": 0.057,
+        "DERM/KETTLE": 0.048,
+        "DERM/KITCHEN": 0.112,
+        "DERM/POLL": 0.087,
+        "DERM/SAAS": 0.121,
+        "DERM/SAVINGS": 0.075,
+        "DERM/TUITION": 0.066,
+        "ELDER/KETTLE": 0.033,
+        "ELDER/KITCHEN": 0.119,
+        "ELDER/POLL": 0.041,
+        "ELDER/SAAS": 0.042,
+        "ELDER/SAVINGS": 0.032,
+        "ELDER/TUITION": 0.05,
+        "KETTLE/KITCHEN": 0.081,
+        "KETTLE/POLL": 0.082,
+        "KETTLE/SAAS": 0.05,
+        "KETTLE/SAVINGS": 0.069,
+        "KETTLE/TUITION": 0.059,
+        "KITCHEN/POLL": 0.08,
+        "KITCHEN/SAAS": 0.044,
+        "KITCHEN/SAVINGS": 0.126,
+        "KITCHEN/TUITION": 0.079,
+        "POLL/SAAS": 0.103,
+        "POLL/SAVINGS": 0.067,
+        "POLL/TUITION": 0.028,
+        "SAAS/SAVINGS": 0.038,
+        "SAAS/TUITION": 0.059,
+        "SAVINGS/TUITION": 0.131
+      },
+      "script": {
+        "ELDER/KETTLE": 0.054,
+        "ELDER/KITCHEN": 0.048,
+        "ELDER/POLL": 0.068,
+        "ELDER/SAVINGS": 0.031,
+        "ELDER/TUITION": 0.018,
+        "KETTLE/KITCHEN": 0.017,
+        "KETTLE/POLL": 0.074,
+        "KETTLE/SAVINGS": 0.069,
+        "KETTLE/TUITION": 0.039,
+        "KITCHEN/POLL": 0.048,
+        "KITCHEN/SAVINGS": 0.045,
+        "KITCHEN/TUITION": 0.034,
+        "POLL/SAVINGS": 0.048,
+        "POLL/TUITION": 0.056,
+        "SAVINGS/TUITION": 0.017
+      },
+      "ai_review": {
+        "DERM/ELDER": 0.145,
+        "DERM/KETTLE": 0.271,
+        "DERM/SAVINGS": 0.184,
+        "DERM/TUITION": 0.448,
+        "ELDER/KETTLE": 0.183,
+        "ELDER/SAVINGS": 0.08,
+        "ELDER/TUITION": 0.14,
+        "KETTLE/SAVINGS": 0.203,
+        "KETTLE/TUITION": 0.196,
+        "SAVINGS/TUITION": 0.182
+      }
+    },
+    "shared_ngrams": {
+      "copilot_reply": {},
+      "roles": {},
+      "persona_descriptions": {},
+      "persona_attributes": {},
+      "script": {},
+      "interview_answers": {},
+      "behavioral_rationale": {},
+      "report_summary": {},
+      "report_findings": {},
+      "report_recommendations": {},
+      "ai_review": {}
+    },
+    "persona_name_reuse": {},
+    "cross_contamination": [],
+    "structure": {
+      "DERM": {
+        "roles": 10,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": 20,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 4.6,
+          "roles": 17.4,
+          "personas": 127.5,
+          "script": 89.3,
+          "behavioral_create": 0.0,
+          "report": 110.9,
+          "ai_review": 91.8
+        }
+      },
+      "ELDER": {
+        "roles": 10,
+        "recommendations": 3,
+        "key_findings": 3,
+        "review_overall": 60,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "kilo/openrouter/free"
+          ],
+          "script": "ollama/llama3.2:3b",
+          "interview": [
+            "ollama/llama3.2:3b"
+          ],
+          "report": "llm7/codestral-latest",
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 3.2,
+          "roles": 17.0,
+          "personas": 20.2,
+          "script": 81.9,
+          "interview_start": 0.0,
+          "interview": 159.6,
+          "behavioral_create": 0.0,
+          "report": 16.5,
+          "ai_review": 82.0
+        }
+      },
+      "KETTLE": {
+        "roles": 10,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": 0,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b",
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 2.7,
+          "roles": 19.4,
+          "personas": 124.0,
+          "script": 85.9,
+          "interview_start": 0.0,
+          "interview": 114.4,
+          "behavioral_create": 0.0,
+          "report": 366.6,
+          "ai_review": 96.1
+        }
+      },
+      "KITCHEN": {
+        "roles": 10,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": null,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 7.3,
+          "roles": 15.9,
+          "personas": 49.3,
+          "script": 90.4,
+          "interview_start": 0.0,
+          "interview": 108.4,
+          "behavioral_create": 0.0,
+          "report": 25.4,
+          "ai_review": 75.0
+        }
+      },
+      "POLL": {
+        "roles": 9,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": null,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 79.3,
+          "roles": 17.9,
+          "personas": 56.6,
+          "script": 90.4,
+          "interview_start": 0.0,
+          "interview": 126.5,
+          "behavioral_create": 0.0,
+          "report": 25.7,
+          "ai_review": 75.0
+        }
+      },
+      "SAAS": {
+        "roles": 10,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": null,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ]
+        },
+        "timings_s": {
+          "copilot": 6.6,
+          "roles": 17.3,
+          "personas": 55.5,
+          "script": 89.3,
+          "behavioral_create": 0.0,
+          "report": 28.0,
+          "ai_review": 75.0
+        }
+      },
+      "SAVINGS": {
+        "roles": 9,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": 0,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b",
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 6.8,
+          "roles": 13.8,
+          "personas": 56.6,
+          "script": 89.2,
+          "interview_start": 0.0,
+          "interview": 126.5,
+          "behavioral_create": 0.0,
+          "report": 296.8,
+          "ai_review": 95.4
+        }
+      },
+      "TUITION": {
+        "roles": 8,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": 20,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b",
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 4.2,
+          "roles": 16.2,
+          "personas": 126.1,
+          "script": 85.8,
+          "interview_start": 0.0,
+          "interview": 111.5,
+          "behavioral_create": 0.0,
+          "report": 377.0,
+          "ai_review": 92.3
+        }
+      }
+    }
+  }
+}

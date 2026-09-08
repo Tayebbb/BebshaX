@@ -13,6 +13,11 @@ export const READ_ONLY_TITLE =
  * StudyWorkflowView (generation request) and Step2Personas (skeleton grid). */
 export const DEFAULT_PERSONA_COUNT = 6;
 
+/** Personas the backend writes per selected role (mirrors
+ * `MAX_PERSONAS_PER_ROLE` in api/copilot.py). The server rejects a higher
+ * request with 422 rather than clamping, so the UI must never ask for more. */
+export const MAX_PERSONAS_PER_ROLE = 3;
+
 export interface CopilotMessage {
   id: string;
   role: 'user' | 'assistant';

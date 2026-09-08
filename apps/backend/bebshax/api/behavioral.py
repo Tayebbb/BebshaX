@@ -245,6 +245,16 @@ async def create_behavioral_test(
     """Create a new behavioral test and its initial scenario."""
     await _get_study_and_verify_access(study_id, session, user, write=True)
 
+    # Validate the researcher's own words BEFORE any row is staged.
+    scenario_title = payload.scenario_title or payload.name
+    scenario_text = (payload.scenario_text or payload.description or "").strip()
+    if not scenario_text:
+        raise APIError(
+            400,
+            "Describe the scenario the personas should react to (scenario_text or description).",
+            error_code="scenario_required",
+        )
+
     test_id = f"bt_{uuid.uuid4().hex[:16]}"
     user_id = user.id if user else None
 
@@ -259,17 +269,11 @@ async def create_behavioral_test(
         status="ready",
     )
     session.add(test)
+    # No relationship() links these mappers, so the unit of work orders their
+    # INSERTs alphabetically (scenarios before tests) and Postgres rejected the
+    # child row's FK. Flushing the parent first makes the order explicit.
     await session.flush()
 
-    # Initial scenario — the researcher's own words; nothing is written for them.
-    scenario_title = payload.scenario_title or payload.name
-    scenario_text = (payload.scenario_text or payload.description or "").strip()
-    if not scenario_text:
-        raise APIError(
-            400,
-            "Describe the scenario the personas should react to (scenario_text or description).",
-            error_code="scenario_required",
-        )
     scenario = BehavioralTestScenarios(
         id=f"bts_{uuid.uuid4().hex[:16]}",
         behavioral_test_id=test_id,
@@ -569,8 +573,35 @@ async def trigger_behavioral_test_run(
             detail=f"Behavioral test '{test_id}' not found.",
         )
 
-    # Determine scenario snapshot — only the researcher's own text.
-    scenario_text = (payload.scenario_text or test.description or "").strip()
+    # Determine scenario snapshot — only the researcher's own text: the body's
+    # scenario, the stored scenario the body names, the test's most recent stored
+    # scenario, or the test description. Found live: create() stores the scenario
+    # in behavioral_test_scenarios, but run() read only test.description, so a
+    # test created with scenario_text alone could never be run (400).
+    scenario_row: Optional[BehavioralTestScenarios] = None
+    if not (payload.scenario_text or "").strip():
+        scenario_q = select(BehavioralTestScenarios).where(
+            BehavioralTestScenarios.behavioral_test_id == test_id
+        )
+        if payload.scenario_id:
+            scenario_q = scenario_q.where(BehavioralTestScenarios.id == payload.scenario_id)
+        scenario_row = (
+            await session.execute(scenario_q.order_by(BehavioralTestScenarios.created_at.desc()).limit(1))
+        ).scalar_one_or_none()
+        if payload.scenario_id and scenario_row is None:
+            # The caller named a scenario; running a different text under its
+            # id would report results for a scenario nobody chose.
+            raise APIError(
+                404,
+                f"Scenario '{payload.scenario_id}' does not belong to this test.",
+                error_code="scenario_not_found",
+            )
+    scenario_text = (
+        payload.scenario_text
+        or (scenario_row.scenario_text if scenario_row else None)
+        or test.description
+        or ""
+    ).strip()
     if not scenario_text:
         raise APIError(
             400,
@@ -578,9 +609,12 @@ async def trigger_behavioral_test_run(
             error_code="scenario_required",
         )
     scenario_snapshot = {
-        "title": payload.scenario_title or test.name,
+        "title": payload.scenario_title or (scenario_row.title if scenario_row else None) or test.name,
         "scenario_text": scenario_text,
-        "structured_parameters": payload.parameters or test.configuration or {},
+        "structured_parameters": payload.parameters
+        or (scenario_row.structured_parameters if scenario_row else None)
+        or test.configuration
+        or {},
     }
 
     # Count personas
@@ -636,7 +670,9 @@ async def trigger_behavioral_test_run(
         behavioral_test_id=test_id,
         study_id=study_id,
         user_id=user.id if user else None,
-        scenario_id=payload.scenario_id,
+        # Linked only to a scenario row verified to belong to this test; a
+        # caller's own text runs under the id they named.
+        scenario_id=scenario_row.id if scenario_row else (payload.scenario_id if (payload.scenario_text or "").strip() else None),
         scenario_snapshot=scenario_snapshot,
         target_population_type=payload.target_population_type,
         target_segment_id=payload.target_segment_id,

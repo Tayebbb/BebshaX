@@ -1,0 +1,204 @@
+{
+  "label": "KETTLE",
+  "idea": "A modular, fully repairable electric kettle sold direct-to-consumer in the UK with a 10-year parts guarantee and mail-in element replacement.",
+  "steps": {
+    "title": "A Modular, Fully Repairable Electric Kettle Sold",
+    "copilot": {
+      "reply": "You're considering a modular, fully repairable electric kettle with a 10-year parts guarantee and mail-in element replacement. This is an innovative approach to the traditional appliance market. What specific geographic region within the UK are you targeting?",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "ACTIVE YOUNG PROFESSIONAL",
+        "description": "Insights on the daily habits and preferences of young professionals who value sustainability, repairability, and convenience."
+      },
+      {
+        "role": "SUSAN CRITICALLY CONSCIOUS",
+        "description": "Perspectives on the environmental impact of electric kettles and the importance of repairability in reducing electronic waste."
+      },
+      {
+        "role": "BUSINESS OWNER WITH SUSTAINABILITY OBLIGATIONS",
+        "description": "Insights on the purchasing decisions and expectations of business owners who prioritize sustainability and have a vested interest in reducing their environmental footprint."
+      },
+      {
+        "role": "DIY ENTHUSIAST WITH ELECTRONIC SKILLS",
+        "description": "Perspectives on the repairability and modularity of electric kettles, including their willingness to take apart and reassemble complex devices."
+      },
+      {
+        "role": "ENVIRONMENTAL ACTIVIST WITH AWARENESS OF E-WASTE",
+        "description": "Insights on the awareness of electronic waste and its environmental impact, as well as their expectations for sustainable products like the modular electric kettle."
+      },
+      {
+        "role": "COFFEE SHOP OWNER WITH SUSTAINABLE VALUES",
+        "description": "Perspectives on the importance of sustainability in the hospitality industry, including their willingness to adopt eco-friendly products like the modular electric kettle."
+      },
+      {
+        "role": "CONSERVATIVE COFFEE DRINKER WITH TECH AWARENESS",
+        "description": "Insights on the tech-savvy coffee drinkers who are willing to invest in high-quality, repairable products, including their expectations for ease of use and durability."
+      },
+      {
+        "role": "MUM WITH YOUNG CHILDREN AND SUSTAINABILITY CONCERNS",
+        "description": "Perspectives on the importance of sustainability in household appliances, including their willingness to adopt products that reduce electronic waste and promote eco-friendly practices."
+      },
+      {
+        "role": "TECH ENTHUSIAST WITH INTEREST IN OPEN- SOURCE PROJECTS",
+        "description": "Insights on the tech enthusiasts who are interested in open-source projects and their willingness to participate in community-driven initiatives for the modular electric kettle."
+      },
+      {
+        "role": "RURAL RESIDENT WITH LIMITED ACCESS TO SUSTAINABLE OPTIONS",
+        "description": "Perspectives on the challenges of accessing sustainable products like the modular electric kettle in rural areas, including their expectations for affordability and accessibility."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_36cc072907a4",
+        "name": "Lily Brown",
+        "archetype": "Creative Problem Solver",
+        "tagline": "The Sustainability Enthusiast",
+        "occupation": "Sustainable Product Designer",
+        "location": "London, United Kingdom",
+        "income": "£60,000 - £80,000",
+        "country_code": "GB",
+        "description": "Lily is a passionate sustainable designer who values eco-friendliness and durability. She seeks innovative products that not only reduce waste but also promote repairability.",
+        "badges": [
+          {
+            "label": "REUSABLE PRODUCT",
+            "value": "True"
+          },
+          {
+            "label": "ECO-FRIENDLY MATERIALS",
+            "value": "Preferred"
+          },
+          {
+            "label": "DIY REPAIR",
+            "value": "Interested in learning"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Reduce Carbon Footprint",
+            "description": "Designing products that minimize waste and promote sustainable practices."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Frustrated with Disposable Products",
+            "description": "Lily struggles with the environmental impact of single-use products in her daily life."
+          },
+          {
+            "category": "Needs",
+            "title": "Easy Maintenance and Repair",
+            "description": "She needs a product that is easy to maintain, repair, and upgrade without sacrificing performance or aesthetics."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_f9d7402c2c2a",
+        "name": "Lily Patel",
+        "archetype": "Environmental Activist",
+        "tagline": "The Sustainable Sipper",
+        "occupation": "Sustainable Consultant",
+        "location": "Bristol, UK",
+        "income": "£40,000-60,000",
+        "country_code": "GB",
+        "description": "Lily is a passionate advocate for reducing electronic waste and promotes eco-friendly living through her consulting work. She's always on the lookout for innovative products that align with her values.",
+        "badges": [
+          {
+            "label": "RECYCLING EXPERT",
+            "value": "Lily has recycled over 100 kg of electronics last year"
+          },
+          {
+            "label": "ZERO WASTE CHALLENGE",
+            "value": "She aims to live a zero-waste lifestyle for the next six months"
+          },
+          {
+            "label": "ELECTRONIC RECYCLING",
+            "value": "Lily can recycle old electronics at her local drop-off center"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Reduce Electronic Waste",
+            "description": "Lily wants to promote the use of modular, fully repairable electric kettles to reduce electronic waste in the UK"
+          },
+          {
+            "category": "Pain Points",
+            "title": "Unsustainable Kettle Options",
+            "description": "Lily is frustrated with the lack of eco-friendly kettle options available in the market, leading her to search for innovative solutions"
+          },
+          {
+            "category": "Needs",
+            "title": "Trustworthy Brand",
+            "description": "Lily needs a reliable brand that shares her values and promotes sustainable practices"
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "What is your current go-to method for replacing worn-out elements in your electric kettle, and how often do you need to do so?",
+      "Can you walk us through a recent experience where you had to repair or replace an element in your kettle, and what was the process like?",
+      "How much would you be willing to pay extra for a 10-year parts guarantee on an electric kettle, and is this a factor that influences your purchasing decision?"
+    ],
+    "interview_job": {
+      "status": "failed",
+      "completed": 0,
+      "failed": 1,
+      "personas": {
+        "per_36cc072907a4": {
+          "persona_id": "per_36cc072907a4",
+          "persona_name": "Lily Brown",
+          "status": "failed",
+          "error": "DBAPIError: interview failed"
+        }
+      }
+    },
+    "ai_review": {
+      "overall": 0,
+      "scores": {
+        "grounding": 0,
+        "specificity": 0,
+        "consistency": 0,
+        "honesty": 0,
+        "actionability": 0
+      },
+      "verdict": "The study brief, target audience, and personas are unclear. Without concrete evidence claims, pain points, and willingness-to-pay signals, it is difficult to determine the validity of the findings. Additionally, the lack of consistency in demographics and commercial profiles for each persona raises concerns about the accuracy of the data.",
+      "strengths": [],
+      "issues": [
+        {
+          "severity": "high",
+          "artifact": "persona:<id>|report|interview:<id>",
+          "detail": "No evidence claims are made in the personas or interviews. The pain points and objections listed for each persona do not provide specific examples or data to support their claims."
+        }
+      ],
+      "served_by": "ollama/llama3.2:3b"
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b",
+    "ai_review": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 2.7,
+    "roles": 19.4,
+    "personas": 124.0,
+    "script": 85.9,
+    "interview_start": 0.0,
+    "interview": 114.4,
+    "behavioral_create": 0.0,
+    "report": 366.6,
+    "ai_review": 96.1
+  },
+  "study_id": "study_89061b35c07e4aaa",
+  "elapsed_s": 809.2
+}

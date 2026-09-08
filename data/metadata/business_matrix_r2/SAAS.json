@@ -1,0 +1,170 @@
+{
+  "label": "SAAS",
+  "idea": "A compliance-automation SaaS for mid-sized German manufacturers that maps EU CSRD sustainability-reporting requirements onto their existing ERP data and drafts the annual disclosure.",
+  "steps": {
+    "title": "A Compliance-Automation SaaS for Mid-Sized German",
+    "copilot": {
+      "reply": "You're developing a SaaS to help mid-sized German manufacturers comply with EU CSRD sustainability reporting requirements by mapping these requirements onto their existing ERP data and drafting annual disclosures. This suggests you want to validate whether your software can effectively automate this process for users in the German manufacturing industry.",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "MANAGER OF OPERATIONS",
+        "description": "Provides insights on the feasibility of integrating compliance-automation with existing ERP systems and annual reporting processes."
+      },
+      {
+        "role": "SUSTAINABILITY OFFICER FOR MANUFACTURING",
+        "description": "Offers perspectives on the importance of mapping EU CSRD requirements onto existing systems and drafting annual disclosure."
+      },
+      {
+        "role": "COMPLIANCE SPECIALIST FOR MANUFACTURING",
+        "description": "Provides expertise on the specific challenges and opportunities of implementing compliance-automation for mid-sized German manufacturers."
+      },
+      {
+        "role": "CHANNEL PARTNER FOR ERP SYSTEMS",
+        "description": "Offers insights on how channel partners perceive the product and its potential impact on their business operations."
+      },
+      {
+        "role": "MANUFACTURING INFLUENCER FOR EU REGULATIONS",
+        "description": "Provides perspectives from manufacturers who have been impacted by EU regulations and their experience with compliance-automation solutions."
+      },
+      {
+        "role": "POWER USER OF ERP SYSTEMS",
+        "description": "Offers insights on the technical capabilities and limitations of integrating compliance-automation with existing ERP systems."
+      },
+      {
+        "role": "WEEKEND WARIOR MANUFACTURING OPERATOR",
+        "description": "Provides insights on the daily operations and pain points of a manufacturing operator in a mid-sized German company."
+      },
+      {
+        "role": "MANUFACTURING SKEPTIC FOR COMPLIANCE-AUTOMATION",
+        "description": "Offers perspectives from manufacturers who are skeptical about the value and feasibility of compliance-automation solutions."
+      },
+      {
+        "role": "REGIONAL MANAGER FOR EU REGULATIONS",
+        "description": "Provides insights on the regional nuances and differences in implementing compliance-automation for mid-sized German manufacturers."
+      },
+      {
+        "role": "MANUFACTURING BUYER FOR SUPPLIERS",
+        "description": "Offers perspectives from purchasing managers and suppliers in the manufacturing industry, highlighting potential pain points and areas for improvement."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_4fc1af7b6d80",
+        "name": "Dorothea Meyer",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Compliance Connoisseur",
+        "occupation": "Operations Manager at a mid-sized manufacturing firm",
+        "location": "Hamburg, Germany",
+        "income": "$80,000 - $110,000",
+        "country_code": "DE",
+        "description": "Dorothea oversees the daily operations of her company and is responsible for ensuring compliance with EU regulations. She has a strong understanding of sustainability reporting requirements and sees this product as a game-changer for her industry.",
+        "badges": [
+          {
+            "label": "RELEVANT LABEL",
+            "value": "EU CSRD expert"
+          },
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$15,000 - $20,000"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Weekly compliance audits and quarterly reporting"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "Streamlining sustainability reporting processes while maintaining regulatory compliance"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Simplify Sustainability Reporting",
+            "description": "Dorothea wants to reduce the administrative burden of sustainability reporting while ensuring the accuracy and completeness of her company's data."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Compliance Complexity",
+            "description": "Dorothea faces challenges in mapping EU CSRD requirements to their existing ERP system and drafting annual disclosures."
+          },
+          {
+            "category": "Needs",
+            "title": "Streamlined Compliance Process",
+            "description": "Dorothea needs a user-friendly tool that can automate compliance-automation processes and provide real-time feedback on regulatory compliance."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_6efa6a43b39f",
+        "name": "Anna Weber",
+        "archetype": "Expertise-Driven Professional",
+        "tagline": "The Compliance Strategist",
+        "occupation": "Environmental Specialist and Sustainibility Officer",
+        "location": "Berlin, Germany",
+        "income": "$80,000 - $110,000",
+        "country_code": "DE",
+        "description": "Anna is a seasoned environmental specialist with 5 years of experience in sustainability reporting. She has a deep understanding of EU CSRD requirements and is dedicated to helping her company comply with regulations.",
+        "badges": [
+          {
+            "label": "EU CSRD Compliance",
+            "value": "Proven expertise in mapping CSRD requirements"
+          },
+          {
+            "label": "Sustainability Reporting",
+            "value": "$50,000 - $75,000 annual budget for reporting software"
+          },
+          {
+            "label": "ERP Integration",
+            "value": "Experience with integrating compliance data into existing ERP systems"
+          },
+          {
+            "label": "Regulatory Knowledge",
+            "value": "Strong understanding of EU environmental regulations"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Implement EU CSRD Compliance",
+            "description": "Anna wants to ensure her company's sustainability reporting is up-to-date and compliant with EU regulations."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Time-Consuming Compliance Process",
+            "description": "Anna struggles to manage the complexity of sustainability reporting, which takes up too much of her time and resources."
+          },
+          {
+            "category": "Needs",
+            "title": "Streamlined Compliance Process",
+            "description": "Anna needs a tool that can simplify the compliance process, integrate with her company's ERP system, and provide accurate reporting templates."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": []
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ]
+  },
+  "timings_s": {
+    "copilot": 6.6,
+    "roles": 17.3,
+    "personas": 55.5,
+    "script": 89.3,
+    "behavioral_create": 0.0,
+    "report": 28.0,
+    "ai_review": 75.0
+  },
+  "study_id": "study_ba418a56f4444699",
+  "elapsed_s": 271.8
+}

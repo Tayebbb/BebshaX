@@ -1,0 +1,188 @@
+{
+  "label": "POLL",
+  "idea": "A network of low-cost air-quality sensors sold to municipalities in northern Italy's Po Valley, with a public dashboard and SMS smog alerts for residents, priced per sensor per month.",
+  "steps": {
+    "title": "A Network of Low-Cost Air-Quality Sensors Sold",
+    "copilot": {
+      "reply": "So you're looking to validate the demand for your network of low-cost air-quality sensors among municipalities in northern Italy's Po Valley, specifically targeting those interested in improving air quality for their residents. You're considering a pricing model based on the number of sensors sold per month.",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "MUNICIPALITY LEADER",
+        "description": "Insights on policy decisions, budget allocation, and feasibility of integrating air-quality sensors into municipal infrastructure."
+      },
+      {
+        "role": "PARENT IN PO VALLEY",
+        "description": "Understanding of residents' concerns about air quality, awareness of the benefits of the public dashboard and SMS smog alerts."
+      },
+      {
+        "role": "RETIREE IN PO VALLEY",
+        "description": "Insights on seniors' health concerns, awareness of air quality issues, and willingness to use the public dashboard."
+      },
+      {
+        "role": "WORKING PROFESSIONAL IN PO VALLEY",
+        "description": "Understanding of working professionals' daily commute experiences, awareness of air quality issues, and interest in using the public dashboard."
+      },
+      {
+        "role": "PARENT OF CHILDREN WITH ASTHMA",
+        "description": "Insights on parents' concerns about air quality, awareness of asthma triggers, and willingness to use the SMS smog alerts."
+      },
+      {
+        "role": "STUDENT IN PO VALLEY",
+        "description": "Insights on students' awareness of air quality issues, interest in using the public dashboard, and willingness to participate in citizen science projects."
+      },
+      {
+        "role": "COMMUNITY ACTIVIST",
+        "description": "Insights on residents' engagement with environmental issues, awareness of the product's benefits, and potential for advocacy."
+      },
+      {
+        "role": "REGIONAL GOVERNMENT OFFICIAL",
+        "description": "Insights on funding decisions, budget allocation, and potential for public-private partnerships."
+      },
+      {
+        "role": "LOCAL BLOGGERS AND JOURNALISTS",
+        "description": "Understanding of the product's marketing appeal, awareness of social media influencers, and potential for partnerships."
+      },
+      {
+        "role": "DISTRIBUTION PARTNER FOR LOW-COST SENSORS",
+        "description": "Insights on logistics, delivery, and customer support for the low-cost sensors."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_6bc598971064",
+        "name": "Anna Maria Bianchi",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Policymaker",
+        "occupation": "Mayor of Piacenza",
+        "location": "Piacenza, Italy",
+        "income": "$120,000 - $150,000",
+        "country_code": "IT",
+        "description": "A seasoned politician and environmentalist with a strong background in policy-making, focused on creating sustainable urban spaces.",
+        "badges": [
+          {
+            "label": "EXPERIENCED LEADER",
+            "value": "10+ years of experience in municipal governance"
+          },
+          {
+            "label": "ENVIRONMENTAL ADVOCATE",
+            "value": "$5,000 - $10,000 per month"
+          },
+          {
+            "label": "DATA-DRIVEN DECISIONS",
+            "value": "Weekly data updates via public dashboard and SMS alerts"
+          },
+          {
+            "label": "STRONG COMMITMENT TO PUBLIC HEALTH",
+            "value": "Ensuring air quality monitors are installed in all municipalities"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Improve Air Quality Monitoring Across Municipalities",
+            "description": "Enhance public health by increasing sensor network coverage and real-time data analysis"
+          },
+          {
+            "category": "Pain Points",
+            "title": "Current Challenges in Air Quality Monitoring",
+            "description": "Limited resources, inadequate infrastructure, and lack of standardization hinder effective monitoring and decision-making"
+          },
+          {
+            "category": "Needs",
+            "title": "Technical Support and Training for Municipal Staff",
+            "description": "Access to comprehensive training, technical support, and ongoing software updates to ensure smooth sensor deployment and maintenance"
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_f5e3a74e9e9d",
+        "name": "Jessica Lopez",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Worried Mom",
+        "occupation": "Elementary School Teacher",
+        "location": "Verona, Italy",
+        "income": "$60,000 - $80,000",
+        "country_code": "IT",
+        "description": "A concerned single mother working as a teacher in Verona, trying to balance work and parenting while keeping her son safe from poor air quality.",
+        "badges": [
+          {
+            "label": "CONCERNED PARENT",
+            "value": 0.8
+          },
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$100"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Checks dashboard daily, receives SMS alerts regularly"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "Air quality affects her son's health and well-being"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Ensuring My Son's Health",
+            "description": "She wants to monitor the air quality for her son's safety and well-being."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Lack of Information",
+            "description": "She struggles with limited access to accurate air quality information in her area."
+          },
+          {
+            "category": "Needs",
+            "title": "Access to Reliable Data",
+            "description": "She needs a reliable and easy-to-use platform for monitoring air quality and receiving alerts."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "What are your current sources of information about air quality in your municipality, and how do you currently use that information to inform public health decisions?",
+      "Can you describe a recent situation where poor air quality affected daily life in your community, and what workarounds or adjustments did residents make as a result?",
+      "Would you be willing to pay €50 per month for access to real-time air quality data and SMS alerts for residents, and if so, what factors would influence your decision to purchase such a service?"
+    ],
+    "interview_job": {
+      "status": "running",
+      "completed": 0,
+      "failed": 0,
+      "personas": {
+        "per_6bc598971064": {
+          "persona_id": "per_6bc598971064",
+          "persona_name": "Anna Maria Bianchi",
+          "status": "in_progress",
+          "retried_turns": 1
+        }
+      }
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 34.7,
+    "roles": 95.9,
+    "personas": 65.9,
+    "script": 87.3,
+    "interview_start": 0.0,
+    "interview": 482.2,
+    "behavioral_create": 0.0
+  },
+  "study_id": "study_8b48632c3bcd4f61"
+}

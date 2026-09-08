@@ -1,0 +1,173 @@
+{
+  "label": "SAAS",
+  "idea": "A compliance-automation SaaS for mid-sized German manufacturers that maps EU CSRD sustainability-reporting requirements onto their existing ERP data and drafts the annual disclosure.",
+  "steps": {
+    "title": "A Compliance-Automation SaaS for Mid-Sized German",
+    "copilot": {
+      "reply": "You're developing a compliance-automation SaaS for mid-sized German manufacturers, mapping EU CSRD sustainability-reporting requirements to their existing ERP data and drafting annual disclosures. To validate this business idea, we'll conduct User Interviews with key decision-makers in these companies. Can you confirm that the primary target geography is Germany and that your platform will focus on manufacturing industries with a typical company size of 50-500 employees?",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "MANUFACTURING MANAGER",
+        "description": "Insights on mapping EU CSRD requirements onto existing ERP data, drafting annual disclosure, and ensuring compliance."
+      },
+      {
+        "role": "SUSTAINABILITY REPORTER",
+        "description": "Understanding the importance of sustainability reporting in mid-sized German manufacturers and the product's ability to streamline this process."
+      },
+      {
+        "role": "ERP ADMINISTRATOR",
+        "description": "Insights on integrating the compliance-automation SaaS with existing ERP systems and its impact on data management and security."
+      },
+      {
+        "role": "CHANNEL PARTNER",
+        "description": "Understanding the needs and pain points of channel partners in promoting and selling the product to mid-sized German manufacturers."
+      },
+      {
+        "role": "INFLUENCER",
+        "description": "Insights on the credibility and effectiveness of industry influencers in promoting the product and its benefits to mid-sized German manufacturers."
+      },
+      {
+        "role": "POWER USER",
+        "description": "Understanding the needs and pain points of power users who will drive adoption and utilization of the product, as well as their potential for advocacy."
+      },
+      {
+        "role": "WEEKEND WARRIOR",
+        "description": "Insights on how mid-sized German manufacturers with limited resources will use the product to manage their sustainability reporting and compliance obligations."
+      },
+      {
+        "role": "REGION MANAGER",
+        "description": "Understanding the regional differences in sustainability reporting requirements and how the product adapts to these needs."
+      },
+      {
+        "role": "COMPLIANCE OFFICER",
+        "description": "Insights on ensuring compliance with EU CSRD requirements and the product's ability to support this process."
+      },
+      {
+        "role": "FINANCIAL REPORTER",
+        "description": "Understanding the integration of sustainability reporting with financial reporting and how the product supports this process."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_dd43c1d71aec",
+        "name": "Helga Müller",
+        "archetype": null,
+        "tagline": "The Compliance Conscience",
+        "occupation": "Operations Manager, Production",
+        "location": "Berlin, Germany",
+        "income": "€60,000 - €80,000",
+        "country_code": "DE",
+        "description": "Helga is a meticulous manufacturing manager with a keen eye for detail. She understands the importance of sustainability reporting but struggles to allocate sufficient resources to implement new processes.",
+        "badges": [
+          {
+            "label": "EU CSRD FOCUS",
+            "value": "90%"
+          },
+          {
+            "label": "ANNUAL DISCLOSURE",
+            "value": "80%"
+          },
+          {
+            "label": "ERP INTEGRATION",
+            "value": "70%"
+          },
+          {
+            "label": "REASSURANCE OF EXPERTISE",
+            "value": "40%"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Improve Efficiency and Compliance",
+            "description": "Helga aims to streamline the sustainability reporting process, reducing administrative burdens and increasing transparency."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Lack of Resources for Sustainability Reporting",
+            "description": "Helga struggles to allocate sufficient budget and personnel to implement new sustainability reporting processes."
+          },
+          {
+            "category": "Needs",
+            "title": "Streamlined Processes and Expert Support",
+            "description": "Helga requires an automated solution that simplifies the sustainability reporting process, providing expert guidance to alleviate her concerns."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_2719cc707f93",
+        "name": "Anna Kleinmann",
+        "archetype": null,
+        "tagline": "The Environmental Advocate",
+        "occupation": "Sustainability Specialist",
+        "location": "Munich, Germany",
+        "income": "$60,000 - $80,000",
+        "country_code": "DE",
+        "description": "Anna is a passionate sustainability specialist working for an environmental non-profit. She has experience with reporting and data analysis, but struggles to find efficient tools for her own company.",
+        "badges": [
+          {
+            "label": "COMPLIANCE EXPERT",
+            "value": 0
+          },
+          {
+            "label": "DATA ANALYSIS",
+            "value": "$500"
+          },
+          {
+            "label": "STAKEHOLDER MANAGEMENT",
+            "value": 3
+          },
+          {
+            "label": "ENVIRONMENTAL ADVOCACY",
+            "value": 4
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Streamline Sustainability Reporting Process",
+            "description": "Anna wants to reduce the time spent on sustainability reporting by 30%."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Difficulty in Mapping EU CSRD Requirements",
+            "description": "Anna struggles to accurately map EU CSRD requirements onto her company's existing ERP data."
+          },
+          {
+            "category": "Needs",
+            "title": "Easy Integration with Existing ERP System",
+            "description": "Anna needs a solution that integrates seamlessly with her company's existing ERP system to reduce manual data entry."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "Can you describe your current process for generating and submitting EU CSRD sustainability reports, and how much time and effort it takes?",
+      "How do you currently handle data mapping between your ERP system and the EU CSRD reporting requirements, if at all?",
+      "Would you be willing to pay a premium for a tool that automates the compliance-automation process for your annual EU CSRD disclosure, and what factors would influence your decision?"
+    ]
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 4.0,
+    "roles": 16.8,
+    "personas": 135.6,
+    "script": 88.5,
+    "interview_start": 0.0
+  },
+  "study_id": "study_aeb96c5905454a12"
+}

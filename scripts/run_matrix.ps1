@@ -1,10 +1,10 @@
 # Runs the business-matrix audit against the isolated scratch DB.
 # Usage: powershell -File scripts/run_matrix.ps1 [-Edge] [-Ideas "POLL,KITCHEN"] [-Out <dir>]
 param(
-    [switch]$Edge,
-    [string]$Ideas = "",
-    [string]$Out = "",
-    [int]$Questions = 3
+  [switch]$Edge,
+  [string]$Ideas = "",
+  [string]$Out = "",
+  [int]$Questions = 3
 )
 $ErrorActionPreference = "Continue"
 $repo = "e:\BebshaX"

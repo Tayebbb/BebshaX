@@ -1,0 +1,183 @@
+{
+  "label": "POLL",
+  "idea": "A network of low-cost air-quality sensors sold to municipalities in northern Italy's Po Valley, with a public dashboard and SMS smog alerts for residents, priced per sensor per month.",
+  "steps": {
+    "title": "A Network of Low-Cost Air-Quality Sensors Sold",
+    "copilot": {
+      "reply": "You're developing an air-quality monitoring system for municipalities in northern Italy's Po Valley, providing affordable solutions with real-time data and alerts. To validate your business model and assumptions, I recommend conducting user interviews to understand the demand for such a service, willingness-to-pay, and potential pain points. Can you confirm if the target geography is specifically within the Po Valley region of northern Italy?",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "MUNICIPAL OFFICIAL",
+        "description": "Insights on the feasibility and adoption of low-cost air-quality sensors in municipalities, policy decisions, and budget constraints."
+      },
+      {
+        "role": "RESIDENT PO VALLEY",
+        "description": "Understanding the needs and concerns of residents living in the Po Valley region, including awareness of air quality issues and willingness to adopt new technologies."
+      },
+      {
+        "role": "MUNICIPAL ENGINEER",
+        "description": "Insights on the technical feasibility and integration of low-cost air-quality sensors into existing municipal infrastructure, including data management and analysis."
+      },
+      {
+        "role": "AIR QUALITY EXPERT",
+        "description": "Expert opinions on the accuracy and reliability of low-cost air-quality sensors, their potential impact on public health, and recommendations for sensor placement and maintenance."
+      },
+      {
+        "role": "SMALL BUSINESS OWNER PO VALLEY",
+        "description": "Understanding the needs and concerns of small business owners in the Po Valley region, including potential benefits of air-quality monitoring for their operations and customers."
+      },
+      {
+        "role": "ENVIRONMENTAL ACTIVIST PO VALLEY",
+        "description": "Insights on the motivations and behaviors of environmental activists in the Po Valley region, including their awareness of air quality issues and potential adoption of new technologies."
+      },
+      {
+        "role": "RESIDENT WITH ASTHMA PO VALLEY",
+        "description": "Understanding the needs and concerns of residents living in the Po Valley region with asthma, including awareness of air quality issues and willingness to adopt new technologies."
+      },
+      {
+        "role": "MUNICIPAL COUNCILOR PO VALLEY",
+        "description": "Insights on the political decisions and budget allocations related to air quality monitoring and management in municipalities, including potential support for low-cost sensors."
+      },
+      {
+        "role": "ITALIAN GOVERNMENT REPRESENTATIVE",
+        "description": "Insights on the government's policies and initiatives related to air quality monitoring, including potential support for low-cost sensors and funding for municipalities."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_502ceff6202e",
+        "name": "Jesús Mancini",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Environmental Guardian",
+        "occupation": "Environmental Coordinator at Municipality of Mantua",
+        "location": "Mantua, Italy",
+        "income": "$40,000 - $60,000 per year",
+        "country_code": "IT",
+        "description": "Jesús Mancini is an environmental advocate working to reduce pollution and promote sustainability in Mantua. He believes in the importance of monitoring air quality and making data accessible to residents.",
+        "badges": [
+          {
+            "label": "EXPERIENCE",
+            "value": 5
+          },
+          {
+            "label": "RELEVANT LABEL",
+            "value": "Previous experience with air quality monitoring"
+          },
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$1,500 per month for the sensor and maintenance"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Regularly checks data on public dashboard, uses SMS alerts to alert residents"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Implement Air Quality Monitoring System",
+            "description": "Wants to reduce pollution and promote sustainability in Mantua"
+          },
+          {
+            "category": "Pain Points",
+            "title": "Limited Resources for Environmental Initiatives",
+            "description": "Current frustration is limited budget and lack of expertise in environmental science"
+          },
+          {
+            "category": "Needs",
+            "title": "Access to Reliable Data for Decision Making",
+            "description": "Needs a reliable system to monitor air quality and provide data to residents and decision makers"
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_a2837cf611ac",
+        "name": "Alessandra Bianchi",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Concerned Neighbor",
+        "occupation": "Freelance Graphic Designer",
+        "location": "Pavia, Italy",
+        "income": "$2,500 - $3,000 per month",
+        "country_code": "IT",
+        "description": "Alessandra is a young professional who works freelance to support her family. She lives in Pavia with her husband and two children, but spends more time than she'd like monitoring the air quality due to her asthma.",
+        "badges": [
+          {
+            "label": "AIR_QUALITY_CONCERNED",
+            "value": 8
+          },
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$120"
+          },
+          {
+            "label": "USAGE_PATTERN",
+            "value": "Check air quality app daily, receive alerts for poor air quality"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Reduce Asthma Triggers",
+            "description": "Alessandra wants to find a solution to minimize her exposure to poor air quality, so she can breathe easier."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Frustration with Current System",
+            "description": "Alessandra is tired of manually tracking air quality and receiving inconsistent alerts from her current smartphone app."
+          },
+          {
+            "category": "Needs",
+            "title": "Reliable Monitoring System",
+            "description": "Alessandra needs a reliable system that provides accurate and timely air quality information, so she can trust the data to inform her decisions."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "Can you describe your current experience with air quality monitoring in your community, and how often do you check for updates?",
+      "How do you currently stay informed about poor air quality in the Po Valley region when it's not a priority for local authorities?",
+      "Would you be willing to pay €10-15 per month for a low-cost sensor that provides real-time data on air quality and sends SMS alerts for hazardous conditions?"
+    ],
+    "interview_job": {
+      "status": "failed",
+      "completed": 0,
+      "failed": 1,
+      "personas": {
+        "per_502ceff6202e": {
+          "persona_id": "per_502ceff6202e",
+          "persona_name": "Jesús Mancini",
+          "status": "failed",
+          "error": "DBAPIError: interview failed"
+        }
+      }
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 79.3,
+    "roles": 17.9,
+    "personas": 56.6,
+    "script": 90.4,
+    "interview_start": 0.0,
+    "interview": 126.5,
+    "behavioral_create": 0.0,
+    "report": 25.7,
+    "ai_review": 75.0
+  },
+  "study_id": "study_dba2f0d4f88a4c11",
+  "elapsed_s": 471.4
+}

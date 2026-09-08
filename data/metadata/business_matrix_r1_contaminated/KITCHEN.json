@@ -1,0 +1,116 @@
+{
+  "label": "KITCHEN",
+  "idea": "A ghost kitchen in Lagos, Nigeria that delivers Nigerian home-style lunches (jollof, egusi, moi moi) to office workers who order over WhatsApp before 10am.",
+  "steps": {
+    "title": "A Ghost Kitchen in Lagos, Nigeria",
+    "roles": [
+      {
+        "role": "LAGOS OFFICE PRO",
+        "description": "Essential for understanding the daily lunch habits, preferences, and pain points of the target audience, providing insights into how the ghost kitchen can tailor its offerings and services to meet their needs."
+      },
+      {
+        "role": "BUSY NIGERIAN PRO",
+        "description": "Crucial for validating the convenience and time-saving aspects of ordering Nigerian home-style lunches over WhatsApp, and how this service can fit into their hectic schedules."
+      },
+      {
+        "role": "NIGERIAN FOODIE",
+        "description": "Vital for assessing the quality, authenticity, and variety of the food offerings, as well as the potential for customer loyalty and retention through satisfying their cravings for traditional Nigerian cuisine."
+      },
+      {
+        "role": "HEALTH CONSCIOUS EATER",
+        "description": "Important for understanding the demand for healthy, nutritious options within the Nigerian home-style lunch menu, and how the ghost kitchen can cater to this segment without compromising on taste or authenticity."
+      },
+      {
+        "role": "SOCIAL MEDIA INFLUENCER",
+        "description": "Helpful in exploring the potential for social media promotion and customer engagement, including the role of influencers in spreading the word about the ghost kitchen and its offerings."
+      },
+      {
+        "role": "CORPORATE CATERING MANAGER",
+        "description": "Relevant for investigating the potential for corporate catering services, including the decision-making process and requirements for ordering lunches in bulk for office events or regular staff meals."
+      },
+      {
+        "role": "SKEPTICAL FIRST TIMER",
+        "description": "Valuable for identifying and addressing concerns or barriers that might prevent new customers from trying the ghost kitchen's services, such as trust issues with food quality or the WhatsApp ordering process."
+      },
+      {
+        "role": "FREQUENT ORDERER",
+        "description": "Important for understanding the behaviors and preferences of loyal customers, including how to incentivize repeat business, manage loyalty programs, and personalize the service to retain high-frequency users."
+      },
+      {
+        "role": "DELIVERY PARTNER",
+        "description": "Critical for evaluating the logistics and efficiency of the delivery process, including the potential for partnerships with delivery services to ensure timely and reliable food delivery to customers."
+      },
+      {
+        "role": "DIETARY RESTRICTION CUSTOMER",
+        "description": "Helpful in considering the needs of customers with specific dietary restrictions or preferences, such as vegetarians, vegans, or those with religious dietary requirements, to ensure inclusivity and accessibility of the menu."
+      }
+    ],
+    "script": [
+      "Walk me through a typical workday lunch for you — what do you usually eat, how do you decide where to get it, and what steps do you go through from feeling hungry to having food in front of you?",
+      "When you think about the lunches you've gotten in the past month, what has been the most frustrating part of that experience — whether it's the food quality, the wait time, the cost, or something else entirely?",
+      "If there was a service where you could order a home-cooked Nigerian meal like jollof rice or egusi soup before 10am and have it delivered to your office, what would make you decide to try it — and what would make you keep ordering it every week?"
+    ],
+    "report": {
+      "title": "A Ghost Kitchen in Lagos, Nigeria",
+      "executive_summary": "Based on the current study context, no empirical data has been collected regarding demand for a ghost kitchen delivering Nigerian home-style lunches to office workers in Lagos. The research is at a conceptual stage, with zero interviews, personas, or datasets gathered. Consequently, any assessment of market viability, customer preferences, or pricing must be considered preliminary and requires extensive data collection before actionable insights can be derived.",
+      "key_findings": [],
+      "recommendations": [],
+      "limitations": "Study is at conceptual stage with zero interviews, personas, datasets, and behavioral simulations; findings are limited to the business idea description.",
+      "risks": null,
+      "opportunities": [],
+      "next_steps": null,
+      "validation_summary": "No validation data available; demand assessment is not possible without empirical evidence."
+    },
+    "report_metrics": {
+      "attempts": 1,
+      "served_by": "kilo/openrouter/free",
+      "demand_score": 0,
+      "total_claims": 0,
+      "llm_request_id": "e20d32fa9e4945ceaa564a99122b07eb",
+      "total_personas": 0,
+      "confidence_score": 0.0,
+      "synthesis_source": "llm",
+      "total_interviews": 0
+    },
+    "ai_review": {
+      "overall": 30,
+      "scores": {
+        "grounding": 100,
+        "specificity": 100,
+        "consistency": 100,
+        "honesty": 100,
+        "actionability": 0
+      },
+      "verdict": "The study is well-grounded, specific, consistent, and honest, but it lacks actionable insights and recommendations due to the absence of empirical data. The research is at a conceptual stage and requires extensive data collection before actionable insights can be derived.",
+      "strengths": [
+        "The study is grounded in the specific idea and market of a ghost kitchen in Lagos, Nigeria.",
+        "The study is specific to the target audience and market, avoiding generic personas and boilerplate findings.",
+        "The study is consistent in its description of the business idea and the limitations of the research.",
+        "The study is honest about the limitations of the research, stating that it is at a conceptual stage with no empirical data collected."
+      ],
+      "issues": [
+        {
+          "severity": "high",
+          "artifact": "report",
+          "detail": "The report lacks actionable insights and recommendations due to the absence of empirical data, interviews, personas, and datasets."
+        }
+      ],
+      "served_by": "llm7/codestral-latest"
+    }
+  },
+  "served_by": {
+    "script": "kilo/openrouter/free",
+    "report": "kilo/openrouter/free",
+    "ai_review": "llm7/codestral-latest"
+  },
+  "timings_s": {
+    "copilot": 85.3,
+    "roles": 63.8,
+    "personas": 92.2,
+    "script": 38.2,
+    "report": 44.4,
+    "ai_review": 42.6
+  },
+  "study_id": "study_de27fa9a9a274e73",
+  "elapsed_s": 366.5
+}

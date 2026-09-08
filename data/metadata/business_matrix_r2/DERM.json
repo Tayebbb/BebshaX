@@ -1,0 +1,189 @@
+{
+  "label": "DERM",
+  "idea": "A tele-dermatology service for rural clinics in Kenya where nurses photograph skin conditions on a basic Android phone and get a specialist triage within 24 hours.",
+  "steps": {
+    "title": "A Tele-Dermatology Service for Rural Clinics in Kenya",
+    "copilot": {
+      "reply": "Conversational explanation and question to display to the user",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "RURAL CLINIC NURSE",
+        "description": "Primary user of the tele-dermatology service, responsible for taking photos and receiving specialist triage."
+      },
+      {
+        "role": "RURAL CLINIC MANAGER",
+        "description": "Responsible for overseeing tele-dermatology service implementation and budgeting, providing insights into adoption rates and workflow efficiency."
+      },
+      {
+        "role": "HEALTH INSURANCE PAYER",
+        "description": "Influential decision-maker for rural clinic budgets, offering valuable feedback on cost-effectiveness and reimbursement policies."
+      },
+      {
+        "role": "TECH-SAVVY RURAL RESIDENT",
+        "description": "Edge case persona with varying levels of tech proficiency, providing insight into user adoption and potential pain points."
+      },
+      {
+        "role": "RURAL CLINIC PATIENT",
+        "description": "Primary beneficiary of the tele-dermatology service, offering feedback on user experience and treatment outcomes."
+      },
+      {
+        "role": "HEALTH INFORMATION EXCHANGE INFLUENCER",
+        "description": "Influential figure in the health information exchange ecosystem, providing insights into interoperability and standardization."
+      },
+      {
+        "role": "TELE-MEETING EXPERT",
+        "description": "Expert in tele-meeting platforms, offering feedback on video conferencing quality and usability for specialist triage."
+      },
+      {
+        "role": "RURAL CLINIC STAFFER",
+        "description": "Casual user of the tele-dermatology service, providing insight into workflow efficiency and adoption rates among non-clinical staff."
+      },
+      {
+        "role": "KENYAN HEALTH POLICY MAKER",
+        "description": "Influential figure in Kenyan healthcare policy, offering insights into regulatory frameworks and national health initiatives."
+      },
+      {
+        "role": "TECH PARTNER REPRESENTATIVE",
+        "description": "Representative of the tech partner providing the tele-dermatology service, offering feedback on implementation and integration."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_59561981c3ed",
+        "name": "Kamru Wanjiru",
+        "archetype": "The Rural Healthcare Worker",
+        "tagline": "Healing in the Community",
+        "occupation": "Clinical Nurse Specialist",
+        "location": "Kisumu, Kenya",
+        "income": "$800-$1,200/month",
+        "country_code": "KE",
+        "description": "Kamru is a dedicated nurse who has worked in rural clinics for over 5 years. She takes pride in providing quality care to her patients and is eager to use tele-dermatology to expand her reach.",
+        "badges": [
+          {
+            "label": "EXPERIENCED NURSE",
+            "value": "10+ years of experience"
+          },
+          {
+            "label": "RURAL CLINIC WORKER",
+            "value": "Works in rural clinics in Kenya"
+          },
+          {
+            "label": "TECH-SAVVY",
+            "value": "Uses a basic Android phone for photos and has some online training"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Expand Access to Care",
+            "description": "Kamru wants to use tele-dermatology to reach more patients in rural areas with limited access to specialized care."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Limited Resources",
+            "description": "Kamru faces challenges with limited resources, including equipment and internet connectivity, which makes it difficult for her to provide quality care to all patients."
+          },
+          {
+            "category": "Needs",
+            "title": "Convenience and Accessibility",
+            "description": "Kamru needs a reliable tele-dermatology service that can be accessed on her basic Android phone, allowing her to provide care to patients in remote areas."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_2156550c6724",
+        "name": "Joan Kamau",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Clinic Director",
+        "occupation": "Clinical Operations Manager",
+        "location": "Nairobi, Kenya",
+        "income": "$40,000 - $60,000",
+        "country_code": "KE",
+        "description": "Joan is the head of a rural clinic in Nairobi, overseeing tele-dermatology service implementation and ensuring seamless workflow efficiency.",
+        "badges": [
+          {
+            "label": "TELE-MEDICINE EXPERT",
+            "value": "5+ years"
+          },
+          {
+            "label": "BUDGET MANAGEMENT",
+            "value": "$15,000 monthly"
+          },
+          {
+            "label": "STAFF TRAINING",
+            "value": "Regular training sessions"
+          },
+          {
+            "label": "ADAPTABILITY",
+            "value": "Ability to adapt quickly"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Increase clinic efficiency by 20%",
+            "description": "Improve productivity and reduce wait times for patients."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Managing tele-dermatology workflow challenges",
+            "description": "Navigating the technology and ensuring nurse training are efficient."
+          },
+          {
+            "category": "Needs",
+            "title": "Easy integration with existing clinic systems",
+            "description": "Streamlining workflow processes to reduce administrative burden."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "ai_review": {
+      "overall": 20,
+      "scores": {
+        "grounding": 0,
+        "specificity": 0,
+        "consistency": 0,
+        "honesty": 0,
+        "actionability": 0
+      },
+      "verdict": "The personas lack grounding in the study brief, specificity to the idea, consistency with each other, honesty about limitations, and actionability.",
+      "strengths": [
+        "The personas provide some information about the target audience"
+      ],
+      "issues": [
+        {
+          "severity": "high",
+          "artifact": "personas:<id>",
+          "detail": "No clear connection to the study brief, no evidence claims, and missing demographics for the segment_id=per_59561981c3ed"
+        }
+      ],
+      "served_by": "ollama/llama3.2:3b"
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "ai_review": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 4.6,
+    "roles": 17.4,
+    "personas": 127.5,
+    "script": 89.3,
+    "behavioral_create": 0.0,
+    "report": 110.9,
+    "ai_review": 91.8
+  },
+  "study_id": "study_f0d2fe43f70a4d92",
+  "elapsed_s": 441.5
+}

@@ -1,0 +1,310 @@
+{
+  "label": "POLL",
+  "idea": "A network of low-cost air-quality sensors sold to municipalities in northern Italy's Po Valley, with a public dashboard and SMS smog alerts for residents, priced per sensor per month.",
+  "steps": {
+    "title": "A Network of Low-Cost Air-Quality Sensors Sold",
+    "copilot": {
+      "reply": "You're developing a network of low-cost air-quality sensors for municipalities in northern Italy's Po Valley, offering a public dashboard and SMS smog alerts. You want to research the demand for this solution among Italian municipalities.",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "MUNICIPAL OFFICIAL",
+        "description": "Insights on municipal needs, pain points, and willingness to adopt the sensor network."
+      },
+      {
+        "role": "RESIDENT WITH SMOG ISSUES",
+        "description": "Perspectives on air quality concerns, behavior change, and adoption of SMS smog alerts."
+      },
+      {
+        "role": "AIR QUALITY EXPERT",
+        "description": "Expertise on sensor accuracy, calibration, and data interpretation to validate product performance."
+      },
+      {
+        "role": "CHANNEL PARTNER EXECUTIVE",
+        "description": "Insights into sales strategies, pricing, and partnership opportunities with municipalities in the Po Valley region."
+      },
+      {
+        "role": "PAYMENT PROCESSING SPECIALIST",
+        "description": "Understanding of payment structures, revenue models, and potential barriers to adoption for municipalities."
+      },
+      {
+        "role": "REGIONAL ECONOMY ANALYST",
+        "description": "Insights into the regional economy's growth prospects, GDP, and potential impact of air quality monitoring on local businesses."
+      },
+      {
+        "role": "FAMILY MAN WITH ALLERGIES",
+        "description": "Perspectives from individuals with severe allergies, understanding their needs for timely smog alerts and sensor placement strategies."
+      },
+      {
+        "role": "SME OWNER WITH SMALL BUSINESS",
+        "description": "Insights into the challenges faced by small businesses in the Po Valley region, including air quality concerns and potential benefits of sensor networks."
+      },
+      {
+        "role": "ENVIRONMENTAL ACTIVIST",
+        "description": "Perspectives on environmental impact, community engagement, and advocacy for air quality monitoring as a social responsibility."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_7b36ea0ab173",
+        "name": "Sandra Ferrari",
+        "archetype": null,
+        "tagline": "The Network Nurturer",
+        "occupation": "Head of Public Works Department",
+        "location": "Ravenna, Italy",
+        "income": "$60,000 - $80,000",
+        "country_code": "IT",
+        "description": "Sandra Ferrari is a seasoned public servant with 10 years of experience in managing municipal infrastructure. She prioritizes the well-being of her constituents and seeks innovative solutions to improve air quality.",
+        "badges": [
+          {
+            "label": "EXPERIENCED LEADER",
+            "value": "10+ years of experience"
+          },
+          {
+            "label": "STRATEGIC THINKER",
+            "value": "$100,000 - $150,000 annual budget"
+          },
+          {
+            "label": "COMMUNITY FOCUSED",
+            "value": "Regular community meetings to address air quality concerns"
+          },
+          {
+            "label": "TECHNOLOGY ADVOCATE",
+            "value": "Already invested in data analytics tools for municipal operations"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Improved Air Quality Data for Informed Decision-Making",
+            "description": "Sandra aims to utilize the sensor network to provide accurate and timely air quality data to inform her decision-making process."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Limited Resources for Air Quality Monitoring",
+            "description": "Sandra currently relies on outdated equipment and manual data collection methods, which can be time-consuming and prone to errors."
+          },
+          {
+            "category": "Needs",
+            "title": "User-Friendly Public Dashboard for Stakeholder Engagement",
+            "description": "Sandra requires a user-friendly public dashboard that allows her to share air quality data with residents, businesses, and other stakeholders in an engaging and accessible format."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_e5e269bdc8d0",
+        "name": "Monica Esposito",
+        "archetype": null,
+        "tagline": "The concerned mother",
+        "occupation": "Environmental Education Teacher",
+        "location": "Verona, Italy",
+        "income": "$50000 - $60000 annually",
+        "country_code": "IT",
+        "description": "Monica teaches environmental education to school children in Verona. She lives with her husband and two kids in a small apartment above their family-owned bakery. Her son has asthma, making air quality a top concern.",
+        "badges": [
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$1000 - $1500"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Monica would check air quality alerts during her daily commute and when planning activities for her children."
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "Reducing her son's asthma symptoms"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Improve my son's health",
+            "description": "To reduce his asthma symptoms and create a healthier environment for him."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Limited access to clean air information",
+            "description": "As a resident in Verona, Monica faces challenges accessing reliable air quality data and SMS alerts for her son's condition."
+          },
+          {
+            "category": "Needs",
+            "title": "Convenient and accurate air quality monitoring",
+            "description": "Monica needs a user-friendly interface to access real-time air quality data and receive timely SMS alerts for her son's health."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "How do you currently stay informed about air quality in your neighborhood, and what sources do you rely on most?",
+      "Can you describe a recent experience where poor air quality affected your daily life or plans, and how did you cope with it?",
+      "If you were to pay €X per month for a personal air-quality sensor that would alert you via SMS when the air quality in your neighborhood exceeds a certain threshold, would you consider purchasing one?"
+    ],
+    "interview_job": {
+      "status": "completed",
+      "completed": 1,
+      "failed": 0,
+      "personas": {
+        "per_7b36ea0ab173": {
+          "persona_id": "per_7b36ea0ab173",
+          "persona_name": "Sandra Ferrari",
+          "status": "completed",
+          "interview_id": "1f2d583724cc44f38875cadff5b7c706"
+        }
+      }
+    },
+    "interview_answers": [
+      "I actually don't have a personal smartphone with internet access at home. My husband usually checks the local newspaper or the official website of our town hall to get information about air quality. He's quite particular about it and likes to know if there are any smog alerts that might affect his work as a mechanic.\n\nIf I need to check the air quality myself, I usually go to the town square where they display the current pollution levels on an electronic screen. It's not very detailed, but at least it gives us an idea of how bad it is outside. Sometimes, the local TV station will also broadcast information about air quality if there are any serious problems in our area.\n\nI have to admit, I wish we had more accurate and regular monitoring systems here in Ravenna, especially since my department deals with the public's health on a daily basis. But these resources help us get an idea of what's going on outside.",
+      "I remember last autumn when the air quality was really bad due to some wildfires in the nearby hills. My husband was scheduled to work at the garage, but he had to cancel his shift because of the smog alert. He didn't want to risk getting sick or having any trouble breathing while working with cars.\n\nAs for me, I actually had a meeting that day at the town hall where we discuss plans for the upcoming summer festival. The air quality was so bad that our department decided to postpone the outdoor activities and move everything indoors instead. It was a bit of an inconvenience, but we wanted to make sure everyone's health was prioritized.\n\nTo be honest, it was frustrating because some of the other departments were not as concerned about the air quality as my own department is. But I guess that's just part of our job - making sure everything runs smoothly and safely for the community.\n\nWe didn't have any of those new-fangled air-quality monitoring devices in our town square, so we relied on the traditional methods like checking the newspaper and watching TV to get updates. It was a bit old-fashioned, but it got the job done!",
+      "I'm not sure if I'd be willing to spend money on something like that. To be honest, the current information we get from the town hall and the electronic screen in the town square is already helping us stay informed about air quality.\n\nIf it were within my budget, which is quite limited, I would have to think carefully before committing to a personal air-quality sensor. €X per month might seem like a reasonable price, but for me, it's not something that's high on my list of priorities right now."
+    ],
+    "interview_turn_meta": [
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      }
+    ],
+    "behavioral": {
+      "status": "completed",
+      "error_message": null,
+      "summary": null,
+      "aggregate_metrics": {
+        "neutral_count": 0,
+        "negative_count": 1,
+        "positive_count": 0,
+        "total_personas": 1,
+        "average_likelihood": 0.6,
+        "neutral_percentage": 0.0,
+        "negative_percentage": 100.0,
+        "positive_percentage": 0.0,
+        "confidence_breakdown": {
+          "low": 0,
+          "high": 0,
+          "medium": 1
+        },
+        "average_likelihood_percentage": 60
+      },
+      "risks": [
+        {
+          "type": "risk",
+          "title": "High Resistance Detected (100% Negative)",
+          "severity": "high",
+          "description": "1 of 1 simulated personas showed resistance. Primary barrier: The price is too high, considering her department's budget constraints and limited resources.."
+        }
+      ],
+      "opportunities": [],
+      "results": [
+        {
+          "persona_name": "Sandra Ferrari",
+          "decision": "negative",
+          "decision_label": "Unlikely to Buy",
+          "probability": 0.6,
+          "confidence": "medium",
+          "key_factors": [
+            {
+              "name": "Price Sensitivity",
+              "impact": "high",
+              "direction": "negative",
+              "description": "The price of €120 per sensor per month exceeds her budget constraints and is a significant barrier to adoption."
+            },
+            {
+              "name": "Budget Constraints",
+              "impact": "medium",
+              "direction": "negative",
+              "description": "Her department's limited resources for air quality monitoring make it difficult to justify the cost of personal air-quality sensors."
+            }
+          ],
+          "motivators": [
+            "Improved Air Quality Data for Informed Decision-Making",
+            "Prioritizing Public Health and the Well-being of Constituents"
+          ],
+          "objections": [
+            "The price is too high, considering her department's budget constraints and limited resources.",
+            "She is hesitant to invest in personal air-quality sensors due to concerns about their cost-effectiveness and potential impact on other departmental priorities."
+          ],
+          "reasoning_summary": "Sandra Ferrari is unlikely to buy the personal air-quality sensor due to its high price, which exceeds her budget constraints and compromises her ability to prioritize public health. She values improved air quality data for informed decision-making but is hesitant to invest in a solution that may not be cost-effective or feasible within her department's resources.",
+          "status": "completed",
+          "error_message": null
+        }
+      ]
+    },
+    "ai_review": {
+      "overall": 0,
+      "scores": {
+        "grounding": 0,
+        "specificity": 0,
+        "consistency": 0,
+        "honesty": 0,
+        "actionability": 0
+      },
+      "verdict": "The artefacts lack grounding, specificity, consistency, honesty and actionability. The personas and report do not contain any evidence claims, and no limits are stated on what is missing or synthetic. The study brief and dataset are referenced, but no concrete pain points or willingness-to-pay signals are provided.",
+      "strengths": [],
+      "issues": [
+        {
+          "severity": "high",
+          "artifact": "persona:per_7b36ea0ab173|report",
+          "detail": "No evidence claims are made in the personas or report."
+        }
+      ],
+      "served_by": "ollama/llama3.2:3b"
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b",
+    "interview": [
+      "ollama/llama3.2:3b"
+    ],
+    "ai_review": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 78.6,
+    "roles": 19.0,
+    "personas": 93.9,
+    "script": 89.8,
+    "interview_start": 0.0,
+    "interview": 136.0,
+    "behavioral_create": 0.0,
+    "behavioral_run_start": 0.0,
+    "behavioral": 18.2,
+    "report": 321.1,
+    "ai_review": 88.8
+  },
+  "study_id": "study_32f2701af3a242da",
+  "elapsed_s": 925.0
+}

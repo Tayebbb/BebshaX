@@ -120,10 +120,16 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
     if (!test) return;
     setIsTriggeringRun(true);
     try {
+      // Only the researcher's own scenario is sent: the test's stored scenario,
+      // else its description. Nothing is invented — a test with neither is
+      // refused by the backend (scenario_required) rather than simulated on
+      // a made-up "Evaluation for <name>" prompt.
+      const storedScenario = test.scenarios?.[0];
       const newRun = await api.triggerBehavioralTestRun(studyId, test.id, {
-        scenario_title: test.name,
-        scenario_text: test.description || `Evaluation for ${test.name}`,
-        parameters: test.configuration || {},
+        scenario_id: storedScenario?.id,
+        scenario_title: storedScenario?.title || test.name,
+        scenario_text: storedScenario?.scenario_text || test.description || undefined,
+        parameters: storedScenario?.structured_parameters || test.configuration || {},
         target_population_type: 'all',
       });
       await fetchDetailAndRuns(false);

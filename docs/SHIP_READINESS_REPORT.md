@@ -69,6 +69,7 @@ Custom BebshaX logic: persona engine + `coerce_provenance` (downgrade-only), `pe
 | `ruff check apps/backend scripts`                                                             | ✅ clean                                                                           |
 | Frontend `vitest run` / `tsc && vite build` / `theme:check`                                   | ✅ 249 / 0 errors / 0 files                                                        |
 | `scripts/live_ai_audit.py` (real routes, real DB)                                            | ✅ 56/56 checks — `data/metadata/live_ai_audit_20260908_040247.md`                 |
+| `scripts/business_matrix_audit.py` (8 businesses, real routes, scratch PG)                    | ✅ differentiation 29/29 (`business_matrix_r2/summary_analysis.md`); fixed tree 61/61 end-to-end through 2 businesses (`business_matrix_r5/`); `--edge` 49/49 (`business_matrix_edge_r2/`) |
 | `docker compose config` (default, `--profile full`)                                           | ✅ exit 0                                                                          |
 | Live API smoke (demo mode, PG) — health, envelopes, seed, provenance, Judge Lab ×5, auth gate | ✅                                                                                 |
 | Real cross-route evaluation                                                                   | ✅ artifact `data/metadata/cross_route_20260907_034932.*`                          |

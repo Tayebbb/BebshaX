@@ -816,9 +816,11 @@ async def _run_batch_job(
             )
             for q in questions:
                 await _ask_with_one_retry(engine, conv.id, q, entry)
-            await engine.complete(conv.id)
+            synthesis = await engine.complete(conv.id)
             entry["status"] = "completed"
             entry["interview_id"] = conv.id
+            # Rows the database rejected are counted, never silently lost.
+            entry["insights_dropped"] = int((synthesis or {}).get("insights_dropped") or 0)
             job["completed_count"] += 1
         except Exception as exc:
             logger.warning(

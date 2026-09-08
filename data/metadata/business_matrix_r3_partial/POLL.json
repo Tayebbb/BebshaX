@@ -1,0 +1,249 @@
+{
+  "label": "POLL",
+  "idea": "A network of low-cost air-quality sensors sold to municipalities in northern Italy's Po Valley, with a public dashboard and SMS smog alerts for residents, priced per sensor per month.",
+  "steps": {
+    "title": "A Network of Low-Cost Air-Quality Sensors Sold",
+    "copilot": {
+      "reply": "You're researching a network of affordable air-quality sensors for municipalities in the Po Valley, providing real-time data through a public dashboard and SMS alerts to residents. You want to validate whether this solution meets the demand for improved air quality monitoring in this region.",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": "retried_after_unparseable_reply"
+    },
+    "roles": [
+      {
+        "role": "MUNICIPAL COMMISSIONER",
+        "description": "Insights into the decision-making process of local government officials regarding air quality monitoring and management."
+      },
+      {
+        "role": "RESIDENT WITH SMOG ALERTS",
+        "description": "Understanding how residents use SMS smog alerts and their willingness to adopt this feature."
+      },
+      {
+        "role": "MAYOR OF PO VALLEY CITY",
+        "description": "Validation of the product's impact on public health and reputation of the city."
+      },
+      {
+        "role": "ENVIRONMENTAL ACTIVIST",
+        "description": "Insights into the concerns and expectations of environmentally conscious individuals regarding air quality monitoring."
+      },
+      {
+        "role": "AIR QUALITY ENGINEER",
+        "description": "Understanding the technical aspects of air quality monitoring and how this product fits into existing systems."
+      },
+      {
+        "role": "REGIONAL GOVERNMENT OFFICIAL",
+        "description": "Insights into the regional policies and regulations affecting air quality monitoring and management."
+      },
+      {
+        "role": "SMALL MUNICIPALITY ADMINISTRATOR",
+        "description": "Validation of the product's feasibility and cost-effectiveness for small municipalities."
+      },
+      {
+        "role": "TECHNOLOGY SAVVY RESIDENT",
+        "description": "Understanding how residents with technical expertise use air quality monitoring tools and their willingness to adopt this product."
+      },
+      {
+        "role": "PO VALLEY CITY COUNCIL MEMBER",
+        "description": "Insights into the city council's decision-making process regarding air quality monitoring and management."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_27ad1be739de",
+        "name": "Anna Bianchi",
+        "archetype": null,
+        "tagline": "The Environmental Guardian",
+        "occupation": "Urban Planner and Councilor",
+        "location": "Milan, Italy",
+        "income": "$100,000 - $150,000",
+        "country_code": "IT",
+        "description": "Anna is a seasoned urban planner with a passion for environmental sustainability. As a municipal commissioner, she prioritizes air quality and public health.",
+        "badges": [
+          {
+            "label": "Environmental Stewardship",
+            "value": "10 years of experience"
+          },
+          {
+            "label": "Budget Management",
+            "value": "$500,000 annual budget"
+          },
+          {
+            "label": "Community Engagement",
+            "value": "Regular town hall meetings"
+          },
+          {
+            "label": "Air Quality Monitoring",
+            "value": "Current setup with limited capacity"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Expand Air Quality Monitoring Network",
+            "description": "Increase sensor coverage to reduce pollution hotspots"
+          },
+          {
+            "category": "Pain Points",
+            "title": "Limited Sensor Capacity",
+            "description": "Current setup can't keep up with growing pollution concerns"
+          },
+          {
+            "category": "Needs",
+            "title": "Scalable Solution",
+            "description": "Easy-to-deploy sensors that expand capacity without significant costs"
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_2cc685b1fecb",
+        "name": "Luca Bianchi",
+        "archetype": null,
+        "tagline": "The concerned citizen",
+        "occupation": "Freelance graphic designer",
+        "location": "Milan, Italy",
+        "income": "$40,000 - $60,000 per year",
+        "country_code": "IT",
+        "description": "Luca Bianchi is a young freelance graphic designer living in Milan. She values her health and the environment, often worrying about air quality in her city.",
+        "badges": [
+          {
+            "label": "ECO-FRIENDLY",
+            "value": 8
+          },
+          {
+            "label": "SMOG ALERTS",
+            "value": "daily"
+          },
+          {
+            "label": "MOBILE APP USAGE",
+            "value": "30 minutes per day"
+          },
+          {
+            "label": "HEALTH CONCERNS",
+            "value": 7
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Reducing air pollution in my city",
+            "description": "Luca wants to see a significant decrease in air pollution levels in Milan."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Frustrated with current air quality monitoring",
+            "description": "Luca is dissatisfied with the existing air quality monitoring systems in Milan, which she believes are unreliable and inadequate."
+          },
+          {
+            "category": "Needs",
+            "title": "A reliable and accessible air quality monitoring system",
+            "description": "Luca needs a user-friendly and accessible air quality monitoring system that provides her with timely and accurate information."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "Can you describe your current method of monitoring air quality in your neighborhood or community?",
+      "How do you currently receive alerts when poor air quality is detected, and are there any existing workarounds if you don't have access to this information?",
+      "Would you be willing to pay a monthly fee for real-time air quality data from sensors installed in public spaces, and what would influence your decision on whether or not to adopt this service?"
+    ],
+    "interview_job": {
+      "status": "completed",
+      "completed": 1,
+      "failed": 0,
+      "personas": {
+        "per_27ad1be739de": {
+          "persona_id": "per_27ad1be739de",
+          "persona_name": "Anna Bianchi",
+          "status": "completed",
+          "interview_id": "1fd5c2159fe44cccabda3da26bb9f1e9"
+        }
+      }
+    },
+    "interview_answers": [
+      "Honestly, I wish we had a better system in place. Right now, our neighborhood relies on the few air quality monitors that are scattered around the city, mostly at busy intersections and industrial areas. It's not very comprehensive, if you ask me.\n\nWe do have some local citizen groups who try to keep track of air pollution levels using personal air quality monitoring kits, but it's not a coordinated effort, so the data isn't always consistent or reliable. And when it comes to real-time updates, forget about it – we're lucky if we get notifications from the city about high-pollution days.\n\nI've been trying to push for more sensors in our neighborhood, especially low-cost ones that can be easily installed and maintained by local residents. That way, we could have a network of data points all over the community, not just at busy intersections. It would give us a better understanding of air quality patterns and help us identify areas where pollution is worst.\n\nBut it's tough to get funding for new sensors and infrastructure when our city's budget is always under strain. Still, I remain hopeful that one day we'll have a more robust system in place to keep our community healthy and safe.",
+      "To be honest, I wish we had a better way of receiving real-time updates on air quality in our neighborhood. Currently, we rely on the city's website and social media channels for alerts about poor air quality. They usually send out messages when particulate matter (PM) levels exceed certain thresholds.\n\nHowever, if you live outside of your immediate neighborhood or don't have access to a computer or phone, it can be tough to stay informed. Some people in our community rely on word of mouth or sign up for emergency alerts from the city's emergency management system, which sometimes includes air quality updates.\n\nPersonally, I've found that having an air quality app on my phone is really helpful. It tracks PM levels and sends me notifications when they exceed certain thresholds. However, even with this tool, it can be frustrating if you're not in range of the nearest monitor or if the data is delayed.\n\nOne workaround I've heard of from some of our community members is using a personal air quality monitoring kit. These are usually small devices that can be placed indoors and track PM levels over time. However, they don't provide real-time updates like the city's system does, and you need to check them manually.\n\nI think having more sensors installed throughout the neighborhood would make a huge difference. Not only would it provide more accurate data, but it would also give us a better understanding of air quality patterns in our community.",
+      "I think it's reasonable to expect some level of compensation for the benefits I'd receive from having access to accurate and timely air quality data. As a resident of Milan, Italy, I'm used to paying taxes and fees that support public services like sanitation, transportation, and waste management.\n\nIf the cost of real-time air quality data from sensors installed in public spaces was reasonable, say around €10-€20 per month, I'd be willing to pay it. However, if the price were significantly higher, I might need some convincing.\n\nWhat would really influence my decision on whether or not to adopt this service is how reliable and accurate the data is. If I knew that the sensors were providing unbiased and high-quality information, and that the city was committed to maintaining them and updating the data regularly, then I'd be more likely to sign up.\n\nI'm also concerned about the user experience. If the app or website providing the air quality data was easy to use and provided clear explanations of what the different metrics mean, that would make a big difference for me.\n\nUltimately, I think the key factor is value. If the benefits of having real-time access to air quality data outweighed the cost, then I'd be willing to give it a try. But if the price was too high or the service wasn't reliable, I'd need to consider other options, like relying on traditional sources of information or using personal monitoring kits."
+    ],
+    "interview_turn_meta": [
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      }
+    ],
+    "ai_review": {
+      "overall": 20,
+      "scores": {
+        "grounding": 0,
+        "specificity": 0,
+        "consistency": 0,
+        "honesty": 0,
+        "actionability": 0
+      },
+      "verdict": "The artefacts lack grounding, specificity, consistency, honesty, and actionability. The personas and interviews do not provide concrete findings or actionable insights, while the report is missing. The study brief and dataset are not explicitly linked to the artefacts.",
+      "strengths": [],
+      "issues": [
+        {
+          "severity": "high",
+          "artifact": "",
+          "detail": "No evidence claims, no interview summaries provide concrete findings; personas and interviews lack specific pain points, willingness-to-pay signals, or next steps."
+        }
+      ],
+      "served_by": "ollama/llama3.2:3b"
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b",
+    "interview": [
+      "ollama/llama3.2:3b"
+    ],
+    "ai_review": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 81.2,
+    "roles": 13.1,
+    "personas": 57.4,
+    "script": 88.4,
+    "interview_start": 0.0,
+    "interview": 120.6,
+    "behavioral_create": 0.0,
+    "behavioral_run_start": 0.0,
+    "report": 0.1,
+    "ai_review": 84.0
+  },
+  "study_id": "study_6a92dba9a0c149f4",
+  "elapsed_s": 447.4
+}

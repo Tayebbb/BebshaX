@@ -12,7 +12,13 @@ import { api } from '../../../services/api';
 import type { FailedPersonaRole } from '../../../services/api';
 import { useNavigation } from '../../../context/NavigationContext';
 import { useViewMotion } from '../../../motion/useViewMotion';
-import { CopilotMessage, DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE, isTemplateReply } from './workflow/types';
+import {
+  CopilotMessage,
+  DEFAULT_PERSONA_COUNT,
+  MAX_PERSONAS_PER_ROLE,
+  READ_ONLY_TITLE,
+  isTemplateReply,
+} from './workflow/types';
 import { fromUnknownError, toUserMessage } from '../../../utils/apiError';
 import { Step1Context } from './workflow/Step1Context';
 import { Step2Personas } from './workflow/Step2Personas';
@@ -211,7 +217,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           copilotMessagesRef.current = restored;
         }
         if (s.suggested_roles && s.suggested_roles.length > 0) {
-          setSuggestedRoles(s.suggested_roles);
+          // Studies saved before the per-role cap can carry counts the server now rejects.
+          setSuggestedRoles(
+            s.suggested_roles.map((r: any) => ({ ...r, count: Math.min(MAX_PERSONAS_PER_ROLE, Number(r.count) || 0) }))
+          );
           // Reopen the role drawer when the goal was already approved pre-refresh.
           if ((s.copilot_messages || []).some((m: any) => m.isGoalCard)) {
             setShowRoleSelection(true);
@@ -440,7 +449,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       [...copilotMessagesRef.current].reverse().find((m) => m.role === 'user')?.content ||
       promptInput ||
       study?.prompt ||
-      'Product Research Study';
+      '';
+    if (!activePrompt.trim()) {
+      // A made-up business here would send the model researching nobody's idea.
+      setRoleError('Describe your business idea first — there is nothing to suggest roles for.');
+      return;
+    }
     void loadSuggestedRoles(activePrompt);
   };
 
@@ -455,7 +469,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       [...copilotMessages].reverse().find((m) => m.role === 'user')?.content ||
       promptInput ||
       study?.prompt ||
-      'Product Research Study';
+      '';
+    if (!activePrompt.trim()) {
+      setRoleError('Describe your business idea first — there is nothing to suggest roles for.');
+      return;
+    }
 
     // 1. Trigger background autonomous research and dataset discovery
     if (studyId) {
@@ -489,7 +507,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           return {
             ...r,
             selected: nextSelected,
-            count: nextSelected ? (r.count > 0 ? r.count : 3) : 0,
+            count: nextSelected ? (r.count > 0 ? r.count : MAX_PERSONAS_PER_ROLE) : 0,
           };
         }
         return r;
@@ -500,7 +518,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const handleIncrementRole = (roleId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setSuggestedRoles((prev) =>
-      prev.map((r) => (r.id === roleId ? { ...r, count: r.count + 1, selected: true } : r))
+      prev.map((r) =>
+        r.id === roleId
+          ? { ...r, count: Math.min(MAX_PERSONAS_PER_ROLE, r.count + 1), selected: true }
+          : r
+      )
     );
   };
 
@@ -518,9 +540,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   };
 
   const handleGeneratePersonas = async () => {
-    setIsGeneratingPersonas(true);
     setPersonaGenError(null);
-    handleStepChange(2);
 
     const activeRoles = suggestedRoles.filter((r) => r.selected && r.count > 0);
     const totalCount = activeRoles.reduce((sum, r) => sum + r.count, 0) || DEFAULT_PERSONA_COUNT;
@@ -530,7 +550,27 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       .map((m) => m.content)
       .join(' ');
 
-    const userPrompt = allUserTexts || promptInput || study?.prompt || 'Product Research Study';
+    // No literal fallback: a made-up idea would yield personas for a business
+    // nobody described. Both guards run BEFORE the step change so the user is
+    // not moved away from the idea and roles they need to fix. The message is
+    // written to both alerts because Generate exists in step 1 (role drawer)
+    // and step 2 (persona panel), and only the current step's alert renders.
+    const refuse = (message: string) => {
+      setRoleError(message);
+      setPersonaGenError(message);
+    };
+    const userPrompt = [allUserTexts, promptInput, study?.prompt ?? ''].find((t) => t.trim()) ?? '';
+    if (!userPrompt) {
+      refuse('Describe your business idea first — there is nothing to generate personas from.');
+      return;
+    }
+    if (activeRoles.length === 0) {
+      refuse('Pick at least one role (with a count of 1–3) before generating personas.');
+      return;
+    }
+    setRoleError(null);
+    setIsGeneratingPersonas(true);
+    handleStepChange(2);
     // Word-boundary cut — slice(0, 50) mid-word produced titles like "…Students at".
     const derivedTitle = (() => {
       if (userPrompt.length <= 50) return userPrompt;
@@ -541,10 +581,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     const studyTitle = study?.title && study.title !== 'Untitled Study' ? study.title : derivedTitle;
 
     try {
+      // Only the roles the user asked for: a selected zero-count role (model-
+      // suggested lists can carry one) is a 422 on the server, not ignored.
       const result = await api.generateStudyPersonasDetailed(
         study?.id || studyId,
         userPrompt,
-        suggestedRoles,
+        activeRoles,
         studyTitle
       );
       const generated = result.personas;

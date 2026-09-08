@@ -12,6 +12,7 @@ without an LLM or with an unusable reply the review fails explicitly.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bebshax.db.models import EvidenceClaims, MarketSegments, Personas, Studies, StudyReports
 from bebshax.interview.orm import Conversations
 from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.placeholders import is_placeholder
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_json_block
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
@@ -32,6 +34,9 @@ logger = logging.getLogger(__name__)
 JUDGE_UNAVAILABLE = "judge_unavailable"
 JUDGE_NOTHING_TO_REVIEW = "nothing_to_review"
 _MAX_ATTEMPTS = 2
+# Artefacts that make a study reviewable. A report is derived from these; a
+# report row over an otherwise empty study is not material to score.
+PRIMARY_ARTEFACTS: tuple[str, ...] = ("personas", "segments", "evidence_claims", "interviews")
 
 # Rubric (data table): dimension -> what the judge must check. Extend the table.
 RUBRIC: dict[str, str] = {
@@ -148,11 +153,27 @@ def _counts(material: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def _clamp_score(value: Any, default: int = 0) -> int:
-    try:
-        return max(0, min(100, int(round(float(value)))))
-    except (TypeError, ValueError):
-        return default
+def _numeric(value: Any) -> Optional[float]:
+    """The number a score field holds (int, float or numeric string), else None.
+    Bools and non-finite values are not scores. Observed live: a 3B route
+    returned non-numeric dimensions and a default of 0 turned them into an
+    all-zero verdict the model never gave — absence, not zero (R2)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str):
+        try:
+            number = float(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _clamp_score(value: float) -> int:
+    return max(0, min(100, int(round(value))))
 
 
 async def _ask_judge(llm: LLMService, scope: str, system_prompt: str, material: dict[str, Any]) -> JudgeVerdict:
@@ -176,20 +197,33 @@ async def _ask_judge(llm: LLMService, scope: str, system_prompt: str, material: 
             parsed = parse_llm_json(result.text)
         except ValueError:
             parsed = None
-        if not isinstance(parsed, dict) or "overall_score" not in parsed or not str(parsed.get("verdict") or "").strip():
+        if not isinstance(parsed, dict) or not str(parsed.get("verdict") or "").strip():
             logger.warning("AI judge reply unusable (attempt %d/%d)", attempt, _MAX_ATTEMPTS)
             continue
+        overall = _numeric(parsed.get("overall_score"))
+        if overall is None:
+            # No score is no verdict: never invent 0 for a missing/non-numeric one.
+            logger.warning("AI judge reply has no numeric overall_score (attempt %d/%d)", attempt, _MAX_ATTEMPTS)
+            continue
         raw_dims = parsed.get("dimension_scores") if isinstance(parsed.get("dimension_scores"), dict) else {}
+        dimension_scores = {
+            dim: _clamp_score(score)
+            for dim in RUBRIC
+            if (score := _numeric(raw_dims.get(dim))) is not None  # non-numeric -> omitted, not 0
+        }
         issues = []
         for item in parsed.get("issues") or []:
             if isinstance(item, dict) and str(item.get("detail") or "").strip():
                 sev = str(item.get("severity") or "medium").lower()
-                issues.append(JudgeIssue(severity=sev if sev in ("high", "medium", "low") else "medium", artifact=str(item.get("artifact") or ""), detail=str(item["detail"]).strip()))
+                artifact = str(item.get("artifact") or "")
+                if is_placeholder(artifact):
+                    artifact = ""  # the schema's own "persona:<id>" slot, not a reference
+                issues.append(JudgeIssue(severity=sev if sev in ("high", "medium", "low") else "medium", artifact=artifact, detail=str(item["detail"]).strip()))
             elif isinstance(item, str) and item.strip():
                 issues.append(JudgeIssue(detail=item.strip()))
         return JudgeVerdict(
-            overall_score=_clamp_score(parsed.get("overall_score")),
-            dimension_scores={dim: _clamp_score(raw_dims.get(dim)) for dim in RUBRIC if dim in raw_dims},
+            overall_score=_clamp_score(overall),
+            dimension_scores=dimension_scores,
             strengths=[str(s).strip() for s in (parsed.get("strengths") or []) if str(s).strip()][:8],
             issues=issues[:12],
             verdict=str(parsed["verdict"]).strip(),
@@ -225,10 +259,11 @@ async def judge_study(session: AsyncSession, study: Studies, llm: Optional[LLMSe
         raise LLMUnavailable("AI review")
     material = await gather_study_material(session, study)
     counts = _counts(material)
-    if not any(counts.values()):
+    if not any(counts[key] for key in PRIMARY_ARTEFACTS):
         raise InsufficientInput(
             JUDGE_NOTHING_TO_REVIEW,
-            "This study has no personas, evidence, interviews, segments or report yet — run the pipeline first, then ask for an AI review.",
+            "This study has no personas, evidence, interviews or segments yet — a report alone is not "
+            "reviewable. Run the pipeline first, then ask for an AI review.",
         )
     system_prompt = (
         "You are an independent research auditor reviewing the outputs of a synthetic customer-research platform. "

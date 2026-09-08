@@ -14,16 +14,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 import uuid
 from collections import defaultdict
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import aclosing
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Optional
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -63,6 +65,84 @@ class InterviewFinished(Exception):
 
 SYNTHESIS_UNPARSEABLE = "interview_synthesis_unparseable"
 _SYNTHESIS_MAX_ATTEMPTS = 2
+
+# InterviewInsights column bounds (interview/orm.py). Only the MODEL-SUPPLIED
+# LABELS of an insight are fitted to them; its content is never cut (R2).
+# Observed live: a free-text ``type`` overflowed String(64) on Postgres, the
+# INSERT failed and the whole interview was marked failed after every turn
+# had succeeded (SQLite never enforces varchar lengths, so tests were blind).
+INSIGHT_TYPE_MAX_LEN = 64
+INSIGHT_TITLE_MAX_LEN = 256
+#: The ORM's documented catch-all category — used when ``type`` slugs to nothing.
+INSIGHT_TYPE_FALLBACK = "unresolved_question"
+_INSIGHT_TITLE_FALLBACK = "Interview Insight"
+_NON_SLUG_CHARS = re.compile(r"[^a-z0-9]+")
+
+
+def _slugify_insight_type(raw: Any) -> str:
+    slug = _NON_SLUG_CHARS.sub("_", str(raw or "").lower()).strip("_")
+    slug = slug[:INSIGHT_TYPE_MAX_LEN].rstrip("_")
+    return slug or INSIGHT_TYPE_FALLBACK
+
+
+def _cut_at_word_boundary(text: str, limit: int) -> str:
+    """First ``limit`` chars of ``text``, not ending mid-word when avoidable."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    if not text[limit].isspace() and any(ch.isspace() for ch in head):
+        head = head[: max(i for i, ch in enumerate(head) if ch.isspace())]
+    return head.rstrip()
+
+
+def _coerce_confidence(raw: Any) -> float:
+    if isinstance(raw, bool):
+        return 0.0
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 0.0  # unmeasured, never an invented default
+    if not math.isfinite(value):
+        return 0.0
+    return max(0.0, min(1.0, value))
+
+
+def _coerce_turn_numbers(raw: Any) -> list[int]:
+    items = raw if isinstance(raw, list) else ([] if raw is None else [raw])
+    numbers: list[int] = []
+    for item in items:
+        if isinstance(item, bool):
+            continue
+        if isinstance(item, int):
+            numbers.append(item)
+        elif isinstance(item, float) and item.is_integer():
+            numbers.append(int(item))
+        elif isinstance(item, str) and item.strip().isdigit():
+            numbers.append(int(item.strip()))
+    return numbers
+
+
+def coerce_insight_labels(ins: Mapping[str, Any]) -> dict[str, Any]:
+    """Fit one model-written insight to the ``InterviewInsights`` columns.
+
+    ``type`` becomes a <=64-char snake slug (empty -> the catch-all category);
+    a ``title`` over 256 chars is stored cut at a word boundary while the FULL
+    title is prepended to ``description`` (Text) so no words are lost;
+    ``confidence`` is a finite 0..1 float (non-numeric -> 0.0 = unmeasured);
+    ``supporting_turn_numbers`` keeps only integers. The insight is always kept.
+    """
+    title = str(ins.get("title") or "").strip() or _INSIGHT_TITLE_FALLBACK
+    description = str(ins.get("description") or "").strip()
+    if len(title) > INSIGHT_TITLE_MAX_LEN:
+        description = f"{title}\n\n{description}" if description else title
+        title = _cut_at_word_boundary(title, INSIGHT_TITLE_MAX_LEN)
+    return {
+        "type": _slugify_insight_type(ins.get("type")),
+        "title": title,
+        "description": description,
+        "supporting_turn_numbers": _coerce_turn_numbers(ins.get("supporting_turn_numbers")),
+        "confidence": _coerce_confidence(ins.get("confidence")),
+    }
 
 
 _TOPIC_DEFINITIONS = [
@@ -1178,6 +1258,7 @@ class InterviewEngine:
                 "summary": "Interview concluded with no messages.",
                 "key_findings": [],
                 "structured_insights": [],
+                "insights_dropped": 0,
             }
 
         # Build transcript for analysis as JSON rows: a message that merely
@@ -1279,8 +1360,13 @@ Output valid JSON adhering strictly to this schema:
             synthesis_source = "unavailable"
             synthesis_error = f"llm_error:{type(exc).__name__}"
 
-        # Persist structured insights and update interview record
+        # Persist structured insights and update interview record. Every turn is
+        # already stored, so the conversation closes as completed regardless of
+        # what happens to the insight rows: each row is written under its own
+        # SAVEPOINT and a row the database rejects is logged, counted in
+        # ``insights_dropped`` and skipped — never a failed interview.
         saved_insights = []
+        insights_dropped = 0
         async with self._sessionmaker() as session:
             conv = await session.get(Conversations, conversation_id)
             if conv:
@@ -1292,6 +1378,7 @@ Output valid JSON adhering strictly to this schema:
                 conv.updated_at = datetime.now(timezone.utc)
 
             for ins in insights_raw:
+                labels = coerce_insight_labels(ins)
                 ins_id = uuid.uuid4().hex
                 ins_obj = InterviewInsights(
                     id=ins_id,
@@ -1299,23 +1386,32 @@ Output valid JSON adhering strictly to this schema:
                     study_id=conversation.study_id or "default_study",
                     user_id=conversation.user_id,
                     persona_id=conversation.persona_id,
-                    type=ins.get("type", "pain_point"),
-                    title=ins.get("title", "Interview Insight"),
-                    description=ins.get("description", ""),
-                    supporting_turn_numbers=ins.get("supporting_turn_numbers", []),
-                    # unmeasured → 0.0, never an invented default
-                    confidence=float(ins.get("confidence") or 0.0),
+                    type=labels["type"],
+                    title=labels["title"],
+                    description=labels["description"],
+                    supporting_turn_numbers=labels["supporting_turn_numbers"],
+                    confidence=labels["confidence"],
                     is_synthetic=True,
                     created_at=datetime.now(timezone.utc),
                 )
-                session.add(ins_obj)
+                try:
+                    async with session.begin_nested():
+                        session.add(ins_obj)
+                        await session.flush()
+                except SQLAlchemyError:
+                    insights_dropped += 1
+                    logger.warning(
+                        "insight row for %s could not be persisted and was dropped (%d so far)",
+                        conversation_id, insights_dropped, exc_info=True,
+                    )
+                    continue
                 saved_insights.append({
                     "id": ins_id,
-                    "type": ins_obj.type,
-                    "title": ins_obj.title,
-                    "description": ins_obj.description,
-                    "supporting_turn_numbers": ins_obj.supporting_turn_numbers,
-                    "confidence": ins_obj.confidence,
+                    "type": labels["type"],
+                    "title": labels["title"],
+                    "description": labels["description"],
+                    "supporting_turn_numbers": labels["supporting_turn_numbers"],
+                    "confidence": labels["confidence"],
                     "is_synthetic": True,
                 })
 
@@ -1329,6 +1425,8 @@ Output valid JSON adhering strictly to this schema:
             "summary": summary,
             "key_findings": key_findings,
             "structured_insights": saved_insights,
+            # Model insights the database refused to store (0 normally) — visible, not silent.
+            "insights_dropped": insights_dropped,
             # "llm" when the analysis below is the model's; "unavailable" when the
             # interview was closed without analysis (error_code says why).
             "source": synthesis_source,

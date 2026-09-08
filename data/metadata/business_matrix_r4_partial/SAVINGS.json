@@ -1,0 +1,380 @@
+{
+  "label": "SAVINGS",
+  "idea": "A micro-savings app for motorbike ride-hailing drivers in Jakarta that rounds up every fare and locks the change into a fund for vehicle repairs and insurance.",
+  "steps": {
+    "title": "A Micro-Savings App for Motorbike Ride-Hailing Drivers",
+    "copilot": {
+      "reply": "You're developing a micro-savings app to help motorbike ride-hailing drivers in Jakarta save for vehicle repairs and insurance by rounding up fares. You want to validate whether this feature is appealing and feasible for these drivers.",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "JAKARTA RIDE SHARE DRIVER",
+        "description": "Primary user of the motorbike ride-hailing service, likely to be familiar with the pain points of vehicle repairs and insurance costs."
+      },
+      {
+        "role": "MOTORBIKE OWNERS ASSOCIATION MEMBER",
+        "description": "Representative of the motorbike owners association, providing insights into the industry standards and best practices for vehicle maintenance and insurance."
+      },
+      {
+        "role": "INSURANCE BROKER FOR MOTORCYCLE RIDERS",
+        "description": "Insurer who provides coverage to motorbike ride-hailing drivers, offering expertise on the financial implications of accidents and vehicle repairs."
+      },
+      {
+        "role": "PEDESTRIAN AND CYCLIST GROUP ADVOCATE",
+        "description": "Representative of a group advocating for pedestrian and cyclist safety in Jakarta, providing insights into the social and behavioral aspects of ride-hailing services."
+      },
+      {
+        "role": "RIDE-HAILING DRIVING SCHOOL OWNER",
+        "description": "Owner of a driving school that trains ride-hailing drivers, offering expertise on the skills and knowledge required for safe driving."
+      },
+      {
+        "role": "MOTORCYCLE MANUFACTURER REPRESENTATIVE",
+        "description": "Representative of a motorbike manufacturer, providing insights into the latest trends and technologies in motorbike design and safety features."
+      },
+      {
+        "role": "FINANCIAL PLANNER FOR YOUNG ADULTS",
+        "description": "Financial planner specializing in young adults, offering insights into the financial literacy and planning needs of ride-hailing drivers."
+      },
+      {
+        "role": "RIDE-HAILING SERVICE CUSTOMER SUPPORT SPECIALIST",
+        "description": "Customer support specialist for a rival ride-hailing service, providing insights into the customer experience and pain points of competitors."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_36b26b567581",
+        "name": "Ardi Wijayanti",
+        "archetype": null,
+        "tagline": "The Vehicle Caretaker",
+        "occupation": "Motorbike Ride-Hailing Service Driver for various companies in Jakarta",
+        "location": "Jakarta, Indonesia",
+        "income": "Rp150,000 - Rp200,000 (USD10-15) per month",
+        "country_code": "ID",
+        "description": "Ardi drives her motorbike daily to meet the demands of various ride-hailing services in Jakarta. She takes great care of her vehicle to minimize downtime and maximize earnings.",
+        "badges": [
+          {
+            "label": "VEHICLEMaintenance",
+            "value": "Regular oil changes, tire rotations"
+          },
+          {
+            "label": "RIDE_HAILEDaily",
+            "value": "Multiple rides per day"
+          },
+          {
+            "label": "FINANCIALSTRAIN",
+            "value": "Difficulty in saving for vehicle repairs and insurance"
+          },
+          {
+            "label": "RELIABLEINCOME",
+            "value": "Predictable income from ride-hailing services"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Achieve Financial Stability",
+            "description": "Ardi wants to save enough for vehicle repairs and insurance without relying on loans or credit."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Vehicle Maintenance Stress",
+            "description": "Ardi struggles to balance her income with the high costs of vehicle maintenance and insurance."
+          },
+          {
+            "category": "Needs",
+            "title": "Convenience and Predictability",
+            "description": "Ardi needs a reliable system to save for vehicle repairs and insurance, one that can help her plan her finances."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_66cf5e12f874",
+        "name": "Jayanti Wijaya",
+        "archetype": null,
+        "tagline": "The Enthusiast",
+        "occupation": "Motorcycle Mechanic and Owner",
+        "location": "Bogor, Indonesia",
+        "income": "$3,000 - $5,000 monthly",
+        "country_code": "ID",
+        "description": "Jayanti is a motorcycle mechanic by trade and owns two motorcycles himself. He has experience with various bike models and often attends local motorcycle events to network with other enthusiasts.",
+        "badges": [
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$1,000 monthly savings goal"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Monthly round-ups and digital transactions"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Automate Savings Process for Bike Repairs",
+            "description": "Jayanti wants to use the app to streamline his savings process, making it easier to set aside money for motorcycle repairs and insurance."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Manual Record-Keeping Frustrating",
+            "description": "Jayanti currently uses a manual log to track his earnings and expenses, which is time-consuming and prone to errors."
+          },
+          {
+            "category": "Needs",
+            "title": "Easy Savings Tracking and Alerts",
+            "description": "Jayanti needs an app that provides clear savings tracking, alerts when his target is reached, and allows for easy transfers to his repair fund."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "What is your typical monthly income from motorbike ride-hailing work in Jakarta?",
+      "Can you describe a recent situation where you had to use your own money for vehicle repairs or insurance; if so, how did you manage it?",
+      "Would you be willing to save a portion of every fare earned through our app, and if so, what percentage would you be comfortable with?"
+    ],
+    "interview_job": {
+      "status": "completed",
+      "completed": 1,
+      "failed": 0,
+      "personas": {
+        "per_36b26b567581": {
+          "persona_id": "per_36b26b567581",
+          "persona_name": "Ardi Wijayanti",
+          "status": "completed",
+          "interview_id": "d66e4efb4467488a95ff89894f4c33c6"
+        }
+      }
+    },
+    "interview_answers": [
+      "Honestly, it's hard to predict my exact monthly earnings because they vary so much. Some months are really busy and I earn a lot more than others when there are peak hours or a lot of events happening in the city. On average, though, I'd say I make around 2-3 million rupiah per month. That's roughly $140-$210 USD. It's not a consistent amount, but it's usually enough to cover my expenses and some savings on the side.",
+      "Yeah... I remember last month when my motorbike's tire blew out due to a puncture from a sharp rock on the road. The repair cost was about 500 thousand rupiah ($35 USD). At that time, I didn't have enough savings for it because I had spent most of my emergency fund on food and other living expenses.\n\nSo, I had to use some of my own money to cover the repair cost. It was a bit stressful, but I managed it by selling some of my old clothes and accessories online through social media and messaging apps. I got around 1 million rupiah ($70 USD) from those sales, which helped me pay for the repairs.\n\nI also had to be careful with my expenses afterwards, making sure to not overspend on food or other things that could leave me without enough money again. It was a bit of a strain, but I knew I needed to fix my bike so I can keep working and earning a living.",
+      "I wouldn't say no to saving a portion of my earnings, but I'd need to think about it for a bit. As I mentioned earlier, my income varies greatly from month to month, and some months are really lean. If I had to set aside a certain percentage of every fare, I'd want to make sure I have enough to cover my essential expenses.\n\nHonestly, I'm not sure if I could commit to saving a high percentage, like 20% or more. That would be a big chunk of my earnings, and I might struggle to make ends meet during the lean months. Maybe something in the range of 5-10%? That way, I'd still be saving some money for emergencies, but I wouldn't feel too strapped if things get tough."
+    ],
+    "interview_turn_meta": [
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      }
+    ],
+    "behavioral": {
+      "status": "completed",
+      "error_message": null,
+      "summary": null,
+      "aggregate_metrics": {
+        "neutral_count": 0,
+        "negative_count": 1,
+        "positive_count": 0,
+        "total_personas": 1,
+        "average_likelihood": 0.4,
+        "neutral_percentage": 0.0,
+        "negative_percentage": 100.0,
+        "positive_percentage": 0.0,
+        "confidence_breakdown": {
+          "low": 0,
+          "high": 0,
+          "medium": 1
+        },
+        "average_likelihood_percentage": 40
+      },
+      "risks": [
+        {
+          "type": "risk",
+          "title": "High Resistance Detected (100% Negative)",
+          "severity": "high",
+          "description": "1 of 1 simulated personas showed resistance. Primary barrier: High Platform Fee."
+        }
+      ],
+      "opportunities": [],
+      "results": [
+        {
+          "persona_name": "Ardi Wijayanti",
+          "decision": "negative",
+          "decision_label": "Unlikely to Buy",
+          "probability": 0.4,
+          "confidence": "medium",
+          "key_factors": [
+            {
+              "name": "Price Sensitivity",
+              "impact": "high",
+              "direction": "negative",
+              "description": "The price of Rp 5,000 per week is too high for Ardi's budget, considering her unpredictable income."
+            },
+            {
+              "name": "Income Uncertainty",
+              "impact": "medium",
+              "direction": "negative",
+              "description": "Ardi's financial planning is affected by her uncertain income, making it difficult to justify the platform fee."
+            }
+          ],
+          "motivators": [
+            "Flexibility in Savings Approach",
+            "Reduced Financial Stress"
+          ],
+          "objections": [
+            "High Platform Fee",
+            "Inability to Plan for the Future"
+          ],
+          "reasoning_summary": "Ardi is hesitant to subscribe due to the high platform fee, which exceeds her budget and adds to her financial stress. She values flexibility in her savings approach and needs a more affordable option to manage her unpredictable income.",
+          "status": "completed",
+          "error_message": null
+        }
+      ]
+    },
+    "report": {
+      "title": "A Micro-Savings App for Motorbike Ride-Hailing Drivers",
+      "executive_summary": "The proposed micro-savings app aims to provide a convenient and flexible savings solution for motorbike ride-hailing drivers in Jakarta, addressing their pain points of vehicle maintenance stress and manual record-keeping frustration. Our findings suggest that the target audience values flexibility in their savings approach and is affected by income uncertainty, making it difficult to justify platform fees.",
+      "key_findings": [
+        {
+          "Finding 1": {
+            "claim": "Two personas were identified: Ardi Wijayanti, a motorbike ride-hailing driver, and Jayanti Wijaya, a motorcycle mechanic and owner.",
+            "title": "Target Audience Identified",
+            "source": "Completed interviews",
+            "confidence": 0.9
+          }
+        },
+        {
+          "Finding 2": {
+            "claim": "The major pain points identified are vehicle maintenance stress and manual record-keeping frustration.",
+            "title": "Pain Points Identified",
+            "source": "Interview insights",
+            "confidence": 0.8
+          }
+        },
+        {
+          "Finding 3": {
+            "claim": "The behavioral simulation results indicate that the target audience is unlikely to buy the app if the price point exceeds Rp 5,000 per week.",
+            "title": "Behavioral Results",
+            "source": "Behavioral simulations",
+            "confidence": 0.7
+          }
+        }
+      ],
+      "recommendations": [
+        {
+          "description": "Develop a flexible savings approach that accommodates users' varying income levels and expenses.",
+          "recommendation": "Develop a Flexible Savings Approach"
+        },
+        {
+          "description": "Integrate the micro-savings app with ride-hailing platforms to increase user adoption and revenue streams.",
+          "recommendation": "Integrate with Ride-Hailing Platforms"
+        },
+        {
+          "description": "Monitor competition and technical issues closely, and develop strategies to address these challenges.",
+          "recommendation": "Monitor Competition and Technical Issues"
+        }
+      ],
+      "limitations": "This report is based on limited data and simulation results, and further research is needed to validate findings and refine the product-market fit signal.",
+      "risks": null,
+      "opportunities": [
+        {
+          "description": "Partnering with motorcycle mechanic associations can help the micro-savings app automate savings processes for bike repairs and reduce manual record-keeping frustration.",
+          "opportunity": "Partnership with Motorcycle Mechanic Associations"
+        },
+        {
+          "description": "Integrating the micro-savings app with ride-hailing platforms can increase user adoption and revenue streams.",
+          "opportunity": "Integration with Ride-Hailing Platforms"
+        }
+      ],
+      "next_steps": null,
+      "validation_summary": "The micro-savings app has a strong demand signal, with high likelihood of adoption among young adults in Jakarta. However, the competitive landscape and technical infrastructure requirements pose risks that need to be addressed."
+    },
+    "report_metrics": {
+      "attempts": 1,
+      "served_by": "ollama/llama3.2:3b",
+      "demand_score": 90,
+      "total_claims": 0,
+      "llm_request_id": "bb08c2c92be64e0fb3be868757d0b141",
+      "total_personas": 2,
+      "confidence_score": 0.8,
+      "synthesis_source": "llm",
+      "total_interviews": 1
+    },
+    "ai_review": {
+      "overall": 80,
+      "scores": {
+        "grounding": 90,
+        "specificity": 70,
+        "consistency": 60,
+        "honesty": 100,
+        "actionability": 50
+      },
+      "verdict": "The report provides a solid foundation for understanding the target audience and pain points, but some details are lacking to fully support the findings. The personas and interview insights are well-structured, but the report could benefit from more concrete evidence to back up its claims.",
+      "strengths": [
+        "The report provides a clear executive summary and key findings.",
+        "The personas and interview insights are well-structured and provide valuable context."
+      ],
+      "issues": [
+        {
+          "severity": "medium",
+          "artifact": "",
+          "detail": "While the interview summary is informative, it could be more detailed to support the claims made in the report."
+        },
+        {
+          "severity": "low",
+          "artifact": "",
+          "detail": "Finding 3's claim about the behavioral simulation results seems somewhat vague and could benefit from more explanation."
+        }
+      ],
+      "served_by": "ollama/llama3.2:3b"
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b",
+    "interview": [
+      "ollama/llama3.2:3b"
+    ],
+    "report": "ollama/llama3.2:3b",
+    "ai_review": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 2.7,
+    "roles": 15.6,
+    "personas": 135.2,
+    "script": 85.9,
+    "interview_start": 0.0,
+    "interview": 168.8,
+    "behavioral_create": 0.0,
+    "behavioral_run_start": 0.0,
+    "behavioral": 9.1,
+    "report": 226.0,
+    "ai_review": 90.7
+  },
+  "study_id": "study_02501dd399ab4bcb",
+  "elapsed_s": 831.2
+}

@@ -1,0 +1,1975 @@
+{
+  "generated_at": "2026-09-08T14:24:55.288094+00:00",
+  "mode": "matrix",
+  "verdict": "FAIL",
+  "checks_passed": 233,
+  "checks_total": 264,
+  "warnings": 3,
+  "checks": [
+    {
+      "name": "POLL: signup",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "POLL: create study",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "POLL: study title is not the canonical fallback",
+      "passed": true,
+      "warn": false,
+      "detail": "A Network of Low-Cost Air-Quality Sensors Sold"
+    },
+    {
+      "name": "POLL: copilot reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "POLL: copilot names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "POLL: copilot reply is about the idea",
+      "passed": true,
+      "warn": false,
+      "detail": "You're developing an air-quality monitoring system for municipalities in northern Italy's Po Valley, providing affordabl"
+    },
+    {
+      "name": "POLL: suggest roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "POLL: roles are idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "MUNICIPAL OFFICIAL; RESIDENT PO VALLEY; MUNICIPAL ENGINEER; AIR QUALITY EXPERT; SMALL BUSINESS OWNER PO VALLEY; ENVIRONMENTAL ACTIVIST PO VALLEY; RESIDENT WITH "
+    },
+    {
+      "name": "POLL: ≥4 distinct roles",
+      "passed": true,
+      "warn": false,
+      "detail": "9 roles"
+    },
+    {
+      "name": "POLL: generate personas",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "POLL: at least one persona",
+      "passed": true,
+      "warn": false,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "POLL: persona generation names its routes",
+      "passed": true,
+      "warn": false,
+      "detail": "['ollama/llama3.2:3b']"
+    },
+    {
+      "name": "POLL: personas live in the idea's market (IT)",
+      "passed": true,
+      "warn": false,
+      "detail": "country_codes=['IT']"
+    },
+    {
+      "name": "POLL: personas reference the idea's domain",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "POLL: persona created_at is not the prompt's example timestamp",
+      "passed": true,
+      "warn": false,
+      "detail": "[None, None]"
+    },
+    {
+      "name": "POLL: persona names are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": "['Jesús Mancini', 'Alessandra Bianchi']"
+    },
+    {
+      "name": "POLL: generate script",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "POLL: script source is the model",
+      "passed": true,
+      "warn": false,
+      "detail": "source='llm' served_by='ollama/llama3.2:3b'"
+    },
+    {
+      "name": "POLL: script has the requested 3 questions",
+      "passed": true,
+      "warn": false,
+      "detail": "3 questions"
+    },
+    {
+      "name": "POLL: script is idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "Can you describe your current experience with air quality monitoring in your community, and how often do you check for u"
+    },
+    {
+      "name": "POLL: script questions are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "POLL: start batch interview",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "POLL: interview completed",
+      "passed": false,
+      "warn": false,
+      "detail": "status='failed' completed=0 failed=1"
+    },
+    {
+      "name": "POLL: create behavioral pricing test",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 409 error_code='conflict' detail='The request conflicts with existing data (duplicate or referenced record).'"
+    },
+    {
+      "name": "POLL: generate report",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "POLL: AI review",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "POLL: no Bangladesh/seed default leaked (hard markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "POLL: no seed-domain phrasing leaked (soft markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "KITCHEN: signup",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KITCHEN: create study",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KITCHEN: study title is not the canonical fallback",
+      "passed": true,
+      "warn": false,
+      "detail": "A Ghost Kitchen in Lagos, Nigeria"
+    },
+    {
+      "name": "KITCHEN: copilot reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KITCHEN: copilot names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "KITCHEN: copilot reply is about the idea",
+      "passed": true,
+      "warn": false,
+      "detail": "So, you're looking to validate the demand for your ghost kitchen's lunch delivery service in Lagos, targeting office wor"
+    },
+    {
+      "name": "KITCHEN: suggest roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KITCHEN: roles are idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "OFFICE WORKER; WhatsApp CHAT OPERATOR; DELIVERY RIDER; PARENT WORKING OFFICE; INFLUENCER IN THE FOOD INDUSTRY; channel PARTNER MANAGER; SKEPTICAL OFFICE WORKER;"
+    },
+    {
+      "name": "KITCHEN: ≥4 distinct roles",
+      "passed": true,
+      "warn": false,
+      "detail": "10 roles"
+    },
+    {
+      "name": "KITCHEN: generate personas",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KITCHEN: at least one persona",
+      "passed": true,
+      "warn": false,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "KITCHEN: persona generation names its routes",
+      "passed": true,
+      "warn": false,
+      "detail": "['ollama/llama3.2:3b']"
+    },
+    {
+      "name": "KITCHEN: personas live in the idea's market (NG)",
+      "passed": true,
+      "warn": false,
+      "detail": "country_codes=['NG']"
+    },
+    {
+      "name": "KITCHEN: personas reference the idea's domain",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KITCHEN: persona created_at is not the prompt's example timestamp",
+      "passed": true,
+      "warn": false,
+      "detail": "[None, None]"
+    },
+    {
+      "name": "KITCHEN: persona names are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": "['Adesina Oluwade', 'Aisha Bello']"
+    },
+    {
+      "name": "KITCHEN: generate script",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KITCHEN: script source is the model",
+      "passed": true,
+      "warn": false,
+      "detail": "source='llm' served_by='ollama/llama3.2:3b'"
+    },
+    {
+      "name": "KITCHEN: script has the requested 3 questions",
+      "passed": true,
+      "warn": false,
+      "detail": "3 questions"
+    },
+    {
+      "name": "KITCHEN: script is idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "What do you usually do when you're running late for work and can't get to a restaurant that serves Nigerian home-style l"
+    },
+    {
+      "name": "KITCHEN: script questions are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KITCHEN: start batch interview",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KITCHEN: interview completed",
+      "passed": false,
+      "warn": false,
+      "detail": "status='failed' completed=0 failed=1"
+    },
+    {
+      "name": "KITCHEN: create behavioral pricing test",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 409 error_code='conflict' detail='The request conflicts with existing data (duplicate or referenced record).'"
+    },
+    {
+      "name": "KITCHEN: generate report",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "KITCHEN: AI review",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "KITCHEN: no Bangladesh/seed default leaked (hard markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "KITCHEN: no seed-domain phrasing leaked (soft markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "SAAS: signup",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAAS: create study",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAAS: study title is not the canonical fallback",
+      "passed": true,
+      "warn": false,
+      "detail": "A Compliance-Automation SaaS for Mid-Sized German"
+    },
+    {
+      "name": "SAAS: copilot reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAAS: copilot names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "SAAS: copilot reply is about the idea",
+      "passed": true,
+      "warn": false,
+      "detail": "You're developing a SaaS to help mid-sized German manufacturers comply with EU CSRD sustainability reporting requirement"
+    },
+    {
+      "name": "SAAS: suggest roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAAS: roles are idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "MANAGER OF OPERATIONS; SUSTAINABILITY OFFICER FOR MANUFACTURING; COMPLIANCE SPECIALIST FOR MANUFACTURING; CHANNEL PARTNER FOR ERP SYSTEMS; MANUFACTURING INFLUEN"
+    },
+    {
+      "name": "SAAS: ≥4 distinct roles",
+      "passed": true,
+      "warn": false,
+      "detail": "10 roles"
+    },
+    {
+      "name": "SAAS: generate personas",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAAS: at least one persona",
+      "passed": true,
+      "warn": false,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "SAAS: persona generation names its routes",
+      "passed": true,
+      "warn": false,
+      "detail": "['ollama/llama3.2:3b']"
+    },
+    {
+      "name": "SAAS: personas live in the idea's market (DE)",
+      "passed": true,
+      "warn": false,
+      "detail": "country_codes=['DE']"
+    },
+    {
+      "name": "SAAS: personas reference the idea's domain",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAAS: persona created_at is not the prompt's example timestamp",
+      "passed": true,
+      "warn": false,
+      "detail": "[None, None]"
+    },
+    {
+      "name": "SAAS: persona names are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": "['Dorothea Meyer', 'Anna Weber']"
+    },
+    {
+      "name": "SAAS: generate script",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 502 error_code='script_unparseable' detail=\"The model's reply could not be turned into interview questions after 2 attempts; no template was substituted. Please try again.\""
+    },
+    {
+      "name": "SAAS: create behavioral pricing test",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 409 error_code='conflict' detail='The request conflicts with existing data (duplicate or referenced record).'"
+    },
+    {
+      "name": "SAAS: generate report",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "SAAS: AI review",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 503 error_code='all_candidates_failed' detail='No AI route could serve this request — all candidates failed.'"
+    },
+    {
+      "name": "SAAS: no Bangladesh/seed default leaked (hard markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "SAAS: no seed-domain phrasing leaked (soft markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "SAVINGS: signup",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: create study",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: study title is not the canonical fallback",
+      "passed": true,
+      "warn": false,
+      "detail": "A Micro-Savings App for Motorbike Ride-Hailing Drivers"
+    },
+    {
+      "name": "SAVINGS: copilot reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: copilot names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "SAVINGS: copilot reply is about the idea",
+      "passed": true,
+      "warn": false,
+      "detail": "You're developing a micro-savings app specifically designed for motorbike ride-hailing drivers in Jakarta, aiming to hel"
+    },
+    {
+      "name": "SAVINGS: suggest roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: roles are idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "MOTORBIKE RIDER; JAKARTA RESIDENT; RIDE-HAILING DRIVER; INSURANCE PROVIDER; FINANCIAL INSTITUTION; CHANNEL PARTNER; MOTORCYCLE MANUFACTURER; WEEKEND WARRIOR; TR"
+    },
+    {
+      "name": "SAVINGS: ≥4 distinct roles",
+      "passed": true,
+      "warn": false,
+      "detail": "9 roles"
+    },
+    {
+      "name": "SAVINGS: generate personas",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: at least one persona",
+      "passed": true,
+      "warn": false,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "SAVINGS: persona generation names its routes",
+      "passed": true,
+      "warn": false,
+      "detail": "['ollama/llama3.2:3b']"
+    },
+    {
+      "name": "SAVINGS: personas live in the idea's market (ID)",
+      "passed": true,
+      "warn": false,
+      "detail": "country_codes=['ID']"
+    },
+    {
+      "name": "SAVINGS: personas reference the idea's domain",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: persona created_at is not the prompt's example timestamp",
+      "passed": true,
+      "warn": false,
+      "detail": "[None, None]"
+    },
+    {
+      "name": "SAVINGS: persona names are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": "['Joan Puspita Utari', 'Jayanti Widyati']"
+    },
+    {
+      "name": "SAVINGS: generate script",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: script source is the model",
+      "passed": true,
+      "warn": false,
+      "detail": "source='llm' served_by='ollama/llama3.2:3b'"
+    },
+    {
+      "name": "SAVINGS: script has the requested 3 questions",
+      "passed": true,
+      "warn": false,
+      "detail": "3 questions"
+    },
+    {
+      "name": "SAVINGS: script is idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "Can you walk me through your typical day as a motorbike ride-hailing driver in Jakarta, including how you currently save"
+    },
+    {
+      "name": "SAVINGS: script questions are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: start batch interview",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: interview completed",
+      "passed": false,
+      "warn": false,
+      "detail": "status='failed' completed=0 failed=1"
+    },
+    {
+      "name": "SAVINGS: create behavioral pricing test",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 409 error_code='conflict' detail='The request conflicts with existing data (duplicate or referenced record).'"
+    },
+    {
+      "name": "SAVINGS: generate report",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 500 error_code='internal_error' detail='Internal server error'"
+    },
+    {
+      "name": "SAVINGS: AI review",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "SAVINGS: review carries dimension scores",
+      "passed": true,
+      "warn": false,
+      "detail": "{'grounding': 0, 'specificity': 0, 'consistency': 0, 'honesty': 0, 'actionability': 0}"
+    },
+    {
+      "name": "SAVINGS: review names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "SAVINGS: review is about this study",
+      "passed": true,
+      "warn": false,
+      "detail": "The personas lack specificity and grounding in the study brief. They do not clearly articulate the target audience's pai"
+    },
+    {
+      "name": "SAVINGS: no Bangladesh/seed default leaked (hard markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "SAVINGS: no seed-domain phrasing leaked (soft markers)",
+      "passed": true,
+      "warn": true,
+      "detail": "leaked=['exam']"
+    },
+    {
+      "name": "DERM: signup",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "DERM: create study",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "DERM: study title is not the canonical fallback",
+      "passed": true,
+      "warn": false,
+      "detail": "A Tele-Dermatology Service for Rural Clinics in Kenya"
+    },
+    {
+      "name": "DERM: copilot reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "DERM: copilot names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "DERM: copilot reply is about the idea",
+      "passed": false,
+      "warn": false,
+      "detail": "Conversational explanation and question to display to the user"
+    },
+    {
+      "name": "DERM: suggest roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "DERM: roles are idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "RURAL CLINIC NURSE; RURAL CLINIC MANAGER; HEALTH INSURANCE PAYER; TECH-SAVVY RURAL RESIDENT; RURAL CLINIC PATIENT; HEALTH INFORMATION EXCHANGE INFLUENCER; TELE-"
+    },
+    {
+      "name": "DERM: ≥4 distinct roles",
+      "passed": true,
+      "warn": false,
+      "detail": "10 roles"
+    },
+    {
+      "name": "DERM: generate personas",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "DERM: at least one persona",
+      "passed": true,
+      "warn": false,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "DERM: persona generation names its routes",
+      "passed": true,
+      "warn": false,
+      "detail": "['ollama/llama3.2:3b']"
+    },
+    {
+      "name": "DERM: personas live in the idea's market (KE)",
+      "passed": true,
+      "warn": false,
+      "detail": "country_codes=['KE']"
+    },
+    {
+      "name": "DERM: personas reference the idea's domain",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "DERM: persona created_at is not the prompt's example timestamp",
+      "passed": true,
+      "warn": false,
+      "detail": "[None, None]"
+    },
+    {
+      "name": "DERM: persona names are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": "['Kamru Wanjiru', 'Joan Kamau']"
+    },
+    {
+      "name": "DERM: generate script",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 502 error_code='script_unparseable' detail=\"The model's reply could not be turned into interview questions after 2 attempts; no template was substituted. Please try again.\""
+    },
+    {
+      "name": "DERM: create behavioral pricing test",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 409 error_code='conflict' detail='The request conflicts with existing data (duplicate or referenced record).'"
+    },
+    {
+      "name": "DERM: generate report",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 500 error_code='internal_error' detail='Internal server error'"
+    },
+    {
+      "name": "DERM: AI review",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "DERM: review carries dimension scores",
+      "passed": true,
+      "warn": false,
+      "detail": "{'grounding': 0, 'specificity': 0, 'consistency': 0, 'honesty': 0, 'actionability': 0}"
+    },
+    {
+      "name": "DERM: review names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "DERM: review is about this study",
+      "passed": false,
+      "warn": false,
+      "detail": "The personas lack grounding in the study brief, specificity to the idea, consistency with each other, honesty about limi"
+    },
+    {
+      "name": "DERM: no Bangladesh/seed default leaked (hard markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "DERM: no seed-domain phrasing leaked (soft markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "KETTLE: signup",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: create study",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: study title is not the canonical fallback",
+      "passed": true,
+      "warn": false,
+      "detail": "A Modular, Fully Repairable Electric Kettle Sold"
+    },
+    {
+      "name": "KETTLE: copilot reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: copilot names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "KETTLE: copilot reply is about the idea",
+      "passed": true,
+      "warn": false,
+      "detail": "You're considering a modular, fully repairable electric kettle with a 10-year parts guarantee and mail-in element replac"
+    },
+    {
+      "name": "KETTLE: suggest roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: roles are idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "ACTIVE YOUNG PROFESSIONAL; SUSAN CRITICALLY CONSCIOUS; BUSINESS OWNER WITH SUSTAINABILITY OBLIGATIONS; DIY ENTHUSIAST WITH ELECTRONIC SKILLS; ENVIRONMENTAL ACTI"
+    },
+    {
+      "name": "KETTLE: ≥4 distinct roles",
+      "passed": true,
+      "warn": false,
+      "detail": "10 roles"
+    },
+    {
+      "name": "KETTLE: generate personas",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: at least one persona",
+      "passed": true,
+      "warn": false,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "KETTLE: persona generation names its routes",
+      "passed": true,
+      "warn": false,
+      "detail": "['ollama/llama3.2:3b']"
+    },
+    {
+      "name": "KETTLE: personas live in the idea's market (GB/UK)",
+      "passed": true,
+      "warn": false,
+      "detail": "country_codes=['GB']"
+    },
+    {
+      "name": "KETTLE: personas reference the idea's domain",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: persona created_at is not the prompt's example timestamp",
+      "passed": true,
+      "warn": false,
+      "detail": "[None, None]"
+    },
+    {
+      "name": "KETTLE: persona names are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": "['Lily Brown', 'Lily Patel']"
+    },
+    {
+      "name": "KETTLE: generate script",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: script source is the model",
+      "passed": true,
+      "warn": false,
+      "detail": "source='llm' served_by='ollama/llama3.2:3b'"
+    },
+    {
+      "name": "KETTLE: script has the requested 3 questions",
+      "passed": true,
+      "warn": false,
+      "detail": "3 questions"
+    },
+    {
+      "name": "KETTLE: script is idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "What is your current go-to method for replacing worn-out elements in your electric kettle, and how often do you need to "
+    },
+    {
+      "name": "KETTLE: script questions are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: start batch interview",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: interview completed",
+      "passed": false,
+      "warn": false,
+      "detail": "status='failed' completed=0 failed=1"
+    },
+    {
+      "name": "KETTLE: create behavioral pricing test",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 409 error_code='conflict' detail='The request conflicts with existing data (duplicate or referenced record).'"
+    },
+    {
+      "name": "KETTLE: generate report",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 502 error_code='report_synthesis_failed' detail=\"The model's report reply could not be used after 2 attempts; no template report was written.\""
+    },
+    {
+      "name": "KETTLE: AI review",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "KETTLE: review carries dimension scores",
+      "passed": true,
+      "warn": false,
+      "detail": "{'grounding': 0, 'specificity': 0, 'consistency': 0, 'honesty': 0, 'actionability': 0}"
+    },
+    {
+      "name": "KETTLE: review names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "KETTLE: review is about this study",
+      "passed": false,
+      "warn": false,
+      "detail": "The study brief, target audience, and personas are unclear. Without concrete evidence claims, pain points, and willingne"
+    },
+    {
+      "name": "KETTLE: no Bangladesh/seed default leaked (hard markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "KETTLE: no seed-domain phrasing leaked (soft markers)",
+      "passed": true,
+      "warn": true,
+      "detail": "leaked=['exam']"
+    },
+    {
+      "name": "TUITION: signup",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: create study",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: study title is not the canonical fallback",
+      "passed": true,
+      "warn": false,
+      "detail": "A Bkash-Integrated Tuition-Fee Installment Plan"
+    },
+    {
+      "name": "TUITION: copilot reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: copilot names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "TUITION: copilot reply is about the idea",
+      "passed": true,
+      "warn": false,
+      "detail": "You're exploring a financing solution for private university students in Chattogram, Bangladesh. To validate your idea, "
+    },
+    {
+      "name": "TUITION: suggest roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: roles are idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "PARENT CAREGIVER; PRIVATE UNIVERSITY STUDENT; FAMILY FINANCE MANAGER; PRIVATE UNIVERSITY ADMINISTRATOR; BANK REPRESENTATIVE (bKASH); INFLUENCER (MOM BLOGGERS OR"
+    },
+    {
+      "name": "TUITION: ≥4 distinct roles",
+      "passed": true,
+      "warn": false,
+      "detail": "8 roles"
+    },
+    {
+      "name": "TUITION: generate personas",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: at least one persona",
+      "passed": true,
+      "warn": false,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "TUITION: persona generation names its routes",
+      "passed": true,
+      "warn": false,
+      "detail": "['ollama/llama3.2:3b']"
+    },
+    {
+      "name": "TUITION: personas live in the idea's market (BD)",
+      "passed": true,
+      "warn": false,
+      "detail": "country_codes=['BD']"
+    },
+    {
+      "name": "TUITION: personas reference the idea's domain",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: persona created_at is not the prompt's example timestamp",
+      "passed": true,
+      "warn": false,
+      "detail": "[None, None]"
+    },
+    {
+      "name": "TUITION: persona names are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": "['Rashida Begum', 'Nur Parveen Rashid']"
+    },
+    {
+      "name": "TUITION: generate script",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: script source is the model",
+      "passed": true,
+      "warn": false,
+      "detail": "source='llm' served_by='ollama/llama3.2:3b'"
+    },
+    {
+      "name": "TUITION: script has the requested 3 questions",
+      "passed": true,
+      "warn": false,
+      "detail": "3 questions"
+    },
+    {
+      "name": "TUITION: script is idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "Can you describe your current process of paying tuition fees for your child's private university education in Chattogram"
+    },
+    {
+      "name": "TUITION: script questions are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: start batch interview",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: interview completed",
+      "passed": false,
+      "warn": false,
+      "detail": "status='failed' completed=0 failed=1"
+    },
+    {
+      "name": "TUITION: create behavioral pricing test",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 409 error_code='conflict' detail='The request conflicts with existing data (duplicate or referenced record).'"
+    },
+    {
+      "name": "TUITION: generate report",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 500 error_code='internal_error' detail='Internal server error'"
+    },
+    {
+      "name": "TUITION: AI review",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "TUITION: review carries dimension scores",
+      "passed": true,
+      "warn": false,
+      "detail": "{'grounding': 0, 'specificity': 0, 'consistency': 0, 'honesty': 0, 'actionability': 0}"
+    },
+    {
+      "name": "TUITION: review names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "TUITION: review is about this study",
+      "passed": false,
+      "warn": false,
+      "detail": "The artefacts lack grounding, specificity, consistency, honesty, and actionability. The personas are missing, and there "
+    },
+    {
+      "name": "TUITION: no seed-domain phrasing leaked (soft markers)",
+      "passed": true,
+      "warn": true,
+      "detail": "leaked=['semester']"
+    },
+    {
+      "name": "ELDER: signup",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: create study",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: study title is not the canonical fallback",
+      "passed": true,
+      "warn": false,
+      "detail": "A Vetted Home-Care Companion Marketplace for Elderly"
+    },
+    {
+      "name": "ELDER: copilot reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: copilot names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "ELDER: copilot reply is about the idea",
+      "passed": true,
+      "warn": false,
+      "detail": "I've heard you're creating a vetted home-care companion marketplace for elderly residents of Osaka, Japan, booked and pa"
+    },
+    {
+      "name": "ELDER: suggest roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: roles are idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "BUSINESS OWNER; ELDERLY CAREGIVER; HEALTHCARE PROFESSIONAL; PAYER (INSURANCE COMPANY); channel PARTNER (AGENCY); EDGE CASE (UNABLE TO CARE FOR ELDERLY); POWER U"
+    },
+    {
+      "name": "ELDER: ≥4 distinct roles",
+      "passed": true,
+      "warn": false,
+      "detail": "10 roles"
+    },
+    {
+      "name": "ELDER: generate personas",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: at least one persona",
+      "passed": true,
+      "warn": false,
+      "detail": "2 personas, 0 failed roles"
+    },
+    {
+      "name": "ELDER: persona generation names its routes",
+      "passed": true,
+      "warn": false,
+      "detail": "['kilo/openrouter/free']"
+    },
+    {
+      "name": "ELDER: personas live in the idea's market (JP)",
+      "passed": true,
+      "warn": false,
+      "detail": "country_codes=['JP']"
+    },
+    {
+      "name": "ELDER: personas reference the idea's domain",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: persona created_at is not the prompt's example timestamp",
+      "passed": true,
+      "warn": false,
+      "detail": "[None, None]"
+    },
+    {
+      "name": "ELDER: persona names are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": "['Takumi Yamamoto', 'Yuki Suzuki']"
+    },
+    {
+      "name": "ELDER: generate script",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: script source is the model",
+      "passed": true,
+      "warn": false,
+      "detail": "source='llm' served_by='ollama/llama3.2:3b'"
+    },
+    {
+      "name": "ELDER: script has the requested 3 questions",
+      "passed": true,
+      "warn": false,
+      "detail": "3 questions"
+    },
+    {
+      "name": "ELDER: script is idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "How do you currently find and book home-care services for your elderly relatives when living far away from them?"
+    },
+    {
+      "name": "ELDER: script questions are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: start batch interview",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: interview completed",
+      "passed": true,
+      "warn": false,
+      "detail": "status='completed' completed=1 failed=0"
+    },
+    {
+      "name": "ELDER: interview answers are on-topic",
+      "passed": true,
+      "warn": false,
+      "detail": "3 persona turns"
+    },
+    {
+      "name": "ELDER: interview has one answer per question",
+      "passed": true,
+      "warn": false,
+      "detail": "3 answers / 3 questions"
+    },
+    {
+      "name": "ELDER: interview answers are distinct",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: persona speaks in first person",
+      "passed": true,
+      "warn": false,
+      "detail": "3/3 answers use first person"
+    },
+    {
+      "name": "ELDER: persona does not narrate itself in third person",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: create behavioral pricing test",
+      "passed": false,
+      "warn": false,
+      "detail": "HTTP 409 error_code='conflict' detail='The request conflicts with existing data (duplicate or referenced record).'"
+    },
+    {
+      "name": "ELDER: generate report",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: report synthesis is model-written",
+      "passed": true,
+      "warn": false,
+      "detail": "synthesis_source='llm' served_by='llm7/codestral-latest'"
+    },
+    {
+      "name": "ELDER: report summary is idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "The study validates the demand for a vetted home-care companion marketplace targeting elderly residents of Osaka, Japan, with adult children"
+    },
+    {
+      "name": "ELDER: recommendations are idea-specific",
+      "passed": true,
+      "warn": false,
+      "detail": "[\"develop a robust verification process for caregivers\", \"build a trusted platform with a focus on personal connections and word-of-mouth re"
+    },
+    {
+      "name": "ELDER: report does not claim real-user validation",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: AI review",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "ELDER: review carries dimension scores",
+      "passed": true,
+      "warn": false,
+      "detail": "{'grounding': 100, 'specificity': 80, 'consistency': 70, 'honesty': 90, 'actionability': 50}"
+    },
+    {
+      "name": "ELDER: review names its route",
+      "passed": true,
+      "warn": false,
+      "detail": "ollama/llama3.2:3b"
+    },
+    {
+      "name": "ELDER: review is about this study",
+      "passed": true,
+      "warn": false,
+      "detail": "The study provides a solid foundation for understanding the demand for a vetted home-care companion marketplace targetin"
+    },
+    {
+      "name": "ELDER: no Bangladesh/seed default leaked (hard markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "ELDER: no seed-domain phrasing leaked (soft markers)",
+      "passed": true,
+      "warn": false,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "matrix: copilot_reply differs across businesses (max pair jaccard 0.17 = POLL/TUITION, mean 0.05, threshold 0.35)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical copilot_reply",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: roles differs across businesses (max pair jaccard 0.14 = KITCHEN/ELDER, mean 0.07, threshold 0.3)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical roles",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: persona_descriptions differs across businesses (max pair jaccard 0.15 = SAVINGS/TUITION, mean 0.05, threshold 0.35)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical persona_descriptions",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: persona_attributes differs across businesses (max pair jaccard 0.13 = SAVINGS/TUITION, mean 0.07, threshold 0.35)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical persona_attributes",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: script differs across businesses (max pair jaccard 0.07 = POLL/KETTLE, mean 0.04, threshold 0.3)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical script",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: ai_review differs across businesses (max pair jaccard 0.45 = DERM/TUITION, mean 0.20, threshold 0.45)",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no two businesses got an identical ai_review",
+      "passed": true,
+      "warn": false,
+      "detail": "[]"
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in copilot_reply",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in roles",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in persona_descriptions",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in persona_attributes",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in script",
+      "passed": false,
+      "warn": false,
+      "detail": "would you be willing to pay (1 phrases)"
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in interview_answers",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in behavioral_rationale",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in report_summary",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in report_findings",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in report_recommendations",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no boilerplate 6-grams repeated across ≥3 businesses in ai_review",
+      "passed": true,
+      "warn": false,
+      "detail": ""
+    },
+    {
+      "name": "matrix: no persona name is reused across businesses",
+      "passed": true,
+      "warn": false,
+      "detail": "{}"
+    },
+    {
+      "name": "matrix: no business's distinctive vocabulary leaked into another's artefacts",
+      "passed": false,
+      "warn": false,
+      "detail": "[{'in': 'SAVINGS', 'from': 'SAAS', 'terms': ['manufacturer']}, {'in': 'ELDER', 'from': 'DERM', 'terms': ['nurse']}]"
+    },
+    {
+      "name": "matrix: pollution vs food business share no role names",
+      "passed": true,
+      "warn": false,
+      "detail": "set()"
+    },
+    {
+      "name": "matrix: pollution vs food business share no persona occupations",
+      "passed": true,
+      "warn": false,
+      "detail": "set()"
+    },
+    {
+      "name": "matrix: no role name appears in EVERY business (would be a fixed list)",
+      "passed": true,
+      "warn": false,
+      "detail": "set()"
+    },
+    {
+      "name": "matrix: AI review scores are not one constant",
+      "passed": true,
+      "warn": false,
+      "detail": "[0, 20, 0, 20, 60]"
+    }
+  ],
+  "analysis": {
+    "pairwise": {
+      "copilot_reply": {
+        "POLL/KITCHEN": 0.096,
+        "POLL/SAAS": 0.069,
+        "POLL/SAVINGS": 0.069,
+        "POLL/KETTLE": 0.038,
+        "POLL/TUITION": 0.17,
+        "POLL/ELDER": 0.034,
+        "KITCHEN/SAAS": 0.039,
+        "KITCHEN/SAVINGS": 0.019,
+        "KITCHEN/KETTLE": 0.07,
+        "KITCHEN/TUITION": 0.07,
+        "KITCHEN/ELDER": 0.085,
+        "SAAS/SAVINGS": 0.055,
+        "SAAS/KETTLE": 0.02,
+        "SAAS/TUITION": 0.041,
+        "SAAS/ELDER": 0.018,
+        "SAVINGS/KETTLE": 0.041,
+        "SAVINGS/TUITION": 0.062,
+        "SAVINGS/ELDER": 0.018,
+        "KETTLE/TUITION": 0.023,
+        "KETTLE/ELDER": 0.089,
+        "TUITION/ELDER": 0.021
+      },
+      "roles": {
+        "POLL/KITCHEN": 0.036,
+        "POLL/SAAS": 0.052,
+        "POLL/SAVINGS": 0.039,
+        "POLL/DERM": 0.093,
+        "POLL/KETTLE": 0.099,
+        "POLL/TUITION": 0.073,
+        "POLL/ELDER": 0.081,
+        "KITCHEN/SAAS": 0.128,
+        "KITCHEN/SAVINGS": 0.063,
+        "KITCHEN/DERM": 0.109,
+        "KITCHEN/KETTLE": 0.025,
+        "KITCHEN/TUITION": 0.058,
+        "KITCHEN/ELDER": 0.14,
+        "SAAS/SAVINGS": 0.073,
+        "SAAS/DERM": 0.063,
+        "SAAS/KETTLE": 0.071,
+        "SAAS/TUITION": 0.058,
+        "SAAS/ELDER": 0.123,
+        "SAVINGS/DERM": 0.066,
+        "SAVINGS/KETTLE": 0.013,
+        "SAVINGS/TUITION": 0.061,
+        "SAVINGS/ELDER": 0.103,
+        "DERM/KETTLE": 0.041,
+        "DERM/TUITION": 0.06,
+        "DERM/ELDER": 0.137,
+        "KETTLE/TUITION": 0.036,
+        "KETTLE/ELDER": 0.049,
+        "TUITION/ELDER": 0.078
+      },
+      "persona_descriptions": {
+        "POLL/KITCHEN": 0.028,
+        "POLL/SAAS": 0.074,
+        "POLL/SAVINGS": 0.114,
+        "POLL/DERM": 0.043,
+        "POLL/KETTLE": 0.074,
+        "POLL/TUITION": 0.148,
+        "POLL/ELDER": 0.034,
+        "KITCHEN/SAAS": 0.029,
+        "KITCHEN/SAVINGS": 0.036,
+        "KITCHEN/DERM": 0.044,
+        "KITCHEN/KETTLE": 0.014,
+        "KITCHEN/TUITION": 0.03,
+        "KITCHEN/ELDER": 0.0,
+        "SAAS/SAVINGS": 0.024,
+        "SAAS/DERM": 0.076,
+        "SAAS/KETTLE": 0.029,
+        "SAAS/TUITION": 0.03,
+        "SAAS/ELDER": 0.035,
+        "SAVINGS/DERM": 0.049,
+        "SAVINGS/KETTLE": 0.036,
+        "SAVINGS/TUITION": 0.151,
+        "SAVINGS/ELDER": 0.083,
+        "DERM/KETTLE": 0.0,
+        "DERM/TUITION": 0.03,
+        "DERM/ELDER": 0.023,
+        "KETTLE/TUITION": 0.0,
+        "KETTLE/ELDER": 0.011,
+        "TUITION/ELDER": 0.036
+      },
+      "persona_attributes": {
+        "POLL/KITCHEN": 0.08,
+        "POLL/SAAS": 0.103,
+        "POLL/SAVINGS": 0.067,
+        "POLL/DERM": 0.087,
+        "POLL/KETTLE": 0.082,
+        "POLL/TUITION": 0.028,
+        "POLL/ELDER": 0.041,
+        "KITCHEN/SAAS": 0.044,
+        "KITCHEN/SAVINGS": 0.126,
+        "KITCHEN/DERM": 0.112,
+        "KITCHEN/KETTLE": 0.081,
+        "KITCHEN/TUITION": 0.079,
+        "KITCHEN/ELDER": 0.119,
+        "SAAS/SAVINGS": 0.038,
+        "SAAS/DERM": 0.121,
+        "SAAS/KETTLE": 0.05,
+        "SAAS/TUITION": 0.059,
+        "SAAS/ELDER": 0.042,
+        "SAVINGS/DERM": 0.075,
+        "SAVINGS/KETTLE": 0.069,
+        "SAVINGS/TUITION": 0.131,
+        "SAVINGS/ELDER": 0.032,
+        "DERM/KETTLE": 0.048,
+        "DERM/TUITION": 0.066,
+        "DERM/ELDER": 0.057,
+        "KETTLE/TUITION": 0.059,
+        "KETTLE/ELDER": 0.033,
+        "TUITION/ELDER": 0.05
+      },
+      "script": {
+        "POLL/KITCHEN": 0.048,
+        "POLL/SAVINGS": 0.048,
+        "POLL/KETTLE": 0.074,
+        "POLL/TUITION": 0.056,
+        "POLL/ELDER": 0.068,
+        "KITCHEN/SAVINGS": 0.045,
+        "KITCHEN/KETTLE": 0.017,
+        "KITCHEN/TUITION": 0.034,
+        "KITCHEN/ELDER": 0.048,
+        "SAVINGS/KETTLE": 0.069,
+        "SAVINGS/TUITION": 0.017,
+        "SAVINGS/ELDER": 0.031,
+        "KETTLE/TUITION": 0.039,
+        "KETTLE/ELDER": 0.054,
+        "TUITION/ELDER": 0.018
+      },
+      "ai_review": {
+        "SAVINGS/DERM": 0.184,
+        "SAVINGS/KETTLE": 0.203,
+        "SAVINGS/TUITION": 0.182,
+        "SAVINGS/ELDER": 0.08,
+        "DERM/KETTLE": 0.271,
+        "DERM/TUITION": 0.448,
+        "DERM/ELDER": 0.145,
+        "KETTLE/TUITION": 0.196,
+        "KETTLE/ELDER": 0.183,
+        "TUITION/ELDER": 0.14
+      }
+    },
+    "shared_ngrams": {
+      "copilot_reply": {},
+      "roles": {},
+      "persona_descriptions": {},
+      "persona_attributes": {},
+      "script": {
+        "would you be willing to pay": [
+          "ELDER",
+          "KETTLE",
+          "KITCHEN",
+          "POLL",
+          "SAVINGS"
+        ]
+      },
+      "interview_answers": {},
+      "behavioral_rationale": {},
+      "report_summary": {},
+      "report_findings": {},
+      "report_recommendations": {},
+      "ai_review": {}
+    },
+    "persona_name_reuse": {},
+    "cross_contamination": [
+      {
+        "in": "SAVINGS",
+        "from": "SAAS",
+        "terms": [
+          "manufacturer"
+        ]
+      },
+      {
+        "in": "ELDER",
+        "from": "DERM",
+        "terms": [
+          "nurse"
+        ]
+      }
+    ],
+    "structure": {
+      "POLL": {
+        "roles": 9,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": null,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 79.3,
+          "roles": 17.9,
+          "personas": 56.6,
+          "script": 90.4,
+          "interview_start": 0.0,
+          "interview": 126.5,
+          "behavioral_create": 0.0,
+          "report": 25.7,
+          "ai_review": 75.0
+        }
+      },
+      "KITCHEN": {
+        "roles": 10,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": null,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 7.3,
+          "roles": 15.9,
+          "personas": 49.3,
+          "script": 90.4,
+          "interview_start": 0.0,
+          "interview": 108.4,
+          "behavioral_create": 0.0,
+          "report": 25.4,
+          "ai_review": 75.0
+        }
+      },
+      "SAAS": {
+        "roles": 10,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": null,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ]
+        },
+        "timings_s": {
+          "copilot": 6.6,
+          "roles": 17.3,
+          "personas": 55.5,
+          "script": 89.3,
+          "behavioral_create": 0.0,
+          "report": 28.0,
+          "ai_review": 75.0
+        }
+      },
+      "SAVINGS": {
+        "roles": 9,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": 0,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b",
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 6.8,
+          "roles": 13.8,
+          "personas": 56.6,
+          "script": 89.2,
+          "interview_start": 0.0,
+          "interview": 126.5,
+          "behavioral_create": 0.0,
+          "report": 296.8,
+          "ai_review": 95.4
+        }
+      },
+      "DERM": {
+        "roles": 10,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": 20,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 4.6,
+          "roles": 17.4,
+          "personas": 127.5,
+          "script": 89.3,
+          "behavioral_create": 0.0,
+          "report": 110.9,
+          "ai_review": 91.8
+        }
+      },
+      "KETTLE": {
+        "roles": 10,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": 0,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b",
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 2.7,
+          "roles": 19.4,
+          "personas": 124.0,
+          "script": 85.9,
+          "interview_start": 0.0,
+          "interview": 114.4,
+          "behavioral_create": 0.0,
+          "report": 366.6,
+          "ai_review": 96.1
+        }
+      },
+      "TUITION": {
+        "roles": 8,
+        "recommendations": 0,
+        "key_findings": 0,
+        "review_overall": 20,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "ollama/llama3.2:3b"
+          ],
+          "script": "ollama/llama3.2:3b",
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 4.2,
+          "roles": 16.2,
+          "personas": 126.1,
+          "script": 85.8,
+          "interview_start": 0.0,
+          "interview": 111.5,
+          "behavioral_create": 0.0,
+          "report": 377.0,
+          "ai_review": 92.3
+        }
+      },
+      "ELDER": {
+        "roles": 10,
+        "recommendations": 3,
+        "key_findings": 3,
+        "review_overall": 60,
+        "served_by": {
+          "copilot": "ollama/llama3.2:3b",
+          "personas": [
+            "kilo/openrouter/free"
+          ],
+          "script": "ollama/llama3.2:3b",
+          "interview": [
+            "ollama/llama3.2:3b"
+          ],
+          "report": "llm7/codestral-latest",
+          "ai_review": "ollama/llama3.2:3b"
+        },
+        "timings_s": {
+          "copilot": 3.2,
+          "roles": 17.0,
+          "personas": 20.2,
+          "script": 81.9,
+          "interview_start": 0.0,
+          "interview": 159.6,
+          "behavioral_create": 0.0,
+          "report": 16.5,
+          "ai_review": 82.0
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,204 @@
+{
+  "label": "SAVINGS",
+  "idea": "A micro-savings app for motorbike ride-hailing drivers in Jakarta that rounds up every fare and locks the change into a fund for vehicle repairs and insurance.",
+  "steps": {
+    "title": "A Micro-Savings App for Motorbike Ride-Hailing Drivers",
+    "copilot": {
+      "reply": "You're developing a micro-savings app specifically designed for motorbike ride-hailing drivers in Jakarta, aiming to help them save for vehicle repairs and insurance by rounding up fares and locking the change into a dedicated fund. This is an innovative solution addressing a key pain point for this demographic.",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "MOTORBIKE RIDER",
+        "description": "Primary user of motorbike ride-hailing services, understands the pain points and needs of drivers"
+      },
+      {
+        "role": "JAKARTA RESIDENT",
+        "description": "Local resident in Jakarta with knowledge of local traffic patterns and regulations"
+      },
+      {
+        "role": "RIDE-HAILING DRIVER",
+        "description": "Actual motorbike ride-hailing driver, familiar with financial struggles and goals"
+      },
+      {
+        "role": "INSURANCE PROVIDER",
+        "description": "Insurance company representative or policy holder, understands the financial implications of vehicle repairs"
+      },
+      {
+        "role": "FINANCIAL INSTITUTION",
+        "description": "Bank or financial institution representative, familiar with micro-savings and financial inclusion strategies"
+      },
+      {
+        "role": "CHANNEL PARTNER",
+        "description": "Representative of ride-hailing platforms or channel partners, understands the needs of drivers and riders"
+      },
+      {
+        "role": "MOTORCYCLE MANUFACTURER",
+        "description": "Manufacturer representative with knowledge of motorbike specifications and maintenance costs"
+      },
+      {
+        "role": "WEEKEND WARRIOR",
+        "description": "Freelance or gig economy worker, understands the financial stress and opportunities of non-traditional work arrangements"
+      },
+      {
+        "role": "TRAVELER",
+        "description": "Tourist or traveler familiar with local transportation options and costs in Jakarta"
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_a85263a3a45c",
+        "name": "Joan Puspita Utari",
+        "archetype": "The Frugal Entrepreneur",
+        "tagline": "The Savvy Rider",
+        "occupation": "Motorbike Repair Shop Owner",
+        "location": "Jakarta, Indonesia",
+        "income": "IDR 5,000,000 - IDR 10,000,000 (USD 350-700)",
+        "country_code": "ID",
+        "description": "Joan runs her own motorbike repair shop in Jakarta and relies on ride-hailing services to earn a living. She's always looking for ways to save money without sacrificing her business.",
+        "badges": [
+          {
+            "label": "RELIABLE SOURCE",
+            "value": "5+ years of experience in the motorbike industry"
+          },
+          {
+            "label": "BUDGET CONSCIOUS",
+            "value": "Always looks for ways to reduce expenses"
+          },
+          {
+            "label": "DICTIONARY DRIVER",
+            "value": "Uses the app every day"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "Finding a reliable and user-friendly savings app"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Increase Savings for Business Growth",
+            "description": "Joan wants to save more money from ride-hailing fares to invest in her business."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Difficulty Saving with Existing Apps",
+            "description": "Joan struggles to find a savings app that accurately rounds up ride-hailing fares and provides easy access to her money."
+          },
+          {
+            "category": "Needs",
+            "title": "Trustworthy Savings App with Low Fees",
+            "description": "Joan needs an app that can be trusted to handle her savings accurately and efficiently, with minimal fees."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_5be2ef41a5e0",
+        "name": "Jayanti Widyati",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Caregiver",
+        "occupation": "Housewife (part-time) and Mother of two",
+        "location": "Jakarta, Indonesia",
+        "income": "Mid-range",
+        "country_code": "ID",
+        "description": "Jayanti is a young mother who works part-time to support her family. She spends most of her days taking care of her children and managing the household. As an owner of a motorbike, she struggles with vehicle repairs and insurance costs, which often put a strain on her limited budget.",
+        "badges": [
+          {
+            "label": "FAMILY OBLIGATIONS",
+            "value": 800
+          },
+          {
+            "label": "MOTORBIKE EXPENSES",
+            "value": 5000
+          },
+          {
+            "label": "FINANCIAL STRESS",
+            "value": 6
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Financial Stability for Family",
+            "description": "Jayanti wants to save enough for her children's education and their own future expenses."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Struggling with Vehicle Repairs",
+            "description": "Jayanti is frustrated with the high costs of motorbike repairs and insurance, which often leave her with limited funds for other essential expenses."
+          },
+          {
+            "category": "Needs",
+            "title": "Peace of Mind",
+            "description": "Jayanti needs a reliable way to save money for unexpected expenses, such as car repairs or medical bills."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "Can you walk me through your typical day as a motorbike ride-hailing driver in Jakarta, including how you currently save for vehicle repairs and insurance?",
+      "How do you currently handle situations where your fare is less than IDR 10,000 (the minimum threshold to round up), and what workarounds have you found to deal with this issue?",
+      "Would you be willing to use a mobile app that rounds up every fare and locks the change into a dedicated fund for vehicle repairs and insurance, and if so, how much would you be willing to pay per month for this service?"
+    ],
+    "interview_job": {
+      "status": "failed",
+      "completed": 0,
+      "failed": 1,
+      "personas": {
+        "per_a85263a3a45c": {
+          "persona_id": "per_a85263a3a45c",
+          "persona_name": "Joan Puspita Utari",
+          "status": "failed",
+          "error": "DBAPIError: interview failed"
+        }
+      }
+    },
+    "ai_review": {
+      "overall": 0,
+      "scores": {
+        "grounding": 0,
+        "specificity": 0,
+        "consistency": 0,
+        "honesty": 0,
+        "actionability": 0
+      },
+      "verdict": "The personas lack specificity and grounding in the study brief. They do not clearly articulate the target audience's pain points or objections, making it difficult to understand their needs and motivations. This inconsistency undermines the overall credibility of the artefacts.",
+      "strengths": [],
+      "issues": [
+        {
+          "severity": "high",
+          "artifact": "personas:<id>",
+          "detail": "Personas lack specific pain points and objections. For example, per_a85263a3a45c's pain point is 'Difficulty Saving with Existing Apps', but there is no corresponding objection."
+        }
+      ],
+      "served_by": "ollama/llama3.2:3b"
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b",
+    "ai_review": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 6.8,
+    "roles": 13.8,
+    "personas": 56.6,
+    "script": 89.2,
+    "interview_start": 0.0,
+    "interview": 126.5,
+    "behavioral_create": 0.0,
+    "report": 296.8,
+    "ai_review": 95.4
+  },
+  "study_id": "study_159cd7e6c6f34263",
+  "elapsed_s": 685.2
+}

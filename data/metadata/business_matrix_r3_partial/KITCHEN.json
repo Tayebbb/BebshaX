@@ -1,0 +1,237 @@
+{
+  "label": "KITCHEN",
+  "idea": "A ghost kitchen in Lagos, Nigeria that delivers Nigerian home-style lunches (jollof, egusi, moi moi) to office workers who order over WhatsApp before 10am.",
+  "steps": {
+    "title": "A Ghost Kitchen in Lagos, Nigeria",
+    "copilot": {
+      "reply": "That's an interesting concept! To further validate your business idea, can you tell me more about the target geography for this ghost kitchen? Are you focusing on a specific neighborhood or area within Lagos?",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "OFFICE WORKER",
+        "description": "Primary user of the product, ordering home-style lunches over WhatsApp before 10am."
+      },
+      {
+        "role": "NIGERIAN FOOD CRITIC",
+        "description": "Influential food blogger or reviewer who can provide feedback on the taste and authenticity of Nigerian home-style lunches."
+      },
+      {
+        "role": "WhatsApp USER",
+        "description": "Casual user of WhatsApp for ordering food, potentially valuable insights on communication and ordering experiences."
+      },
+      {
+        "role": "NIGERIAN BUSINESS OWNER",
+        "description": "Primary user with entrepreneurial experience in the Nigerian food industry, providing insights on market trends and competition."
+      },
+      {
+        "role": "DELIVERY RIDER",
+        "description": "Edge case: Delivery rider who can provide feedback on logistics, customer service, and operational efficiency."
+      },
+      {
+        "role": "FOODIE",
+        "description": "Demographic segment: Food enthusiasts with a passion for trying new cuisines, potentially valuable insights on product differentiation and marketing."
+      },
+      {
+        "role": "MARKETING PROFESSIONAL",
+        "description": "Secondary stakeholder: Marketing expert who can provide feedback on branding, advertising, and social media strategies for the product."
+      },
+      {
+        "role": "LOCAL BUSINESS OWNER",
+        "description": "Edge case: Local business owner who may have different expectations or concerns regarding food delivery services in Lagos, Nigeria."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_465271b58e42",
+        "name": "Nneoma Oladipo",
+        "archetype": "Busy Professional",
+        "tagline": "The Career Driven One",
+        "occupation": "Marketing Coordinator",
+        "location": "Lagos, Nigeria",
+        "income": "N200,000 - N500,000 per month",
+        "country_code": "NG",
+        "description": "A young professional with a demanding job and limited time to cook. She relies on WhatsApp orders for convenient Nigerian home-style lunches.",
+        "badges": [
+          {
+            "label": "RELIABLE ORDERER",
+            "value": "Regularly orders from the same restaurant"
+          },
+          {
+            "label": "BUDGET CONSCIOUS",
+            "value": "Looks for affordable lunch options"
+          },
+          {
+            "label": "TIME CONstrained",
+            "value": "Ordering is done before 10am to avoid lunch breaks"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Healthy Lunch Options",
+            "description": "She wants to ensure the lunches are nutritious and delicious."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Limited Time",
+            "description": "She struggles to find time to cook or order lunch during her busy schedule."
+          },
+          {
+            "category": "Needs",
+            "title": "Convenience",
+            "description": "She needs a convenient and reliable way to order Nigerian home-style lunches."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_c2566c8da123",
+        "name": "Jumoke Ojo",
+        "archetype": null,
+        "tagline": "The Jollof Connoisseur",
+        "occupation": "Freelance Food Blogger and Reviewer",
+        "location": "Lagos, Nigeria",
+        "income": "$50,000 - $75,000 per year",
+        "country_code": "NG",
+        "description": "Jumoke is a passionate food blogger who reviews the taste and authenticity of Nigerian home-style lunches for her online following. She's known for her high standards and can be quite critical, but also provides valuable feedback that helps restaurants improve their dishes.",
+        "badges": [
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$1,000 per month"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Reviews at least 3 new restaurants every week"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "Authenticity and Taste"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Increase Engagement on Blog",
+            "description": "To increase her online following by reviewing at least 3 new restaurants every week"
+          },
+          {
+            "category": "Pain Points",
+            "title": "Finding Time to Review Restaurants",
+            "description": "She struggles to balance her review schedule with her other work commitments, leaving her limited time to try new restaurants"
+          },
+          {
+            "category": "Needs",
+            "title": "Restaurant Owners' Feedback",
+            "description": "She needs feedback from restaurant owners on how to improve their dishes and provide better reviews"
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "Can you walk me through your typical lunch break routine when working from home or office, and how often do you order food in advance?",
+      "How do you currently handle situations where restaurants are out of stock on the dishes you're craving (e.g. jollof rice), and what alternatives have you tried?",
+      "Would you be willing to pay a premium for a convenient, hot meal delivered to your office within an hour of ordering, and if so, how much would that amount be?"
+    ],
+    "interview_job": {
+      "status": "completed",
+      "completed": 1,
+      "failed": 0,
+      "personas": {
+        "per_465271b58e42": {
+          "persona_id": "per_465271b58e42",
+          "persona_name": "Nneoma Oladipo",
+          "status": "completed",
+          "interview_id": "a945a410b9d949529db409c1bc841066"
+        }
+      }
+    },
+    "interview_answers": [
+      "My typical lunch break routine is pretty straightforward. I work as a marketing coordinator, so my days are usually filled with meetings, emails, and social media tasks. When I'm at the office, I usually grab something quick from the cafeteria or bring my own lunch from home. But since I work from home sometimes, it can get a bit tricky.\n\nIf I do end up working from home, I'll often order food in advance because time is really limited for me. Usually, if I know what's going to happen that day, I'll place an order with a local WhatsApp vendor who delivers Nigerian home-style lunches – jollof rice, egusi soup, moi moi... those kinds of things are always a hit with my coworkers and me.\n\nI'd say about 2-3 times a week, I'll order food in advance for the day. It's just so convenient because I know exactly what I want, and it saves me so much time. Plus, it's easier to eat while working, you know? Sometimes I feel like cooking at home is just too much work when I'm already stuck inside all day.",
+      "Honestly, it's not uncommon for me to get a message from my WhatsApp vendor saying that they're out of stock on some of the items I'm looking for. Usually, it's just a simple case of them running low on ingredients or having a busy day.\n\nWhat I do in those situations is usually ask them if they have any alternatives or suggestions. Like, if they're out of jollof rice, maybe they can make me egusi soup instead? Or if they're out of moi moi, maybe they can add some fried plantains to the order?\n\nSometimes, my vendors will be able to hook me up with something similar, and it's actually not that bad. I mean, egusi soup is still a favorite of mine! But other times... well, let's just say I've learned to be patient and flexible when ordering food in advance.\n\nI haven't really had to get creative or try new things too much, but if I'm being completely honest, sometimes I do end up getting something a bit different from what I originally ordered. And you know what? It's not always a disaster!",
+      "Honestly, I'm not sure about paying a premium for something. As it is, 2-3 times a week, I already spend around 5,000 - 7,000 Naira (depending on what I order) on food through WhatsApp vendors. That's a decent chunk of my budget.\n\nTo be honest, I'd need to know that the meal would really be worth an extra 1,000-2,000 Naira or more per order for me to consider it. It sounds like a lot, but if it means getting a hot meal in under an hour and saving time on cooking myself, I might be willing to pay a bit more.\n\nBut at the end of the day, my budget is pretty tight, and I'm not sure I'd be able to justify spending that much extra money on food."
+    ],
+    "interview_turn_meta": [
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      },
+      {
+        "role": "interviewer",
+        "served_by": null,
+        "identity_drift": false
+      },
+      {
+        "role": "persona",
+        "served_by": "ollama/llama3.2:3b",
+        "identity_drift": false
+      }
+    ],
+    "ai_review": {
+      "overall": 20,
+      "scores": {
+        "grounding": 0,
+        "specificity": 0,
+        "consistency": 0,
+        "honesty": 0,
+        "actionability": 0
+      },
+      "verdict": "The artefacts lack grounding, specificity, consistency, honesty, and actionability. The study brief is not supported by the provided artefacts, and key information about the target audience and market is missing.",
+      "strengths": [],
+      "issues": [
+        {
+          "severity": "high",
+          "artifact": "",
+          "detail": "No evidence claims, no interviews, and missing personas (Nneoma Oladipo and Jumoke Ojo) are present."
+        }
+      ],
+      "served_by": "ollama/llama3.2:3b"
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b",
+    "interview": [
+      "ollama/llama3.2:3b"
+    ],
+    "ai_review": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 3.1,
+    "roles": 23.2,
+    "personas": 131.9,
+    "script": 87.9,
+    "interview_start": 0.0,
+    "interview": 114.6,
+    "behavioral_create": 0.0,
+    "behavioral_run_start": 0.0,
+    "report": 0.0,
+    "ai_review": 4.8
+  },
+  "study_id": "study_39d25923b35f41ed",
+  "elapsed_s": 368.5
+}

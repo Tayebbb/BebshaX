@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, ArrowRight, Check, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Send, Sparkles } from 'lucide-react';
 import { PersonaRoleSuggestion } from '../../../../types';
-import { CopilotMessage, READ_ONLY_TITLE } from './types';
+import { CopilotMessage, MAX_PERSONAS_PER_ROLE, READ_ONLY_TITLE } from './types';
 import { EvidenceProbe } from './evidenceProbe';
 import { RequestIdTag } from '../../../common/RequestIdTag';
 
@@ -421,11 +421,11 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                   <button
                     type="button"
                     onClick={handleGeneratePersonas}
-                    disabled={isGeneratingPersonas || suggestedRoles.length === 0 || isReadOnly}
+                    disabled={isGeneratingPersonas || !suggestedRoles.some((r) => r.selected && r.count > 0) || isReadOnly}
                     title={
                       isReadOnly
                         ? READ_ONLY_TITLE
-                        : suggestedRoles.length === 0
+                        : !suggestedRoles.some((r) => r.selected && r.count > 0)
                         ? 'Pick at least one role first'
                         : undefined
                     }
@@ -499,6 +499,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                   )}
                   {suggestedRoles.map((role, roleIdx) => {
                     const isSelected = !!role.selected && role.count > 0;
+                    const atCap = role.count >= MAX_PERSONAS_PER_ROLE;
                     return (
                       <div
                         key={role.id}
@@ -630,14 +631,17 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                             type="button"
                             aria-label={`Increase ${role.role} count`}
                             onClick={(e) => handleIncrementRole(role.id, e)}
+                            disabled={atCap}
+                            aria-disabled={atCap ? true : undefined}
+                            title={atCap ? `Up to ${MAX_PERSONAS_PER_ROLE} personas per role` : undefined}
                             style={{
-                              background: 'var(--border-subtle)',
+                              background: atCap ? 'transparent' : 'var(--border-subtle)',
                               border: 'none',
-                              color: 'var(--text-main)',
+                              color: atCap ? 'var(--text-faint)' : 'var(--text-main)',
                               borderRadius: '6px',
                               width: '26px',
                               height: '26px',
-                              cursor: 'pointer',
+                              cursor: atCap ? 'not-allowed' : 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',

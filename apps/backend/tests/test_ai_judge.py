@@ -127,6 +127,60 @@ async def test_judge_fails_explicitly_without_llm_or_material_or_usable_reply():
 
 
 @pytest.mark.asyncio
+async def test_verdict_without_a_numeric_overall_score_is_unusable_never_zero():
+    """Observed live: a 3B route answered with a generic verdict and no usable
+    score; a default of 0 turned that into an all-zero review the model never
+    gave. Missing or non-numeric overall_score -> retry -> judge_unavailable."""
+    maker = await _maker()
+    study = await _seed(maker)
+    missing = {k: v for k, v in _VERDICT.items() if k != "overall_score"}
+    stub = _StubLLM(json.dumps(missing), json.dumps({**_VERDICT, "overall_score": "n/a"}))
+    async with maker() as session:
+        with pytest.raises(UnusableModelOutput) as info:
+            await judge_study(session, study, stub)
+    assert info.value.error_code == JUDGE_UNAVAILABLE
+    assert info.value.attempts == 2 and len(stub.requests) == 2
+    assert "no verdict was invented" in info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_non_numeric_dimensions_are_omitted_not_zeroed():
+    maker = await _maker()
+    study = await _seed(maker)
+    reply = {
+        **_VERDICT,
+        "overall_score": "71",  # numeric strings are numbers
+        "dimension_scores": {"grounding": "n/a", "specificity": "80", "consistency": None, "honesty": 70.4, "actionability": True, "bogus": 50},
+    }
+    stub = _StubLLM(json.dumps(reply))
+    async with maker() as session:
+        verdict = await judge_study(session, study, stub)
+    assert verdict.overall_score == 71
+    assert verdict.dimension_scores == {"specificity": 80, "honesty": 70}  # absence, not 0
+    assert "grounding" not in verdict.dimension_scores
+
+
+@pytest.mark.asyncio
+async def test_an_unfilled_schema_slot_artifact_is_blanked_but_the_detail_is_kept():
+    maker = await _maker()
+    study = await _seed(maker)
+    reply = {
+        **_VERDICT,
+        "issues": [
+            {"severity": "high", "artifact": "persona:<id>", "detail": "Budget of 900 has no supporting evidence claim."},
+            {"severity": "low", "artifact": "persona:<id>|report|interview:<id>|segment:<id>|evidence", "detail": "Limitations are thin."},
+            {"severity": "medium", "artifact": "persona:per_1", "detail": "Occupation contradicts the bio."},
+        ],
+    }
+    stub = _StubLLM(json.dumps(reply))
+    async with maker() as session:
+        verdict = await judge_study(session, study, stub)
+    assert [i.artifact for i in verdict.issues] == ["", "", "persona:per_1"]
+    assert verdict.issues[0].detail.startswith("Budget of 900") and verdict.issues[1].detail == "Limitations are thin."
+    assert "<id>" not in verdict.model_dump_json()
+
+
+@pytest.mark.asyncio
 async def test_ai_review_endpoints_gate_and_envelope():
     maker = await _maker()
     await _seed(maker)

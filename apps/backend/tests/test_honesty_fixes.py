@@ -197,7 +197,10 @@ def test_unusable_simulation_reply_yields_no_decision():
     assert parse(json.dumps({"probability": 0.4}), persona) is None
     assert parse(json.dumps({"decision": "positive", "probability": "very"}), persona) is None
     ok = parse(json.dumps({"decision": "negative", "probability": 1.7, "objections": "x"}), persona)
-    assert ok["decision"] == "negative" and ok["probability"] == 1.0 and ok["objections"] == []
+    # Probability is clamped, never invented; a lone-string objection is the
+    # model's own word and is kept as a one-item list rather than discarded.
+    assert ok["decision"] == "negative" and ok["probability"] == 1.0 and ok["objections"] == ["x"]
+    assert parse(json.dumps({"decision": "negative", "probability": 0.2, "objections": None}), persona)["objections"] == []
 
 
 @pytest.mark.asyncio

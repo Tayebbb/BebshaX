@@ -44,7 +44,9 @@ def generate_deterministic_study_title(prompt: Optional[str], study_type: str = 
     if not prompt or not prompt.strip():
         return CANONICAL_TYPE_TITLES.get(study_type, "Research Study")
 
-    cleaned = prompt.strip()
+    cleaned = _strip_markup(prompt)
+    if not cleaned:
+        return CANONICAL_TYPE_TITLES.get(study_type, "Research Study")
 
     # If prompt is very short and already title-like, format and return
     if len(cleaned) <= 30 and "\n" not in cleaned and "." not in cleaned:
@@ -90,6 +92,24 @@ def generate_deterministic_study_title(prompt: Optional[str], study_type: str = 
         return CANONICAL_TYPE_TITLES.get(study_type, "Research Study")
 
     return _title_case(processed)
+
+
+# A tag starts with a letter, "/" or "!" — so "kids < 10 and adults > 60" survives
+# while <script>, </b>, <img …> and <!-- --> are removed.
+_HTML_TAG_RE = re.compile(r"</?[A-Za-z!][^>]*>")
+# Collapse runs of whitespace but keep line breaks: the first line still bounds the title.
+_INLINE_WS_RE = re.compile(r"[^\S\n]+")
+
+
+def _strip_markup(text: str) -> str:
+    """Titles are derived from the user's words, never from their markup."""
+    text = _HTML_TAG_RE.sub(" ", text)
+    return _INLINE_WS_RE.sub(" ", text).strip()
+
+
+def clean_client_title(title: Optional[str]) -> str:
+    """A caller-supplied title with markup removed; "" when nothing is left."""
+    return _strip_markup(title or "")
 
 
 def _title_case(text: str) -> str:

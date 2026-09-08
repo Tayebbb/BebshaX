@@ -34,6 +34,12 @@ const study = (overrides: Partial<Study>): Study =>
     updated_at: '2026-01-01T00:00:00.000Z',
     is_demo: true,
     step: 5,
+    // A study that reached step 2 always carries its selected roles; without
+    // one, Generate is refused client-side before any request (the server
+    // 400s an empty role list too), so the 403 path could never be reached.
+    suggested_roles: [
+      { id: 'role_1', role: 'COFFEE DRINKER', description: 'Core target user.', count: 1, selected: true },
+    ],
     personas_data: [{ id: 'per_1', name: 'Sarah Rahman', archetype: 'Founder' }],
     script_questions: ['How do you buy coffee today?'],
     ...overrides,

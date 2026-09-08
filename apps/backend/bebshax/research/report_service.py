@@ -32,16 +32,135 @@ from bebshax.db.models import (
 )
 from bebshax.interview.orm import Conversations, InterviewInsights
 from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.placeholders import is_placeholder
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_json_block
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.tenancy import ANONYMOUS_OWNER_ID
-from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
+from bebshax.utils.explicit_failures import InsufficientInput, LLMUnavailable, UnusableModelOutput
 
 logger = logging.getLogger(__name__)
 
 REPORT_SYNTHESIS_FAILED = "report_synthesis_failed"
+REPORT_REQUIRES_DATA = "report_requires_data"
 _MAX_ATTEMPTS = 2
+#: Output reservation for the report reply; rationale at its use site.
+REPORT_MAX_OUTPUT_TOKENS = 5000
+
+# StudyReports column shapes (db/models.py) as DATA TABLES: the model's JSON is
+# fitted to them before the row is built. Observed live on Postgres:
+# target_market_summary came back as {"demographics": {...}} for a Text column
+# -> asyncpg DataError -> HTTP 500 (SQLite accepts anything, so tests were blind).
+_TEXT_FIELDS: tuple[str, ...] = (
+    "executive_summary",
+    "target_market_summary",
+    "market_context_summary",
+    "validation_summary",
+    "limitations",
+)
+_LIST_FIELDS: tuple[str, ...] = (
+    "key_findings",
+    "evidence_findings",
+    "dataset_findings",
+    "market_segments_summary",
+    "persona_overview",
+    "interview_findings",
+    "major_pain_points",
+    "customer_needs",
+    "behavioral_results",
+    "pricing_signals",
+    "major_risks",
+    "opportunities",
+    "strongest_segments",
+    "recommendations",
+)
+_TITLE_MAX = 256  # StudyReports.title String(256)
+
+
+def _render_text(value: Any, indent: int = 0) -> str:
+    """Readable text for a Text section the model returned as JSON structure.
+
+    Dicts become ``key: value`` lines, lists bullet lines, nested structures are
+    indented one level per depth. Every key and value the model wrote is kept;
+    nothing is added or rephrased.
+    """
+    pad = "  " * indent
+    if isinstance(value, dict) and value:
+        lines: list[str] = []
+        for key, item in value.items():
+            if isinstance(item, (dict, list)) and item:
+                lines.append(f"{pad}{key}:")
+                lines.append(_render_text(item, indent + 1))
+            else:
+                lines.append(f"{pad}{key}: {_render_text(item)}")
+        return "\n".join(lines)
+    if isinstance(value, list) and value:
+        lines = []
+        for item in value:
+            if isinstance(item, (dict, list)) and item:
+                lines.append(f"{pad}-")
+                lines.append(_render_text(item, indent + 1))
+            else:
+                lines.append(f"{pad}- {_render_text(item)}")
+        return "\n".join(lines)
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)  # numbers, bools, null, empty containers
+
+
+def _bound_title(title: str) -> str:
+    title = " ".join(title.split())
+    if len(title) <= _TITLE_MAX:
+        return title
+    head = title[:_TITLE_MAX]
+    cut = head[: head.rfind(" ")] if " " in head else head
+    logger.info("report title cut from %d to %d chars to fit its column", len(title), len(cut))
+    return cut
+
+
+def _is_placeholder_item(item: Any) -> bool:
+    """A list item that is one of the prompt's example strings, or an example
+    object whose every string value is one (``{"title": "...", "claim": "..."}``)."""
+    if isinstance(item, str):
+        return is_placeholder(item)
+    if isinstance(item, dict):
+        strings = [v for v in item.values() if isinstance(v, str) and v.strip()]
+        return bool(strings) and all(is_placeholder(v) for v in strings)
+    return False
+
+
+def _normalize_report_fields(report_data: dict[str, Any]) -> dict[str, Any]:
+    """Fit the model's report JSON to the ``StudyReports`` column shapes.
+
+    Text sections that arrived as dict/list are rendered to readable text (all
+    content kept, nothing invented); None stays None. List sections that arrived
+    as a string or dict are wrapped in a list; None/anything else -> ``[]``.
+    Items and sections that are the prompt's own example strings ("Finding 2",
+    "Detailed target market overview") are dropped — they are not findings.
+    ``metrics`` that is not a dict -> ``{}``. ``title`` is bounded to its
+    String(256) column at a word boundary (None when the model gave none).
+    Unknown keys pass through untouched.
+    """
+    fields: dict[str, Any] = dict(report_data)
+    for name in _TEXT_FIELDS:
+        value = report_data.get(name)
+        fields[name] = None if value is None or is_placeholder(value) else _render_text(value)
+    for name in _LIST_FIELDS:
+        value = report_data.get(name)
+        if isinstance(value, list):
+            items = value
+        elif isinstance(value, str):
+            items = [value] if value.strip() else []
+        elif isinstance(value, dict):
+            items = [value] if value else []
+        else:
+            items = []
+        fields[name] = [item for item in items if not _is_placeholder_item(item)]
+    metrics = report_data.get("metrics")
+    fields["metrics"] = metrics if isinstance(metrics, dict) else {}
+    title = report_data.get("title")
+    fields["title"] = _bound_title(title) if isinstance(title, str) and title.strip() else None
+    return fields
 
 
 REPORT_SYSTEM_PROMPT = """You are BebshaX Chief Research Intelligence Officer.
@@ -156,6 +275,15 @@ class StudyReportService:
             ).scalars()
         )
 
+        # A report over nothing is a template by construction: the model can only
+        # write "no data available", yet the row would mark the study completed.
+        if not any((personas, conversations, evidence_claims, segments, behavioral_results, datasets)):
+            raise InsufficientInput(
+                REPORT_REQUIRES_DATA,
+                "This study has no personas, interviews, evidence, segments or behavioral results yet — "
+                "run the pipeline before generating a report.",
+            )
+
         # 2. Determine version number
         latest_version_stmt = select(func.max(StudyReports.version)).where(
             StudyReports.study_id == study_id
@@ -180,48 +308,45 @@ class StudyReportService:
             custom_title=custom_title,
         )
 
-        # 4. Persist to StudyReports
+        # 4. Persist to StudyReports — the model's JSON fitted to the column shapes first.
+        fields = _normalize_report_fields(report_data)
         report_id = f"rep_{uuid.uuid4().hex[:16]}"
         report = StudyReports(
             id=report_id,
             study_id=study_id,
             user_id=effective_user_id,
             version=new_version,
-            title=custom_title or report_data.get("title") or study.title or "Research Synthesis Report",
-            executive_summary=report_data.get(
-                "executive_summary",
-                f"Validation report for {study.prompt or study.title}.",
-            ),
-            key_findings=report_data.get("key_findings", []),
-            target_market_summary=report_data.get("target_market_summary"),
-            market_context_summary=report_data.get("market_context_summary"),
-            evidence_findings=report_data.get("evidence_findings", []),
-            dataset_findings=report_data.get("dataset_findings", []),
-            market_segments_summary=report_data.get("market_segments_summary", []),
-            persona_overview=report_data.get("persona_overview", []),
-            interview_findings=report_data.get("interview_findings", []),
-            major_pain_points=report_data.get("major_pain_points", []),
-            customer_needs=report_data.get("customer_needs", []),
-            behavioral_results=report_data.get("behavioral_results", []),
-            pricing_signals=report_data.get("pricing_signals", []),
-            major_risks=report_data.get("major_risks", []),
-            opportunities=report_data.get("opportunities", []),
-            strongest_segments=report_data.get("strongest_segments", []),
-            recommendations=report_data.get("recommendations", []),
-            validation_summary=report_data.get("validation_summary"),
-            limitations=report_data.get("limitations"),
-            metrics=report_data.get(
-                "metrics",
-                {
-                    "total_interviews": len(conversations),
-                    "total_personas": len(personas),
-                    "total_claims": len(evidence_claims),
-                    # Honest absence: scores are only present when the LLM
-                    # synthesis computed them from the actual study data.
-                    "confidence_score": None,
-                    "demand_score": None,
-                },
-            ),
+            title=_bound_title(custom_title or fields["title"] or study.title or "Research Synthesis Report"),
+            executive_summary=fields.get("executive_summary")
+            or f"Validation report for {study.prompt or study.title}.",
+            key_findings=fields["key_findings"],
+            target_market_summary=fields["target_market_summary"],
+            market_context_summary=fields["market_context_summary"],
+            evidence_findings=fields["evidence_findings"],
+            dataset_findings=fields["dataset_findings"],
+            market_segments_summary=fields["market_segments_summary"],
+            persona_overview=fields["persona_overview"],
+            interview_findings=fields["interview_findings"],
+            major_pain_points=fields["major_pain_points"],
+            customer_needs=fields["customer_needs"],
+            behavioral_results=fields["behavioral_results"],
+            pricing_signals=fields["pricing_signals"],
+            major_risks=fields["major_risks"],
+            opportunities=fields["opportunities"],
+            strongest_segments=fields["strongest_segments"],
+            recommendations=fields["recommendations"],
+            validation_summary=fields["validation_summary"],
+            limitations=fields["limitations"],
+            metrics={
+                "total_interviews": len(conversations),
+                "total_personas": len(personas),
+                "total_claims": len(evidence_claims),
+                # Honest absence: scores are only present when the LLM
+                # synthesis computed them from the actual study data.
+                "confidence_score": None,
+                "demand_score": None,
+                **fields["metrics"],
+            },
             is_synthetic=True,
             created_at=_utcnow(),
             updated_at=_utcnow(),
@@ -316,7 +441,15 @@ class StudyReportService:
                 {
                     "test_type": t.test_type,
                     "scenario": t.name,
-                    "run_count": len(t.scenarios or []),
+                    # BehavioralTests declares no `scenarios` relationship; the
+                    # old `t.scenarios` raised AttributeError -> HTTP 500 for
+                    # every study that had a behavioral test (found live).
+                    "run_count": sum(1 for r in behavioral_runs if r.behavioral_test_id == t.id),
+                    "completed_runs": sum(
+                        1 for r in behavioral_runs
+                        if r.behavioral_test_id == t.id and str(r.status).startswith("completed")
+                    ),
+                    "description": t.description,
                 }
                 for t in behavioral_tests[:4]
             ],
@@ -380,7 +513,14 @@ class StudyReportService:
             temperature=0.4,
             # The 20-section report JSON does not fit provider default output
             # caps (~1024 tokens); without this the JSON is silently truncated.
-            max_output_tokens=8000,
+            # Sized from measurement, not guesswork: 14 live reports across 8
+            # businesses peaked at 2,577 output tokens (business-matrix run,
+            # 2026-09-08). The reservation also feeds the shared context
+            # estimate — at 8000 it pushed a ~1.1k-token prompt onto Ollama's
+            # 16k num_ctx rung, which a 4 GB GPU cannot allocate, so every
+            # local-only report failed with SERVER_ERROR. 5000 keeps ~2x
+            # headroom over the observed maximum and lands on the 8k rung.
+            max_output_tokens=REPORT_MAX_OUTPUT_TOKENS,
         )
         served_by = None
         for attempt in range(1, _MAX_ATTEMPTS + 1):
@@ -392,7 +532,10 @@ class StudyReportService:
                 parsed = parse_llm_json(result.text)
             except ValueError:
                 parsed = None
-            if isinstance(parsed, dict) and str(parsed.get("executive_summary") or "").strip():
+            executive_summary = parsed.get("executive_summary") if isinstance(parsed, dict) else None
+            # A summary that is the prompt's own example ("Crisp 2-3 paragraph
+            # executive summary grounded in findings") is not a report.
+            if str(executive_summary or "").strip() and not is_placeholder(executive_summary):
                 metrics = parsed.get("metrics")
                 if not isinstance(metrics, dict):
                     metrics = {}

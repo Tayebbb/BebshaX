@@ -94,6 +94,47 @@ async def _candidates_stub():
     return [RouteCandidate(provider="ollama", model="qwen3:4b", context_window=16_384)]
 
 
+async def test_json_mode_requests_grammar_constrained_output() -> None:
+    """Found live: 2 of 3 twenty-section report replies from llama3.2:3b were
+    on-topic and complete yet unparseable (a missing opening quote, a bare
+    `30%`). OpenRouter already honours json_mode via response_format; the local
+    adapter dropped it. Ollama's `format: "json"` constrains the sampler so
+    those slips cannot be emitted."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return _chat_ok({"message": {"role": "assistant", "content": '{"questions": ["a", "b"]}'}})
+
+    adapter = _adapter(handler)
+    [cand] = await _candidates_stub()
+    completion = await adapter.complete(cand, _request(json_mode=True))
+    assert seen["format"] == "json"
+    assert "format=json" in completion.notes
+
+    seen.clear()
+    await adapter.complete(cand, _request(json_mode=False))
+    assert "format" not in seen  # free-text turns (interviews) stay unconstrained
+
+
+async def test_json_mode_is_forwarded_on_the_stream_path_too() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        lines = [
+            json.dumps({"message": {"role": "assistant", "content": '{"a":'}, "done": False}),
+            json.dumps({"message": {"role": "assistant", "content": " 1}"}, "done": True, "done_reason": "stop", "prompt_eval_count": 3, "eval_count": 2}),
+        ]
+        return httpx.Response(200, text="\n".join(lines) + "\n")
+
+    adapter = _adapter(handler)
+    [cand] = await _candidates_stub()
+    events = [e async for e in adapter.stream(cand, _request(json_mode=True))]
+    assert seen["format"] == "json" and seen["stream"] is True
+    assert events
+
+
 @pytest.mark.parametrize(
     ("response", "expected_kind"),
     [

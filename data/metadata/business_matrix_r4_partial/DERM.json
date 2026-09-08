@@ -1,0 +1,161 @@
+{
+  "label": "DERM",
+  "idea": "A tele-dermatology service for rural clinics in Kenya where nurses photograph skin conditions on a basic Android phone and get a specialist triage within 24 hours.",
+  "steps": {
+    "title": "A Tele-Dermatology Service for Rural Clinics in Kenya",
+    "copilot": {
+      "reply": "So, you want to validate the effectiveness of your tele-dermatology service for rural clinics in Kenya, specifically focusing on the nurse's ability to take high-quality photos with a basic Android phone and receive timely specialist triage. Can you tell me more about the specific geographic region within Kenya where these clinics are located? Are there any particular skin conditions or age groups that are more prevalent in this area?",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": "retried_after_unparseable_reply"
+    },
+    "roles": [
+      {
+        "role": "RURAL CLINIC NURSE",
+        "description": "Primary users of the product. Essential for validating the service's effectiveness in triaging skin conditions and understanding nurses' workflow."
+      },
+      {
+        "role": "RURAL CLINIC PATIENT",
+        "description": "Representing patients who receive tele-dermatology services. Insights from these users will help validate the service's impact on patient outcomes and overall experience."
+      },
+      {
+        "role": "RURAL CLINIC ADMINISTRATOR",
+        "description": "Key stakeholders responsible for implementing and managing tele-dermatology services in rural clinics. Their input is crucial for understanding operational feasibility and potential challenges."
+      },
+      {
+        "role": "TELE-MEDICAL SPECIALIST",
+        "description": "Triage specialists who review and provide feedback on skin conditions. Insights from these users will help validate the service's accuracy and effectiveness in specialist triage."
+      },
+      {
+        "role": "HEALTH INSURANCE PAYER",
+        "description": "Representing organizations that cover tele-dermatology services. Their input is essential for understanding cost-effectiveness, reimbursement, and potential barriers to adoption."
+      },
+      {
+        "role": "TECHNOLOGY PARTNER",
+        "description": "Representing companies providing the basic Android phone technology for tele-dermatology services. Their input will help validate the technical feasibility and user experience of the service."
+      },
+      {
+        "role": "RURAL COMMUNITY LEADER",
+        "description": "Representing community leaders who can provide insights into social determinants affecting health outcomes and potential barriers to tele-dermatology adoption in rural areas."
+      },
+      {
+        "role": "SKIN CANCER SURVIVOR",
+        "description": "Representing individuals who have been diagnosed with skin cancer and have experience with tele-dermatology services. Their input will help validate the service's impact on patient outcomes and overall experience."
+      },
+      {
+        "role": "TELE-MEDICAL TECHNOLOGY DEVELOPER",
+        "description": "Representing developers of tele-dermatology technology. Their input will help validate the technical feasibility, user experience, and potential areas for improvement."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_4e3d964049e5",
+        "name": "Jane Kiptoo",
+        "archetype": "Caring Professional",
+        "tagline": "The Clinic Partner",
+        "occupation": "Clinical Nurse Specialist",
+        "location": "Nairobi, Kenya",
+        "income": "$2500-$3500",
+        "country_code": "KE",
+        "description": "A seasoned nurse with experience in rural clinics, Jane has seen the impact of tele-dermatology on patient care and is eager to streamline her own workflow.",
+        "badges": [
+          {
+            "label": "TELE-DERMATOLOGY EXPERIENCE",
+            "value": "3+ years"
+          },
+          {
+            "label": "CLINICAL SKILLS",
+            "value": "Advanced"
+          },
+          {
+            "label": "MANAGEMENT RESPONSIBILITIES",
+            "value": "Yes"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Reduce Patient Wait Times",
+            "description": "Increase efficiency in triaging skin conditions with tele-dermatology"
+          },
+          {
+            "category": "Pain Points",
+            "title": "Overwhelmed with Manual Triaging",
+            "description": "Current challenge of manually assessing and triaging skin conditions without specialist expertise"
+          },
+          {
+            "category": "Needs",
+            "title": "Streamlined Workflow",
+            "description": "Need for a reliable tele-dermatology service to reduce administrative burden and focus on patient care"
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_8a094fa1a173",
+        "name": "Jenith Mwangi",
+        "archetype": null,
+        "tagline": "The Caregiver",
+        "occupation": "Part-time Farmer",
+        "location": "Nairobi, Kenya",
+        "income": "$1,500 - $2,000 monthly",
+        "country_code": "KE",
+        "description": "Jenith is a 28-year-old farmer who lives in Nairobi with her family. She takes care of her farm during the day and works at the local clinic part-time to support her family.",
+        "badges": [
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$1,000 monthly"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "uses phone for basic tasks during farm work"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "access to quality healthcare for her family"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Access Quality Healthcare",
+            "description": "She wants to ensure that she and her family receive timely and quality medical care, especially during rural trips."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Limited Access to Healthcare",
+            "description": "She faces challenges accessing quality healthcare services in her rural area, leading to delayed diagnoses and treatments."
+          },
+          {
+            "category": "Needs",
+            "title": "Digital Literacy",
+            "description": "She needs guidance on how to effectively use the tele-dermatology service, including understanding medical terminology and technology."
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "Can you describe your current process for diagnosing and treating skin conditions in patients at your rural clinic in Kenya? What steps do you take when a patient presents with a condition that requires specialist attention?",
+      "How often do you or your team currently use technology to aid in the diagnosis of skin conditions, and what devices or platforms are used?",
+      "If you could get access to specialist triage for skin conditions within 24 hours, would you be willing to pay a premium fee for this service?"
+    ]
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 7.4,
+    "roles": 17.4,
+    "personas": 122.2,
+    "script": 144.2,
+    "interview_start": 0.0
+  },
+  "study_id": "study_1fd70c261cdb47e8"
+}

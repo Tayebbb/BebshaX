@@ -1,0 +1,61 @@
+{
+  "label": "KITCHEN",
+  "idea": "A ghost kitchen in Lagos, Nigeria that delivers Nigerian home-style lunches (jollof, egusi, moi moi) to office workers who order over WhatsApp before 10am.",
+  "steps": {
+    "title": "A Ghost Kitchen in Lagos, Nigeria",
+    "copilot": {
+      "reply": "So, you want to validate the demand for your Nigerian home-style lunch delivery service in Lagos, targeting office workers who order via WhatsApp before 10am. You're concerned about whether this concept can be scalable and profitable. Can you tell me more about the average order value and frequency of orders from these office workers?",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "OFFICE WORKER",
+        "description": "Insights on daily routines, meal preferences, and communication habits of office workers in Lagos, Nigeria."
+      },
+      {
+        "role": "NIGERIAN HOME COOK",
+        "description": "Understanding of traditional Nigerian cuisine, cooking techniques, and ingredient sourcing habits."
+      },
+      {
+        "role": "WhatsApp USER",
+        "description": "Insights on WhatsApp usage patterns, order frequency, and payment methods among young adults in Lagos, Nigeria."
+      },
+      {
+        "role": "INFLUENCER MARKETER",
+        "description": "Insights on social media influence, content creation, and engagement strategies targeting the product's target audience."
+      },
+      {
+        "role": "PARTNER CHANNEL MANAGER",
+        "description": "Understanding of partner channel dynamics, commission structures, and communication channels among delivery partners in Lagos, Nigeria."
+      },
+      {
+        "role": "POWER USER",
+        "description": "Insights on high-order frequency, loyalty program adoption, and special requests from repeat customers."
+      },
+      {
+        "role": "CASUAL USER",
+        "description": "Insights on casual ordering habits, payment methods, and order frequency among occasional users of the product."
+      },
+      {
+        "role": "YOUNG PROFESSIONAL",
+        "description": "Insights on lifestyle preferences, dietary habits, and technology adoption patterns among young professionals in Lagos, Nigeria."
+      },
+      {
+        "role": "REGIONAL FOOD CRITIC",
+        "description": "Insights on regional food trends, culinary preferences, and cultural influences shaping the product's menu offerings."
+      }
+    ]
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 81.4,
+    "roles": 32.2,
+    "personas": 178.0
+  },
+  "study_id": "study_a9f62ed804e5483f"
+}

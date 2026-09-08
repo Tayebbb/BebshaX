@@ -1,0 +1,196 @@
+{
+  "label": "TUITION",
+  "idea": "A bKash-integrated tuition-fee installment plan for private-university students in Chattogram, Bangladesh, letting families split each semester's fee into four payments.",
+  "steps": {
+    "title": "A Bkash-Integrated Tuition-Fee Installment Plan",
+    "copilot": {
+      "reply": "You're exploring a financing solution for private university students in Chattogram, Bangladesh. To validate your idea, we could conduct user interviews to understand demand, willingness-to-pay, and potential pain points related to financial strain on families.",
+      "goal_card": null,
+      "is_ready": false,
+      "suggested_roles": [],
+      "fallback_reason": null
+    },
+    "roles": [
+      {
+        "role": "PARENT CAREGIVER",
+        "description": "Insights on family dynamics, financial stress, and decision-making processes of parents considering the bKash-integrated tuition-fee installment plan."
+      },
+      {
+        "role": "PRIVATE UNIVERSITY STUDENT",
+        "description": "Insights on student needs, financial burdens, and expectations from a bKash-integrated tuition-fee installment plan, specifically for Chattogram-based institutions."
+      },
+      {
+        "role": "FAMILY FINANCE MANAGER",
+        "description": "Insights on household financial management, budgeting strategies, and the role of bKash in facilitating financial stability for families with dependent students."
+      },
+      {
+        "role": "PRIVATE UNIVERSITY ADMINISTRATOR",
+        "description": "Insights on institutional policies, student enrollment processes, and the potential impact of a bKash-integrated tuition-fee installment plan on university operations."
+      },
+      {
+        "role": "BANK REPRESENTATIVE (bKASH)",
+        "description": "Insights on the banking industry's perspective, bKash's features, and how a bKash-integrated tuition-fee installment plan can enhance customer experience."
+      },
+      {
+        "role": "INFLUENCER (MOM BLOGGERS OR YOUTUBERS)",
+        "description": "Insights on social media influence, parenting trends, and the potential impact of a bKash-integrated tuition-fee installment plan on family lifestyle."
+      },
+      {
+        "role": "TUTORING CENTER OWNER",
+        "description": "Insights on tutoring services, student demand, and the potential benefits of a bKash-integrated tuition-fee installment plan for tutoring centers."
+      },
+      {
+        "role": "STUDENT LOAN REPRESENTATIVE (NGO)",
+        "description": "Insights on student loan policies, education financing options, and the potential impact of a bKash-integrated tuition-fee installment plan on student debt."
+      }
+    ],
+    "personas": [
+      {
+        "id": "per_8e052b604c08",
+        "name": "Rashida Begum",
+        "archetype": "Descriptive Archetype",
+        "tagline": "The Relenting Caregiver",
+        "occupation": "Part-time Teacher",
+        "location": "Chittagong, Bangladesh",
+        "income": "$4000 - $6000",
+        "country_code": "BD",
+        "description": "Rashida juggles her part-time teaching job with caring for her two young children. Her husband works abroad to support their family.",
+        "badges": [
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$1200"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "She regularly checks bKash app for tuition fee installment plan details"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Manage Family Finances Effectively",
+            "description": "Rashida wants to simplify her family's finances and avoid debt."
+          },
+          {
+            "category": "Pain Points",
+            "title": "Financial Stress from Tuition Fees",
+            "description": "She feels overwhelmed by the high tuition fees and struggles to make ends meet."
+          },
+          {
+            "category": "Needs",
+            "title": "Easy Financial Planning and Flexibility",
+            "description": "Rashida needs a reliable installment plan that allows her to adjust payments according to her financial situation."
+          }
+        ],
+        "created_at": null
+      },
+      {
+        "id": "per_1cf35fb94d4c",
+        "name": "Nur Parveen Rashid",
+        "archetype": "Overwhelmed Caregiver",
+        "tagline": "The Burdened Caregiver",
+        "occupation": "PhD Student",
+        "location": "Chattogram, Bangladesh",
+        "income": "$15,000 - $25,000/year",
+        "country_code": "BD",
+        "description": "A single mother of two, juggling PhD studies with childcare responsibilities, feeling overwhelmed by the increasing tuition fees and struggling to make ends meet.",
+        "badges": [
+          {
+            "label": "RELEVANT LABEL",
+            "value": "Financial Strain"
+          },
+          {
+            "label": "MONTHLY BUDGET",
+            "value": "$3,000 - $5,000"
+          },
+          {
+            "label": "USAGE PATTERN",
+            "value": "Regularly reviews finances and tuition fees online"
+          },
+          {
+            "label": "KEY CONCERN",
+            "value": "Managing debt and ensuring children receive quality education"
+          }
+        ],
+        "attributes": [
+          {
+            "category": "Goals",
+            "title": "Achieve financial stability for family",
+            "description": "Wants to secure a stable income to cover tuition fees and living expenses"
+          },
+          {
+            "category": "Pain Points",
+            "title": "Struggling with debt and financial burden",
+            "description": "Feels overwhelmed by the pressure of managing multiple debts, including tuition fees and living expenses"
+          },
+          {
+            "category": "Needs",
+            "title": "Reliable payment options for tuition fees",
+            "description": "Requires a secure and convenient way to pay tuition fees regularly, with minimal interest or fees"
+          }
+        ],
+        "created_at": null
+      }
+    ],
+    "failed_roles": [],
+    "script": [
+      "Can you describe your current process of paying tuition fees for your child's private university education in Chattogram, Bangladesh?",
+      "How do you typically handle financial constraints or difficulties in making full payments on time?",
+      "What would make it more convenient and manageable for you to pay tuition fees for the upcoming semester?"
+    ],
+    "interview_job": {
+      "status": "failed",
+      "completed": 0,
+      "failed": 1,
+      "personas": {
+        "per_8e052b604c08": {
+          "persona_id": "per_8e052b604c08",
+          "persona_name": "Rashida Begum",
+          "status": "failed",
+          "error": "DBAPIError: interview failed"
+        }
+      }
+    },
+    "ai_review": {
+      "overall": 20,
+      "scores": {
+        "grounding": 0,
+        "specificity": 0,
+        "consistency": 0,
+        "honesty": 0,
+        "actionability": 0
+      },
+      "verdict": "The artefacts lack grounding, specificity, consistency, honesty, and actionability. The personas are missing, and there is no report or interview summary. The evidence claims are also absent.",
+      "strengths": [],
+      "issues": [
+        {
+          "severity": "high",
+          "artifact": "personas:<id>|report|interview:<id>",
+          "detail": "No evidence claims, no interviews, and missing personas (e.g., per_1cf35fb94d4c), segments, or report."
+        }
+      ],
+      "served_by": "ollama/llama3.2:3b"
+    }
+  },
+  "served_by": {
+    "copilot": "ollama/llama3.2:3b",
+    "personas": [
+      "ollama/llama3.2:3b"
+    ],
+    "script": "ollama/llama3.2:3b",
+    "ai_review": "ollama/llama3.2:3b"
+  },
+  "timings_s": {
+    "copilot": 4.2,
+    "roles": 16.2,
+    "personas": 126.1,
+    "script": 85.8,
+    "interview_start": 0.0,
+    "interview": 111.5,
+    "behavioral_create": 0.0,
+    "report": 377.0,
+    "ai_review": 92.3
+  },
+  "study_id": "study_60f26cf4389544f3",
+  "elapsed_s": 813.2
+}

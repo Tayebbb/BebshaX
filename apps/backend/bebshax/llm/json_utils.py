@@ -9,19 +9,87 @@ Contract: :func:`parse_llm_json` raises ``ValueError`` (``json.JSONDecodeError``
 is a subclass) when no JSON payload can be recovered. Call sites keep their own
 fallback semantics by catching that — control flow is unchanged from the old
 inline variants; parsing is strictly more tolerant (any fence language tag,
-prose before/after the payload).
+prose before/after the payload, and — as a last resort — a *delimiter-only*
+repair of a mismatched or stray closing bracket or a trailing comma, see
+:func:`repair_json_delimiters`). The repair never touches string contents and
+never closes an unfinished payload: the model's own complete words are
+returned exactly, or nothing is.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _FENCE_OPEN = re.compile(r"^```[a-zA-Z0-9_-]*[ \t]*\r?\n?")
 _FENCE_CLOSE = re.compile(r"\r?\n?```\s*$")
 _OBJECT_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 _ARRAY_BLOCK = re.compile(r"\[.*\]", re.DOTALL)
+_CLOSER_FOR = {"{": "}", "[": "]"}
+
+
+def repair_json_delimiters(text: str) -> str | None:
+    """Fix structural delimiters in an otherwise complete JSON payload.
+
+    Observed live from 3B-class local models: a string array closed with ``}``
+    instead of ``]`` (``{"questions": ["a", "b"}}``), a stray extra closer, or a
+    trailing comma before a closer. Only brackets and commas OUTSIDE string
+    literals are changed — a mismatched closer becomes the one the innermost
+    open bracket expects, an unmatched closer is dropped, a trailing comma is
+    removed. A payload that ends with brackets still open, or inside a string,
+    is NOT repaired: that is what a reply cut off by the token limit looks
+    like, and closing it would present a partial answer as a finished one.
+    Returns the repaired text, or ``None`` when nothing was (or could be)
+    repaired, so callers can tell a repaired parse from a clean one.
+    """
+    out: list[str] = []
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    changed = False
+    for ch in text:
+        if in_string:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+        elif ch in _CLOSER_FOR:
+            stack.append(ch)
+            out.append(ch)
+        elif ch in ("}", "]"):
+            if not stack:
+                changed = True  # stray closer with nothing open: drop it
+                continue
+            expected = _CLOSER_FOR[stack.pop()]
+            if ch != expected:
+                changed = True
+            # A comma right before a closer is not JSON; drop it.
+            j = len(out) - 1
+            while j >= 0 and out[j].isspace():
+                j -= 1
+            if j >= 0 and out[j] == ",":
+                del out[j]
+                changed = True
+            out.append(expected)
+        else:
+            out.append(ch)
+    if in_string or stack:
+        # Cut off mid-string or before its closers: finishing it would hand the
+        # caller a partial reply as if the model had completed it. Leave that
+        # to the explicit-failure path.
+        return None
+    return "".join(out) if changed else None
 
 
 def strip_md_fences(text: str) -> str:
@@ -63,6 +131,22 @@ def parse_llm_json(text: str) -> Any:
                 return json.loads(match.group(0))
             except json.JSONDecodeError:
                 continue
+
+    # Last resort: the payload is there but a closer is wrong or stray. Only
+    # the WHOLE repaired payload is accepted — mining a fragment out of a
+    # mis-repair could hand a caller a list that was never the answer.
+    start = min(i for i in (first_obj, first_arr) if i != -1) if (first_obj != -1 or first_arr != -1) else -1
+    end = max(cleaned.rfind("}"), cleaned.rfind("]"))
+    if start != -1 and end > start:
+        repaired = repair_json_delimiters(cleaned[start : end + 1])
+        if repaired is not None:
+            try:
+                parsed = json.loads(repaired)
+            except json.JSONDecodeError:
+                parsed = None
+            if parsed is not None:
+                logger.info("parse_llm_json: delimiter repair applied (%d chars)", len(text))
+                return parsed
     raise ValueError(f"no JSON payload found in LLM response ({len(text)} chars)")
 
 

@@ -157,18 +157,30 @@ class OllamaAdapter(ProviderAdapter):
             options["temperature"] = request.temperature
         return num_ctx, options
 
+    @staticmethod
+    def _chat_body(candidate: RouteCandidate, request: LLMRequest, options: dict, *, stream: bool) -> dict:
+        body: dict = {
+            "model": candidate.model,
+            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "stream": stream,
+            "options": options,
+        }
+        if request.json_mode:
+            # Ollama's counterpart of OpenAI response_format: the sampler is
+            # constrained to a JSON grammar, so the reply CANNOT carry the
+            # syntax slips 3B-class models make in long structured output
+            # (missing opening quote, bare `30%`) — found live: 2 of 3 report
+            # replies were on-topic, complete, and unparseable.
+            body["format"] = "json"
+        return body
+
     async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
         num_ctx, options = self._sized_options(candidate, request)
 
         try:
             resp = await self._client.post(
                 "/api/chat",
-                json={
-                    "model": candidate.model,
-                    "messages": [{"role": m.role, "content": m.content} for m in request.messages],
-                    "stream": False,
-                    "options": options,
-                },
+                json=self._chat_body(candidate, request, options, stream=False),
                 timeout=self._request_timeout,
             )
         except httpx.TimeoutException as exc:
@@ -206,6 +218,8 @@ class OllamaAdapter(ProviderAdapter):
             )
 
         notes = [f"num_ctx={num_ctx}"]
+        if request.json_mode:
+            notes.append("format=json")
         done_reason = data.get("done_reason")
         if done_reason and done_reason != "stop":
             notes.append(f"done_reason={done_reason}")
@@ -232,12 +246,7 @@ class OllamaAdapter(ProviderAdapter):
             async with self._client.stream(
                 "POST",
                 "/api/chat",
-                json={
-                    "model": candidate.model,
-                    "messages": [{"role": m.role, "content": m.content} for m in request.messages],
-                    "stream": True,
-                    "options": options,
-                },
+                json=self._chat_body(candidate, request, options, stream=True),
                 timeout=self._request_timeout,
             ) as resp:
                 if resp.status_code == 404:

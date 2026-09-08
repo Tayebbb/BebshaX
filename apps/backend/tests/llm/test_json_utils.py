@@ -3,7 +3,7 @@ utility that replaced seven duplicated inline variants."""
 
 import pytest
 
-from bebshax.llm.json_utils import parse_llm_json, strip_md_fences, unwrap_list
+from bebshax.llm.json_utils import parse_llm_json, repair_json_delimiters, strip_md_fences, unwrap_list
 
 
 class TestStripMdFences:
@@ -67,8 +67,79 @@ class TestParseLlmJson:
             parse_llm_json("")
 
     def test_broken_json_raises_value_error(self):
+        # Cut off before its closers: the truncation signature, never "repaired".
         with pytest.raises(ValueError):
             parse_llm_json('{"a": 1')
+
+
+# Verbatim llama3.2:3b reply from the business-matrix run (2026-09-08): three
+# perfectly usable questions, array closed with '}' instead of ']'. Two such
+# replies in a row turned a whole study's script step into a 502.
+_LIVE_MISMATCHED_CLOSER = (
+    '{"questions": ["Can you walk me through your current process for generating the '
+    'sustainability report required by EU CSRD?", "How do you currently handle the discrepancy '
+    'between your existing ERP data and the reporting requirements of EU CSRD?", "Would you be '
+    'willing to pay a premium for a tool that could automate the mapping of EU CSRD requirements '
+    'onto your existing ERP data?"}}'
+)
+
+
+class TestDelimiterRepair:
+    def test_live_mismatched_array_closer_is_parsed(self):
+        parsed = parse_llm_json(_LIVE_MISMATCHED_CLOSER)
+        assert isinstance(parsed["questions"], list)
+        assert len(parsed["questions"]) == 3
+        assert parsed["questions"][2].endswith("onto your existing ERP data?")
+
+    def test_payload_cut_off_before_its_closers_is_not_finished_for_the_model(self):
+        # A report reply cut by the token limit right after a complete value
+        # must not be "repaired" into a report that is silently missing sections.
+        assert repair_json_delimiters('{"roles": [{"role": "A"}, {"role": "B"}') is None
+        result = None
+        try:
+            result = parse_llm_json('{"executive_summary": "...", "key_findings": ["a"]')
+        except ValueError:
+            pass
+        # The block extractor may still surface the inner array (pre-existing
+        # leniency); it must never surface the truncated report object.
+        assert not (isinstance(result, dict) and "executive_summary" in result)
+
+    def test_trailing_comma_before_closer_is_dropped(self):
+        assert parse_llm_json('{"items": [1, 2, 3,], }') == {"items": [1, 2, 3]}
+
+    def test_stray_extra_closer_is_dropped(self):
+        assert parse_llm_json('{"a": [1, 2]}]') == {"a": [1, 2]}
+
+    def test_brackets_inside_strings_are_never_touched(self):
+        text = '{"q": "Use [brackets] and {braces} freely?", "list": ["a"}}'
+        assert parse_llm_json(text) == {"q": "Use [brackets] and {braces} freely?", "list": ["a"]}
+
+    def test_escaped_quote_inside_string_keeps_string_state(self):
+        text = '{"q": "She said \\"go\\" then left", "n": [1}}'
+        assert parse_llm_json(text) == {"q": 'She said "go" then left', "n": [1]}
+
+    def test_repaired_payload_with_trailing_prose_is_recovered(self):
+        text = '{"questions": ["a", "b"}} Hope this helps!'
+        assert parse_llm_json(text) == {"questions": ["a", "b"]}
+
+    def test_cut_off_mid_string_is_not_finished_for_the_model(self):
+        # Half a sentence handed back as a question would be a fabrication.
+        assert repair_json_delimiters('{"questions": ["How do you currently han') is None
+        with pytest.raises(ValueError):
+            parse_llm_json('{"questions": ["How do you currently han')
+
+    def test_valid_json_reports_nothing_to_repair(self):
+        assert repair_json_delimiters('{"a": [1, {"b": 2}]}') is None
+
+    def test_mis_repair_never_yields_a_fragment(self):
+        # A MISSING opener cannot be repaired; the repaired text is still invalid
+        # and the inner "[1, 2]" must not be mined out of it as the answer.
+        with pytest.raises(ValueError):
+            parse_llm_json('{"a": [1, 2}, {"b": 3}]')
+
+    def test_repair_never_changes_string_contents(self):
+        original = '{"text": "keep, this] exactly {as} is", "tail": [1, 2}}'
+        assert parse_llm_json(original)["text"] == "keep, this] exactly {as} is"
 
 
 class TestUnwrapList:

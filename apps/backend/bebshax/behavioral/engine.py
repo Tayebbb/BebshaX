@@ -52,6 +52,47 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Keys a model uses for the text of a list item it returned as an object.
+_ITEM_TEXT_KEYS = ("name", "title", "text", "label", "factor", "detail", "description")
+
+
+def _item_text(item: Any) -> Optional[str]:
+    """The text of a list item: a string as is, an object's first text field, a
+    number as its string; None for anything without words."""
+    if isinstance(item, bool) or item is None:
+        return None
+    if isinstance(item, str):
+        return item.strip() or None
+    if isinstance(item, (int, float)):
+        return str(item)
+    if isinstance(item, dict):
+        for key in _ITEM_TEXT_KEYS:
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
+def _text_items(raw: Any) -> list[str]:
+    """A model-written list fitted to ``list[str]`` (a lone string becomes one item)."""
+    items = raw if isinstance(raw, list) else ([raw] if isinstance(raw, str) else [])
+    return [text for text in (_item_text(i) for i in items) if text]
+
+
+def _factor_items(raw: Any) -> list[dict[str, str]]:
+    """``key_factors`` fitted to ``[{"name": ..., "impact": ...}]``; a bare string
+    is a factor with no stated impact (recorded as such, never guessed)."""
+    items = raw if isinstance(raw, list) else ([raw] if isinstance(raw, str) else [])
+    factors: list[dict[str, str]] = []
+    for item in items:
+        name = _item_text(item)
+        if not name:
+            continue
+        impact = item.get("impact") if isinstance(item, dict) else None
+        factors.append({"name": name, "impact": str(impact).strip().lower() if isinstance(impact, str) and impact.strip() else "unstated"})
+    return factors
+
+
 class BehavioralTestNotFound(Exception):
     pass
 
@@ -470,9 +511,14 @@ class BehavioralSimulationEngine:
             logger.warning("simulation response for persona %s had a non-numeric probability", persona.id)
             return None
         data["probability"] = max(0.0, min(1.0, probability))
-        for key in ("key_factors", "motivators", "objections"):
-            if not isinstance(data.get(key), list):
-                data[key] = []
+        # Observed live: a 3B route returned motivators/objections as objects
+        # ({"name": ..., "detail": ...}) and key_factors as bare strings; the
+        # aggregate step's Counter() then raised on the unhashable dicts and the
+        # whole run failed after every persona had answered. Fit the shapes
+        # here, keeping the model's own words.
+        data["motivators"] = _text_items(data.get("motivators"))
+        data["objections"] = _text_items(data.get("objections"))
+        data["key_factors"] = _factor_items(data.get("key_factors"))
         return data
 
     # -----------------------------------------------------------------------
@@ -517,11 +563,17 @@ class BehavioralSimulationEngine:
             else:
                 neu_count += 1
 
-            all_motivators.extend(r.get("motivators", []))
-            all_objections.extend(r.get("objections", []))
+            # Fitted again here: this also aggregates rows persisted before the
+            # parse-time shape-fitting existed (retry-failed on an old run).
+            all_motivators.extend(_text_items(r.get("motivators")))
+            all_objections.extend(_text_items(r.get("objections")))
 
             for f in r.get("key_factors", []):
-                factors_by_impact.append((f.get("name", "Unknown"), f.get("impact", "medium")))
+                # Rows written before shape-fitting may still hold bare strings.
+                if isinstance(f, dict):
+                    factors_by_impact.append((f.get("name") or "Unknown", f.get("impact") or "unstated"))
+                elif isinstance(f, str) and f.strip():
+                    factors_by_impact.append((f.strip(), "unstated"))
 
             seg_id = r.get("segment_id") or "unassigned"
             segment_groups[seg_id].append(r)
@@ -554,7 +606,7 @@ class BehavioralSimulationEngine:
             g_prob = round(sum(float(g.get("probability", 0.0)) for g in group) / g_total, 2)
 
             # Top objection for segment
-            seg_objs = [obj for g in group for obj in g.get("objections", [])]
+            seg_objs = [obj for g in group for obj in _text_items(g.get("objections"))]
             top_seg_obj = Counter(seg_objs).most_common(1)[0][0] if seg_objs else "None identified"
 
             segment_analysis.append({

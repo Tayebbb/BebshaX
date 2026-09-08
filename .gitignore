@@ -52,3 +52,5 @@ coverage.xml
 # AI Agent Skills (restorable via skills-lock.json)
 .agents/skills/
 
+# Chromium crashpad logs dropped by the embedded browser tooling next to whatever file was open
+debug.log
