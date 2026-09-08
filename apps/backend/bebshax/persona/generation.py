@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
@@ -26,7 +27,9 @@ from bebshax.persona.schema import (
     PersonaProfile,
     coerce_provenance,
 )
-from bebshax.personas.ml_adapter import MLPersonaAdapter, build_business_context, to_persona_profile
+
+if TYPE_CHECKING:
+    from bebshax.personas.ml_adapter import MLPersonaAdapter
 
 
 class PersonaGenerationFailed(Exception):
@@ -160,6 +163,8 @@ class PersonaEngine:
         max_age: int | None = None,
     ) -> PersonaProfile:
         if self._ml_generator is not None:
+            from bebshax.personas.ml_adapter import build_business_context, to_persona_profile
+
             context = build_business_context(
                 description=f"{business_name}\n{business_description}",
                 product_category=industry or "",
