@@ -2,7 +2,7 @@ import React from 'react';
 import { ArrowRight, FlaskConical, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { Persona, PersonaRoleSuggestion } from '../../../../types';
 import type { FailedPersonaRole } from '../../../../services/api';
-import { EvidenceBadge, TemplateBadge, countEvidenceBacked } from '../../../../utils/personaEvidence';
+import { EvidenceBadge, TemplateBadge, countEvidenceBacked, isSyntheticSourcePersona } from '../../../../utils/personaEvidence';
 import { DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE } from './types';
 import { RequestIdTag } from '../../../common/RequestIdTag';
 
@@ -49,6 +49,9 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
   isReadOnly = false,
 }) => {
   const evidenceBackedCount = countEvidenceBacked(personas);
+  const syntheticSourceCount = personas.filter(isSyntheticSourcePersona).length;
+  const hasSyntheticSources = syntheticSourceCount > 0;
+  const allSyntheticSources = hasSyntheticSources && syntheticSourceCount === personas.length;
   return (
     <>
             {personaGenError && (
@@ -96,12 +99,14 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 </ul>
               </div>
             )}
-            {personaServedBy.length > 0 && personas.length > 0 && (
+            {(personaServedBy.length > 0 || hasSyntheticSources) && personas.length > 0 && (
               <p
                 data-testid="persona-served-by"
                 style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}
               >
-                Written by {personaServedBy.join(', ')} from this study’s brief — regenerate and they will differ.
+                {hasSyntheticSources
+                  ? `${allSyntheticSources ? 'Complete public synthetic source profiles' : `${syntheticSourceCount} of ${personas.length} personas are complete public synthetic source profiles`}, selected by the local persona model to match your brief.${allSyntheticSources ? '' : ' Other personas retain their own evidence labels.'}`
+                  : <>Written by {personaServedBy.join(', ')} from this study’s brief — regenerate and they will differ.</>}
               </p>
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
@@ -113,7 +118,11 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                   <span>Total Personas</span>
                   <span>({personas.length})</span>
                   <span>
-                    {personas.length > 0
+                    {hasSyntheticSources
+                      ? allSyntheticSources
+                        ? `• ${syntheticSourceCount} synthetic source profiles, not observed customers`
+                        : `• ${syntheticSourceCount} synthetic source profiles; ${evidenceBackedCount} of ${personas.length} backed by retrieved evidence`
+                      : personas.length > 0
                       ? `• ${evidenceBackedCount} of ${personas.length} backed by retrieved evidence — each card says which`
                       : '• Built from your description; any evidence we retrieve is labelled per persona'}
                   </span>
@@ -206,7 +215,9 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 }}
               >
                 <Sparkles size={16} className="animate-spin" />
-                Generating personas — any retrieved evidence is cited per claim. This can take a minute on free-tier routes...
+                {hasSyntheticSources
+                  ? 'Refreshing personas. Synthetic source profiles remain hypotheses, not observed customers.'
+                  : 'Generating personas — any retrieved evidence is cited per claim. This can take a minute on free-tier routes...'}
               </div>
             )}
 
@@ -227,12 +238,18 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 <FlaskConical size={17} color="var(--accent-cyan)" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                    {evidenceBackedCount === 0
+                    {hasSyntheticSources
+                      ? allSyntheticSources
+                        ? 'Synthetic source profiles are not observed customers'
+                        : `${syntheticSourceCount} synthetic source profiles; ${evidenceBackedCount} of ${personas.length} personas cite retrieved evidence`
+                      : evidenceBackedCount === 0
                       ? 'No research evidence has been gathered for this study yet'
                       : `${evidenceBackedCount} of ${personas.length} personas cite retrieved evidence`}
                   </div>
                   <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    {evidenceBackedCount === 0
+                    {hasSyntheticSources
+                      ? 'Synthetic profile claims remain hypotheses. Collect real research in the Evidence Laboratory to validate your study; regenerating does not turn synthetic profiles into observed customer evidence.'
+                      : evidenceBackedCount === 0
                       ? 'Every persona above is inferred from your description alone. Run research in the Evidence Laboratory to collect claims, then regenerate personas to have them cite that evidence.'
                       : 'The rest are inferred from your description. Collect more claims in the Evidence Laboratory, then regenerate to widen the coverage.'}
                   </div>
@@ -261,7 +278,9 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                   )}
                   {evidenceBackedCount === 0 && (
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      You can continue without it — the personas stay usable, they just aren&apos;t evidence-backed.
+                      {hasSyntheticSources
+                        ? 'You can continue with these profiles as hypotheses, not validated customer findings.'
+                        : <>You can continue without it — the personas stay usable, they just aren&apos;t evidence-backed.</>}
                     </div>
                   )}
                 </div>

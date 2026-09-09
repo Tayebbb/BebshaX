@@ -28,6 +28,7 @@ interface Step4InterviewsProps {
   interviewChatRef: React.MutableRefObject<HTMLDivElement | null>;
   chatMessages: ConversationTurn[];
   isSimulating: boolean;
+  isRestoringInterview?: boolean;
   handleSendInterviewMessage: (e: React.FormEvent) => Promise<void>;
   userInputMessage: string;
   setUserInputMessage: React.Dispatch<React.SetStateAction<string>>;
@@ -53,6 +54,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
   interviewChatRef,
   chatMessages,
   isSimulating,
+  isRestoringInterview = false,
   handleSendInterviewMessage,
   userInputMessage,
   setUserInputMessage,
@@ -314,6 +316,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
             {/* Chat Transcript Area */}
             <div
               ref={interviewChatRef}
+              aria-busy={isRestoringInterview}
               style={{
                 background: 'var(--bg-card)',
                 border: '1px solid var(--border-subtle)',
@@ -327,7 +330,12 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                 gap: '16px',
               }}
             >
-              {chatMessages.length === 0 && (
+              {isRestoringInterview && (
+                <div role="status" style={{ color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
+                  Loading saved transcript...
+                </div>
+              )}
+              {chatMessages.length === 0 && !isRestoringInterview && (
                 <div style={{ textAlign: 'center', color: 'var(--text-secondary)', margin: 'auto', padding: '32px 0' }}>
                   <MessageSquare size={28} className="text-teal-400 mx-auto mb-2" />
                   <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-main)' }}>
@@ -395,7 +403,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                     : 'Ask a follow-up interview question...'
                 }
                 aria-label="Follow-up interview question"
-                disabled={isReadOnly}
+                disabled={isReadOnly || isRestoringInterview}
                 title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
                   flex: 1,
@@ -411,7 +419,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
               />
               <button
                 type="submit"
-                disabled={isSimulating || !userInputMessage.trim() || isReadOnly}
+                disabled={isSimulating || isRestoringInterview || !userInputMessage.trim() || isReadOnly}
                 title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
                   background: 'var(--accent-gradient)',
@@ -420,7 +428,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   borderRadius: '12px',
                   padding: '0 20px',
                   fontWeight: 700,
-                  cursor: isSimulating || !userInputMessage.trim() || isReadOnly ? 'not-allowed' : 'pointer',
+                  cursor: isSimulating || isRestoringInterview || !userInputMessage.trim() || isReadOnly ? 'not-allowed' : 'pointer',
                   opacity: isReadOnly ? 0.55 : 1,
                 }}
               >

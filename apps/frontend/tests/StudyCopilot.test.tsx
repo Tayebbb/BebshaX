@@ -1,5 +1,7 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { StudyWorkflowView } from '../src/components/dashboard/views/StudyWorkflowView';
 import { api } from '../src/services/api';
@@ -78,6 +80,82 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
         screen.getByText(/What level of students/i)
       ).toBeInTheDocument();
     });
+  });
+
+  it('starts the initial coffee copilot turn under Strict Mode with the browser scheduler', async () => {
+    const prompt = 'I want to open a coffee shop for university students in Dhaka.';
+    const study: Study = {
+      id: 'study_strict_coffee',
+      title: 'Coffee study',
+      type: 'interviews',
+      prompt,
+      status: 'in_progress',
+      step: 1,
+      persona_count: 0,
+      persona_ids: [],
+      copilot_messages: [],
+      created_at: '2026-09-09T10:00:00Z',
+      updated_at: '2026-09-09T10:00:00Z',
+    };
+    vi.spyOn(api, 'getStudy').mockResolvedValue(study);
+    vi.spyOn(api, 'getStudyReports').mockResolvedValue([]);
+    vi.spyOn(api, 'getEvidenceSummary').mockRejectedValue(new Error('Evidence unavailable in this fixture'));
+    const updateStudy = vi.spyOn(api, 'updateStudy').mockResolvedValue(study);
+    type CopilotResponse = Awaited<ReturnType<typeof api.sendStudyCopilotMessage>>;
+    let resolveCopilot!: (response: CopilotResponse) => void;
+    const sendCopilot = vi.spyOn(api, 'sendStudyCopilotMessage').mockReturnValue(
+      new Promise<CopilotResponse>((resolve) => { resolveCopilot = resolve; })
+    );
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', false);
+    try {
+      root.render(
+        <StrictMode>
+          <StudyWorkflowView
+            studyId={study.id}
+            initialStep={1}
+            initialType="interviews"
+            initialPrompt={prompt}
+            onExit={vi.fn()}
+            onStepChange={vi.fn()}
+          />
+        </StrictMode>
+      );
+
+      expect(await screen.findByText(prompt)).toBeInTheDocument();
+      await waitFor(() => expect(sendCopilot).toHaveBeenCalledTimes(1));
+      expect(sendCopilot).toHaveBeenCalledWith([{ role: 'user', content: prompt }], 'interviews', study.id);
+      expect(await screen.findByText('Synthesizing market context & assumptions...')).toBeInTheDocument();
+
+      await act(async () => {
+        resolveCopilot({
+          reply: 'Which students would visit your coffee shop?',
+          is_ready_for_approval: false,
+          research_goal_card: null,
+          suggested_roles: [],
+          suggested_study_type: 'interviews',
+          served_by: 'test/synthetic-fixture',
+        });
+      });
+
+      expect(screen.getAllByText(prompt)).toHaveLength(1);
+      expect(screen.getAllByText('Which students would visit your coffee shop?')).toHaveLength(1);
+        expect(screen.queryByText('Synthesizing market context & assumptions...')).not.toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Describe your idea or answer the copilot' })).toBeEnabled();
+      expect(sendCopilot).toHaveBeenCalledTimes(1);
+      expect(updateStudy).toHaveBeenLastCalledWith(study.id, {
+        copilot_messages: [
+          expect.objectContaining({ role: 'user', content: prompt }),
+          expect.objectContaining({ role: 'assistant', content: 'Which students would visit your coffee shop?' }),
+        ],
+      });
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('progresses through multi-turn dialogue, shows role selection, generates grounded personas in Step 2, and advances to Step 3', async () => {

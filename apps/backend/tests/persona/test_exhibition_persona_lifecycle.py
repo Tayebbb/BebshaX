@@ -247,6 +247,43 @@ async def test_delete_run_rolls_back_all_artifacts_when_commit_fails(
         assert await session.get(ConversationTurns, "turn_per_delete") is not None
 
 
+async def test_delete_run_refuses_foreign_tenant_conversation_references(
+    exhibition_run_artifacts: async_sessionmaker[AsyncSession],
+) -> None:
+    async with exhibition_run_artifacts() as session:
+        conversation = await session.get(Conversations, "conversation_per_delete")
+        assert conversation is not None
+        conversation.user_id = "usr_other_lifecycle"
+        await session.commit()
+        with pytest.raises(APIError) as raised:
+            await PersonaGenerationService(session).delete_run("std_lifecycle", "pgen_delete", "usr_lifecycle")
+        assert raised.value.status_code == 409
+        assert raised.value.error_code == "data_integrity"
+    async with exhibition_run_artifacts() as session:
+        assert await session.get(PersonaGenerationRuns, "pgen_delete") is not None
+        assert await session.get(Conversations, "conversation_per_delete") is not None
+        assert await session.get(MemoryItems, "memory_per_delete") is not None
+
+
+async def test_active_source_exclusions_ignore_archived_foreign_and_other_context_personas(
+    exhibition_run_artifacts: async_sessionmaker[AsyncSession],
+) -> None:
+    async with exhibition_run_artifacts() as session:
+        for persona_id in ("per_delete", "per_keep", "per_foreign", "per_other_context"):
+            persona = await session.get(Personas, persona_id)
+            assert persona is not None
+            persona.detailed_attributes = {"ml_provenance": {"record_id": f"source_{persona_id}"}}
+            if persona_id == "per_keep":
+                persona.status = "archived"
+        await session.commit()
+        await service_module.lock_persona_parent(session, owner_id="usr_lifecycle", study_id="std_lifecycle")
+        exclude_ids, exclude_names = await service_module.active_source_exclusions(
+            session, owner_id="usr_lifecycle", scope=Personas.study_id == "std_lifecycle",
+        )
+        assert exclude_ids == {"source_per_delete"}
+        assert exclude_names == {"per_delete"}
+
+
 @pytest.mark.parametrize(
     ("parent_type", "scope_key", "parent_id"),
     [(Studies, "study_id", "std_lifecycle"), (Businesses, "business_id", "biz_lifecycle"),

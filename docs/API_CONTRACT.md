@@ -372,13 +372,20 @@ within the request and archives the old cohort when persisting the new one,
 without excluding old-cohort source records from selection. Its partial-role
 success contract above is unchanged.
 
-Exclusions are a read-before-generate check, not a transactional uniqueness lock.
-Overlapping independent requests/processes can still select the same source;
-no cross-process uniqueness guarantee is claimed. Existing persona tables,
+Cooperating generation paths lock the owned study/business/dataset parent row
+with `SELECT ... FOR UPDATE` before exclusion selection and persistence;
+regeneration archives old rows under lock. This serializes cooperating writers
+on PostgreSQL, not arbitrary writers: there is no global source-identity unique
+constraint. SQLite ignores these row locks; SQLite FK and PostgreSQL-compiled
+SQL tests are not live multi-process concurrency proof. Study generation uses
+only the selected segmentation run, or the latest run when omitted. Run deletion,
+owned dependents, and study count/ID/snapshot updates are atomic; conflicting
+foreign references return 409 (`data_integrity`). Existing persona tables,
 JSON columns, ownership/quota checks, and response schemas remain authoritative.
 The ML integration introduces no database migration, frontend contract/provider
-change, or HTTP training endpoint. The later user-approved frontend correction
-changes only four CSS theme-token declarations, not these contracts.
+change, or HTTP training endpoint. The earlier token-only frontend correction
+did not change these contracts; subsequent hardening is recorded in
+[SHIP_READINESS_REPORT.md](SHIP_READINESS_REPORT.md#current-hardening-verification-2026-09-09).
 
 [Post-sync local checks](../ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09)
 passed on 2026-09-09. Earlier live checks persisted/read back five unique ML
@@ -479,6 +486,27 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
   - `event: done` · `data: {…}` — the canonical payload (same fields as the non-stream endpoint incl. `reply` [normalized, this is what was persisted], `turn_number`, `served_by`, `latency_ms`, `suggested_questions`, `topics_explored`, `is_finished`, plus `user_message`/`persona_reply` parity objects). Clients MUST replace their streamed buffer with `reply`.
   - `event: error` · `data: {"kind": "finished|not_found|context_window|no_route|generic", "detail": "…", "error_code": "…", "request_id": "…", "llm_request_id": "…", "attempts": […], "routing_path": […]}` — failures after headers are sent; nothing was persisted for this turn unless `done` arrived. `kind` is legacy; `error_code` follows §1.
 
+#### Batch interviews (2026-09-09)
+
+- **`POST /api/studies/{study_id}/interviews/batch-run`** returns `202`. Optional
+  `persona_ids` and `questions` select the batch; omitted questions use the study
+  script. Both explicit and resolved stored inputs are validated: at most 50
+  personas, 20 questions, and 2,000 characters per question; invalid limits return
+  422. A missing script/questions is an explicit failure, not generated filler.
+- Study write access and each persona's `owner_can_write` permission are required.
+  Admission shares the in-memory job registry with other background jobs: at most
+  3 running jobs per effective owner, else 429 `too_many_jobs` with
+  `max_running_jobs: 3`. This is per-process admission, not a distributed quota.
+- The whole batch has a 600-second deadline; expiry marks the registry entry
+  `failed` with `error_code: "job_timeout"`. Polling retains the batch result's
+  `failed` or `completed_with_failures` status and includes the timeout error.
+  Completed persisted work is not rolled back as a
+  whole batch. Active jobs remain registered and counted when old jobs are evicted.
+- **`GET /api/studies/{study_id}/interviews/batch-run/{job_id}`** is bound to the
+  study, job kind, and job owner. Registry status is in memory and lost on restart;
+  persisted conversations remain. Per-persona results expose failures and
+  `insights_dropped`; a completed job is not proof every persona succeeded.
+
 #### Consistency signals on study-scoped turns (2026-09-06)
 
 The study-scoped message endpoint (`POST /api/studies/{study_id}/interviews/{interview_id}/messages`), its SSE `done` payload and every serialized turn (`turns[]` on interview detail) carry deterministic **quality** signals — never infrastructure failures, the turn was served normally:
@@ -492,7 +520,19 @@ The study-scoped message endpoint (`POST /api/studies/{study_id}/interviews/{int
 }
 ```
 
-`identity_drift` compares age/name/occupation statements in the reply against the immutable identity card; `contradiction_detected` compares money amounts against the persona's stated budget (skipped when no budget was stated). Both are also stored in the turn's `metadata`. The completion endpoint (`POST …/complete`) returns `source: "llm" | "fallback_mechanical"` and `fallback_reason` so a mechanical summary is never mistaken for analysis.
+`identity_drift` compares age/name/occupation statements in the reply against the immutable identity card; `contradiction_detected` compares money amounts against the persona's stated budget (skipped when no budget was stated). Both are also stored in the turn's `metadata` and restored on transcript hydration.
+
+Interview context includes the immutable identity card, business/study and segment
+context, available persona evidence citations, objective, and retrieved persona
+memories; researcher/document content is wrapped as untrusted data. Evidence
+citations are not sliced in prompt composition.
+
+Completion (`POST …/complete`) reports synthesis `source: "llm" | "unavailable"`,
+`error_code`, and `fallback_reason: null`, not a mechanical-analysis fallback.
+The completion snapshot, accepted insight rows, and synthesis metadata commit in
+one transaction. Each insight uses a savepoint: rejected rows increment
+`insights_dropped` without discarding accepted rows or preventing completion.
+Already-persisted turns remain; completion does not imply synthesis succeeded.
 
 #### `POST /api/conversations/{id}/messages`
 

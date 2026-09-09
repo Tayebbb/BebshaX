@@ -66,8 +66,8 @@ def discover_segments(
         grouped_rows.setdefault(val, []).append(r)
 
     segments: list[dict[str, Any]] = []
-    sorted_groups = sorted(grouped_rows.items(), key=lambda x: len(x[1]), reverse=True)
-    for seg_idx, (seg_name, seg_rows) in enumerate(sorted_groups[:6]):
+    sorted_groups = sorted(grouped_rows.items(), key=lambda group: (-len(group[1]), group[0]))
+    for seg_idx, (seg_name, seg_rows) in enumerate(sorted_groups):
         seg_count = len(seg_rows)
         pop_share = round(seg_count / total_rows, 3)
         pop_share_pct = round((seg_count / total_rows) * 100, 1)
@@ -138,7 +138,7 @@ def _categorical_summary(rows: list[dict[str, Any]], col: str) -> dict[str, Any]
 def calculate_segment_persona_distribution(
     segments: list[dict[str, Any]], requested_count: int
 ) -> dict[str, int]:
-    """Mathematically allocate personas per segment according to population share percentages.
+    """Allocate by complete population counts, otherwise use the supplied shares.
     
     Guarantees sum(allocated) == requested_count using largest remainder method.
     """
@@ -146,8 +146,25 @@ def calculate_segment_persona_distribution(
         return {}
 
     # Exact quota calculation
-    total_share = sum(s.get("population_share", 0.0) for s in segments) or 1.0
-    normalized_shares = [s.get("population_share", 0.0) / total_share for s in segments]
+    population_counts: list[int] = []
+    for segment in segments:
+        count = segment.get("population_count")
+        if count is None:
+            continue
+        if (
+            isinstance(count, bool)
+            or not isinstance(count, (int, float))
+            or count < 0
+            or (isinstance(count, float) and (not math.isfinite(count) or not count.is_integer()))
+        ):
+            raise ValueError("population_count must be a finite non-negative integer")
+        population_counts.append(int(count))
+    total_population = sum(population_counts)
+    if len(population_counts) == len(segments) and total_population:
+        normalized_shares = [count / total_population for count in population_counts]
+    else:
+        total_share = sum(s.get("population_share", 0.0) for s in segments) or 1.0
+        normalized_shares = [s.get("population_share", 0.0) / total_share for s in segments]
 
     floored_counts: list[int] = []
     remainders: list[tuple[float, int]] = []

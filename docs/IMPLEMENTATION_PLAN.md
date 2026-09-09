@@ -55,6 +55,138 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-09-09): Session and navigation loading latency
+
+Existing app-token restoration now validates directly with backend `/auth/me`,
+removing the preceding external Neon session lookup. The no-token Google OAuth
+cookie exchange remains in AuthContext; backend 401/403 still clears rejected
+sessions. Recent-study sidebar links remain visible during navigation refreshes
+instead of being replaced with initial-loading skeletons.
+
+Validation: the new auth regressions were demonstrated failing before the fix;
+44 nearby auth/API tests and all 9 Dashboard tests passed with one Vitest worker.
+TypeScript/Vite build passed. No dependencies or credentials changed. These fixes
+remove a serial auth request and repeat loading-state blocking, not database
+authentication failures: fresh configured database connections previously failed
+with InvalidPasswordError, which still requires valid deployment credentials.
+No end-to-end latency improvement or coverage percentage is claimed.
+
+### Maintenance (2026-09-09): Exhibition integrity fixes and regression closure
+
+Completed the outstanding hardening against executable failures rather than
+restarting the original 15 phases. Preserved concurrent frontend/auth work and
+its log entries; no model retraining, new dependencies, secret changes, database
+migrations, commits, pushes, or remote CI claims were made by this pass.
+
+- Batch interviews now use the shared job registry: at most three running jobs
+  per owner across features, a 600-second batch deadline, and retention of live
+  jobs during registry eviction. Resolved study inputs receive the same limits
+  as submitted inputs: 50 personas, 20 questions, 2,000 characters per question.
+  Every selected persona needs write ownership; private job status stays private
+  even if its study becomes shared. Seven reproduced boundary failures passed
+  after correction; the batch/persona-lifecycle scope passed 46 tests.
+- Persona lifecycle work selects one explicit or latest segmentation run, locks
+  cooperating writers on the owned parent, and deletes dependent artifacts and
+  repairs study snapshots transactionally. Foreign references fail explicitly.
+  SQLite foreign keys and PostgreSQL statement compilation were exercised;
+  this is not live PostgreSQL multi-process concurrency proof.
+- Dataset grouping retains all observed categories, including missing-value
+  groups, with deterministic tie ordering. Combined datasets use pooled counts
+  for percentages. Persona quotas use complete valid counts, fall back to
+  supplied shares when counts are incomplete, and reject negative, fractional,
+  non-finite, or boolean counts. Eight initial failures plus seven independent
+  review reproductions were repaired; all 25 population tests pass.
+- Study requests retain visit-specific cancellation guards. Sending is blocked
+  during saved-transcript restoration, including programmatic form submission;
+  success retains history and failure releases the composer. Two new tests
+  failed before the repair and pass afterward. Existing report fixtures now use
+  real ORM objects and an unbound async session, preserving full-context report
+  behavior and assertions; 34 report tests pass.
+- Independent read-only reviewers checked batch authorization/admission,
+  frontend request lifetimes, restoration, and population allocation. Their
+  concrete findings were reproduced and repaired; final scoped reviews found
+  no blocking issue. Reviews were not represented as independent test runs.
+
+Final executed gates: **1,639 backend tests passed, 3 integration tests
+deselected, 82.72% coverage** (80% floor; 773.82 seconds); **298 ML tests passed**
+(34.05 seconds); **293 frontend tests in 40 files passed**; **3 supplementary
+SSRF tests passed**. TypeScript, production Vite build (4.39 seconds), theme
+check (zero violations), changed-file Ruff, `pip check`, and quiet full-profile
+Compose validation passed. Existing frontend test `act` warnings and Vite's
+687.85 kB dashboard-chunk advisory remain.
+
+The existing trained artifact passed source/prepared/model/generation/backend
+smoke stages and produced five schema-valid personas. The production preview
+at `http://127.0.0.1:4173/` rendered on desktop (1440x1000) and mobile (390x844);
+visible images loaded, keyboard mobile navigation and light-theme sign-in
+worked, inputs were labelled, and no horizontal overflow was measured.
+Authenticated study creation through final report was not rehearsed in this
+browser pass. Health returned 20/20 HTTP 200 with p50 717.2 ms, p95 1195.3 ms,
+p99 1761.1 ms while ML tests ran; these are health round trips under concurrent
+load, not clean API/AI latency or TTFT measurements.
+
+The live keyless `smoke_freellmpool.py` failed twice, the second with UTF-8
+explicitly enabled: `AllCandidatesFailed` after one outer attempt. This does
+not invalidate the separate configured-provider successes recorded below, but
+keyless availability and offline fallback are not certified here. No real
+50-turn quality tournament, full Compose runtime rehearsal, new PostgreSQL
+integration run, credential-rotation verification, or exhaustive accessibility
+sign-off was completed. Verdict: **READY WITH RESERVATIONS**, as detailed in
+[SHIP_READINESS_REPORT.md](SHIP_READINESS_REPORT.md).
+
+### Maintenance (2026-09-09): Chat verification and frontend build repairs
+
+Follow-up to the missing first reply: repaired the incomplete copilot and
+synthetic-persona fixtures in `ExhibitionNavigation.test.tsx` and
+`ExhibitionInterviewLifecycle.test.tsx`. The new
+`ExhibitionTranscriptRestore.test.tsx` now preserves its known prompt type and
+returns the actual interview-list envelope. The frontend TypeScript/Vite build
+passes; **293 frontend tests in 40 files** and **417 LLM routing/adapter tests**
+pass. Vite still reports the existing large-chunk advisory.
+
+Real-provider verification exercised two copilot HTTP requests through the
+actual handler and default adapters in an isolated ASGI app, with synthetic
+authentication and no database. Both returned HTTP 200, useful coffee-specific
+replies, and provenance via `openrouter/dots-studio/dots-3-note-preview:free`,
+in **6.06 seconds** and **2.73 seconds**. Separately, the running API reported
+healthy remote adapters with no active cooldowns; its six most recent persisted
+LLM records were successful. These are observed calls, not a general reliability
+claim or an authenticated browser-session test.
+
+The installed Ollama daemon was stopped and has been restarted on port 11434;
+its existing model catalogue is reachable, including `llama3.2:3b` and `qwen3:4b`.
+No models were downloaded, and no secrets, provider configuration, or saved
+studies were changed. A local-model completion was not part of this check.
+
+### Maintenance (2026-09-09): Restore the first chat reply under Strict Mode
+
+Fixed a first-message race in
+[StudyWorkflowView](../apps/frontend/src/components/dashboard/views/StudyWorkflowView.tsx).
+React Strict Mode's effect replay could reset the chat history reference while
+the initial message was still pending. The queued send then returned before
+starting either the copilot request or the typing indicator. The pending message
+now repopulates an empty history reference on replay, preserving cancellation,
+study isolation, duplicate-send guards, and longer restored conversations.
+
+A direct-root, real-scheduler regression in
+[StudyCopilot.test.tsx](../apps/frontend/tests/StudyCopilot.test.tsx) reproduced
+zero API calls before the fix and verifies exactly one call, loading, reply,
+and persistence afterward. The existing async-act shell test did not expose
+this scheduling race. Copilot/navigation checks passed **24 tests**; the full
+frontend suite passed **291 tests in 39 files**. Editor diagnostics and the
+theme gate passed. An isolated mock-mode browser check verified the coffee
+prompt plus one follow-up: two calls, two saved user/assistant pairs, and a
+typing indicator that clears when a deliberately pending reply resolves.
+
+The production build remains blocked by existing test-fixture type errors:
+[ExhibitionNavigation.test.tsx](../apps/frontend/tests/ExhibitionNavigation.test.tsx)
+omits `suggested_study_type`, and
+[ExhibitionInterviewLifecycle.test.tsx](../apps/frontend/tests/ExhibitionInterviewLifecycle.test.tsx)
+omits three required synthetic-persona fields. Those fixtures were left untouched.
+No dependencies, backend behavior, authentication, or environment settings were
+changed. Live provider responses were not exercised; the browser check used
+synthetic mock data on a separate local origin, not the user's saved studies.
+
 ### Maintenance (2026-09-09): Persona ML publication confirmed
 
 Current documentation and the approved fixes were pushed to `origin/main`:

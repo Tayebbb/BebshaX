@@ -15,10 +15,14 @@ export interface PersonaEvidenceFields {
 export const evidenceRatio = (p: PersonaEvidenceFields): number =>
   p.grounding_ratio ?? p.grounding_score ?? 0;
 
+export const isSyntheticSourcePersona = (p: PersonaEvidenceFields): boolean =>
+  p.grounding_basis === 'synthetic_training_proxy' ||
+  p.generation_model?.startsWith('bebshax-persona-ml/') === true;
+
 /** Evidence-backed only when a real grounding ratio survived generation and the
  * backend did not flag the persona as "no evidence retrieved". */
 export const isEvidenceBacked = (p: PersonaEvidenceFields): boolean =>
-  evidenceRatio(p) > 0 && p.grounding_basis !== 'no_evidence_retrieved';
+  !isSyntheticSourcePersona(p) && evidenceRatio(p) > 0 && p.grounding_basis !== 'no_evidence_retrieved';
 
 /** Skeleton/template fallbacks are stamped by the backend generator. */
 export const isTemplatePersona = (p: PersonaEvidenceFields): boolean =>
@@ -39,10 +43,14 @@ export const EvidenceBadge: React.FC<{ persona: PersonaEvidenceFields }> = ({ pe
     </span>
   ) : (
     <span
-      title="No supporting evidence was retrieved for this persona — its details come from your description."
+      title={isSyntheticSourcePersona(persona)
+        ? 'A complete public synthetic source profile selected by the local persona model to match your brief. Its claims remain hypotheses, not observed customer evidence.'
+        : 'No supporting evidence was retrieved for this persona — its details come from your description.'}
       style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--fill-soft)', border: '1px solid var(--border-subtle)', padding: '2px 8px', borderRadius: '6px' }}
     >
-      Not evidence-backed — inferred from your description
+      {isSyntheticSourcePersona(persona)
+        ? 'Synthetic source profile'
+        : 'Not evidence-backed — inferred from your description'}
     </span>
   );
 

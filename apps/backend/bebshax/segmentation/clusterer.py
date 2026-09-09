@@ -183,14 +183,11 @@ def _explicit_segment_clusters(
     """Strategy A — segments the dataset pipeline already derived from real rows
     (categorical grouping). Every derived group is kept so the population stays
     complete; only observed constraints are carried, nothing is back-filled."""
-    subset = explicit_segments[:_MAX_CLUSTERS]
-    total_pop = sum(int(s.get("population_count") or 0) for s in subset) or total_records
+    total_pop = sum(int(s.get("population_count") or 0) for s in explicit_segments) or total_records
     clusters: list[ClusterDistribution] = []
-    for idx, seg in enumerate(subset):
+    for idx, seg in enumerate(explicit_segments):
         pop_count = int(seg.get("population_count") or 0)
-        pop_pct = seg.get("population_percentage")
-        if pop_pct is None:
-            pop_pct = round((pop_count / total_pop) * 100, 1) if total_pop else 0.0
+        pop_pct = round((pop_count / total_pop) * 100, 1) if total_pop else 0.0
         constraints = seg.get("constraints") or {}
         observed = {k: v for k, v in constraints.items() if v not in (None, "", [], {})}
         characteristics: dict[str, Any] = {
@@ -223,10 +220,10 @@ def cluster_dataset_populations(
     desired_clusters: Optional[int] = None,
     rows_by_dataset: Optional[dict[str, list[dict[str, Any]]]] = None,
 ) -> list[ClusterDistribution]:
-    """Partition the study's OBSERVED population into 2–6 data-backed clusters.
+    """Partition the study's OBSERVED population into data-backed clusters.
 
     Strategy A: segments already derived by the dataset pipeline (categorical
-    grouping of real rows). Strategy B: quantile bands on the highest-ranked
+    grouping of real rows). Strategy B: 2-6 quantile bands on the highest-ranked
     numeric variable over the actual rows, with every other selected variable
     profiled inside each band. No rows and no derived segments →
     ``InsufficientInput(segmentation_requires_data)``; there is no archetype

@@ -54,6 +54,8 @@ def start_job(
     runner: Callable[[dict[str, Any]], Awaitable[None]],
     user_id: Optional[str] = None,
     user_safe_exceptions: tuple[type[BaseException], ...] = (),
+    timeout_s: float | None = None,
+    job_id_prefix: str = "job",
 ) -> dict[str, Any]:
     """Register a job and run `runner(job)` in the background.
 
@@ -66,6 +68,7 @@ def start_job(
 
     Raises ``APIError(429, error_code="too_many_jobs")`` when ``user_id``
     already has ``MAX_RUNNING_JOBS_PER_USER`` jobs running.
+    ``timeout_s`` optionally bounds the entire runner, including retries.
     """
     registry = _registry(app)
     if running_jobs_for_user(app, user_id) >= MAX_RUNNING_JOBS_PER_USER:
@@ -77,7 +80,7 @@ def start_job(
             extra={"max_running_jobs": MAX_RUNNING_JOBS_PER_USER},
         )
     job: dict[str, Any] = {
-        "job_id": f"job_{uuid.uuid4().hex[:12]}",
+        "job_id": f"{job_id_prefix}_{uuid.uuid4().hex[:12]}",
         "kind": kind,
         "scope_id": scope_id,
         "user_id": user_id,
@@ -89,20 +92,26 @@ def start_job(
         "finished_at": None,
     }
     registry[job["job_id"]] = job
-    # Evict terminated jobs first — a still-running job must stay pollable
-    # (evicting it would 404 with a misleading "restart" hint while the task
-    # keeps running). Oldest-running goes only when everything is running.
+    # Running jobs must remain pollable and counted toward admission limits.
     while len(registry) > _MAX_JOBS:
         evictable = next(
             (jid for jid, j in registry.items() if j["status"] != "running"),
-            next(iter(registry)),
+            None,
         )
+        if evictable is None:
+            break
         registry.pop(evictable)
 
     async def _run() -> None:
         try:
-            await runner(job)
+            async with asyncio.timeout(timeout_s):
+                await runner(job)
             job["status"] = "completed"
+        except TimeoutError:
+            job["status"] = "failed"
+            job["error"] = "The background job exceeded its time limit."
+            job["error_code"] = "job_timeout"
+            logger.warning("%s job %s exceeded its deadline", kind, job["job_id"])
         except asyncio.CancelledError:
             # Shutdown/cancellation — never leave a job claiming "running".
             job["status"] = "failed"

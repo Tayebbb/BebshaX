@@ -99,6 +99,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [activeInterviewPersonaId, setActiveInterviewPersonaId] = useState<string>('');
   const [chatMessages, setChatMessages] = useState<ConversationTurn[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isRestoringInterview, setIsRestoringInterview] = useState(false);
   const [isBatchRunning, setIsBatchRunning] = useState(false);
   const [userInputMessage, setUserInputMessage] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -131,12 +132,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const step1InputRef = useRef<HTMLTextAreaElement | null>(null);
   const personaModalTriggerRef = useRef<HTMLElement | null>(null);
   const personaModalRef = useRef<HTMLDivElement | null>(null);
-  const interviewEpochRef = useRef({ active: false, pending: false, revision: 0 });
+  const interviewEpochRef = useRef({ active: false, pending: false, restoring: false, revision: 0 });
 
   useLayoutEffect(() => {
-    const epoch = { active: true, pending: false, revision: 0 };
+    const epoch = {
+      active: true, pending: false, revision: 0,
+      restoring: Boolean(studyId && activeInterviewPersonaId && localStorage.getItem(
+        `bebshax_conv_${studyId}_${activeInterviewPersonaId}`,
+      )),
+    };
     interviewEpochRef.current = epoch;
     setIsSimulating(false);
+    setIsRestoringInterview(epoch.restoring);
     setUserInputMessage('');
     setConversationId(null);
     setChatMessages([]);
@@ -167,10 +174,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       `bebshax_conv_${studyId}_${activeInterviewPersonaId}`
     );
     if (!storedConvId) {
+      epoch.restoring = false;
+      setIsRestoringInterview(false);
       setConversationId(null);
       setChatMessages([]);
       return;
     }
+    epoch.restoring = true;
+    setIsRestoringInterview(true);
     setConversationId(storedConvId);
     let cancelled = false;
     api
@@ -185,6 +196,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           localStorage.removeItem(`bebshax_conv_${studyId}_${activeInterviewPersonaId}`);
           setConversationId(null);
           setChatMessages([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled && epoch.active && epoch.revision === revision) {
+          epoch.restoring = false;
+          setIsRestoringInterview(false);
         }
       });
     return () => {
@@ -824,7 +841,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     e.preventDefault();
     const epoch = interviewEpochRef.current;
     const text = userInputMessage.trim();
-    if (!epoch.active || epoch.pending || !text || isSimulating || !activeInterviewPersonaId) return;
+    if (!epoch.active || epoch.pending || epoch.restoring || !text || isSimulating || !activeInterviewPersonaId) return;
 
     epoch.pending = true;
     epoch.revision += 1;
@@ -952,6 +969,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
       };
       pendingInitialPromptRef.current = userMsg;
+    }
+    if (copilotMessagesRef.current.length === 0) {
       copilotMessagesRef.current = [userMsg];
       setCopilotMessages([userMsg]);
     }
@@ -1340,6 +1359,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               interviewChatRef={interviewChatRef}
               chatMessages={chatMessages}
               isSimulating={isSimulating}
+              isRestoringInterview={isRestoringInterview}
               handleSendInterviewMessage={handleSendInterviewMessage}
               userInputMessage={userInputMessage}
               setUserInputMessage={setUserInputMessage}

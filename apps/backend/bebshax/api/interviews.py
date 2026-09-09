@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import uuid
 from contextlib import aclosing
 from datetime import datetime, timezone
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -25,6 +24,7 @@ from bebshax.api.deps import (
     user_owns_study,
 )
 from bebshax.api.errors import APIError, request_id_of
+from bebshax.api.jobs import get_job, start_job
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
@@ -37,6 +37,7 @@ from bebshax.utils.explicit_failures import ExplicitFailure, LLMUnavailable
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["interviews"])
+_MAX_BATCH_PERSONAS = 50
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +58,7 @@ class InterviewMessageRequest(BaseModel):
 
 class BatchInterviewRunRequest(BaseModel):
     # Caps bound real LLM spend: N personas × M questions of sequential calls.
-    persona_ids: Optional[list[str]] = Field(default=None, max_length=50)
+    persona_ids: Optional[list[str]] = Field(default=None, max_length=_MAX_BATCH_PERSONAS)
     questions: Optional[list[str]] = Field(default=None, max_length=20)
 
     @field_validator("questions")
@@ -795,15 +796,7 @@ async def post_message(
 # completed interviews are persisted as conversations as they finish.
 # ---------------------------------------------------------------------------
 
-def _batch_registry(app) -> dict[str, dict[str, Any]]:
-    reg = getattr(app.state, "interview_batch_jobs", None)
-    if reg is None:
-        reg = {}
-        app.state.interview_batch_jobs = reg
-        app.state.interview_batch_tasks = set()
-    return reg
-
-
+_BATCH_JOB_TIMEOUT_S = 600.0
 _BATCH_TURN_RETRY_DELAY_S = 20.0  # one provider-wide cooldown window is 30-60 s
 
 
@@ -837,6 +830,7 @@ async def _run_batch_job(
         if engine is None:
             entry["status"] = "failed"
             entry["error"] = "interview engine unavailable (LLM router / DB not wired)"
+            job["failed_count"] += 1
             continue
         entry["status"] = "in_progress"
         try:
@@ -886,7 +880,7 @@ async def batch_run_study_interviews(
     # 1. Resolve personas
     target_persona_ids = payload.persona_ids if payload and payload.persona_ids else []
     if not target_persona_ids:
-        p_stmt = select(Personas).where(Personas.study_id == study_id)
+        p_stmt = select(Personas).where(Personas.study_id == study_id).limit(_MAX_BATCH_PERSONAS + 1)
         personas = list((await session.execute(p_stmt)).scalars().all())
     else:
         # Client-supplied ids are scoped to this study: an unscoped `IN` let a
@@ -902,6 +896,8 @@ async def batch_run_study_interviews(
 
     if not personas:
         raise HTTPException(status_code=400, detail="No personas available for this study")
+    if any(not owner_can_write(persona.owner_id, current_user) for persona in personas):
+        raise HTTPException(status_code=403, detail="Not authorized to interview one or more personas")
 
     # 2. Resolve questions — the study's generated script or the caller's own
     # list. There is no default questionnaire: a script must exist first (R2).
@@ -912,6 +908,17 @@ async def batch_run_study_interviews(
             "This study has no interview script yet. Generate the script (or pass your own questions) before running interviews.",
             error_code="script_required",
         )
+
+    try:
+        BatchInterviewRunRequest(
+            persona_ids=[persona.id for persona in personas], questions=questions,
+        )
+    except ValidationError as exc:
+        raise APIError(
+            422,
+            "Batch interviews allow at most 50 personas and 20 questions, with 2000 characters per question.",
+            error_code="batch_limit_exceeded",
+        ) from exc
 
     if getattr(request.app.state, "interview_engine", None) is None:
         llm_router = getattr(request.app.state, "llm_router", None)
@@ -927,9 +934,7 @@ async def batch_run_study_interviews(
     # Detach plain values before the request session closes.
     personas_data = [{"id": p.id, "name": p.name} for p in personas]
 
-    job_id = f"bjob_{uuid.uuid4().hex[:12]}"
     job: dict[str, Any] = {
-        "job_id": job_id,
         "study_id": study_id,
         "status": "running",
         "total_personas": len(personas_data),
@@ -943,23 +948,39 @@ async def batch_run_study_interviews(
         "started_at": datetime.now(timezone.utc).isoformat(),
         "finished_at": None,
     }
-    registry = _batch_registry(request.app)
-    registry[job_id] = job
-    # Keep only the most recent jobs.
-    while len(registry) > 50:
-        registry.pop(next(iter(registry)))
 
-    task = asyncio.create_task(
-        _run_batch_job(
-            request.app, job, personas_data, list(questions),
-            study_id, study.goal or "demand_validation", study.prompt, effective_user_id,
-        )
+    async def _runner(registered_job: dict[str, Any]) -> None:
+        job["job_id"] = registered_job["job_id"]
+        registered_job["result"] = job
+        try:
+            await _run_batch_job(
+                request.app, job, personas_data, list(questions),
+                study_id, study.goal or "demand_validation", study.prompt, effective_user_id,
+            )
+        finally:
+            if job["status"] == "running":
+                for entry in job["personas"].values():
+                    if entry["status"] in ("pending", "in_progress"):
+                        entry["status"] = "failed"
+                        entry["error"] = "Batch stopped before this interview completed."
+                        job["failed_count"] += 1
+                job["status"] = "completed_with_failures" if job["completed_count"] else "failed"
+                job["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+    registered_job = start_job(
+        request.app,
+        kind="interview_batch",
+        scope_id=study_id,
+        runner=_runner,
+        user_id=effective_user_id,
+        timeout_s=_BATCH_JOB_TIMEOUT_S,
+        job_id_prefix="bjob",
     )
-    request.app.state.interview_batch_tasks.add(task)
-    task.add_done_callback(request.app.state.interview_batch_tasks.discard)
+    job["job_id"] = registered_job["job_id"]
+    registered_job["result"] = job
 
     return {
-        "job_id": job_id,
+        "job_id": job["job_id"],
         "study_id": study_id,
         "status": "running",
         "total_personas": job["total_personas"],
@@ -977,9 +998,17 @@ async def get_batch_run_status(
 ) -> dict[str, Any]:
     """Poll a batch interview job. 404 for unknown/lost jobs (e.g. after a restart)."""
     await _get_study_and_verify_access(session, study_id, current_user)
-    job = _batch_registry(request.app).get(job_id)
-    if not job or job["study_id"] != study_id:
+    registered_job = get_job(request.app, job_id, kind="interview_batch", scope_id=study_id)
+    if not registered_job or not owner_can_write(registered_job.get("user_id"), current_user):
         raise HTTPException(status_code=404, detail="batch job not found (it may have been lost in a server restart)")
+    job = registered_job["result"]
+    if registered_job["status"] == "failed":
+        return {
+            **job,
+            "error": registered_job["error"],
+            "error_code": registered_job["error_code"],
+            "finished_at": registered_job["finished_at"],
+        }
     return job
 
 

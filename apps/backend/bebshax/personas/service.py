@@ -96,16 +96,20 @@ async def delete_persona_artifacts(
     )).all())
     if not persona_ids:
         return persona_ids
-    conversation_ids = select(Conversations.id).where(Conversations.persona_id.in_(persona_ids))
+    conversation_ids = select(Conversations.id).where(
+        Conversations.persona_id.in_(persona_ids),
+        Conversations.user_id.is_(None) | (Conversations.user_id == owner_id),
+    )
     await session.execute(delete(ConversationTurns).where(
         ConversationTurns.conversation_id.in_(conversation_ids),
     ))
     await session.execute(delete(InterviewInsights).where(
         InterviewInsights.interview_id.in_(conversation_ids)
         | InterviewInsights.persona_id.in_(persona_ids),
+        InterviewInsights.user_id.is_(None) | (InterviewInsights.user_id == owner_id),
     ))
     await session.execute(delete(MemoryItems).where(MemoryItems.persona_id.in_(persona_ids)))
-    await session.execute(delete(Conversations).where(Conversations.persona_id.in_(persona_ids)))
+    await session.execute(delete(Conversations).where(Conversations.id.in_(conversation_ids)))
     for model in (PersonaAttributes, PersonaEvidence, PersonaDetails):
         await session.execute(delete(model).where(model.persona_id.in_(persona_ids)))
     await session.execute(delete(Personas).where(Personas.id.in_(persona_ids)))

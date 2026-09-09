@@ -59,8 +59,11 @@ The [model card](ml_persona/MODEL_CARD.md) records lower held-out retrieval MRR
 than lexical TF-IDF (0.432654 versus 0.751621), USA-synthetic-only coverage,
 and no validated population/student/Bangladesh fit. Source occupation/location
 is retained; explicit ages in 18–95 are hard constraints, role/location are soft
-hints, and income/OCEAN values stay unknown. Sequential owner-scoped identity
-exclusions do not provide a concurrent transactional uniqueness lock.
+hints, and income/OCEAN values stay unknown. Source exclusions now use cooperating
+study/business/dataset parent-row locks before selection and persistence;
+regeneration archives old rows under lock. There is no global source-identity
+unique constraint. SQLite FK tests and PostgreSQL-compiled SQL checks do not
+prove live PostgreSQL multi-process concurrency.
 
 The [post-sync local checks](ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09)
 passed at the documented scopes. Earlier checks passed local PostgreSQL
@@ -73,6 +76,38 @@ and cross-conversation memory retrieval rehearsals were not repeated. Commit,
 push, and CI results are tracked separately in the
 [implementation log](docs/IMPLEMENTATION_PLAN.md), not claimed successful here.
 This addendum does not change the original phase roadmap or completion dates.
+
+### Current Hardening Status (2026-09-09)
+
+**READY WITH RESERVATIONS**, not production sign-off. Parent-reported current
+checks: backend 1,639 passed / 3 integration deselected (773.82 s, 82.72% coverage,
+80% required); frontend 293 tests / 40 files, TypeScript/Vite PASS (4.39 s),
+theme check 0 files; ML 298 passed (34.05 s); root SSRF regression 3 passed.
+All five backend-enabled ML smoke stages passed with five profiles. Dependency
+consistency, full-profile Compose configuration, and changed-Python bug-tier Ruff
+passed. The initial 11 backend failures are resolved; no test failures remain
+in these reported runs. The ML model remains frozen; no LLM fine-tuning.
+
+Current hardening covers shared batch-job admission/ownership, transcript
+hydration, selected/latest segmentation, atomic persona deletion and snapshots,
+complete observed-group statistics and validated count-based quotas, full-fidelity
+report context with atomic versions, and frontend request-epoch/navigation/restore
+guards. Independent reviews of batch ownership/admission, transcript hydration,
+and statistics/quotas were code-only.
+
+Built-preview checks at desktop 1440x1000 loaded all visible images; mobile
+390x844 checked navigation, keyboard, theme, sign-in input labels, and no horizontal
+overflow. These do not establish an authenticated critical journey or resolution
+of the earlier persona-header finding. Health returned HTTP 200 in 20/20 samples:
+p50 717.2 ms, p95 1195.3 ms, p99 1761.1 ms during ML tests, not a clean baseline.
+The current Freellmpool smoke failed and is under diagnosis; two real copilot
+HTTP 200 responses (6.06 s, 2.73 s) belong to another concurrent workstream,
+not this run. Neither observation establishes fleet-wide provider availability.
+
+Remaining gates: real 50-turn conversation, PostgreSQL full-stack/concurrency,
+offline-provider and real-user rehearsals, real Google sign-in/checkout, and
+verification of historical credential rotation. No commit, push, or CI success
+is claimed. Detailed current evidence: [ship readiness](docs/SHIP_READINESS_REPORT.md).
 
 ## Stack (decided — do not relitigate casually)
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { DashboardLayout } from '../src/components/dashboard/DashboardLayout';
@@ -69,6 +69,29 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
       expect(screen.getByText('Saved personas and audiences you can reuse in any study.')).toBeInTheDocument();
       expect(screen.getByText('Sarah Chen')).toBeInTheDocument();
     });
+  });
+
+  it('keeps loaded recent study links visible while navigation refresh is pending', async () => {
+    const getStudies = vi.spyOn(api, 'getStudies');
+    try {
+      renderDashboard();
+
+      expect(await screen.findByRole('button', { name: 'Brand Messaging Discovery' })).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Price Tracker Demand' })).toBeVisible();
+
+      getStudies.mockImplementation(() => new Promise(() => {}));
+      const callsBeforeNavigation = getStudies.mock.calls.length;
+      fireEvent.click(screen.getByRole('button', { name: /Persona Library/i }));
+
+      await waitFor(() => {
+        expect(getStudies.mock.calls.length).toBeGreaterThan(callsBeforeNavigation);
+        expect(screen.getByRole('heading', { name: /^Persona Library$/i })).toBeInTheDocument();
+      });
+      expect(screen.getByRole('button', { name: 'Brand Messaging Discovery' })).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Price Tracker Demand' })).toBeVisible();
+    } finally {
+      getStudies.mockRestore();
+    }
   });
 
   it('renders primary sidebar navigation tabs without Model Router', async () => {

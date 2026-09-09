@@ -186,6 +186,39 @@ def test_quota_allocation_uses_counts_not_dataset_local_or_missing_shares(
     assert sum(allocation.values()) == requested_count
 
 
+@pytest.mark.parametrize("invalid_count", [-1, 1.5, float("nan"), float("inf"), True])
+def test_quota_allocation_rejects_invalid_observed_counts(invalid_count: int | float) -> None:
+    segments = [
+        {"id": "invalid", "population_count": invalid_count, "population_share": 0.5},
+        {"id": "valid", "population_count": 3, "population_share": 0.5},
+    ]
+
+    with pytest.raises(ValueError, match="population_count"):
+        calculate_segment_persona_distribution(segments, 2)
+
+
+@pytest.mark.parametrize("missing_count", [{}, {"population_count": None}])
+def test_quota_allocation_uses_shares_when_counts_are_incomplete(missing_count: dict[str, Any]) -> None:
+    segments = [
+        {"id": "counted", "population_count": 10, "population_share": 0.5},
+        {"id": "uncounted", "population_share": 0.5, **missing_count},
+    ]
+
+    assert calculate_segment_persona_distribution(segments, 10) == {"counted": 5, "uncounted": 5}
+
+
+@pytest.mark.parametrize(
+    ("counts", "requested_count", "expected"),
+    [([0, 5], 3, {"seg_0": 0, "seg_1": 3}), ([1, 2, 3], 1, {"seg_0": 0, "seg_1": 0, "seg_2": 1})],
+)
+def test_quota_allocation_conserves_small_requests_and_zero_groups(
+    counts: list[int], requested_count: int, expected: dict[str, int],
+) -> None:
+    segments = [{"id": f"seg_{index}", "population_count": count} for index, count in enumerate(counts)]
+
+    assert calculate_segment_persona_distribution(segments, requested_count) == expected
+
+
 @pytest.mark.parametrize("desired_clusters", [2, 3, 4, 5, 6])
 def test_numeric_partition_keeps_requested_two_to_six_cluster_behavior(desired_clusters: int) -> None:
     rows = [{"monthly_budget": index} for index in range(60)]

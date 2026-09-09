@@ -965,22 +965,6 @@ export const api = {
     if (!token) return null;
 
     if (!this.isMockMode()) {
-      // 1. Check Neon Auth live session (with token if present)
-      try {
-        const neonUser = await neonAuth.getSession(token);
-        if (neonUser) {
-          lastKnownLive = true;
-          this.setStoredUser(neonUser);
-          if (neonUser.token) {
-            this.setAuthToken(neonUser.token);
-          }
-          return neonUser;
-        }
-      } catch {
-        // ignore neon check error
-      }
-
-      // 2. Check Backend API /auth/me if we have a token
       try {
         const res = await fetch(`${API_BASE}/auth/me`, {
           headers: this.getAuthHeaders(),
@@ -1108,23 +1092,23 @@ export const api = {
   },
 
   getStoredUserStudies(): Study[] {
+    const mockMode = this.isMockMode();
+    const userId = this.getStoredUser()?.id;
+    if (!mockMode && !userId) return [];
     try {
       const key = this.getUserStudiesStorageKey();
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          return parsed;
+          return mockMode ? parsed : parsed.filter((study) => study?.user_id === userId);
         }
       }
     } catch {
       // ignore
     }
-    // Sync helper: mock-mode callers await loadMocks() before reaching this
-    // fallback, so the cache is populated. Before any mock load (live mode,
-    // cold cache) there are no seed studies to serve — return the empty list
-    // instead of leaking fixtures into the live localStorage cache.
-    return _mocksSync ? [..._mocksSync.mockStore.studies] : [];
+    // Sync mock callers await loadMocks(); live reads must never use its seeds.
+    return mockMode && _mocksSync ? [..._mocksSync.mockStore.studies] : [];
   },
 
   /** Write-through used by reads. Deliberately does NOT invalidate: a read
@@ -1137,9 +1121,13 @@ export const api = {
    * next create/update/delete then persists back as B's own. */
   persistStoredUserStudies(studies: Study[], expectedKey?: string) {
     try {
+      const mockMode = this.isMockMode();
+      const userId = this.getStoredUser()?.id;
+      if (!mockMode && !userId) return;
       const key = this.getUserStudiesStorageKey();
       if (expectedKey !== undefined && expectedKey !== key) return;
-      localStorage.setItem(key, JSON.stringify(studies));
+      const ownedStudies = mockMode ? studies : studies.filter((study) => study?.user_id === userId);
+      localStorage.setItem(key, JSON.stringify(ownedStudies));
     } catch {
       // ignore
     }
@@ -1155,7 +1143,8 @@ export const api = {
   async getStudies(): Promise<Study[]> {
     // Keyed by user: signing out and back in as someone else must never be
     // served the previous account's studies out of a process-global cache.
-    const key = this.getUserStudiesStorageKey();
+    const storageKey = this.getUserStudiesStorageKey();
+    const key = `${this.isMockMode() ? 'mock' : 'live'}:${storageKey}`;
     if (studiesCache && studiesCache.key === key && Date.now() - studiesCache.at < STUDIES_CACHE_TTL_MS) {
       // Copy: the three dashboard consumers share this entry for the TTL
       // window, and one in-place sort would corrupt the other two views.
@@ -1165,7 +1154,7 @@ export const api = {
       return studiesInFlight.promise.then((value) => value.slice());
     }
     const generation = studiesGeneration;
-    const promise = this.fetchStudies(key)
+    const promise = this.fetchStudies(storageKey)
       .then((value) => {
         if (generation === studiesGeneration) {
           studiesCache = { at: Date.now(), key, value };

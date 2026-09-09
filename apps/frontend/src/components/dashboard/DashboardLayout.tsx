@@ -299,17 +299,27 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
   useEffect(() => {
     const epoch = routeEpochRef.current;
+    const ownerId = user?.id;
+    let cancelled = false;
+    const isCurrent = () => !cancelled && epoch.active && api.getStoredUser()?.id === ownerId;
+    setRecentStudies((previous) => api.isMockMode()
+      ? previous
+      : previous.filter((study) => ownerId && study.user_id === ownerId));
+    setDemoStudy((previous) => api.isMockMode() || (ownerId && previous?.user_id === ownerId) ? previous : null);
     const loadRecent = async () => {
-      setLoadingRecent(true);
       try {
         const data = await api.getStudies();
-        if (!epoch.active) return;
-        setRecentStudies(data.slice(0, 5));
-        setDemoStudy(findExampleStudy(data));
+        if (!isCurrent()) return;
+        const ownedStudies = api.isMockMode() ? data : data.filter((study) => ownerId && study.user_id === ownerId);
+        setRecentStudies(ownedStudies.slice(0, 5));
+        setDemoStudy(findExampleStudy(ownedStudies));
       } catch {
-        // fallback
+        if (!isCurrent()) return;
+        const cached = api.getStoredUserStudies();
+        setRecentStudies(cached.slice(0, 5));
+        setDemoStudy(findExampleStudy(cached));
       } finally {
-        if (epoch.active) {
+        if (isCurrent()) {
           setLoadingRecent(false);
           // Mock fixtures must never masquerade as live research data.
           setBackendDown(!api.isMockMode() && !api.isLive());
@@ -317,7 +327,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       }
     };
     loadRecent();
-  }, [currentPath]);
+    return () => { cancelled = true; };
+  }, [currentPath, user?.id]);
 
   // Dynamic greeting based on time of day
   const getGreeting = () => {
@@ -1478,7 +1489,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             }}
           >
             <div style={{ fontSize: '0.85rem', color: 'var(--status-error-text)', lineHeight: 1.55 }}>
-              {createStudyError} Nothing was saved — please try again.
+              {createStudyError} Check Dashboard before retrying to avoid creating a duplicate.
             </div>
             <button
               type="button"

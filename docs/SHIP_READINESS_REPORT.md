@@ -21,12 +21,53 @@ Post-sync local checks are distinguished from earlier live evidence below.
 | Research limits         | NMF retrieval loses to lexical baseline; USA-only source, visible workforce bias, no demand/population/student/Bangladesh validity or inferred budget/OCEAN                                                                                                         |
 | Unfinished verification | Full Compose app/web and cross-conversation retrieval rehearsals not repeated; Pyright unavailable. Earlier desktop passed; mobile header clipping remains unfixed and was not reverified after upstream styling or the token-only correction                       |
 
-This is **not a production sign-off**. Sequential source exclusions are not
-cross-process transactional uniqueness. The
+This is **not a production sign-off**. Source exclusions now use cooperating
+parent-row locks before selection/persistence, including regeneration archiving;
+there is no global source-identity unique constraint or live multi-process proof.
+The older post-sync counts above are superseded by the current results below. The
 [post-sync local checks](../ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09)
 passed at the recorded scopes; commit, push, and remote CI results are tracked
 separately in the [implementation log](IMPLEMENTATION_PLAN.md), not claimed
 successful here. See the [current readiness assessment](PRODUCTION_READINESS.md).
+
+## Current Hardening Verification (2026-09-09)
+
+**READY WITH RESERVATIONS.** The results below were executed locally during the
+hardening pass. Earlier evidence above and the September 7-8 tables below remain
+historical, not current acceptance gates.
+
+| Check | Current result / scope |
+| ----- | ---------------------- |
+| Backend | 1,639 passed, 3 integration deselected; 773.82 s; 82.72% coverage (80% required). Initial 11 failures resolved; no remaining test failures in this run |
+| Frontend | 293 tests / 40 files; TypeScript/Vite PASS, build 4.39 s; theme check 0 files |
+| ML / SSRF | ML 298 passed in 34.05 s; root SSRF regression 3 passed; backend-enabled business-example smoke all 5 stages green, 5 profiles |
+| Configuration / lint | Dependency consistency PASS; full-profile Compose configuration PASS (not stack startup); changed-Python bug-tier Ruff PASS |
+| Independent review | Code-only verification of batch ownership/admission, transcript hydration, and statistics/quotas |
+| Built preview | `http://127.0.0.1:4173`: desktop 1440x1000, all visible images loaded; mobile 390x844 navigation/keyboard/theme/sign-in input labels, no horizontal overflow. No authenticated critical journey or real Google sign-in/checkout |
+| Health samples | HTTP 200 in 20/20 samples; p50 717.2 ms, p95 1195.3 ms, p99 1761.1 ms, collected during ML tests, not a clean performance baseline |
+| Live provider evidence | Keyless Freellmpool smoke failed twice; the UTF-8-enabled retry raised `AllCandidatesFailed` after one outer attempt. A separate concurrent verification logged two real configured-provider copilot HTTP 200 responses (6.06 s, 2.73 s). Neither proves all providers available or down |
+
+Current patches cover shared batch admission (3 running jobs per owner, 600 s
+deadline, active-job retention), resolved/explicit input caps and owner-protected
+polling; selected/latest segmentation, atomic run/dependent deletion and study
+snapshots with foreign-reference 409s; parent-row locking before exclusions and
+regeneration archiving. Lock evidence is SQLite FK plus PostgreSQL-compiled SQL,
+not live PostgreSQL concurrency or a global source-identity unique constraint.
+
+The verified changes also include complete observed-group retention, stable ties
+and pooled counts/percentages; quotas use complete valid nonnegative integer
+counts, reject invalid counts, and use legacy shares for incomplete counts;
+unclipped report claims/input history
+and atomic versions; real-ORM fixtures; frontend request epochs, stale-navigation
+guards and a restore gate. The frozen ML model still loses on retrieval MRR
+(0.432654 versus lexical 0.751621), is USA-synthetic-only, and involves no LLM
+fine-tuning. Test success does not remove these research limitations.
+
+Reservations: no complete real 50-turn conversation, current PostgreSQL full-stack
+or live multi-process rehearsal, offline-provider drill, or real-user rehearsal;
+historical credential rotation remains unverified. The preview scope does not
+reverify the earlier persona-header clipping finding. No commit, push, or remote
+CI success is claimed; the original 15 phases and dates remain unchanged.
 
 ## Architecture (as built)
 

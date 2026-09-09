@@ -279,6 +279,7 @@ describe('Exhibition navigation through the real console shell', () => {
     vi.spyOn(api, 'updateStudy').mockResolvedValue(created);
     const sendCopilot = vi.spyOn(api, 'sendStudyCopilotMessage').mockResolvedValue({
       reply: 'The first copilot reply survived Strict Mode.',
+      suggested_study_type: 'interviews',
       is_ready_for_approval: false,
       research_goal_card: null,
       suggested_roles: [],

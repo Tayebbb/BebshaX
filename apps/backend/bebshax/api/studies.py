@@ -306,9 +306,15 @@ async def create_study(
         personas_data=payload.personas_data,
     )
     session.add(study)
-    await session.commit()
-    await session.refresh(study)
-    return _serialize_study(study)
+    try:
+        await session.flush()
+        await session.refresh(study)
+        response = _serialize_study(study)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    return response
 
 
 @router.get("/studies/{study_id}")

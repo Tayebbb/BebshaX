@@ -1,5 +1,114 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { api } from '../src/services/api';
+import { neonAuth } from '../src/services/neonAuth';
+import type { User } from '../src/types/auth';
+
+describe('getMe validates existing app tokens directly with the backend', () => {
+  const originalFetch = globalThis.fetch;
+  const storedUser: User = {
+    id: 'usr_existing',
+    email: 'existing@example.com',
+    full_name: 'Stored User',
+    is_active: true,
+    is_verified: true,
+    auth_provider: 'email',
+    created_at: '2026-09-09T00:00:00Z',
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    api.setMockMode(false);
+    api.setAuthToken('existing-app-token');
+    api.setStoredUser(storedUser);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalThis.fetch = originalFetch;
+    localStorage.clear();
+    api.setMockMode(true);
+  });
+
+  it('returns the backend user without waiting for a never-resolving Neon session', async () => {
+    const neonSession = vi.spyOn(neonAuth, 'getSession').mockImplementation(
+      () => new Promise(() => {})
+    );
+    const backendUser = { ...storedUser, full_name: 'Backend Validated User' };
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => backendUser,
+    });
+    globalThis.fetch = fetchSpy;
+
+    const validation = api.getMe();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/\/auth\/me$/),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer existing-app-token' }),
+        signal: expect.any(AbortSignal),
+      })
+    );
+    expect(neonSession).not.toHaveBeenCalled();
+    expect(api.getStoredUser()).toEqual(storedUser);
+    await expect(validation).resolves.toEqual(backendUser);
+    expect(api.getStoredUser()).toEqual(backendUser);
+    expect(api.getAuthToken()).toBe('existing-app-token');
+  });
+
+  it.each([401, 403])('clears a backend-rejected token on HTTP %i without Neon substitution', async (status) => {
+    const neonSession = vi.spyOn(neonAuth, 'getSession').mockResolvedValue({
+      ...storedUser,
+      token: 'different-neon-token',
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status });
+
+    await expect(api.getMe()).resolves.toBeNull();
+
+    expect(neonSession).not.toHaveBeenCalled();
+    expect(api.getAuthToken()).toBeNull();
+    expect(api.getStoredUser()).toBeNull();
+  });
+
+  it.each(['network failure', 'server error'])('preserves stored-user recovery on %s', async (failure) => {
+    const neonSession = vi.spyOn(neonAuth, 'getSession').mockResolvedValue(null);
+    globalThis.fetch = failure === 'network failure'
+      ? vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+      : vi.fn().mockResolvedValue({ ok: false, status: 500 });
+
+    await expect(api.getMe()).resolves.toEqual(storedUser);
+
+    expect(neonSession).not.toHaveBeenCalled();
+    expect(api.getAuthToken()).toBe('existing-app-token');
+    expect(api.getStoredUser()).toEqual(storedUser);
+  });
+
+  it('returns null without network calls when there is no app token', async () => {
+    api.setAuthToken(null);
+    const neonSession = vi.spyOn(neonAuth, 'getSession').mockResolvedValue(null);
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy;
+
+    await expect(api.getMe()).resolves.toBeNull();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(neonSession).not.toHaveBeenCalled();
+  });
+
+  it('returns the stored mock user without network calls in mock mode', async () => {
+    api.setMockMode(true);
+    const neonSession = vi.spyOn(neonAuth, 'getSession').mockResolvedValue(null);
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy;
+
+    await expect(api.getMe()).resolves.toEqual(storedUser);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(neonSession).not.toHaveBeenCalled();
+  });
+});
 
 /** Blocker 2: in live mode a non-ok backend response must surface as an error.
  * It once fell through to the mock branch and minted `mock_jwt_<timestamp>`
