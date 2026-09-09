@@ -107,9 +107,11 @@ The [model card](../ml_persona/MODEL_CARD.md), [experiments](../ml_persona/EXPER
 and [implementation report](../ml_persona/IMPLEMENTATION_REPORT.md) record local
 results for model `7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247`.
 Model/split/evaluation outputs under the processed-data root are Git-ignored,
-not distributed artifacts or clean-checkout download links. The sanitized live
+not distributed artifacts or clean-checkout download links. The live
 record at `data/metadata/ml_persona_live_20260909_20260908_215004_181812.json`
-is a local record pending publication, not a CI result.
+is a stored sanitized verification record, not a CI result. The live
+API/provider/container/browser observations below predate upstream sync and
+were not repeated.
 
 | Claim | Recorded evidence | Honest scope |
 | --- | --- | --- |
@@ -118,10 +120,10 @@ is a local record pending publication, not a CI result.
 | Retrieval | Validation MRR 0.418117 vs lexical 0.716645; held-out test 0.432654 vs 0.751621 across 539 identities | NMF blend underperforms; cross-view proxy, zero real business-labelled evaluations |
 | Generation structure | 160 selections, no failed batches or within-batch duplicate IDs/names/descriptions; source reuse 100%, diversity 0.877963, age JS 0.030183 | Exact reuse is intentional; 72/160 `not_in_workforce` reveals bias, not population validity |
 | Timing | Warm five-profile p95 34.3 ms | Excludes cold loading, API scheduling, DB, network; no API SLA or throughput result |
-| Persistence and existing LLM flow | Five unique age-bounded profiles saved/read back, 22 synthetic claims, zero LLM generation calls; context, ten role suggestions, two interview turns, four 384-dimensional memories | Fresh local PostgreSQL only; cloud DB untouched; ten scratch rows from two cohorts retained |
+| Persistence and existing LLM flow | Five unique age-bounded profiles saved/read back, 22 synthetic claims reported, zero LLM generation calls; context, ten role suggestions, two interview turns, four 384-dimensional memories | Fresh local PostgreSQL only; cloud DB untouched; ten scratch rows from two cohorts retained |
 | Provider smoke | Seven successful responses, `llm7/codestral-latest` through `freellmpool/auto` | Not a provider success rate, independent route comparison, or large-sample quality trial |
 | Cross-platform serving | Windows artifact loaded in Linux image and selected five profiles with networking disabled | Exact NumPy/SciPy/scikit-learn pins; not bit-for-bit training portability or full Compose rehearsal |
-| Browser | Desktop 1440×1000 passed; mobile 390×844 clipped persona-header controls | No UI changes in this continuation, no all-green UI verdict |
+| Browser | Before upstream styling, desktop 1440×1000 passed and mobile 390×844 clipped persona-header controls | The later token-only correction neither fixes nor reverifies that defect; no all-green UI verdict |
 
 **Not verified:** customer/demand/purchasing validity, student/Bangladesh fit,
 real population representativeness, concurrent cross-process identity uniqueness,
@@ -132,8 +134,9 @@ unknown. All profile claims remain `SYNTHETIC`; source attribution is not
 observed evidence. Filtering protected fields/contact text is not a PII-scrub
 or neutrality guarantee.
 
-The prior offline baseline is 1,279 backend passed / 3 deselected (81.68%),
-295 ML passed (97%), and 269 frontend passed / 36 files. Later packaging checks
-passed 26 cases; two existing PostgreSQL tests also passed. These recorded
-pre-sync gates do not claim final post-integration tests, push, or CI completion.
-Main records publication and actual final counts in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+Post-sync local suites and checks passed; their counts, timing, and preserved
+baseline are in the [canonical verification record](../ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09).
+Packaging regressions are included in the full backend run. The 269-test
+frontend result precedes the token correction; the latest build and theme
+checks passed after it. Commit, push, and CI results are tracked separately in
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), not established by local passes.

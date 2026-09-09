@@ -200,7 +200,7 @@
   cursor: pointer;
   flex-shrink: 0;
   transition: opacity 0.2s var(--ns-ease), background 0.2s var(--ns-ease), transform 0.2s var(--ns-ease);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 0 var(--reflect);
 }
 .ns-send:hover:not(:disabled) { background: var(--accent-hover); }
 .ns-send:disabled {

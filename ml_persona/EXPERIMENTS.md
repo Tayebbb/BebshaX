@@ -121,23 +121,36 @@ student/Bangladesh customer fit.
 
 ## Verification (2026-09-09)
 
-These checks were executed against the resumed implementation:
+These direct local checks passed after upstream sync. Exact timings and scope
+are in the [post-sync verification record](IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09);
+commit, push, and CI results are separate from these local passes.
 
 | Gate | Reported Result |
 | --- | --- |
-| Backend offline suite | 1,279 passed, 3 deselected; coverage 81.68%, floor 68% |
+| Backend offline suite | 1,284 passed, 3 deselected; coverage 81.71%, floor 68% |
 | Independent ML suite | 295 passed; coverage 97% |
-| Frontend suite | 269 passed across 36 files |
-| Packaging checks after the Docker pin fix | 26 passed, including 5 new cases; full backend run above preceded these test-only additions |
-| Build / TypeScript / lint / theme checks | PASS; no frontend `lint` script is declared |
-| Dependency consistency / Compose default and full syntax | `pip check` PASS; both Compose syntax checks PASS |
+| Frontend suite | 269 passed across 36 files after sync and the CSS token correction; final run 45.01 s |
+| Packaging regressions | Included in the full 1,284-test backend run; earlier standalone 26-case result retained in the implementation report's baseline |
+| Build / TypeScript / theme checks | Latest checks PASS after the four-declaration CSS token correction; 0 theme violations; no frontend `lint` script is declared |
+| Ruff | PASS after upstream sync; no subsequent Python changes |
+| Dependency consistency / Compose default and full syntax | `pip check` PASS; both quiet Compose syntax checks PASS |
 | Real CLI `smoke --backend --input ml_persona/examples/business.json` | PASS: source, prepared, model, generation, backend conversion |
-| Pyright | Not installed; remaining static-analysis debt is advisory, not a passing Pyright run |
+| Pyright | Unavailable; remaining static-analysis debt is advisory, not a passing Pyright run |
+
+### Earlier Live And Dependency Checks
+
+These checks predate upstream sync and were not repeated:
+
+| Gate | Reported Result |
+| --- | --- |
 | Existing PostgreSQL integration tests | 2 passed against the isolated local database |
 | Python dependency audit | No known vulnerabilities; local `bebshax` and `bebshax-persona-ml` packages skipped as not on PyPI |
 | Backend Docker build and offline inference | PASS with reference-runtime constraints; five unique sources, ages 19/20/19/20/24, networking disabled |
-| Live API / database / provider flow | 5 unique ML profiles persisted/reloaded, 22 SYNTHETIC attributes, zero persona-generation LLM calls; real copilot, 10 role suggestions, 2 interview turns, 4 memory rows |
+| Live API / database / provider flow | 5 unique ML profiles persisted/reloaded, 22 SYNTHETIC attributes reported, zero persona-generation LLM calls; real copilot, 10 role suggestions, 2 interview turns, 4 memory rows |
 | Live browser | Desktop 1440x1000 passed; mobile 390x844 showed clipped profile-header controls. Both had zero JS exceptions, console errors, or failed API reads |
+
+The browser result predates upstream styling. The later token-only correction
+does not fix the mobile clipping or constitute browser re-verification.
 
 The backend smoke exercises real `GeneratedPersona`, `PersonaProfile`, draft,
 and workflow mappings, preserved source data, and zero observed evidence. It

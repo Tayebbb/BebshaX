@@ -40,7 +40,7 @@
 
 [data-theme='light'] .iv-root {
   --iv-bg: #f2f5f5;
-  --iv-glass: rgba(255, 255, 255, 0.62);
+  --iv-glass: var(--glass-soft);
   --iv-line: rgba(15, 35, 33, 0.14);
   --iv-line-soft: rgba(15, 35, 33, 0.09);
   --iv-accent: #0d9488;

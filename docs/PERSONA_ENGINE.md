@@ -168,19 +168,22 @@ After building the local artifact, the focused offline conversion check is:
 .venv/Scripts/python.exe -m bebshax_persona_ml smoke --backend --input ml_persona/examples/business.json
 ```
 
-The recorded 2026-09-09 run passed all five stages: source, prepared, model,
+The post-sync 2026-09-09 run passed all five stages: source, prepared, model,
 generation, backend mappings/schema/zero observed evidence. This does not invoke
-settings, a DB, network, or an LLM. Aggregate offline suite results and the weaker
-performance than lexical TF-IDF are recorded in
+settings, a DB, network, or an LLM. The other local suites and checks passed at
+the scopes in [Post-Sync Verification](../ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09).
+The weaker performance than lexical TF-IDF remains recorded in
 [EXPERIMENTS.md](../ml_persona/EXPERIMENTS.md).
 
-Separate live checks persisted and read back five unique age-bounded personas
-with 22 synthetic claims and zero LLM generation calls in a fresh local
+Earlier live checks persisted and read back five unique age-bounded personas
+with 22 synthetic claims reported and zero LLM generation calls in a fresh local
 PostgreSQL database. Seven Freellmpool responses covered context, ten role
 suggestions, and two interview turns with four 384-dimensional memory rows.
 Linux loaded the Windows-trained artifact and generated five profiles with
-networking disabled. These are smoke observations, not a success rate or
-customer-quality result. Desktop passed; mobile header clipping remains.
-Full Compose app/web rehearsal and cross-conversation retrieval were not run;
-final post-sync gates/publication remain separately reported. The older dated
-examples above remain historical. See the [ML report](../ml_persona/IMPLEMENTATION_REPORT.md).
+networking disabled. These checks were not repeated after sync and are smoke
+observations, not a success rate or customer-quality result. Before upstream
+styling, desktop passed and mobile header controls clipped; the token-only
+correction neither fixes nor reverifies that defect. Full Compose app/web and
+cross-conversation retrieval rehearsals were not repeated. Commit, push, and CI
+results are tracked separately in the [implementation log](IMPLEMENTATION_PLAN.md),
+not claimed successful here. The older dated examples above remain historical.

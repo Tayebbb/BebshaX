@@ -69,13 +69,17 @@ retrieval proxy. Install both packages and build the Git-ignored bundle using
 unavailable models return 503 and unsupported/exhausted contexts return 422,
 never an LLM fallback. Source role/location is preserved; only explicit age
 bounds are hard, and income/OCEAN values are not invented. Chat/interviews are
-unchanged. The recorded continuation passed local PostgreSQL persistence,
-seven Freellmpool smoke responses, and Linux loading of the Windows artifact
-with networking disabled. Desktop passed; mobile persona-header clipping
-remains. Full Compose app/web rehearsal and final post-sync publication gates
-are not claimed complete. See the [model card](ml_persona/MODEL_CARD.md) and
-[verification scope](ml_persona/IMPLEMENTATION_REPORT.md); original phase dates
-are unchanged.
+unchanged. [Post-sync local checks](ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09)
+passed at the documented scopes. Earlier checks passed local PostgreSQL
+persistence, seven Freellmpool smoke responses, and Linux loading of the Windows
+artifact with networking disabled. Desktop passed before upstream styling;
+mobile persona-header clipping remains unfixed and was not reverified after
+the upstream changes or approved token-only correction. Full Compose app/web
+and cross-conversation retrieval rehearsals were not repeated. Commit, push,
+and CI results are tracked separately in the
+[implementation log](docs/IMPLEMENTATION_PLAN.md), not claimed successful here.
+See the [model card](ml_persona/MODEL_CARD.md) for research limits; original
+phase dates are unchanged.
 
 The independent CLI is `python -m bebshax_persona_ml`; there is no console
 entry point. After download/preparation/validation/training, use

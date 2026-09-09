@@ -62,13 +62,16 @@ is retained; explicit ages in 18–95 are hard constraints, role/location are so
 hints, and income/OCEAN values stay unknown. Sequential owner-scoped identity
 exclusions do not provide a concurrent transactional uniqueness lock.
 
-Recorded continuation checks passed offline suites, local PostgreSQL
+The [post-sync local checks](ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09)
+passed at the documented scopes. Earlier checks passed local PostgreSQL
 persistence/pgvector, seven real Freellmpool responses, and Windows-artifact
-loading in the Linux backend image with networking disabled. Desktop passed;
-mobile persona-header clipping remains. These are scoped checks, not a provider
-success rate or production verdict. Full Compose app/web rehearsal,
-cross-conversation memory retrieval, and final post-sync publication gates are
-not claimed complete; see the [ML report](ml_persona/IMPLEMENTATION_REPORT.md).
+loading in Linux with networking disabled. Desktop passed before upstream
+styling; mobile persona-header clipping remains unfixed and was not reverified
+after the upstream changes or approved token-only correction. These are scoped
+checks, not a provider success rate or production verdict. Full Compose app/web
+and cross-conversation memory retrieval rehearsals were not repeated. Commit,
+push, and CI results are tracked separately in the
+[implementation log](docs/IMPLEMENTATION_PLAN.md), not claimed successful here.
 This addendum does not change the original phase roadmap or completion dates.
 
 ## Stack (decided — do not relitigate casually)

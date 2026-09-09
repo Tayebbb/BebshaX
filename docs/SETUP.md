@@ -172,11 +172,17 @@ not supply weights. Its recorded numerical versions must match the serving
 image, or a fresh bundle must be trained in the intended numerical environment.
 Cloud API hosts likewise provision a compatible local bundle and configure its
 artifact path. No model download or training occurs on an HTTP request. The
-2026-09-09 continuation verified the Windows-trained artifact in the Linux
-backend image with networking disabled, plus separate local PostgreSQL and
-Freellmpool flows. This was not a full Compose app/web rehearsal. Desktop passed;
-mobile persona-header clipping remains. Final post-sync tests/publication are
-reported separately in the [implementation log](IMPLEMENTATION_PLAN.md).
+[post-sync local checks](../ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09)
+passed on 2026-09-09, including both quiet Compose syntax checks and all five
+trained-artifact smoke stages. Earlier verification loaded the Windows-trained
+artifact in the Linux backend image with networking disabled and exercised
+separate local PostgreSQL/Freellmpool flows; these were not repeated after sync
+and are not a full Compose app/web rehearsal. The earlier desktop check passed;
+mobile persona-header clipping remains unfixed and was not reverified after
+upstream styling or the token-only correction. Full Compose app/web and
+cross-conversation retrieval rehearsals were not repeated. Commit, push, and CI
+results are tracked separately in the [implementation log](IMPLEMENTATION_PLAN.md),
+not claimed successful here.
 
 ## Dependency review (RULES.md R8)
 

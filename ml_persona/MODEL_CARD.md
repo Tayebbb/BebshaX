@@ -160,11 +160,14 @@ or repository. No root or ML-specific LICENSE/LICENCE/COPYING file was found,
 and the ML package manifest declares no project software license; this card
 does not assign one or grant redistribution rights for project code.
 
-Verification on 2026-09-09 passed the offline suites, five-stage backend smoke,
-real PostgreSQL persistence/pgvector checks, and real Freellmpool chat, role
-suggestions, and two interview turns. The Windows-trained artifact also loaded
-and generated five personas in the Linux backend image with networking disabled.
-The browser checks found a mobile profile-header clipping defect; desktop
-rendering passed. This is not an all-green UI or production-readiness verdict.
-See [EXPERIMENTS.md](EXPERIMENTS.md) and
-[IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for scope and limitations.
+Post-sync local verification on 2026-09-09 passed the offline suites and all
+five trained-artifact backend-smoke stages. Exact timing, including the passing
+build/theme checks after the approved CSS token correction, is in
+[Post-Sync Verification](IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09).
+Earlier real PostgreSQL persistence/pgvector, Freellmpool chat/roles/two interview
+turns, and Linux loading/inference from the Windows artifact with networking
+disabled passed but were not repeated after sync. Before upstream styling,
+desktop rendering passed and mobile profile-header controls clipped; the
+token-only correction neither fixes that defect nor constitutes re-verification.
+Local passes do not establish publication, an all-green UI, or production
+readiness. See [EXPERIMENTS.md](EXPERIMENTS.md) for the research limitations.

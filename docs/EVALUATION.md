@@ -155,23 +155,26 @@ path or explicit `--force`, not silent overwrite. These ignored artifacts are
 not linked as distributed files. Model/source/preparation fingerprints and
 exact numerical-runtime compatibility are checked; they are not signatures.
 
-The recorded pre-sync baseline (`fca5c0f`, 2026-09-09) passed backend 1,279 tests/3 deselected (81.68%
-coverage, floor 68%), ML 295 passed (97%), frontend 269 passed/36 files, and all
-five local backend-smoke stages passing. Build/TypeScript/lint/theme, `pip check`,
-and Compose default/full syntax checks passed. The subsequent Docker pin fix
-passed 26 packaging cases, including 5 new cases. Existing PostgreSQL integration
-tests passed 2/2. Live persistence, Freellmpool chat/roles/interviews, and
-network-disabled Linux-container inference passed. Desktop rendering passed;
-mobile profile-header controls were clipped. Pyright was not installed.
-See [the implementation report](../ml_persona/IMPLEMENTATION_REPORT.md) for
-evidence, exact commands, and remaining verification limits.
+The [post-sync local verification record](../ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09)
+reports passing backend/ML/frontend suites, all five trained-artifact smoke
+stages, Ruff, `pip check`, and both quiet Compose syntax checks. The full backend
+run includes the packaging regressions. The verified frontend suite preceded
+the CSS token correction; the latest TypeScript/Vite build and theme check
+passed after it. Exact counts, timing, and the pre-sync baseline are in that record.
 
-These are recorded continuation results, not new post-sync gates, a provider
-success rate, or proof of production readiness. Full Compose app/web rehearsal
-and cross-conversation memory retrieval were not run. The probe's zero
+Earlier PostgreSQL integration tests passed 2/2; live persistence, Freellmpool
+chat/roles/interviews, and network-disabled Linux-container inference also
+passed, but were not repeated after sync. Desktop rendering passed before
+upstream styling; mobile profile-header clipping remains unfixed and was not
+reverified after the styling or token-only correction. Pyright was unavailable.
+
+These scoped results are not a provider success rate or proof of production
+readiness. Full Compose app/web and cross-conversation memory retrieval
+rehearsals were not repeated. The probe's zero
 within-batch duplicates do not prove concurrent uniqueness: production source
 exclusions are owner-scoped reads without a transactional identity lock.
-Final gate counts and publication belong in the [implementation log](IMPLEMENTATION_PLAN.md).
+Commit, push, and CI results are tracked separately in the
+[implementation log](IMPLEMENTATION_PLAN.md), not claimed successful here.
 
 Next work is a validation-only comparison of TF-IDF with equivalent diversity
 selection, plus authorized held-out business-labelled relevance judgments.

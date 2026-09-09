@@ -376,20 +376,25 @@ Exclusions are a read-before-generate check, not a transactional uniqueness lock
 Overlapping independent requests/processes can still select the same source;
 no cross-process uniqueness guarantee is claimed. Existing persona tables,
 JSON columns, ownership/quota checks, and response schemas remain authoritative.
-There is no new ML database migration, frontend/provider change, or HTTP training
-endpoint.
+The ML integration introduces no database migration, frontend contract/provider
+change, or HTTP training endpoint. The later user-approved frontend correction
+changes only four CSS theme-token declarations, not these contracts.
 
-Recorded 2026-09-09 checks include offline contracts plus five unique ML profiles
-persisted/read back in fresh local PostgreSQL, real copilot/role/interview calls,
-and Linux loading of the Windows-trained artifact with networking disabled.
-They are not an all-route load test or production-readiness certification. The
+[Post-sync local checks](../ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09)
+passed on 2026-09-09. Earlier live checks persisted/read back five unique ML
+profiles in fresh local PostgreSQL, exercised real copilot/role/interview calls,
+and loaded the Windows-trained artifact in Linux with networking disabled;
+these were not repeated after sync. They are not an all-route load test or
+production-readiness certification. The
 model underperforms lexical TF-IDF on the retrieval proxy;
 see [MODEL_CARD.md](../ml_persona/MODEL_CARD.md) and
 [EXPERIMENTS.md](../ml_persona/EXPERIMENTS.md). USA-only synthetic selections do
-not establish student/Bangladesh fit or customer demand. Desktop passed; mobile
-persona-header clipping remains. Full Compose app/web rehearsal and
-cross-conversation retrieval were not run. Final post-sync gates and publication
-are separately recorded in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+not establish student/Bangladesh fit or customer demand. The earlier desktop
+check passed; mobile persona-header clipping remains unfixed and was not
+reverified after upstream styling or the token-only correction. Full Compose
+app/web and cross-conversation retrieval rehearsals were not repeated. Commit,
+push, and CI results are tracked separately in
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), not claimed successful here.
 
 #### `data_source` — demo honesty label (audit H3 piece 2)
 

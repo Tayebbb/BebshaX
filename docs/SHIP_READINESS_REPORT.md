@@ -8,21 +8,25 @@ The original 15 phases and dates are unchanged. The subsystem/test tables below
 are historical September 7–8 snapshots, not current ML acceptance or publication
 gates. In particular, earlier LLM-generated country/budget and full-Compose
 observations are not validation of the new selector.
+Post-sync local checks are distinguished from earlier live evidence below.
 
 | Current requirement | Status / evidence |
 | --- | --- |
 | Four generation paths | Shared CPU `MLPersonaAdapter` selects complete synthetic source profiles; existing schemas/DB JSON and LLM interviews remain; 503/422 errors, no LLM fallback |
 | Packaging | Exact numerical versions pinned for local/Docker installs; Windows artifact loaded in Linux with networking disabled, five profiles selected |
 | Fresh deployment | Must train or stage the ignored ~32.54 MiB model; package-only checkout/image is insufficient; restart after validated artifact replacement |
-| Recorded gates | Pre-sync backend 1,279 passed / 3 deselected, ML 295, frontend 269 / 36 files; later packaging 26; PostgreSQL integration 2 |
-| Real workflow | Five unique age-bounded profiles saved/read back, 22 synthetic claims, zero LLM generation calls; seven Freellmpool responses, ten role suggestions, two interview turns, four memory rows |
+| Post-sync local suites | Backend 1,284 passed / 3 deselected (81.71% coverage, including packaging regressions), ML 295 passed (97%), frontend 269 passed / 36 files after the CSS token correction |
+| Other post-sync checks | Ruff, `pip check`, both quiet Compose configuration checks, and all 5 trained-artifact smoke stages passed. Latest TypeScript/Vite build and theme check passed after the token correction; 0 theme violations |
+| Earlier real workflow | Five unique age-bounded profiles saved/read back, 22 synthetic claims reported, zero LLM generation calls; seven Freellmpool responses, ten role suggestions, two interview turns, four memory rows; 2 PostgreSQL integration tests passed. Not repeated after sync |
 | Research limits | NMF retrieval loses to lexical baseline; USA-only source, visible workforce bias, no demand/population/student/Bangladesh validity or inferred budget/OCEAN |
-| Unfinished verification | Full Compose app/web rehearsal and cross-conversation retrieval not run; Pyright unavailable; mobile header controls clip despite passing desktop check |
+| Unfinished verification | Full Compose app/web and cross-conversation retrieval rehearsals not repeated; Pyright unavailable. Earlier desktop passed; mobile header clipping remains unfixed and was not reverified after upstream styling or the token-only correction |
 
 This is **not a production sign-off**. Sequential source exclusions are not
-cross-process transactional uniqueness. Final integrated-tree gates, publication,
-and remote CI must be reported separately. See [ML report](../ml_persona/IMPLEMENTATION_REPORT.md)
-and [current readiness assessment](PRODUCTION_READINESS.md).
+cross-process transactional uniqueness. The
+[post-sync local checks](../ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09)
+passed at the recorded scopes; commit, push, and remote CI results are tracked
+separately in the [implementation log](IMPLEMENTATION_PLAN.md), not claimed
+successful here. See the [current readiness assessment](PRODUCTION_READINESS.md).
 
 ## Architecture (as built)
 

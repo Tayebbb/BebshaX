@@ -55,6 +55,43 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-09-09): Persona ML documentation sync and publication gate
+
+User requested updating all docs and pushing the completed continuation.
+Refreshed current project/showcase reports, setup/demo/team guidance, routing,
+persona/API/evaluation documents, readiness summaries, and ML reports. Current
+descriptions distinguish trained CPU-only synthetic source selection from
+governed LLM chat/interviews, preserve the approved R9 exception and original
+phase dates, and retain the weaker-than-lexical baseline result and known
+limitations. Dated audits and earlier log entries remain historical records.
+
+Integrated the five upstream commits through `779986f` by preserving local
+work in named stash `7e0c3c708a41aebed1b66647805476ad748a4997`, fast-forwarding,
+and applying the stash without dropping it. The only conflict was this log;
+both upstream UI entries and the ML continuation entry were retained. The
+upstream lazy persona import refactor merged with the ML exclusions.
+
+**Post-sync gates:** backend **1,284 passed / 3 deselected**, **81.71%** coverage;
+ML **295 passed**, **97%** coverage; frontend **269 passed / 36 files** in the
+final post-correction run. TypeScript/Vite build, Ruff, `pip check`, both quiet
+Compose configuration checks, and the trained-artifact five-stage
+`smoke --backend` passed. The original live database/provider and Linux-artifact
+evidence is preserved, not misrepresented as a new post-sync live audit.
+
+The incoming frontend commits failed the existing theme gate in three CSS
+files. The user explicitly approved the bounded fix: four declarations in
+`newstudy.css`, `studies.css`, and `interview.css` now use existing reflection,
+card, and glass tokens. The selected light tab stays a white surface rather
+than taking the codemod's incorrect text-color replacement. The same theme
+check then reported zero violations; build and frontend tests passed again.
+No layout, JavaScript behavior, model artifact, provider configuration, or
+secrets were changed by this fix.
+
+Current documentation link checks passed; one obsolete component link remains
+only inside the untouched 2026-08-24 historical audit. This entry records local
+commit gates, not a claim of completed remote CI. GitHub Actions results are
+reported separately after pushing; no production/customer-fit sign-off is implied.
+
 ### Maintenance (2026-09-09, later) — Console restyled to an iOS/macOS visual language
 
 Frontend only; backend untouched. The authenticated console (`/app`, `/dashboard`, `/persona-library`, and every view built on the `bx-*` primitives) now follows Apple's system design conventions instead of the previous dark-teal SaaS look. Token-level change in `index.css`: true near-black canvas (`#000`) with luminance-stepped grouped surfaces (`#1c1c1e`/`#2c2c2e`) in dark, iOS grouped grey (`#f2f2f7`) with white cells in light; iOS label hierarchy for text; hairline separators (`rgba(84,84,88,.42)`) replacing outlines; system-vivid teal accent (`#30d1c7` dark / `#00968c` light) with white on-accent text; SF-first font stack (`-apple-system, BlinkMacSystemFont, 'SF Pro Text'`) falling back to the already-loaded Plus Jakarta Sans; continuous-corner radius scale (8/10/14/18/24); softer wide shadows; Apple's sheet ease `cubic-bezier(0.32, 0.72, 0, 1)`. Primitives (`ui.css`): sidebar rows are filled selection pills with accent icons (left-bar indicator removed); topbar is a sticky translucent toolbar; buttons are filled / gray / plain per iOS; badges, callouts, metrics, empty states, cmdk and search are fill-based with no borders; eyebrows and section labels are small sans caps (monospace kickers removed everywhere). Views (`newstudy.css`, `studies.css`): solid tight display headlines (gradient ink removed), elevated composer cell with round filled send button, iOS suggestion pills, real segmented control, grouped list rows, tinted empty-state CTA. `DashboardLayout.tsx` inline chrome softened to match (hairline sidebar edge, borderless rounded banners, pill verify button, borderless user chip). No text, aria, routing or data changes; 269/269 tests green, `tsc` clean. Verified in both themes at 1440px and 390px. `docs/DESIGN_SYSTEM.md` updated (principle 0, fonts, radius, elevation, motion).

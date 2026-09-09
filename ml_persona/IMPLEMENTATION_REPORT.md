@@ -15,7 +15,9 @@ The licensed dataset, disjoint splits, trained bundle, experiment record, and
 example output survived locally. Held-out evaluation and final verification
 were incomplete. This continuation reused the model, completed evaluation,
 repaired concrete integration/integrity issues, and finished documentation.
-No stash restore, branch change, commit, push, or LLM fine-tuning was performed.
+That initial recovery stage did not restore a stash, change branches, commit,
+push, or fine-tune an LLM. Subsequent upstream integration and local verification
+are recorded below; publication status is tracked separately.
 
 ## B. ML Approach
 
@@ -128,6 +130,45 @@ p95 34.30 ms on two CPU threads; this is not cold-load or API latency.
 
 ## H. Verification And Existing Functionality
 
+### Post-Sync Verification (2026-09-09)
+
+Five upstream commits were integrated and the saved ML work reapplied. The
+following direct local checks passed after that sync; their scope and timing
+are explicit so earlier live checks and publication are not conflated.
+
+| Gate | Verified result / scope |
+| --- | --- |
+| Backend full offline suite | 1,284 passed, 3 integration tests deselected; 81.71% coverage; 456.45 s. Includes the packaging regressions previously checked separately. |
+| Independent ML suite | 295 passed; 97% coverage; 42.42 s |
+| Frontend suite | 269 passed across 36 files after upstream sync and the CSS token correction; final run 45.01 s |
+| TypeScript and Vite build | Passed after the CSS token correction; 2,398 modules; Vite build 4.07 s |
+| Theme check | Passed after the correction, with 0 violations; CSS editor diagnostics reported no errors |
+| Ruff | Passed after upstream sync; no Python changes followed that check |
+| Dependency consistency | `pip check` passed |
+| Compose syntax | Both quiet Compose configuration checks passed; this is not a full app/web rehearsal |
+| Real five-stage ML smoke | All 5 stages passed using the existing trained artifact, without LLM, network, or DB settings |
+
+The theme check initially failed on upstream CSS. The user-approved correction
+replaced four declarations across three stylesheets with existing theme tokens:
+the new-study send shadow and studies CTA shadow use `var(--reflect)`, the light
+selected tab uses `var(--bg-card)`, and the light interview glass uses
+`var(--glass-soft)`. This separate, small frontend change does not alter layout
+or JavaScript behavior; resolved token colors vary by theme. It does not fix or
+reverify the mobile persona-header clipping observed before upstream styling.
+
+The earlier live record of five unique USA-synthetic prototypes and 22 reported
+synthetic attributes, two PostgreSQL integration tests, Linux inference from the
+original Windows artifact with networking disabled, and the zero-known-CVE
+audit below were not repeated as post-sync checks. They remain scoped evidence,
+not observed customer validation. Pyright remains unavailable; full Compose
+app/web and cross-conversation retrieval rehearsals were not repeated.
+
+These local results do not establish successful publication. Commit, push,
+and CI results are tracked in the [implementation log](../docs/IMPLEMENTATION_PLAN.md);
+no push or CI success is claimed here.
+
+### Earlier Verification Baseline (Before Upstream Sync)
+
 | Gate | Result |
 | --- | --- |
 | Backend full offline suite | 1,279 passed, 3 integration tests deselected; 81.68% coverage |
@@ -219,17 +260,21 @@ business-labelled relevance or predictive attribute-accuracy evaluation exists.
 No incomes, purchase frequencies, or personality measurements are learned here.
 
 Sequential source exclusions do not impose a transactional uniqueness lock on
-independent concurrent requests. Mobile profile-header clipping remains in the
-existing frontend; a lower Close button works. Pyright was unavailable, a full
-Compose app/web rehearsal was not repeated, and cross-conversation retrieval
-was not tested live. No new dependency CVEs were found, but unpublished local
-code is outside PyPI vulnerability coverage. Review and customer validation
-are still required before relying on these personas for business decisions.
+independent concurrent requests. Mobile profile-header clipping was observed
+before upstream styling, with a working lower Close button; the token-only
+correction neither fixes it nor constitutes a new browser check. Pyright was
+unavailable, a full Compose app/web rehearsal was not repeated, and
+cross-conversation retrieval was not tested live. The earlier audit found no
+known dependency CVEs, but unpublished local code is outside PyPI vulnerability
+coverage. Review and customer validation are still required before relying on
+these personas for business decisions.
 
 Final independent scoped review approved the integrity, exclusion, and packaging
 fixes with no new high/medium findings. At the end of that recorded verification,
 the changes were uncommitted and the remote branch was five commits ahead of
 the tested working tree. This is a historical session snapshot, not the ongoing
-publication status. Subsequent remote integration, final gate counts, commit,
-push, and CI results belong in the [implementation log](../docs/IMPLEMENTATION_PLAN.md);
-they are not asserted complete by this report.
+publication status. Subsequent upstream integration and local gate results are
+recorded in [Post-Sync Verification](#post-sync-verification-2026-09-09).
+Commit, push, and CI results belong in the
+[implementation log](../docs/IMPLEMENTATION_PLAN.md); successful publication is
+not asserted by this report.
