@@ -2,6 +2,13 @@
 
 Last verified: 2026-09-09.
 
+Publication verification: code commit `be92185` passed
+[CI run 34299654884](https://github.com/Tayebbb/BebshaX/actions/runs/34299654884),
+including the corrected ML tests on Linux. Backend/ML, frontend, migrations,
+secret scanning, and Compose jobs passed; advisory typecheck remained failed.
+The model and numerical results below were not retrained or retuned during
+these test-compatibility follow-ups.
+
 ## Run And Evidence
 
 Training artifacts survived the interrupted session; the selected bundle was

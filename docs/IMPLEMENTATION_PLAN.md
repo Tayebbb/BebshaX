@@ -55,6 +55,28 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-09-09): Persona ML publication confirmed
+
+Current documentation and the approved fixes were pushed to `origin/main`:
+`453a403` (final documentation and theme gate), `2a22b3f` (exact third-party
+warning policy), and `be92185` (Linux fixture subprocess isolation). The ML
+implementation and initial documentation had already been published concurrently
+in `7bab126` and `9269eff`; their work was preserved, not duplicated or reverted.
+
+[CI run 34299654884](https://github.com/Tayebbb/BebshaX/actions/runs/34299654884)
+completed **successfully** for `be9218514225996eed6b68fc627c1c8987f82a5e`.
+Backend (including ML tests), frontend, migration-drift, secret-scan, and
+Compose configuration jobs passed. The existing `continue-on-error` advisory
+typecheck job remained failed; overall workflow success is not a claim of
+zero type debt. The earlier two CI failures and their fixes are preserved below.
+
+Verified local totals: **1,287 backend**, **298 ML**, and **269 frontend** tests;
+model-quality and live-browser limitations remain documented. The recovery
+stash was retained. An unrelated untracked exhibition test was left untouched
+and was not included in any publication commit. This confirmation records the
+verified code commit; subsequent documentation-only commits do not change its
+test evidence or claim a different CI run has completed.
+
 ### Maintenance (2026-09-09): Linux ML fixture subprocess isolation
 
 Follow-up `2a22b3f` resolved the Starlette/AnyIO collection failure: the second

@@ -2,6 +2,14 @@
 
 Date: 2026-09-09. Status: working research prototype with measured limitations.
 
+Publication confirmed through code commit `be92185` on `origin/main`.
+[GitHub Actions run 34299654884](https://github.com/Tayebbb/BebshaX/actions/runs/34299654884)
+passed backend/ML, frontend, migrations, secret scanning, and Compose checks.
+The advisory, non-blocking typecheck job remained failed. This is a successful
+required CI gate, not production/customer-fit approval or zero type debt.
+The [publication log](../docs/IMPLEMENTATION_PLAN.md) records the commits and
+the two CI compatibility fixes without rewriting earlier verification history.
+
 ## A. Recovery And Project Understanding
 
 BebshaX collects business context through its existing governed LLM copilot,
