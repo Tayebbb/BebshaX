@@ -12,10 +12,12 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, cast
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_current_user
 from bebshax.api.deps import require_study_access, user_owns_study
@@ -29,6 +31,7 @@ from bebshax.llm.placeholders import contains_placeholder, is_placeholder
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.personas.ml_adapter import build_business_context, get_persona_ml, to_workflow_persona
+from bebshax.personas.service import active_source_exclusions, lock_persona_parent
 from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 from bebshax.utils.safe_errors import safe_error_summary
 
@@ -758,7 +761,7 @@ async def generate_study_personas(
 ) -> GeneratePersonasResponse:
     """Generate synthetic personas for the selected roles from THIS study's context.
 
-    Every persona is model-written. A role whose generation fails is reported in
+    Every persona is selected by the local model. A role whose generation fails is reported in
     ``failed_roles`` (never replaced by a skeleton); if every role fails the
     request fails explicitly. Superseded personas of the study are archived so
     the study has one set of current personas.
@@ -769,6 +772,8 @@ async def generate_study_personas(
     study_row: Optional[Studies] = None
     if body.study_id:
         gate_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
+        if gate_sessionmaker is None:
+            raise APIError(503, "Database unavailable", error_code="database_unavailable")
         if gate_sessionmaker:
             async with gate_sessionmaker() as gate_session:
                 study_row = await gate_session.get(Studies, body.study_id)
@@ -781,21 +786,6 @@ async def generate_study_personas(
                         "create your own study to generate personas."
                     ),
                 )
-                claim_rows = (
-                    (
-                        await gate_session.execute(
-                            select(EvidenceClaims)
-                            .where(EvidenceClaims.study_id == body.study_id)
-                            .order_by(EvidenceClaims.confidence.desc())
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                evidence_claims = [
-                    {"alias": f"C{i + 1}", "claim_id": c.id, "claim_text": c.claim_text or ""}
-                    for i, c in enumerate(claim_rows)
-                ]
 
     study_prompt = (body.study_prompt or (study_row.prompt if study_row else None) or "").strip()
     if not study_prompt:
@@ -827,9 +817,55 @@ async def generate_study_personas(
                 error_code="validation_error",
             )
         seen_ids.add(role.id)
+    if not body.study_id:
+        return await _generate_role_cohort(body, request, selected_roles, study_row, evidence_claims)
+
+    async with gate_sessionmaker() as db_session:
+        try:
+            study_row = cast(Studies, await lock_persona_parent(
+                db_session, owner_id=current_user.id, study_id=body.study_id,
+            ))
+            require_study_access(study_row, current_user, write=True)
+            claim_rows = (await db_session.execute(
+                select(EvidenceClaims)
+                .where(EvidenceClaims.study_id == body.study_id)
+                .order_by(EvidenceClaims.confidence.desc()),
+            )).scalars().all()
+            evidence_claims = [
+                {"alias": f"C{index + 1}", "claim_id": claim.id, "claim_text": claim.claim_text or ""}
+                for index, claim in enumerate(claim_rows)
+            ]
+            response = await _generate_role_cohort(
+                body, request, selected_roles, study_row, evidence_claims, db_session,
+            )
+            await db_session.commit()
+            return response
+        except IntegrityError as exc:
+            await db_session.rollback()
+            raise APIError(
+                409, "Persona persistence conflicts with existing data.", error_code="data_integrity",
+            ) from exc
+        except BaseException:
+            await db_session.rollback()
+            raise
+
+
+async def _generate_role_cohort(
+    body: GeneratePersonasRequest, request: Request, selected_roles: list[PersonaGenerationRole],
+    study_row: Studies | None, evidence_claims: list[dict[str, Any]], db_session: AsyncSession | None = None,
+) -> GeneratePersonasResponse:
+    """Select and stage a role cohort in the caller's study-locked transaction."""
+    study_prompt = (body.study_prompt or (study_row.prompt if study_row else None) or "").strip()
+    if not study_prompt:
+        raise HTTPException(status_code=400, detail="Describe the business idea before generating personas.")
     ml_generator = get_persona_ml(request.app)
     used_source_ids: set[str] = set()
     used_names: set[str] = set()
+    owner_id = (study_row.user_id if study_row else None) or "usr_system_holder"
+    if db_session is not None and study_row is not None:
+        used_source_ids, used_names = await active_source_exclusions(
+            db_session, owner_id=owner_id, scope=Personas.study_id == study_row.id,
+        )
 
     async def _one_role(
         role: PersonaGenerationRole,
@@ -882,74 +918,57 @@ async def generate_study_personas(
     for p in all_personas:
         p["evidence_claim_count"] = len(evidence_claims)
 
-    # Persist: archive superseded personas, store ONLY what the model produced.
-    db_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
-    if db_sessionmaker and body.study_id:
-        try:
-            async with db_sessionmaker() as db_session:
-                study = await db_session.get(Studies, body.study_id)
-                await db_session.execute(
-                    update(Personas)
-                    .where(Personas.study_id == body.study_id, Personas.status != "archived")
-                    .values(status="archived")
+    if db_session is not None and study_row is not None:
+        await db_session.execute(
+            update(Personas)
+            .where(Personas.study_id == study_row.id, Personas.owner_id == owner_id, Personas.status != "archived")
+            .values(status="archived")
+        )
+        for persona in all_personas:
+            persona_id = f"per_{uuid.uuid4().hex[:12]}"
+            persona["id"] = persona_id
+            persona["study_id"] = study_row.id
+            demographics = persona.get("demographics") or {}
+            personality = persona.get("personality") if isinstance(persona.get("personality"), dict) else None
+            db_session.add(
+                Personas(
+                    id=persona_id,
+                    study_id=study_row.id,
+                    user_id=study_row.user_id,
+                    owner_id=owner_id,
+                    name=str(persona.get("name")),
+                    status="active",
+                    version=1,
+                    generation_model=persona.get("generation_model"),
+                    archetype=persona.get("archetype") or persona.get("role_title"),
+                    tagline=persona.get("tagline"),
+                    country_code=persona.get("country_code"),
+                    personality=personality or None,
+                    detailed_attributes=persona.get("detailed_attributes") or {},
+                    demographics=demographics,
+                    bio=persona.get("description"),
+                    quote=persona.get("quote"),
+                    goals=_attr_titles(persona, "Goals"),
+                    needs=_attr_titles(persona, "Needs"),
+                    pain_points=_attr_titles(persona, "Pain Points"),
+                    behaviors=persona.get("behaviors") or [],
+                    preferences=persona.get("preferences") or [],
+                    motivations=persona.get("motivations") or [],
+                    objections=persona.get("objections") or [],
+                    commercial_profile=persona.get("commercial_profile") or {},
+                    technology_profile=persona.get("technology_profile") or {},
+                    evidence_citations=persona.get("evidence_citations") or [],
+                    dataset_refs=persona.get("dataset_refs") or [],
+                    validation_warnings=persona.get("validation_warnings") or [],
+                    confidence=float(persona.get("confidence", 0.0)),
+                    is_synthetic=True,
+                    grounding_score=float(persona.get("grounding_ratio", 0.0)),
                 )
-                for p in all_personas:
-                    # SERVER owns persona identity (LLM-suggested ids collide across studies).
-                    p_id = f"per_{uuid.uuid4().hex[:12]}"
-                    p["id"] = p_id
-                    p["study_id"] = body.study_id
-                    demographics = p.get("demographics") or {}
-                    personality = p.get("personality") if isinstance(p.get("personality"), dict) else None
-                    db_session.add(
-                        Personas(
-                            id=p_id,
-                            study_id=body.study_id,
-                            user_id=study.user_id if study else None,
-                            owner_id=(study.user_id if study else None) or "usr_system_holder",
-                            name=str(p.get("name")),
-                            status="active",
-                            version=1,
-                            generation_model=p.get("generation_model"),
-                            archetype=p.get("archetype") or p.get("role_title"),
-                            tagline=p.get("tagline"),
-                            country_code=p.get("country_code"),
-                            personality=personality or None,
-                            detailed_attributes=p.get("detailed_attributes") or {},
-                            demographics=demographics,
-                            bio=p.get("description"),
-                            quote=p.get("quote"),
-                            goals=_attr_titles(p, "Goals"),
-                            needs=_attr_titles(p, "Needs"),
-                            pain_points=_attr_titles(p, "Pain Points"),
-                            behaviors=p.get("behaviors") or [],
-                            preferences=p.get("preferences") or [],
-                            motivations=p.get("motivations") or [],
-                            objections=p.get("objections") or [],
-                            commercial_profile=p.get("commercial_profile") or {},
-                            technology_profile=p.get("technology_profile") or {},
-                            evidence_citations=p.get("evidence_citations") or [],
-                            dataset_refs=p.get("dataset_refs") or [],
-                            validation_warnings=p.get("validation_warnings") or [],
-                            confidence=float(p.get("confidence", 0.0)),
-                            is_synthetic=True,
-                            grounding_score=float(p.get("grounding_ratio", 0.0)),
-                        )
-                    )
-                if study:
-                    study.personas_data = all_personas
-                    study.persona_ids = [p["id"] for p in all_personas]
-                    study.persona_count = len(all_personas)
-                    study.step = max(study.step or 1, 2)
-                await db_session.commit()
-        except Exception:
-            # Personas the UI shows but the DB doesn't have make every later
-            # interview 404 — this must never fail silently.
-            logger.error(
-                "persona persistence failed for study %s — generated personas will 404 in interviews",
-                body.study_id,
-                exc_info=True,
             )
-            raise HTTPException(status_code=503, detail="Personas were generated but could not be saved. Please retry.")
+        study_row.personas_data = all_personas
+        study_row.persona_ids = [persona["id"] for persona in all_personas]
+        study_row.persona_count = len(all_personas)
+        study_row.step = max(study_row.step or 1, 2)
 
     return GeneratePersonasResponse(
         personas=all_personas,
