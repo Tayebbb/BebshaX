@@ -53,6 +53,20 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-09-09): Batch interviews tolerate stale persona ids
+
+`POST /studies/{id}/interviews/batch-run` previously failed the entire batch
+with "One or more personas do not belong to this study" whenever any supplied
+id was not a current row under the study — including ids the client held from a
+regenerated/removed set. The endpoint now classifies missing ids: an id that
+exists under another study is still a hard 400 (the original cross-tenant
+guard), while ids that simply no longer exist are treated as stale client state
+and skipped, running the remaining valid personas. If nothing valid remains the
+existing "No personas available for this study" 400 applies. Verification: two
+new tests (foreign-study id → 400; stale id skipped → 202 with only the valid
+persona) plus the full `test_exhibition_batchbounds.py` suite (20 passed). No
+API shape, database, auth, or credential changes.
+
 ### Maintenance (2026-09-09): Repository organization and verified dead-code cleanup
 
 Added [docs/README.md](README.md) as the documentation index and corrected the
