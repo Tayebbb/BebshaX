@@ -484,7 +484,7 @@ Conventions that matter: a naming convention on `Base` (deterministic index/cons
 
 > **In plain words:** offline tests exercise routing with scripted fake providers and ML behavior with controlled inputs. Real-provider smoke checks and retrieval/quality experiments are separate evidence; passing structural tests does not validate customer fit.
 
-- **Post-sync local suites (2026-09-09)**: 1,284 backend tests passed / 3 deselected, 81.71% coverage, including packaging regressions; 295 ML tests passed, 97% coverage. Full scope, timings, and the earlier baseline are in the [canonical verification record](ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09).
+- **Post-sync local suites (2026-09-09)**: 1,287 backend tests passed / 3 deselected, 81.64% coverage after the exact third-party warning exemption; 298 ML tests passed after narrowing a Linux-incompatible subprocess fixture. The earlier ML coverage run measured 97%. Full scope, CI findings, and earlier baselines are in the [canonical verification record](ml_persona/IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09).
 - **Boundary tests as architecture enforcement:** R1 (no provider imports outside adapters), task→pool total coverage, quality-not-a-failure-kind, provenance completeness.
 - **Post-sync frontend**: 269 tests passed across 36 files after the user-approved token-only CSS correction, in 45.01 s. The final TypeScript/Vite build and theme check also passed, with zero theme violations.
 - **Historical Phase 14 acceptance matrix** mapped 13 criteria to the then-current implementation. Its generation/concurrency results do not establish transactional source-identity uniqueness for the ML selector.

@@ -55,6 +55,29 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-09-09): Linux ML fixture subprocess isolation
+
+Follow-up `2a22b3f` resolved the Starlette/AnyIO collection failure: the second
+[CI run](https://github.com/Tayebbb/BebshaX/actions/runs/34298815752) passed
+the backend application tests, migration-drift, frontend, secret-scan, and
+Compose checks. The backend job then failed its separate ML test step.
+The advisory typecheck job remained non-green, without blocking this test fix.
+
+The ML source fixture mocked all `subprocess.run` calls as dataset verification.
+On Linux, Python's hardware reporting invokes `uname -p` through that same
+function; the fixture asserted that it was the Python dataset command. The
+fixture now intercepts only the exact approved verifier invocation and delegates
+unrelated subprocesses unchanged. Production training/inference, hardware
+reporting, source validation, and dependencies are not modified.
+
+Three new regression cases reproduce the overly broad mock and verify ordinary
+Python output, verifier-like unrelated code, and Linux-shaped execution-error
+passthrough. RED/GREEN was observed; the pipeline file passed **130 tests** and
+the complete ML suite passed **298 tests** on Windows. Ruff and editor checks
+passed. The latest full backend gate remains **1,287 passed / 3 deselected**,
+**81.64%** coverage. Actual Linux verification follows this test-only commit;
+these local results alone do not establish a green remote run.
+
 ### Maintenance (2026-09-09): Exact Starlette/AnyIO warning compatibility after publication
 
 Documentation and the approved theme-gate corrections were pushed in

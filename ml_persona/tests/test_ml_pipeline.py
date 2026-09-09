@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import Mock
 
 import pytest
 
@@ -69,6 +70,8 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def source_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    from bebshax_persona_ml import pipeline
+
     names = "Alpha Bravo Charlie Delta Echo Foxtrot Golf Hotel India Juliet Kilo Lima Mike November Oscar Papa Quebec Romeo Sierra Tango Uniform Victor Whiskey Xray".split()
     domains = ["bread recipes cooking ingredients", "electrical wiring circuits equipment"]
     rows = [{
@@ -101,6 +104,8 @@ def source_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     )
 
     def official_verifier(arguments: list[str], **options: object) -> subprocess.CompletedProcess:
+        if arguments != [sys.executable, "-c", pipeline.VERIFY_SOURCE]:
+            return RUN_PROCESS(arguments, **options)
         assert arguments[0] == sys.executable and arguments[1] == "-c"
         assert "verify_ml_dataset" in arguments[2]
         assert Path(options["cwd"]) == tmp_path
@@ -112,6 +117,30 @@ def source_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     monkeypatch.setattr(subprocess, "run", official_verifier)
     return tmp_path
+
+
+@pytest.mark.parametrize("probe", ["hardware-probe", "verify_ml_dataset"])
+def test_source_verifier_preserves_unrelated_python_probe_output(source_case: Path, probe: str) -> None:
+    output = subprocess.check_output(
+        [sys.executable, "-c", f"print({probe!r})"], cwd=source_case, text=True,
+    )
+
+    assert output == f"{probe}\n"
+
+
+def test_source_verifier_preserves_uname_probe_execution_errors(
+    source_case: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    arguments = ["uname", "-p"]
+    failure = FileNotFoundError("hardware probe unavailable")
+    run_process = Mock(side_effect=failure)
+    monkeypatch.setattr(sys.modules[__name__], "RUN_PROCESS", run_process)
+
+    with pytest.raises(FileNotFoundError) as result:
+        subprocess.run(arguments, cwd=source_case, check=True, capture_output=True, text=True)
+
+    assert result.value is failure
+    run_process.assert_called_once_with(arguments, cwd=source_case, check=True, capture_output=True, text=True)
 
 
 def test_validate_requires_preparation_manifest_without_creating_files(tmp_path: Path) -> None:

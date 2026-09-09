@@ -47,6 +47,14 @@ LLM request → task-typed `LLMRequest` → pool (data-driven map) → ranked ca
 
 ## 6. Security posture
 
+Publication follow-ups added a narrowly scoped Starlette/AnyIO warning exemption
+and corrected an ML test fixture that intercepted Linux hardware subprocesses.
+The latest local checks passed **1,287 backend tests / 3 deselected** with
+**81.64% coverage**, and **298 ML tests**; the earlier ML coverage run measured
+97%. No model or application behavior changed. These supersede the earlier
+pre-publication totals above. Actual CI outcomes are recorded separately in
+[the implementation log](docs/IMPLEMENTATION_PLAN.md), not inferred from local passes.
+
 JWT secrets are env-only, ≥32 chars, burned-default rejected at startup, with `_PREVIOUS` rotation support; alphanumeric password policy; flag-gated email-verification enforcement; slowapi rate limiting with deployment knobs; explicit-origin CORS; tenancy columns + shared-owner seeding for public fixtures; no secrets in code or logs (R4); prompt-injection defense in the behavioral engine; provenance never hides fallbacks. Known deferred items are listed below rather than papered over.
 
 ## 7. Limitations (honest)

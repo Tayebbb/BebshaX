@@ -158,6 +158,13 @@ No package upgrades, application changes, or blanket warning suppression were
 introduced. See the [implementation log](../docs/IMPLEMENTATION_PLAN.md) for
 the initial CI failure and follow-up publication status.
 
+The next CI run passed application tests and migrations but exposed a Linux-only
+ML fixture issue: its broad subprocess mock intercepted Python's `uname -p`
+hardware probe. The fixture now intercepts only the exact dataset verifier
+command. Three additional regression cases pass; the complete ML suite now
+passes **298 tests** locally. Production code and model artifacts are unchanged.
+Linux CI verification is separate from that Windows result.
+
 The theme check initially failed on upstream CSS. The user-approved correction
 replaced four declarations across three stylesheets with existing theme tokens:
 the new-study send shadow and studies CTA shadow use `var(--reflect)`, the light

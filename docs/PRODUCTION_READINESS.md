@@ -17,7 +17,7 @@ evidence predates upstream sync and was not repeated.
 | Local persistence | Fresh local PostgreSQL at `f2a3b4c5d6e7`, pgvector 0.8.6; five unique profiles read back; two existing integration tests passed; cloud DB untouched |
 | Existing LLM flow | Seven Freellmpool responses covered context, roles, and two interview turns with four 384-dimensional memories; not a success rate or cross-route benchmark |
 | Container | Windows artifact loaded and selected five profiles in Linux with networking disabled; full Compose app/web rehearsal not run in this continuation |
-| Post-sync offline suites | Backend 1,284 passed / 3 deselected (81.71% coverage, including packaging regressions), ML 295 passed (97%), frontend 269 passed / 36 files before the CSS token correction |
+| Post-sync offline suites | Backend 1,287 passed / 3 deselected (81.64% coverage) after the exact warning-policy correction; ML 298 passed after fixture isolation (earlier coverage 97%); frontend 269 passed / 36 files after the CSS token correction |
 | Other post-sync local checks | Ruff, `pip check`, both quiet Compose configuration checks, and all 5 trained-artifact smoke stages passed. Latest TypeScript/Vite build and theme check passed after the four-declaration CSS token correction; 0 theme violations |
 | Quality and coverage | NMF test MRR 0.432654 vs lexical 0.751621; USA-synthetic-only, 72/160 `not_in_workforce`; no validated demand, population, student/Bangladesh fit, or income/OCEAN prediction |
 | Concurrency | Active owner-scoped source exclusions work sequentially; no transactional identity lock for overlapping independent requests |

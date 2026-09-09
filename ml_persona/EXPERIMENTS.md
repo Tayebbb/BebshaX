@@ -144,6 +144,12 @@ three tests that preserve fatal handling of unrelated warnings. This does not
 change the model, training, or evaluation. The [implementation log](../docs/IMPLEMENTATION_PLAN.md)
 separates the first CI failure from local follow-up verification.
 
+The subsequent Linux run reached ML tests and exposed the source fixture's
+overly broad subprocess mock, which intercepted `uname -p` hardware reporting.
+The exact-verifier-only mock and three new regression cases pass locally:
+**298 ML tests**. This is a test-isolation correction, not model retraining or
+changed evaluation. Linux CI must confirm the corrected fixture independently.
+
 ### Earlier Live And Dependency Checks
 
 These checks predate upstream sync and were not repeated:

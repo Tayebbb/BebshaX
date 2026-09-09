@@ -15,7 +15,7 @@ Post-sync local checks are distinguished from earlier live evidence below.
 | Four generation paths | Shared CPU `MLPersonaAdapter` selects complete synthetic source profiles; existing schemas/DB JSON and LLM interviews remain; 503/422 errors, no LLM fallback |
 | Packaging | Exact numerical versions pinned for local/Docker installs; Windows artifact loaded in Linux with networking disabled, five profiles selected |
 | Fresh deployment | Must train or stage the ignored ~32.54 MiB model; package-only checkout/image is insufficient; restart after validated artifact replacement |
-| Post-sync local suites | Backend 1,284 passed / 3 deselected (81.71% coverage, including packaging regressions), ML 295 passed (97%), frontend 269 passed / 36 files after the CSS token correction |
+| Post-sync local suites | Backend 1,287 passed / 3 deselected (81.64% coverage) after the exact warning-policy correction; ML 298 passed after fixture isolation (earlier coverage 97%); frontend 269 passed / 36 files after the CSS token correction |
 | Other post-sync checks | Ruff, `pip check`, both quiet Compose configuration checks, and all 5 trained-artifact smoke stages passed. Latest TypeScript/Vite build and theme check passed after the token correction; 0 theme violations |
 | Earlier real workflow | Five unique age-bounded profiles saved/read back, 22 synthetic claims reported, zero LLM generation calls; seven Freellmpool responses, ten role suggestions, two interview turns, four memory rows; 2 PostgreSQL integration tests passed. Not repeated after sync |
 | Research limits | NMF retrieval loses to lexical baseline; USA-only source, visible workforce bias, no demand/population/student/Bangladesh validity or inferred budget/OCEAN |
