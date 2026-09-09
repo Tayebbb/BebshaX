@@ -95,7 +95,12 @@ is clean across backend, ML, and scripts. Offline npm CI dry-run with scripts
 disabled accepts the manifests; quiet full-profile Compose validation passed.
 No generated cache/build/debug artifacts were found tracked. Independent
 read-only reviews found no concrete cleanup regressions. The final backend
-rerun is in progress; its result will be added before task completion.
+rerun is in progress; its result will be added before task completion. The
+first run passed 1,722 tests but exposed the environment-dependent defaults
+test, now fixed and verified in the 43-test configuration scope. A subsequent
+run could not allocate test fixtures because the Windows C: temporary drive
+had no free space. The final run uses a unique ignored temporary directory
+on E: with process-local TEMP/TMP overrides; no system files were deleted.
 
 Preserved: the pre-existing report-cohort fix and documentation edits, API and
 CLI entry points, ORM registrations and migrations, datasets/uploads, trained
