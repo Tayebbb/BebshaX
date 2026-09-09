@@ -53,7 +53,39 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-09-09): Interview list independent loading
+
+The Interview Lab now renders saved interviews as soon as the list request
+finishes rather than waiting for metrics. Metrics load independently with
+unknown values until available and separate error reporting. Request-generation
+guards reject stale updates after study, filter, search, or lifecycle changes.
+Verification: delayed-metrics regression failed before the fix; 19 focused tests
+across two files and the TypeScript/Vite build passed. No API, database, auth,
+credentials, or stored research changes. Coverage was not measured; the existing
+dashboard chunk-size build warning remains.
+
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
+
+### Maintenance (2026-09-09): Bound optional interview suggestions
+
+Shared interview finalization now applies a named 3-second asyncio timeout only
+to optional model-written follow-up generation. Fast suggestions remain enabled;
+on timeout the coroutine is cancelled and the persisted answer returns without
+generated suggestions. Existing deterministic contradiction guidance is retained.
+The timeout log contains only the duration and conversation ID, not interview
+content or exception details. Answer generation, full context, memory write-back,
+primary routing, and response fields are unchanged.
+
+Validation: after correcting the test adapter wrapper's argument signature, the
+regressions demonstrated RED (2 blocked cases failed, 2 fast cases passed) before
+the production edit, then GREEN (4 passed). Cases cover both `ask` and
+`ask_stream`, cancellation, intact answers/transcripts/memory, and timeout logs;
+tests shorten only the suggestion deadline to 50 ms. Full interview slice:
+`.venv\Scripts\python.exe -m pytest apps/backend/tests/interview --no-cov -q --tb=short`
+passed 128 tests. Changed Python files have no editor diagnostics. Coverage was
+not measured; no live-provider or full-backend run, dependencies, environment
+changes, or commits. Async cancellation remains cooperative; this is not a
+3-second deadline for primary inference, persistence, or the whole request.
 
 ### Maintenance (2026-09-09): Session and navigation loading latency
 

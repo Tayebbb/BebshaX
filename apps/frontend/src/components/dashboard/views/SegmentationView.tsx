@@ -124,7 +124,14 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
         setActiveRun(runsData[0]);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load segmentation data.');
+      // A raw "Failed to fetch" is a browser-level network error (server
+      // unreachable / restarting), not a data problem — say so plainly.
+      const isNetwork = err?.name === 'TypeError' || /failed to fetch|networkerror|load failed/i.test(err?.message || '');
+      setError(
+        isNetwork
+          ? "Couldn't reach the server. Check that the backend is running, then retry."
+          : err?.message || 'Failed to load segmentation data.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -231,33 +238,6 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           Loading segmentation data…
         </div>
       )}
-      {error && !isLoading && (
-        <div
-          role="alert"
-          style={{
-            background: 'rgba(239,68,68,0.08)',
-            border: '1px solid rgba(239,68,68,0.4)',
-            borderRadius: '10px',
-            padding: '14px 18px',
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            color: 'var(--status-error-text)',
-            fontSize: '0.88rem',
-          }}
-        >
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={loadData}
-            style={{ background: 'transparent', border: '1px solid currentColor', borderRadius: '6px', padding: '4px 12px', color: 'inherit', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-          >
-            Retry
-          </button>
-        </div>
-      )}
       {/* Top Banner / Metrics Header */}
       <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-6 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -313,15 +293,24 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
       </div>
 
       {/* Error Alert */}
-      {error && (
-        <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center justify-between text-rose-300 text-sm">
+      {error && !isLoading && (
+        <div role="alert" className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center justify-between gap-3 text-rose-300 text-sm">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>
-          <button type="button" onClick={() => setError(null)} aria-label="Dismiss error" className="text-rose-400 hover:text-rose-200">
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={loadData}
+              className="border border-current rounded-md px-3 py-1 font-semibold text-xs whitespace-nowrap hover:bg-rose-500/10"
+            >
+              Retry
+            </button>
+            <button type="button" onClick={() => setError(null)} aria-label="Dismiss error" className="text-rose-400 hover:text-rose-200">
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       )}
 

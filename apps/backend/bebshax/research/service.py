@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from bebshax.api.errors import APIError
 from bebshax.datasets.discovery.engine import DatasetDiscoveryEngine, materialize_candidate
 from bebshax.db.models import (
     DatasetCandidates,
@@ -488,7 +489,8 @@ class ResearchEngineService:
     ) -> DatasetSources:
         """Import a discovered candidate by fetching its published resource.
 
-        Raises ``ValueError`` (unknown candidate), ``DatasetDownloadFailed`` (no
+        Raises ``APIError`` (invalid metadata), ``ValueError`` (unknown candidate),
+        ``DatasetDownloadFailed`` (no
         resource URL / network / size / HTTP status) or ``DatasetParseError``
         (not tabular). Nothing is generated in place of the download.
         """
@@ -500,6 +502,15 @@ class ResearchEngineService:
         candidate = res.scalar_one_or_none()
         if not candidate:
             raise ValueError("Dataset candidate not found")
+
+        if (candidate.evaluation_details or {}).get("metadata_errors"):
+            raise APIError(
+                422,
+                "Cannot import this dataset: candidate metadata exceeds storage limits. "
+                "Full candidate metadata is preserved in evaluation_details.raw_metadata; "
+                "resolve the metadata errors before importing.",
+                error_code="invalid_metadata",
+            )
 
         imported_ds = await materialize_candidate(
             session=session,

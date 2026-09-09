@@ -481,6 +481,13 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
 
 #### `POST /api/studies/{study_id}/interviews/{interview_id}/messages/stream`
 
+- **Optional follow-ups (streaming and non-streaming):** shared finalization gives
+  model-written suggestion generation a 3-second timeout after answer persistence.
+  Fast suggestions are returned normally. On timeout, generation is cancelled
+  and the answer returns without generated suggestions; `suggested_questions`
+  is empty unless existing deterministic contradiction guidance is present.
+  Primary answer generation, full context, memory, and routing are unchanged.
+  This is not an end-to-end request deadline; async cancellation is cooperative.
 - **SSE variant** of the study-scoped message endpoint (same auth/ownership checks). `Content-Type: text/event-stream`. Events, in order:
   - `event: delta` · `data: {"text": "<raw chunk>"}` — repeated as the persona speaks (raw model output).
   - `event: done` · `data: {…}` — the canonical payload (same fields as the non-stream endpoint incl. `reply` [normalized, this is what was persisted], `turn_number`, `served_by`, `latency_ms`, `suggested_questions`, `topics_explored`, `is_finished`, plus `user_message`/`persona_reply` parity objects). Clients MUST replace their streamed buffer with `reply`.
@@ -491,8 +498,7 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
 - **`POST /api/studies/{study_id}/interviews/batch-run`** returns `202`. Optional
   `persona_ids` and `questions` select the batch; omitted questions use the study
   script. Both explicit and resolved stored inputs are validated: at most 50
-  personas, 20 questions, and 2,000 characters per question; invalid limits return
-  422. A missing script/questions is an explicit failure, not generated filler.
+  personas, 20 questions, and 2,000 characters per question; invalid limits return 422. A missing script/questions is an explicit failure, not generated filler.
 - Study write access and each persona's `owner_can_write` permission are required.
   Admission shares the in-memory job registry with other background jobs: at most
   3 running jobs per effective owner, else 429 `too_many_jobs` with

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import threading
 import uuid
 from pathlib import Path
@@ -25,6 +26,11 @@ _PROXY_WARNING = (
     "Selected from USA synthetic training data as a proxy; selection scores are not "
     "observed customer evidence or customer demand."
 )
+_AGE_RANGE = r"([+-]?\d+)\s*(?:[-\u2013\u2014]|\bto\b)\s*([+-]?\d+)"
+_EXPLICIT_AGE_PATTERNS = (
+    re.compile(r"\b(?:aged|ages|age)\s+" + _AGE_RANGE + r"(?!\w|\.\d)", re.IGNORECASE),
+    re.compile(r"(?<![\w.+-])" + _AGE_RANGE + r"\s+years\s+old\b", re.IGNORECASE),
+)
 
 
 def _unsupported_context() -> APIError:
@@ -35,9 +41,34 @@ def _unsupported_context() -> APIError:
     )
 
 
+def _explicit_age_bounds(text: str) -> tuple[int, int] | None:
+    bounds: tuple[int, int] | None = None
+    for pattern in _EXPLICIT_AGE_PATTERNS:
+        for match in pattern.finditer(text):
+            try:
+                minimum, maximum = (int(value) for value in match.groups())
+            except ValueError as error:
+                raise _unsupported_context() from error
+            if not 18 <= minimum <= maximum <= 95:
+                raise _unsupported_context()
+            bounds = (minimum, maximum) if bounds is None else (
+                max(bounds[0], minimum), min(bounds[1], maximum),
+            )
+            if bounds[0] > bounds[1]:
+                raise _unsupported_context()
+    return bounds
+
+
 def build_business_context(**fields: Any) -> BusinessContext:
     try:
-        return BusinessContext(**fields)
+        context = BusinessContext(**fields)
+        minimum, maximum = context.min_age, context.max_age
+        for text in (context.description, context.target_audience):
+            bounds = _explicit_age_bounds(text)
+            if bounds is not None:
+                minimum = bounds[0] if minimum is None else max(minimum, bounds[0])
+                maximum = bounds[1] if maximum is None else min(maximum, bounds[1])
+        return BusinessContext(**{**context.model_dump(), "min_age": minimum, "max_age": maximum})
     except ValidationError as error:
         raise _unsupported_context() from error
 

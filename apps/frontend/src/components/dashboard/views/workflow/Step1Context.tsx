@@ -80,7 +80,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
         (evidenceProbe.sources > 0
           ? ` from ${evidenceProbe.sources} source${evidenceProbe.sources === 1 ? '' : 's'}`
           : '') +
-        ' — personas can cite them.'
+        ' — review them in the Evidence Laboratory.'
       : evidenceProbe.state === 'failed'
       ? `The evidence research run failed${
           evidenceProbe.message ? ` (${evidenceProbe.message})` : ''
@@ -89,10 +89,10 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
       ? 'Still searching — this can take a few minutes. Check the Evidence Laboratory.'
       : evidenceProbe.state === 'empty'
       ? evidenceProbe.noLiveEvidence
-        ? `The live search${evidenceProbe.provider ? ` (${evidenceProbe.provider})` : ''} returned no sources for this idea — no claims were written in their place; personas will be inferred from your description.`
-        : 'No evidence claims were extracted — personas will be inferred from your description.'
+        ? `The live search${evidenceProbe.provider ? ` (${evidenceProbe.provider})` : ''} returned no sources for this idea — no claims were written in their place; synthetic source profiles remain unvalidated hypotheses.`
+        : 'No evidence claims were extracted — synthetic source profiles remain unvalidated hypotheses.'
       : evidenceProbe.state === 'not_run'
-      ? 'No evidence run yet for this study — personas will be inferred from your description.'
+      ? 'No evidence run yet for this study — synthetic source profiles remain unvalidated hypotheses.'
       : 'Could not check for supporting evidence right now.';
   return (
     <>
@@ -102,7 +102,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
               </h1>
               <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: 0 }}>
                 Enter your product idea. BebshaX will refine your research objective, look for supporting
-                market evidence, and build personas — labelling which parts that evidence actually backs.
+                market evidence, and select synthetic source profiles — keeping their assumptions distinct from observed evidence.
               </p>
             </div>
 

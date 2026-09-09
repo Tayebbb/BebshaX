@@ -1088,7 +1088,7 @@ export const api = {
   // 10. Research Studies Management (User-Scoped 5-Step Workflow Persistence)
   getUserStudiesStorageKey(): string {
     const user = this.getStoredUser();
-    return `bebshax_studies_${user?.id || 'default_user'}`;
+    return `bebshax_studies_${this.isMockMode() ? 'mock' : 'live'}_${user?.id || 'default_user'}`;
   },
 
   getStoredUserStudies(): Study[] {

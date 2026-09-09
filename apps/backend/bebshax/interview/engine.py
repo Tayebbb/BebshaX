@@ -83,6 +83,7 @@ def _validate_persona_version(conversation: Conversations, persona: Personas) ->
 
 SYNTHESIS_UNPARSEABLE = "interview_synthesis_unparseable"
 _SYNTHESIS_MAX_ATTEMPTS = 2
+_SUGGESTED_QUESTIONS_TIMEOUT_SECONDS = 3.0
 
 # InterviewInsights column bounds (interview/orm.py). Only the MODEL-SUPPLIED
 # LABELS of an insight are fitted to them; its content is never cut (R2).
@@ -1105,6 +1106,25 @@ class InterviewEngine:
 
         question_count = (conversation.question_count or 0) + 1
 
+        current_exchange = [
+            ConversationTurns(role="interviewer", content=interviewer_message),
+            ConversationTurns(role="persona", content=reply),
+        ]
+        try:
+            async with asyncio.timeout(_SUGGESTED_QUESTIONS_TIMEOUT_SECONDS):
+                suggested_questions = await self.generate_suggested_questions(
+                    conversation, persona, [*prior_turns, *current_exchange]
+                )
+        except TimeoutError:
+            logger.info(
+                "suggested-question generation timed out after %s seconds for %s",
+                _SUGGESTED_QUESTIONS_TIMEOUT_SECONDS,
+                conversation_id,
+            )
+            suggested_questions = []
+        if follow_up_guidance:
+            suggested_questions.insert(0, follow_up_guidance)
+
         # Persist turns and update conversation in DB
         async with self._sessionmaker() as session:
             researcher_turn_num = conversation.turn_count + 1
@@ -1151,6 +1171,7 @@ class InterviewEngine:
                         "drift_notes": drift_notes,
                         "memory_kind": memory_kind,
                         "decision_state": decision_state,
+                        "suggested_questions": suggested_questions,
                     },
                     created_at=datetime.now(timezone.utc),
                 )
@@ -1175,18 +1196,6 @@ class InterviewEngine:
                     session=session,
                 )
             await session.commit()
-
-        # Suggested questions for the next turn — model-written from this
-        # transcript INCLUDING the exchange that just happened.
-        current_exchange = [
-            ConversationTurns(role="interviewer", content=interviewer_message),
-            ConversationTurns(role="persona", content=reply),
-        ]
-        suggested_questions = await self.generate_suggested_questions(
-            conversation, persona, [*prior_turns, *current_exchange]
-        )
-        if follow_up_guidance:
-            suggested_questions.insert(0, follow_up_guidance)
 
         return {
             "reply": reply,

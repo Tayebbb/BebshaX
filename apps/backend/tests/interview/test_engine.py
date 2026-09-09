@@ -1,6 +1,11 @@
+import asyncio
+import json
+import logging
+
 import pytest
 from sqlalchemy import select
 
+import bebshax.interview.engine as interview_engine
 from bebshax.interview.engine import ConversationNotFound, InterviewEngine, PersonaNotFound
 from bebshax.llm import TaskType
 from bebshax.memory.orm import MemoryItems
@@ -107,3 +112,74 @@ async def test_suggested_questions_are_model_written_from_the_transcript(
     conv2 = await quiet.start(stored_persona.id, "x")
     res = await quiet.ask(conv2.id, "q")
     assert res["suggested_questions"] == [] and len(quiet_adapter.requests) == 1
+
+
+@pytest.mark.parametrize("streaming", [False, True], ids=["ask", "stream"])
+@pytest.mark.parametrize("blocked", [False, True], ids=["fast-suggestions", "blocked-suggestions"])
+async def test_optional_suggestions_preserve_answer_when_fast_or_blocked(
+    session_maker, stored_persona, memory_service, llm_factory, monkeypatch, caplog,
+    streaming, blocked,
+) -> None:
+    reply = "I usually skip breakfast because the canteen opens late."
+    question = "Tell me about your mornings."
+    suggestions = ["What happens when the canteen opens on time?"]
+    llm, adapter = llm_factory([reply, json.dumps(suggestions)])
+    engine = InterviewEngine(llm, session_maker, memory=memory_service, suggest_questions=True)
+    conversation = await engine.start(stored_persona.id, "breakfast habits")
+    suggestion_started = asyncio.Event()
+    suggestion_cancelled = asyncio.Event()
+    original_complete = adapter.complete
+
+    async def complete_with_blocked_suggestions(candidate, request):
+        if blocked and request.task == TaskType.STRUCTURED_OUTPUT:
+            suggestion_started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                suggestion_cancelled.set()
+                raise
+        return await original_complete(candidate, request)
+
+    monkeypatch.setattr(adapter, "complete", complete_with_blocked_suggestions)
+    monkeypatch.setattr(interview_engine, "_SUGGESTED_QUESTIONS_TIMEOUT_SECONDS", 0.05, raising=False)
+
+    async def get_answer():
+        if streaming:
+            events = [event async for event in engine.ask_stream(conversation.id, question)]
+            assert events[0]["type"] == "delta"
+            assert events[-1]["type"] == "done"
+            return events[-1]
+        return await engine.ask(conversation.id, question)
+
+    with caplog.at_level(logging.INFO, logger=interview_engine.__name__):
+        answer_task = asyncio.create_task(get_answer())
+        try:
+            if blocked:
+                await asyncio.wait_for(suggestion_started.wait(), timeout=5)
+            result = await asyncio.wait_for(answer_task, timeout=1)
+        finally:
+            if not answer_task.done():
+                answer_task.cancel()
+            await asyncio.gather(answer_task, return_exceptions=True)
+
+    assert result["reply"] == reply
+    assert result["served_by"] == "fake/m1"
+    assert result["turn_number"] == 2
+    assert result["suggested_questions"] == ([] if blocked else suggestions)
+    assert suggestion_cancelled.is_set() is blocked
+    timeout_logs = [
+        record.getMessage() for record in caplog.records
+        if record.name == interview_engine.__name__ and "timed out" in record.getMessage()
+    ]
+    assert bool(timeout_logs) is blocked
+    assert all(reply not in message and question not in message for message in timeout_logs)
+
+    _, turns = await engine.transcript(conversation.id)
+    assert [turn.content for turn in turns] == [question, reply]
+    async with session_maker() as session:
+        memories = list((await session.execute(
+            select(MemoryItems).where(MemoryItems.conversation_id == conversation.id)
+        )).scalars())
+    assert sorted((memory.source, memory.text) for memory in memories) == [
+        ("interviewer", question), ("persona", reply),
+    ]

@@ -312,7 +312,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         if (!isCurrent()) return;
         const ownedStudies = api.isMockMode() ? data : data.filter((study) => ownerId && study.user_id === ownerId);
         setRecentStudies(ownedStudies.slice(0, 5));
-        setDemoStudy(findExampleStudy(ownedStudies));
+        setDemoStudy(findExampleStudy(data.filter((study) => study.is_demo === true)));
       } catch {
         if (!isCurrent()) return;
         const cached = api.getStoredUserStudies();

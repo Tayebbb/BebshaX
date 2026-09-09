@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MessageSquare,
   Search,
   Filter,
   Plus,
   CheckCircle2,
-  AlertCircle,
+  RefreshCw,
   Layers,
   Bot,
   Activity,
@@ -38,14 +38,11 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
   onNavigateToPersonas,
 }) => {
   const [interviews, setInterviews] = useState<Interview[]>([]);
-  const [metrics, setMetrics] = useState<InterviewMetrics>({
-    total_interviews: 0,
-    active_interviews: 0,
-    completed_interviews: 0,
-    total_insights_generated: 0,
-  });
+  const [metrics, setMetrics] = useState<InterviewMetrics | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -53,36 +50,56 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
   const [selectedObjective, setSelectedObjective] = useState<string>('all');
 
   const fetchInterviews = async () => {
+    const generation = ++requestGeneration.current;
+    const isCurrent = () => generation === requestGeneration.current;
+    setIsLoading(true);
+    setError(null);
+    setMetricsError(null);
+    setMetrics(null);
+
+    void api.getStudyInterviewMetrics(studyId).then((result) => {
+      if (isCurrent()) setMetrics(result);
+    }).catch((err: unknown) => {
+      if (isCurrent()) {
+        setMetricsError(`Failed to load interview metrics: ${err instanceof Error ? err.message : 'Please retry.'}`);
+      }
+    });
     try {
-      setIsLoading(true);
-      setError(null);
+      const listRes = await api.listStudyInterviews(studyId, {
+        status: selectedStatus !== 'all' ? selectedStatus : undefined,
+        objective: selectedObjective !== 'all' ? selectedObjective : undefined,
+        search: searchQuery.trim() || undefined,
+      });
 
-      const [listRes, metricsRes] = await Promise.all([
-        api.listStudyInterviews(studyId, {
-          status: selectedStatus !== 'all' ? selectedStatus : undefined,
-          objective: selectedObjective !== 'all' ? selectedObjective : undefined,
-          search: searchQuery.trim() || undefined,
-        }),
-        api.getStudyInterviewMetrics(studyId),
-      ]);
-
-      setInterviews(listRes.interviews || []);
-      setMetrics(metricsRes);
-    } catch (err: any) {
-      console.error('Failed to load study interviews:', err);
-      setError(err.message || 'Failed to load interviews.');
+      if (isCurrent()) setInterviews(listRes.interviews || []);
+    } catch (err: unknown) {
+      if (isCurrent()) {
+        setInterviews([]);
+        setError(`Failed to load interviews: ${err instanceof Error ? err.message : 'Please retry.'}`);
+      }
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchInterviews();
+    void fetchInterviews();
+    return () => { requestGeneration.current += 1; };
   }, [studyId, selectedStatus, selectedObjective]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchInterviews();
+    void fetchInterviews();
+  };
+
+  const navigateToPersonas = () => {
+    requestGeneration.current += 1;
+    onNavigateToPersonas();
+  };
+
+  const openInterview = (interviewId: string) => {
+    requestGeneration.current += 1;
+    onOpenInterview(interviewId);
   };
 
   const filteredInterviews = interviews.filter((item) => {
@@ -97,13 +114,14 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in text-[var(--text-primary)]">
-      {error && (
+      {[error, metricsError].map((message, index) => message && (
         <div
+          key={index}
           role="alert"
           className="flex items-center justify-between gap-3 rounded-xl px-5 py-3 text-sm font-medium"
           style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.4)', color: 'var(--status-error-text)' }}
         >
-          <span>{error}</span>
+          <span>{message}</span>
           <button
             type="button"
             onClick={fetchInterviews}
@@ -112,7 +130,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             Retry
           </button>
         </div>
-      )}
+      ))}
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -132,7 +150,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
         </div>
 
         <button
-          onClick={onNavigateToPersonas}
+          onClick={navigateToPersonas}
           className="px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-black font-bold text-xs flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all cursor-pointer shrink-0 self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />
@@ -141,13 +159,14 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
       </div>
 
       {/* 2. Metrics Cards */}
+      {!metrics && !metricsError && <p role="status" className="text-xs text-[var(--text-secondary)]">Loading interview metrics...</p>}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
           <div className="flex items-center justify-between text-[var(--text-muted)]">
             <span className="text-xs font-semibold uppercase tracking-wider">Total Interviews</span>
             <MessageSquare className="w-4 h-4 text-teal-400" />
           </div>
-          <div className="text-2xl font-black text-white"><CountUp value={metrics.total_interviews} /></div>
+          <div className="text-2xl font-black text-white">{metrics ? <CountUp value={metrics.total_interviews} /> : <span aria-label="Total interviews unavailable">--</span>}</div>
           <p className="text-[0.72rem] text-[var(--text-muted)]">Recorded research sessions</p>
         </div>
 
@@ -156,7 +175,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <span className="text-xs font-semibold uppercase tracking-wider">Active Sessions</span>
             <Activity className="w-4 h-4 text-cyan-400" />
           </div>
-          <div className="text-2xl font-black text-cyan-400"><CountUp value={metrics.active_interviews} /></div>
+          <div className="text-2xl font-black text-cyan-400">{metrics ? <CountUp value={metrics.active_interviews} /> : <span aria-label="Active sessions unavailable">--</span>}</div>
           <p className="text-[0.72rem] text-[var(--text-muted)]">Conversations in progress</p>
         </div>
 
@@ -165,7 +184,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <span className="text-xs font-semibold uppercase tracking-wider">Completed</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-2xl font-black text-emerald-400"><CountUp value={metrics.completed_interviews} /></div>
+          <div className="text-2xl font-black text-emerald-400">{metrics ? <CountUp value={metrics.completed_interviews} /> : <span aria-label="Completed interviews unavailable">--</span>}</div>
           <p className="text-[0.72rem] text-[var(--text-muted)]">Synthesized sessions</p>
         </div>
 
@@ -175,7 +194,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             <Award className="w-4 h-4 text-amber-400" />
           </div>
           <div className="text-2xl font-black text-amber-400">
-            <CountUp value={metrics.total_insights_generated} />
+            {metrics ? <CountUp value={metrics.total_insights_generated} /> : <span aria-label="Structured insights unavailable">--</span>}
           </div>
           <p className="text-[0.72rem] text-[var(--text-muted)]">Turn-provenance claims</p>
         </div>
@@ -197,6 +216,16 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
 
         {/* Filters */}
         <div className="flex items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={fetchInterviews}
+            disabled={isLoading}
+            aria-label="Refresh interviews"
+            title="Refresh interviews"
+            className="w-8 h-8 flex items-center justify-center text-[var(--text-label)] disabled:opacity-50 disabled:cursor-wait"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
           <div className="flex items-center gap-1.5 bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-xl px-3 py-1.5 text-xs">
             <Filter className="w-3.5 h-3.5 text-[var(--text-muted)]" />
             <select
@@ -226,20 +255,13 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3 text-red-400 text-xs">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
       {/* 4. Interviews List Grid */}
       {isLoading ? (
         <div className="p-16 text-center text-[var(--text-secondary)] space-y-4">
           <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs">Loading study interviews...</p>
         </div>
-      ) : filteredInterviews.length === 0 ? (
+      ) : error ? null : filteredInterviews.length === 0 ? (
         <div className="p-12 text-center bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 mx-auto">
             <MessageSquare className="w-7 h-7" />
@@ -253,7 +275,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             </p>
           </div>
           <button
-            onClick={onNavigateToPersonas}
+            onClick={navigateToPersonas}
             className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-black font-bold rounded-xl text-xs transition-colors cursor-pointer"
           >
             Go to Persona Library
@@ -274,7 +296,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             return (
               <div
                 key={item.id}
-                onClick={() => onOpenInterview(item.id)}
+                onClick={() => openInterview(item.id)}
                 className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] hover:border-teal-500/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all duration-200 cursor-pointer shadow-md hover:shadow-teal-500/5 group"
               >
                 {/* Card Top: Persona & Status */}

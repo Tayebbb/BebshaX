@@ -295,11 +295,11 @@ describe('Blocker 4 — step 1 reports the evidence attempt', () => {
     expect(screen.getByText(/Found 12 supporting claims from 4 sources/i)).toBeInTheDocument();
   });
 
-  it('says personas will be inferred when a run found nothing', () => {
+  it('keeps synthetic source profiles unvalidated when a run found nothing', () => {
     renderStep1({ state: 'empty' });
 
     expect(
-      screen.getByText(/No evidence claims were extracted — personas will be inferred from your description/i)
+      screen.getByText(/No evidence claims were extracted — synthetic source profiles remain unvalidated hypotheses/i)
     ).toBeInTheDocument();
   });
 

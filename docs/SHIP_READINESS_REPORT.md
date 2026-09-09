@@ -36,15 +36,15 @@ successful here. See the [current readiness assessment](PRODUCTION_READINESS.md)
 hardening pass. Earlier evidence above and the September 7-8 tables below remain
 historical, not current acceptance gates.
 
-| Check | Current result / scope |
-| ----- | ---------------------- |
-| Backend | 1,639 passed, 3 integration deselected; 773.82 s; 82.72% coverage (80% required). Initial 11 failures resolved; no remaining test failures in this run |
-| Frontend | 293 tests / 40 files; TypeScript/Vite PASS, build 4.39 s; theme check 0 files |
-| ML / SSRF | ML 298 passed in 34.05 s; root SSRF regression 3 passed; backend-enabled business-example smoke all 5 stages green, 5 profiles |
-| Configuration / lint | Dependency consistency PASS; full-profile Compose configuration PASS (not stack startup); changed-Python bug-tier Ruff PASS |
-| Independent review | Code-only verification of batch ownership/admission, transcript hydration, and statistics/quotas |
-| Built preview | `http://127.0.0.1:4173`: desktop 1440x1000, all visible images loaded; mobile 390x844 navigation/keyboard/theme/sign-in input labels, no horizontal overflow. No authenticated critical journey or real Google sign-in/checkout |
-| Health samples | HTTP 200 in 20/20 samples; p50 717.2 ms, p95 1195.3 ms, p99 1761.1 ms, collected during ML tests, not a clean performance baseline |
+| Check                  | Current result / scope                                                                                                                                                                                                                                                                   |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend                | 1,639 passed, 3 integration deselected; 773.82 s; 82.72% coverage (80% required). Initial 11 failures resolved; no remaining test failures in this run                                                                                                                                   |
+| Frontend               | 293 tests / 40 files; TypeScript/Vite PASS, build 4.39 s; theme check 0 files                                                                                                                                                                                                            |
+| ML / SSRF              | ML 298 passed in 34.05 s; root SSRF regression 3 passed; backend-enabled business-example smoke all 5 stages green, 5 profiles                                                                                                                                                           |
+| Configuration / lint   | Dependency consistency PASS; full-profile Compose configuration PASS (not stack startup); changed-Python bug-tier Ruff PASS                                                                                                                                                              |
+| Independent review     | Code-only verification of batch ownership/admission, transcript hydration, and statistics/quotas                                                                                                                                                                                         |
+| Built preview          | `http://127.0.0.1:4173`: desktop 1440x1000, all visible images loaded; mobile 390x844 navigation/keyboard/theme/sign-in input labels, no horizontal overflow. No authenticated critical journey or real Google sign-in/checkout                                                          |
+| Health samples         | HTTP 200 in 20/20 samples; p50 717.2 ms, p95 1195.3 ms, p99 1761.1 ms, collected during ML tests, not a clean performance baseline                                                                                                                                                       |
 | Live provider evidence | Keyless Freellmpool smoke failed twice; the UTF-8-enabled retry raised `AllCandidatesFailed` after one outer attempt. A separate concurrent verification logged two real configured-provider copilot HTTP 200 responses (6.06 s, 2.73 s). Neither proves all providers available or down |
 
 Current patches cover shared batch admission (3 running jobs per owner, 600 s

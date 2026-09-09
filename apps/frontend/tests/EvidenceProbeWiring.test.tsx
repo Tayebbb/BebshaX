@@ -77,4 +77,24 @@ describe('Step 1 evidence probe wiring', () => {
     );
     expect(screen.queryByText(/No evidence found/i)).toBeNull();
   });
+
+  it('keeps synthetic source profiles distinct from evidence when research has not run', async () => {
+    vi.spyOn(api, 'getEvidenceSummary').mockResolvedValue(evidenceSummary({}));
+
+    renderWorkflow();
+
+    expect(await screen.findByText(/No evidence run yet.*synthetic source profiles remain unvalidated hypotheses/i)).toBeInTheDocument();
+    expect(screen.queryByText(/personas will be inferred from your description/i)).toBeNull();
+  });
+
+  it('does not promise observed persona claims when study evidence is found', async () => {
+    vi.spyOn(api, 'getEvidenceSummary').mockResolvedValue(evidenceSummary({
+      research_status: 'completed', total_claims: 2, total_sources: 1,
+    }));
+
+    renderWorkflow();
+
+    expect(await screen.findByText(/Found 2 supporting claims from 1 source.*review them in the Evidence Laboratory/i)).toBeInTheDocument();
+    expect(screen.queryByText(/personas can cite them/i)).toBeNull();
+  });
 });

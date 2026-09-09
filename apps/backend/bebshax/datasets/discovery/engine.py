@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
+from sqlalchemy import String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.config import get_settings
@@ -195,7 +196,41 @@ class DatasetDiscoveryEngine:
                 },
             )
 
-            if eval_res.is_selected:
+            metadata_errors = {}
+            for column in DatasetCandidates.__table__.columns:
+                if column.name not in DatasetCandidateData.model_fields:
+                    continue
+                value = getattr(cand, column.name)
+                limit = column.type.length if isinstance(column.type, String) else None
+                if isinstance(value, str) and limit is not None and len(value) > limit:
+                    metadata_errors[column.name] = {"actual_length": len(value), "max_length": limit}
+                    replacement = (
+                        "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+                        if column.name in {"source", "external_id"}
+                        else f"See evaluation_details.raw_metadata.{column.name}"
+                    )
+                    setattr(db_cand, column.name, replacement)
+
+            if metadata_errors:
+                fields = ", ".join(
+                    f"{field}: {bounds['actual_length']} > {bounds['max_length']} characters"
+                    for field, bounds in metadata_errors.items()
+                )
+                detail = (
+                    f"Not imported: dataset metadata exceeds storage limits ({fields}). "
+                    "Full candidate preserved in evaluation_details.raw_metadata."
+                )
+                db_cand.selection_status = "import_failed"
+                db_cand.selection_reason = f"{detail}\n{eval_res.selection_reason}"
+                db_cand.evaluation_details = {
+                    **db_cand.evaluation_details,
+                    "raw_metadata": cand.model_dump(mode="json"),
+                    "metadata_errors": metadata_errors,
+                    "import_error": detail,
+                }
+                logger.warning("Dataset candidate metadata rejected: %s", fields)
+
+            if eval_res.is_selected and not metadata_errors:
                 try:
                     imported_ds = await materialize_candidate(
                         session=session,

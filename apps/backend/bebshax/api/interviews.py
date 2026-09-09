@@ -385,10 +385,14 @@ async def get_study_interview_detail(
     )
     insights = list((await session.execute(ins_stmt)).scalars())
 
-    # Suggested follow-ups, written by the model from this transcript (empty when unavailable).
-    suggested = await request.app.state.interview_engine.generate_suggested_questions(
-        conversation, persona, turns
-    )
+    suggested = (conversation.configuration or {}).get("suggested_questions", [])
+    if not isinstance(suggested, list):
+        suggested = []
+    for turn in reversed(turns):
+        saved_suggestions = (turn.metadata_json or {}).get("suggested_questions")
+        if isinstance(saved_suggestions, list):
+            suggested = saved_suggestions
+            break
 
     data = _serialize_interview(conversation, persona, turns, insights)
     data["suggested_questions"] = suggested
