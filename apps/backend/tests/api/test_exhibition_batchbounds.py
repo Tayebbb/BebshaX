@@ -314,3 +314,28 @@ def test_batch_cancellation_preserves_completed_interviews(exhibition_batch_case
     assert job["completed_count"] == job["failed_count"] == 1
     assert job["finished_at"] is not None
     assert sorted(entry["status"] for entry in job["personas"].values()) == ["completed", "failed"]
+
+
+def test_batch_rejects_persona_belonging_to_another_study(exhibition_batch_case):
+    client, _ = exhibition_batch_case
+
+    response = client.post(_BATCH_URL, json={
+        "persona_ids": ["exhibition_batch_persona_0", "exhibition_batch_other_persona"],
+    })
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "One or more personas do not belong to this study"
+    assert not _job_tasks(client.app)
+
+
+def test_batch_skips_stale_ids_and_runs_the_remaining_valid_personas(exhibition_batch_case):
+    client, _ = exhibition_batch_case
+
+    response = client.post(_BATCH_URL, json={
+        "persona_ids": ["exhibition_batch_persona_0", "per_no_longer_exists"],
+    })
+
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["total_personas"] == 1
+    assert set(body["personas"]) == {"exhibition_batch_persona_0"}

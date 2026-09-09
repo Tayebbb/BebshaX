@@ -889,14 +889,25 @@ async def batch_run_study_interviews(
     else:
         # Client-supplied ids are scoped to this study: an unscoped `IN` let a
         # caller interview another tenant's persona and read the transcript back.
+        requested = set(target_persona_ids)
         p_stmt = select(Personas).where(
-            Personas.id.in_(target_persona_ids), Personas.study_id == study_id
+            Personas.id.in_(requested), Personas.study_id == study_id
         )
         personas = list((await session.execute(p_stmt)).scalars().all())
-        if len(personas) != len(set(target_persona_ids)):
-            raise HTTPException(
-                status_code=400, detail="One or more personas do not belong to this study"
+        if len(personas) != len(requested):
+            # A missing id is either genuinely foreign (exists under another
+            # study — a security concern) or merely stale client state (the row
+            # was regenerated/removed). Foreign ids stay a hard 400; stale ids
+            # are dropped so a single outdated id can't kill the whole batch.
+            found_ids = {persona.id for persona in personas}
+            foreign_stmt = select(Personas.id).where(
+                Personas.id.in_(requested - found_ids)
             )
+            foreign_ids = set((await session.execute(foreign_stmt)).scalars().all())
+            if foreign_ids:
+                raise HTTPException(
+                    status_code=400, detail="One or more personas do not belong to this study"
+                )
 
     if not personas:
         raise HTTPException(status_code=400, detail="No personas available for this study")
