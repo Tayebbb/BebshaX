@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
-DB_PROBE_TIMEOUT_S = 2.0
+# Covers a cold pooled connect + pre-ping to a cross-region managed Postgres
+# (observed ~4s to Neon ap-southeast-1); a 2s cap false-flagged a working DB.
+DB_PROBE_TIMEOUT_S = 8.0
 
 
 async def probe_database(app, timeout_s: float = DB_PROBE_TIMEOUT_S) -> str:
