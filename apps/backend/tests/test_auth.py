@@ -20,7 +20,7 @@ def test_password_hashing_and_verification():
     """Verify password hashing produces salted hashes and verifies correctly."""
     pwd = "SecurePassword123!"
     hashed = hash_password(pwd)
-    assert hashed.startswith("pbkdf2_sha256$100000$")
+    assert hashed.startswith("pbkdf2_sha256$600000$")
     assert hashed != pwd
     assert verify_password(pwd, hashed) is True
     assert verify_password("WrongPassword", hashed) is False

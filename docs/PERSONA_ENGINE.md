@@ -151,12 +151,12 @@ Multi-turn interviews with a **stable identity** — the persona is composed per
 
 ## REST API (`bebshax/api/personas.py`)
 
-| Endpoint                             | Purpose                                           | Errors                                                                                        |
-| ------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `POST /api/businesses`               | create business                                   | —                                                                                             |
-| `GET /api/businesses`                | list                                              | —                                                                                             |
+| Endpoint                             | Purpose                                           | Errors                                                                                     |
+| ------------------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `POST /api/businesses`               | create business                                   | —                                                                                          |
+| `GET /api/businesses`                | list                                              | —                                                                                          |
 | `POST /api/businesses/{id}/personas` | select + store one synthetic persona              | 404 unknown business · 422 unsupported ML context/exhaustion · 503 unavailable local model |
-| `GET /api/personas/{id}`             | full profile incl. attributes, evidence, warnings | 404                                                                                           |
+| `GET /api/personas/{id}`             | full profile incl. attributes, evidence, warnings | 404                                                                                        |
 
 App wiring (`main.py` lifespan) now also connects **Sazid's `ProvenanceSink` to the PoolRouter** — every LLM request lands in `llm_requests` (fail-soft; DB issues never fail a request).
 

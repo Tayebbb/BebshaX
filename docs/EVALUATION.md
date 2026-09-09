@@ -110,12 +110,12 @@ Random is exact expected uniform ranking; popularity uses training occupation
 frequencies and seeded tie breaking. These are proxies, not supervised
 business-to-persona labels or direct MMR batch-quality comparisons.
 
-| Method | Validation MRR | Test MRR |
-| --- | --- | --- |
-| Selected TF-IDF + NMF | 0.41811696827631073 | 0.43265430767833196 |
-| Lexical TF-IDF | 0.7166454265071603 | 0.7516210382537256 |
-| Expected random | Not reproduced here | 0.012741852676724338 |
-| Popular occupation | Not reproduced here | 0.011943168742486186 |
+| Method                | Validation MRR      | Test MRR             |
+| --------------------- | ------------------- | -------------------- |
+| Selected TF-IDF + NMF | 0.41811696827631073 | 0.43265430767833196  |
+| Lexical TF-IDF        | 0.7166454265071603  | 0.7516210382537256   |
+| Expected random       | Not reproduced here | 0.012741852676724338 |
+| Popular occupation    | Not reproduced here | 0.011943168742486186 |
 
 **The custom model underperforms lexical TF-IDF on validation and test.** It is
 not established as a superior production selector. Full recall tables and all

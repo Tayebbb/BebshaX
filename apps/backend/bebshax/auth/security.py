@@ -14,10 +14,8 @@ ALGORITHM = "HS256"
 # The hash string encodes its own iteration count (`pbkdf2_sha256$<iters>$<salt>$<dk>`)
 # and `verify_password` reads it back, so this constant only governs NEW hashes:
 # raising it never invalidates stored passwords (they upgrade on the next reset).
-# OWASP's 2023+ floor for PBKDF2-HMAC-SHA256 is 600_000; the bump is deliberately
-# NOT applied yet because tests/test_auth.py pins the `$100000$` prefix — flip this
-# constant together with that assertion (one-line change each).
-PBKDF2_ITERATIONS = 100_000
+# OWASP's 2023+ floor for PBKDF2-HMAC-SHA256 is 600_000.
+PBKDF2_ITERATIONS = 600_000
 
 
 def _b64_encode(data: bytes) -> str:
@@ -50,7 +48,8 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(
-    user_id: Union[str, Dict[str, Any]], expires_delta: Optional[timedelta] = None
+    user_id: Union[str, Dict[str, Any]], expires_delta: Optional[timedelta] = None,
+    *, session_version: int = 0,
 ) -> str:
     """Sign path — ALWAYS current secret, never previous."""
     if isinstance(user_id, dict):
@@ -60,6 +59,7 @@ def create_access_token(
     exp = now + (expires_delta or timedelta(days=s.jwt_expire_days))
     payload = {
         "sub": user_id,
+        "session_version": session_version,
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
         "iss": s.jwt_issuer,
@@ -110,6 +110,9 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
             if s.jwt_audience not in aud:
                 return None
         elif aud != s.jwt_audience:
+            return None
+        session_version = payload.get("session_version", 0)
+        if type(session_version) is not int or session_version < 0:
             return None
         return payload
     except Exception:

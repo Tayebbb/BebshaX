@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import zipfile
 from typing import Any
 
@@ -35,6 +36,21 @@ def _enforce_shape_caps(columns: list[str], rows: list[dict[str, Any]]) -> None:
             f"Dataset has more than {MAX_DATASET_ROWS:,} rows. "
             "Split it or sample it before uploading."
         )
+
+
+def _normalize_columns(columns: list[str]) -> list[str]:
+    normalized = [str(column).strip() for column in columns]
+    if not normalized or any(not column for column in normalized):
+        raise DatasetParseError("Dataset column names must not be empty.")
+    if len(set(normalized)) != len(normalized):
+        raise DatasetParseError("Dataset column names must be unique after trimming whitespace.")
+    _enforce_shape_caps(normalized, [])
+    return normalized
+
+
+def _normalize_record(record: dict[str, Any]) -> dict[str, Any]:
+    columns = _normalize_columns(list(record))
+    return dict(zip(columns, record.values(), strict=True))
 
 
 def detect_format(content: bytes, filename: str = "", content_type: str = "") -> str:
@@ -115,21 +131,23 @@ def _parse_delimited(content: bytes, delimiter: str = ",") -> tuple[list[str], l
     elif delimiter == "," and "|" in first_line and first_line.count("|") > first_line.count(","):
         delimiter = "|"
 
-    reader = csv.DictReader(io.StringIO("\n".join(lines)), delimiter=delimiter)
-    fieldnames = reader.fieldnames
+    reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
+    fieldnames = next((row for row in reader if row), None)
     if not fieldnames:
         raise DatasetParseError("Dataset header is missing or invalid.")
 
-    clean_columns = [str(f).strip() for f in fieldnames if f is not None and str(f).strip()]
-    if not clean_columns:
-        raise DatasetParseError("No valid columns found in dataset header.")
+    clean_columns = _normalize_columns(fieldnames)
 
     rows: list[dict[str, Any]] = []
     for row in reader:
-        clean_row: dict[str, Any] = {}
-        for col in clean_columns:
-            val = row.get(col)
-            clean_row[col] = _cast_value(val)
+        if not row:
+            continue
+        if len(row) > len(clean_columns):
+            raise DatasetParseError("Dataset row contains more fields than its header.")
+        clean_row = {
+            column: _cast_value(row[index] if index < len(row) else None)
+            for index, column in enumerate(clean_columns)
+        }
         rows.append(clean_row)
         # One over the cap is enough for _enforce_shape_caps to reject; keep
         # reading and the caller pays for the whole expansion first.
@@ -161,22 +179,23 @@ def _parse_json(content: bytes) -> tuple[list[str], list[dict[str, Any]]]:
     if not data:
         raise DatasetParseError("JSON dataset is an empty array.")
 
-    # Collect all unique keys across all records
     cols_set: dict[str, None] = {}
+    records: list[dict[str, Any]] = []
+    _enforce_shape_caps([], data)
     for item in data:
         if isinstance(item, dict):
-            for k in item.keys():
-                cols_set[str(k).strip()] = None
+            record = _normalize_record(item)
+            cols_set.update(dict.fromkeys(record))
+            _enforce_shape_caps(list(cols_set), data)
+            records.append(record)
 
     columns = list(cols_set.keys())
     if not columns:
         raise DatasetParseError("JSON objects have no valid keys/fields.")
 
     rows: list[dict[str, Any]] = []
-    for item in data:
-        if isinstance(item, dict):
-            row = {col: _cast_value(item.get(col)) for col in columns}
-            rows.append(row)
+    for record in records:
+        rows.append({column: _cast_value(record.get(column)) for column in columns})
 
     return columns, rows
 
@@ -193,11 +212,10 @@ def _parse_jsonl(content: bytes) -> tuple[list[str], list[dict[str, Any]]]:
         try:
             item = json.loads(line)
             if isinstance(item, dict):
-                for k in item.keys():
-                    cols_set[str(k).strip()] = None
-                rows.append(item)
-                if len(rows) > MAX_DATASET_ROWS:
-                    break
+                record = _normalize_record(item)
+                cols_set.update(dict.fromkeys(record))
+                rows.append(record)
+                _enforce_shape_caps(list(cols_set), rows)
         except json.JSONDecodeError:
             continue
 
@@ -248,6 +266,8 @@ def _parse_xlsx(content: bytes) -> tuple[list[str], list[dict[str, Any]]]:
 def _cast_value(val: Any) -> Any:
     if val is None:
         return None
+    if isinstance(val, float) and not math.isfinite(val):
+        raise DatasetParseError("Dataset numeric values must be finite.")
     if isinstance(val, (int, float, bool, list, dict)):
         return val
     s = str(val).strip()
@@ -265,7 +285,9 @@ def _cast_value(val: Any) -> Any:
         pass
     # Try float
     try:
-        return float(s)
+        numeric_value = float(s)
     except ValueError:
-        pass
-    return s
+        return s
+    if not math.isfinite(numeric_value):
+        raise DatasetParseError("Dataset numeric values must be finite.")
+    return numeric_value

@@ -1,14 +1,27 @@
 """Tests for dataset SSRF protection and security constraints."""
 
+import socket
+from typing import Any
+
 import pytest
 
 from bebshax.datasets.security import (
     DatasetSecurityError,
+    Resolver,
     validate_url_security,
 )
 
 
-def test_validate_url_security_blocks_private_ips():
+@pytest.fixture
+def offline_resolver() -> Resolver:
+    def resolve(host: str, port: Any) -> list[tuple[Any, ...]]:
+        address = "93.184.216.34" if host == "raw.githubusercontent.com" else host
+        return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (address, 0))]
+
+    return resolve
+
+
+def test_validate_url_security_blocks_private_ips(offline_resolver: Resolver):
     dangerous_urls = [
         "http://127.0.0.1/data.csv",
         "http://localhost:8000/secret.json",
@@ -22,16 +35,11 @@ def test_validate_url_security_blocks_private_ips():
 
     for url in dangerous_urls:
         with pytest.raises(DatasetSecurityError):
-            validate_url_security(url)
+            validate_url_security(url, resolver=offline_resolver)
 
 
-def test_validate_url_security_allows_valid_http_scheme():
-    # Public domain format validation
-    try:
-        validate_url_security("https://raw.githubusercontent.com/datasets/sample.csv")
-    except DatasetSecurityError as exc:
-        # If offline DNS fails in test runner, verify it was a DNS resolution error rather than scheme error
-        assert "Unable to resolve hostname" in str(exc) or "raw.githubusercontent.com" in str(exc)
+def test_validate_url_security_allows_valid_http_scheme(offline_resolver: Resolver):
+    validate_url_security("https://raw.githubusercontent.com/datasets/sample.csv", resolver=offline_resolver)
 
 
 def test_parser_rejects_datasets_above_the_column_cap():

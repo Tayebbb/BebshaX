@@ -22,6 +22,7 @@ from bebshax.behavioral.orm import (
 )
 from bebshax.db.models import (
     DatasetSources,
+    EvidenceChunks,
     EvidenceClaims,
     EvidenceSources,
     MarketSegments,
@@ -30,7 +31,7 @@ from bebshax.db.models import (
     StudyReports,
     _utcnow,
 )
-from bebshax.interview.orm import Conversations, InterviewInsights
+from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.placeholders import is_placeholder
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_json_block
@@ -164,12 +165,16 @@ def _normalize_report_fields(report_data: dict[str, Any]) -> dict[str, Any]:
 
 
 REPORT_SYSTEM_PROMPT = """You are BebshaX Chief Research Intelligence Officer.
-Synthesize the provided research study data into an authoritative, grounded 20-section market validation report.
+Synthesize the provided research study data into a grounded 20-section research report.
 
 CRITICAL RULES:
 - Use ONLY the actual business idea, evidence, dataset signals, personas, interview answers, and behavioral simulation results provided in the prompt.
 - NEVER invent unsupported claims or use generic platitudes.
-- Clearly label synthetic persona simulations as exploratory simulation signals, and real research citations as empirical evidence.
+- Preserve claim status, supporting source and chunk IDs, contradicting source IDs, and rationale. Present both sides of contested claims and retain uncertainty; unsupported claims are not findings.
+- A valid citation ID confirms a reference exists, not that its text entails a claim. No automated entailment validation has been performed; do not imply otherwise.
+- Clearly label synthetic personas, interview insights, and behavioral simulations as exploratory synthetic signals, never observed customers, population estimates, or validated demand. Preserve persona and interview attribution for turn citations.
+- Distinguish real source material from synthetic, sample, or inferred data. State missing evidence, coverage limitations, uncertainty, and the need for real-customer validation explicitly.
+- Leave confidence and demand scores null when no defensible measurement exists. Model judgments and citation counts are not empirical probabilities or proof of product-market fit.
 - Return ONLY valid JSON (no markdown fences, no explanatory text outside the JSON object).
 """
 
@@ -207,6 +212,16 @@ class StudyReportService:
             (
                 await self.session.execute(
                     select(EvidenceClaims).where(EvidenceClaims.study_id == study_id)
+                )
+            ).scalars()
+        )
+
+        evidence_chunks = list(
+            (
+                await self.session.execute(
+                    select(EvidenceChunks)
+                    .where(EvidenceChunks.study_id == study_id)
+                    .order_by(EvidenceChunks.source_id, EvidenceChunks.chunk_index, EvidenceChunks.id)
                 )
             ).scalars()
         )
@@ -251,6 +266,17 @@ class StudyReportService:
             ).scalars()
         )
 
+        conversation_turns = list(
+            (
+                await self.session.execute(
+                    select(ConversationTurns)
+                    .join(Conversations, ConversationTurns.conversation_id == Conversations.id)
+                    .where(Conversations.study_id == study_id)
+                    .order_by(ConversationTurns.conversation_id, ConversationTurns.turn_number)
+                )
+            ).scalars()
+        )
+
         behavioral_tests = list(
             (
                 await self.session.execute(
@@ -284,91 +310,96 @@ class StudyReportService:
                 "run the pipeline before generating a report.",
             )
 
-        # 2. Determine version number
-        latest_version_stmt = select(func.max(StudyReports.version)).where(
-            StudyReports.study_id == study_id
-        )
-        max_ver = (await self.session.execute(latest_version_stmt)).scalar() or 0
-        new_version = max_ver + 1
-
-        # 3. Generate report data
+        # 2. Generate report data before allocating its persisted version.
         report_data = await self._synthesize_report_content(
             study=study,
             evidence_sources=evidence_sources,
+            evidence_chunks=evidence_chunks,
             evidence_claims=evidence_claims,
             datasets=datasets,
             segments=segments,
             personas=personas,
             conversations=conversations,
+            conversation_turns=conversation_turns,
             interview_insights=interview_insights,
             behavioral_tests=behavioral_tests,
             behavioral_runs=behavioral_runs,
             behavioral_results=behavioral_results,
-            version=new_version,
             custom_title=custom_title,
         )
 
-        # 4. Persist to StudyReports — the model's JSON fitted to the column shapes first.
+        # 3. Persist the normalized report and study findings under one short lock.
         fields = _normalize_report_fields(report_data)
         report_id = f"rep_{uuid.uuid4().hex[:16]}"
-        report = StudyReports(
-            id=report_id,
-            study_id=study_id,
-            user_id=effective_user_id,
-            version=new_version,
-            title=_bound_title(custom_title or fields["title"] or study.title or "Research Synthesis Report"),
-            executive_summary=fields.get("executive_summary")
-            or f"Validation report for {study.prompt or study.title}.",
-            key_findings=fields["key_findings"],
-            target_market_summary=fields["target_market_summary"],
-            market_context_summary=fields["market_context_summary"],
-            evidence_findings=fields["evidence_findings"],
-            dataset_findings=fields["dataset_findings"],
-            market_segments_summary=fields["market_segments_summary"],
-            persona_overview=fields["persona_overview"],
-            interview_findings=fields["interview_findings"],
-            major_pain_points=fields["major_pain_points"],
-            customer_needs=fields["customer_needs"],
-            behavioral_results=fields["behavioral_results"],
-            pricing_signals=fields["pricing_signals"],
-            major_risks=fields["major_risks"],
-            opportunities=fields["opportunities"],
-            strongest_segments=fields["strongest_segments"],
-            recommendations=fields["recommendations"],
-            validation_summary=fields["validation_summary"],
-            limitations=fields["limitations"],
-            metrics={
-                "total_interviews": len(conversations),
-                "total_personas": len(personas),
-                "total_claims": len(evidence_claims),
-                # Honest absence: scores are only present when the LLM
-                # synthesis computed them from the actual study data.
-                "confidence_score": None,
-                "demand_score": None,
-                **fields["metrics"],
-            },
-            is_synthetic=True,
-            created_at=_utcnow(),
-            updated_at=_utcnow(),
-        )
+        async with self.session.begin():
+            study = (
+                await self.session.execute(
+                    select(Studies)
+                    .where(Studies.id == study_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one_or_none()
+            if study is None:
+                raise ValueError(f"Study '{study_id}' not found")
+            latest_version_stmt = select(func.max(StudyReports.version)).where(
+                StudyReports.study_id == study_id
+            )
+            max_version = (await self.session.execute(latest_version_stmt)).scalar() or 0
+            new_version = max_version + 1
+            report = StudyReports(
+                id=report_id,
+                study_id=study_id,
+                user_id=effective_user_id,
+                version=new_version,
+                title=_bound_title(custom_title or fields["title"] or study.title or "Research Synthesis Report"),
+                executive_summary=fields.get("executive_summary")
+                or f"Validation report for {study.prompt or study.title}.",
+                key_findings=fields["key_findings"],
+                target_market_summary=fields["target_market_summary"],
+                market_context_summary=fields["market_context_summary"],
+                evidence_findings=fields["evidence_findings"],
+                dataset_findings=fields["dataset_findings"],
+                market_segments_summary=fields["market_segments_summary"],
+                persona_overview=fields["persona_overview"],
+                interview_findings=fields["interview_findings"],
+                major_pain_points=fields["major_pain_points"],
+                customer_needs=fields["customer_needs"],
+                behavioral_results=fields["behavioral_results"],
+                pricing_signals=fields["pricing_signals"],
+                major_risks=fields["major_risks"],
+                opportunities=fields["opportunities"],
+                strongest_segments=fields["strongest_segments"],
+                recommendations=fields["recommendations"],
+                validation_summary=fields["validation_summary"],
+                limitations=fields["limitations"],
+                metrics={
+                    "total_interviews": len(conversations),
+                    "total_personas": len(personas),
+                    "total_claims": len(evidence_claims),
+                    "confidence_score": None,
+                    "demand_score": None,
+                    **fields["metrics"],
+                },
+                is_synthetic=True,
+                created_at=_utcnow(),
+                updated_at=_utcnow(),
+            )
+            self.session.add(report)
 
-        self.session.add(report)
+            study.findings = {
+                "report_id": report_id,
+                "version": new_version,
+                "title": report.title,
+                "executive_summary": report.executive_summary,
+                "key_findings": report.key_findings,
+                "metrics": report.metrics,
+                "generated_at": _utcnow().isoformat(),
+            }
+            study.status = "completed"
+            study.step = 5
+            study.updated_at = _utcnow()
 
-        # Update Study findings & status
-        study.findings = {
-            "report_id": report_id,
-            "version": new_version,
-            "title": report.title,
-            "executive_summary": report.executive_summary,
-            "key_findings": report.key_findings,
-            "metrics": report.metrics,
-            "generated_at": _utcnow().isoformat(),
-        }
-        study.status = "completed"
-        study.step = 5
-        study.updated_at = _utcnow()
-
-        await self.session.commit()
         await self.session.refresh(report)
         return report
 
@@ -385,8 +416,10 @@ class StudyReportService:
         behavioral_tests: list[BehavioralTests],
         behavioral_runs: list[BehavioralTestRuns],
         behavioral_results: list[BehavioralTestResults],
-        version: int,
+        version: int | None = None,
         custom_title: Optional[str] = None,
+        evidence_chunks: list[EvidenceChunks] | None = None,
+        conversation_turns: list[ConversationTurns] | None = None,
     ) -> dict[str, Any]:
         """Synthesize the report with the model from the stored study data.
         Raises ``LLMUnavailable`` (no service), ``UnusableModelOutput`` (after one
@@ -397,70 +430,259 @@ class StudyReportService:
 
         # Build context snapshot
         study_context = {
+            "study_id": study.id,
+            "study_title": study.title,
+            "study_type": study.type,
             "business_idea": prompt_text,
             "target_audience": target_aud,
             "pricing_hypothesis": pricing_hyp,
             "research_goal": study.goal,
+            "script_questions": study.script_questions,
+            "script_meta": study.script_meta,
+            "suggested_roles": study.suggested_roles,
+            "workflow_personas": study.personas_data,
+            "copilot_messages": study.copilot_messages,
+            "is_demo": study.is_demo,
+            "evidence_sources": [
+                {
+                    "id": source.id,
+                    "run_id": source.run_id,
+                    "source_type": source.source_type,
+                    "title": source.title,
+                    "url": source.url,
+                    "publisher": source.publisher,
+                    "content": source.content,
+                    "content_hash": source.content_hash,
+                    "relevance_score": source.relevance_score,
+                    "status": source.status,
+                    "metadata_payload": source.metadata_payload,
+                    "created_at": source.created_at.isoformat() if source.created_at else None,
+                    "updated_at": source.updated_at.isoformat() if source.updated_at else None,
+                }
+                for source in evidence_sources
+            ],
+            "evidence_chunks": [
+                {
+                    "id": chunk.id,
+                    "source_id": chunk.source_id,
+                    "chunk_index": chunk.chunk_index,
+                    "content": chunk.content,
+                    "embedding_space": chunk.embedding_space,
+                    "metadata_payload": chunk.metadata_payload,
+                }
+                for chunk in evidence_chunks or []
+            ],
             "evidence_claims_count": len(evidence_claims),
             "evidence_claims_sample": [
-                {"claim": c.claim_text, "category": c.category, "confidence": c.confidence}
-                for c in evidence_claims[:8]
+                {
+                    "id": claim.id,
+                    "run_id": claim.run_id,
+                    "claim": claim.claim_text,
+                    "status": claim.status,
+                    "category": claim.category,
+                    "confidence": claim.confidence,
+                    "supporting_source_ids": claim.supporting_source_ids,
+                    "supporting_chunk_ids": claim.supporting_chunk_ids,
+                    "contradicting_source_ids": claim.contradicting_source_ids,
+                    "rationale": claim.rationale,
+                }
+                for claim in evidence_claims
             ],
             "dataset_count": len(datasets),
             "datasets_sample": [
-                {"name": d.name, "rows": d.row_count, "segments": len(d.segments or [])}
-                for d in datasets[:3]
+                {
+                    "id": dataset.id,
+                    "name": dataset.name,
+                    "source_type": dataset.source_type,
+                    "source_url": dataset.source_url,
+                    "original_file_name": dataset.original_file_name,
+                    "file_type": dataset.file_type,
+                    "description": dataset.description,
+                    "status": dataset.status,
+                    "rows": dataset.row_count,
+                    "column_count": dataset.column_count,
+                    "schema_metadata": dataset.schema_metadata,
+                    "statistics": dataset.statistics,
+                    "segments": dataset.segments,
+                    "persona_count_generated": dataset.persona_count_generated,
+                    "processing_error": dataset.processing_error,
+                    "content_hash": dataset.content_hash,
+                    "last_processed_at": dataset.last_processed_at.isoformat() if dataset.last_processed_at else None,
+                }
+                for dataset in datasets
             ],
             "market_segments": [
-                {"name": s.name, "share": s.population_percentage, "description": s.description}
-                for s in segments[:5]
+                {
+                    "id": segment.id,
+                    "segmentation_run_id": segment.segmentation_run_id,
+                    "name": segment.name,
+                    "cluster_label": segment.cluster_label,
+                    "share": segment.population_percentage,
+                    "population_count": segment.population_count,
+                    "description": segment.description,
+                    "confidence_score": segment.confidence_score,
+                    "status": segment.status,
+                    "characteristics": segment.characteristics,
+                    "variable_distributions": segment.variable_distributions,
+                    "evidence_citations": segment.evidence_citations,
+                    "differentiation_summary": segment.differentiation_summary,
+                }
+                for segment in segments
             ],
             "personas_count": len(personas),
             "personas_sample": [
                 {
-                    "name": p.name,
-                    "archetype": p.archetype,
-                    "occupation": (p.demographics or {}).get("occupation", "User"),
-                    "grounding_score": p.grounding_score,
-                    "goals": (p.goals or [])[:2],
-                    "pain_points": (p.pain_points or [])[:2],
+                    "id": persona.id,
+                    "segment_id": persona.segment_id,
+                    "generation_run_id": persona.generation_run_id,
+                    "name": persona.name,
+                    "status": persona.status,
+                    "version": persona.version,
+                    "generation_model": persona.generation_model,
+                    "data_source": persona.data_source,
+                    "archetype": persona.archetype,
+                    "tagline": persona.tagline,
+                    "country_code": persona.country_code,
+                    "demographics": persona.demographics,
+                    "personality": persona.personality,
+                    "bio": persona.bio,
+                    "quote": persona.quote,
+                    "goals": persona.goals,
+                    "pain_points": persona.pain_points,
+                    "needs": persona.needs,
+                    "behaviors": persona.behaviors,
+                    "preferences": persona.preferences,
+                    "motivations": persona.motivations,
+                    "objections": persona.objections,
+                    "detailed_attributes": persona.detailed_attributes,
+                    "commercial_profile": persona.commercial_profile,
+                    "technology_profile": persona.technology_profile,
+                    "evidence_citations": persona.evidence_citations,
+                    "dataset_refs": persona.dataset_refs,
+                    "grounding_score": persona.grounding_score,
+                    "confidence": persona.confidence,
+                    "validation_warnings": persona.validation_warnings,
+                    "is_synthetic": persona.is_synthetic,
                 }
-                for p in personas[:6]
+                for persona in personas
             ],
-            "completed_interviews": len(conversations),
+            "completed_interviews": sum(conversation.status == "completed" for conversation in conversations),
+            "conversations": [
+                {
+                    "id": conversation.id,
+                    "persona_id": conversation.persona_id,
+                    "persona_version": conversation.persona_version,
+                    "generation_run_id": conversation.generation_run_id,
+                    "objective": conversation.objective,
+                    "custom_objective": conversation.custom_objective,
+                    "interview_type": conversation.interview_type,
+                    "length_tier": conversation.length_tier,
+                    "max_turns": conversation.max_turns,
+                    "status": conversation.status,
+                    "topics_explored": conversation.topics_explored,
+                    "question_count": conversation.question_count,
+                    "turn_count": conversation.turn_count,
+                    "summary": conversation.summary,
+                    "key_findings": conversation.key_findings,
+                    "structured_insights": conversation.structured_insights,
+                    "configuration": conversation.configuration,
+                }
+                for conversation in conversations
+            ],
+            "conversation_turns": [
+                {
+                    "id": turn.id,
+                    "conversation_id": turn.conversation_id,
+                    "turn_number": turn.turn_number,
+                    "role": turn.role,
+                    "content": turn.content,
+                    "topic": turn.topic,
+                    "latency_ms": turn.latency_ms,
+                    "served_by": turn.served_by,
+                    "retrieved_memories": turn.retrieved_memories,
+                    "metadata_json": turn.metadata_json,
+                }
+                for turn in conversation_turns or []
+            ],
             "interview_insights_sample": [
                 {
-                    "title": i.title,
-                    "type": i.type,
-                    "description": i.description,
-                    "turns": i.supporting_turn_numbers,
+                    "id": insight.id,
+                    "interview_id": insight.interview_id,
+                    "persona_id": insight.persona_id,
+                    "title": insight.title,
+                    "type": insight.type,
+                    "description": insight.description,
+                    "turns": insight.supporting_turn_numbers,
+                    "confidence": insight.confidence,
+                    "is_synthetic": insight.is_synthetic,
                 }
-                for i in interview_insights[:8]
+                for insight in interview_insights
             ],
             "behavioral_simulations": [
                 {
-                    "test_type": t.test_type,
-                    "scenario": t.name,
-                    # BehavioralTests declares no `scenarios` relationship; the
-                    # old `t.scenarios` raised AttributeError -> HTTP 500 for
-                    # every study that had a behavioral test (found live).
-                    "run_count": sum(1 for r in behavioral_runs if r.behavioral_test_id == t.id),
+                    "id": test.id,
+                    "test_type": test.test_type,
+                    "scenario": test.name,
+                    "configuration": test.configuration,
+                    "status": test.status,
+                    "run_count": sum(1 for run in behavioral_runs if run.behavioral_test_id == test.id),
                     "completed_runs": sum(
-                        1 for r in behavioral_runs
-                        if r.behavioral_test_id == t.id and str(r.status).startswith("completed")
+                        1 for run in behavioral_runs
+                        if run.behavioral_test_id == test.id and str(run.status).startswith("completed")
                     ),
-                    "description": t.description,
+                    "description": test.description,
                 }
-                for t in behavioral_tests[:4]
+                for test in behavioral_tests
+            ],
+            "behavioral_runs": [
+                {
+                    "id": run.id,
+                    "behavioral_test_id": run.behavioral_test_id,
+                    "scenario_id": run.scenario_id,
+                    "scenario_snapshot": run.scenario_snapshot,
+                    "target_population_type": run.target_population_type,
+                    "target_segment_id": run.target_segment_id,
+                    "target_persona_ids": run.target_persona_ids,
+                    "status": run.status,
+                    "persona_count": run.persona_count,
+                    "completed_count": run.completed_count,
+                    "failed_count": run.failed_count,
+                    "aggregate_metrics": run.aggregate_metrics,
+                    "segment_analysis": run.segment_analysis,
+                    "cross_persona_patterns": run.cross_persona_patterns,
+                    "risks": run.risks,
+                    "opportunities": run.opportunities,
+                    "summary": run.summary,
+                    "error_message": run.error_message,
+                }
+                for run in behavioral_runs
             ],
             "behavioral_results_sample": [
                 {
-                    "persona": r.persona_name,
-                    "decision": r.decision_label,
-                    "probability": r.probability,
-                    "key_factors": r.key_factors,
+                    "id": result.id,
+                    "test_run_id": result.test_run_id,
+                    "behavioral_test_id": result.behavioral_test_id,
+                    "persona_id": result.persona_id,
+                    "persona": result.persona_name,
+                    "persona_version": result.persona_version,
+                    "segment_id": result.segment_id,
+                    "segment_name": result.segment_name,
+                    "decision": result.decision,
+                    "decision_label": result.decision_label,
+                    "probability": result.probability,
+                    "confidence": result.confidence,
+                    "confidence_score": result.confidence_score,
+                    "key_factors": result.key_factors,
+                    "motivators": result.motivators,
+                    "objections": result.objections,
+                    "reasoning_summary": result.reasoning_summary,
+                    "simulation_context_sources": result.simulation_context_sources,
+                    "interview_signals_used": result.interview_signals_used,
+                    "status": result.status,
+                    "error_message": result.error_message,
+                    "provenance_id": result.provenance_id,
                 }
-                for r in behavioral_results[:6]
+                for result in behavioral_results
             ],
         }
 
@@ -481,26 +703,30 @@ class StudyReportService:
             '  "key_findings": ["Finding 1 with concrete data", "Finding 2", "Finding 3"],\n'
             '  "target_market_summary": "Detailed target market overview",\n'
             '  "market_context_summary": "Market macro and competitive context",\n'
-            '  "evidence_findings": [{"title": "...", "claim": "...", "confidence": 0.9, "source": "..."}],\n'
+            '  "evidence_findings": [{"title": "...", "claim": "...", "status": "...", "confidence": null, "source": "...", '
+            '"supporting_source_ids": [], "supporting_chunk_ids": [], "contradicting_source_ids": [], "rationale": "..."}],\n'
             '  "dataset_findings": [{"name": "...", "insight": "...", "variables": ["..."]}],\n'
-            '  "market_segments_summary": [{"name": "...", "percentage": 35.0, "description": "..."}],\n'
+            '  "market_segments_summary": [{"name": "...", "percentage": null, "description": "..."}],\n'
             '  "persona_overview": [{"name": "...", "archetype": "...", "segment": "...", "key_takeaway": "..."}],\n'
-            '  "interview_findings": [{"topic": "...", "finding": "...", "supporting_personas": ["..."], "turn_citations": ["Turn 2", "Turn 4"]}],\n'
+            '  "interview_findings": [{"topic": "...", "finding": "...", "supporting_personas": [], '
+            '"turn_citations": [], "is_synthetic": true}],\n'
             '  "major_pain_points": [{"pain_point": "...", "severity": "High", "frequency": "Frequent"}],\n'
             '  "customer_needs": [{"need": "...", "priority": "Crucial", "context": "..."}],\n'
-            '  "behavioral_results": [{"test_type": "...", "scenario": "...", "decision": "...", "average_likelihood": 0.78, "key_objection": "...", "key_motivator": "..."}],\n'
+            '  "behavioral_results": [{"test_type": "...", "scenario": "...", "decision": "...", "average_likelihood": null, "key_objection": "...", "key_motivator": "..."}],\n'
             '  "pricing_signals": [{"price_point": "...", "sentiment": "...", "acceptable_range": "..."}],\n'
             '  "major_risks": ["Risk 1", "Risk 2"],\n'
             '  "opportunities": ["Opportunity 1", "Opportunity 2"],\n'
             '  "strongest_segments": ["Segment A", "Segment B"],\n'
             '  "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"],\n'
-            '  "validation_summary": "Synthesis of validation score and product-market fit signal",\n'
+            '  "validation_summary": "What the supplied evidence does and does not establish",\n'
             '  "limitations": "Clear disclosure of synthetic simulation boundaries and dataset coverage",\n'
             f'  "metrics": {{"total_interviews": {len(conversations)}, "total_personas": {len(personas)}, "total_claims": {len(evidence_claims)}, '
-            '"confidence_score": <float 0.0-1.0: YOUR assessment of evidence coverage — lower it when interviews are few or claims are thin>, '
-            '"demand_score": <integer 0-100: YOUR assessment of demand strength derived ONLY from the interview answers and pricing signals above>}\n'
+            '"confidence_score": null, "demand_score": null}\n'
             "}\n"
-            "Sections with no underlying data in STUDY_CONTEXT must be empty lists or state the absence plainly — never filled with generic statements."
+            "Sections with no underlying data in STUDY_CONTEXT must be empty lists or state the absence plainly — never filled with generic statements. "
+            "Legacy keys ending in '_sample' contain all supplied records. Preserve their qualifications and attribution. "
+            "Each turn_citations entry must be a string naming the stored interview ID, persona ID, and turn number. "
+            "Scores remain null unless a defensible measurement with its basis is supplied; synthetic responses cannot validate real demand."
         )
 
         llm_req = LLMRequest(
@@ -519,9 +745,11 @@ class StudyReportService:
             # estimate — at 8000 it pushed a ~1.1k-token prompt onto Ollama's
             # 16k num_ctx rung, which a 4 GB GPU cannot allocate, so every
             # local-only report failed with SERVER_ERROR. 5000 keeps ~2x
-            # headroom over the observed maximum and lands on the 8k rung.
+            # output headroom; the full input still must fit the selected model.
             max_output_tokens=REPORT_MAX_OUTPUT_TOKENS,
         )
+        if self.session.in_transaction():
+            await self.session.commit()
         served_by = None
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             if attempt > 1:

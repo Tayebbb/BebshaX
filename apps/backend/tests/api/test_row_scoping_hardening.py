@@ -192,10 +192,15 @@ async def test_legacy_conversation_endpoints_are_owner_scoped(scoped_app):
             await client.post("/api/conversations", json={"persona_id": "per_owned", "objective": "probe"})
         ).status_code == 404
 
-        # owner can read their transcript; anyone can start on a shared persona
+        # Shared transcripts remain readable; new conversations require a private owner.
         assert (await client.get("/api/conversations/conv_owned", headers=_owner_headers())).status_code == 200
-        shared = await client.post(
+        anonymous = await client.post(
             "/api/conversations", json={"persona_id": "per_shared", "objective": "ok"}
+        )
+        assert anonymous.status_code == 403
+        shared = await client.post(
+            "/api/conversations", json={"persona_id": "per_shared", "objective": "ok"},
+            headers=_owner_headers(),
         )
         assert shared.status_code == 201
 

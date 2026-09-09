@@ -344,25 +344,37 @@ class OpenRouterAdapter(ProviderAdapter):
         }
 
         # Per-attempt budget by task class overrides the client-wide default.
-        req_timeout = httpx.Timeout(attempt_timeout_s(request.task), connect=10.0)
+        budget = attempt_timeout_s(request.task)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + budget
+        req_timeout = httpx.Timeout(budget, connect=min(10.0, budget))
         degradation_notes: list[str] = []
         try:
-            resp = await client.post(
-                OPENROUTER_ENDPOINT, json=payload, headers=headers, timeout=req_timeout
-            )
-            if (
-                resp.status_code == 400
-                and "response_format" in payload
-                and not _is_context_overflow_body(resp.text)
-            ):
-                # Some models reject response_format; retry without it (the prompt
-                # already demands JSON). A context-overflow 400 is NOT retried — the
-                # same prompt would overflow again. Provenance records the drop.
-                retry_payload = {k: v for k, v in payload.items() if k != "response_format"}
+            async with asyncio.timeout_at(deadline):
                 resp = await client.post(
-                    OPENROUTER_ENDPOINT, json=retry_payload, headers=headers, timeout=req_timeout
+                    OPENROUTER_ENDPOINT, json=payload, headers=headers, timeout=req_timeout
                 )
-                degradation_notes.append(RESPONSE_FORMAT_DROPPED_NOTE)
+                if (
+                    resp.status_code == 400
+                    and "response_format" in payload
+                    and not _is_context_overflow_body(resp.text)
+                ):
+                    # Some models reject response_format; retry without it (the prompt
+                    # already demands JSON). A context-overflow 400 is NOT retried — the
+                    # same prompt would overflow again. Provenance records the drop.
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        raise TimeoutError("attempt budget exceeded")
+                    retry_timeout = httpx.Timeout(remaining, connect=min(10.0, remaining))
+                    retry_payload = {k: v for k, v in payload.items() if k != "response_format"}
+                    resp = await client.post(
+                        OPENROUTER_ENDPOINT, json=retry_payload, headers=headers, timeout=retry_timeout
+                    )
+                    degradation_notes.append(RESPONSE_FORMAT_DROPPED_NOTE)
+        except TimeoutError as exc:
+            raise AttemptFailed(
+                FailureKind.TIMEOUT, PROVIDER, candidate.model, "attempt budget exceeded"
+            ) from exc
         except httpx.TimeoutException as exc:
             raise AttemptFailed(FailureKind.TIMEOUT, PROVIDER, candidate.model, str(exc)) from exc
         except httpx.TransportError as exc:
@@ -380,7 +392,7 @@ class OpenRouterAdapter(ProviderAdapter):
 
         try:
             data = resp.json()
-        except Exception as exc:
+        except ValueError as exc:
             raise AttemptFailed(
                 FailureKind.MALFORMED_RESPONSE,
                 PROVIDER,
@@ -388,20 +400,44 @@ class OpenRouterAdapter(ProviderAdapter):
                 f"Failed to parse JSON response: {exc}",
             ) from exc
 
-        choices = data.get("choices", [])
-        if not choices:
+        if not isinstance(data, dict):
             raise AttemptFailed(
                 FailureKind.MALFORMED_RESPONSE,
                 PROVIDER,
                 candidate.model,
-                "No choices returned in OpenRouter response",
+                "OpenRouter response must be a JSON object",
+            )
+        choices = data.get("choices", [])
+        if not isinstance(choices, list) or not choices:
+            raise AttemptFailed(
+                FailureKind.MALFORMED_RESPONSE,
+                PROVIDER,
+                candidate.model,
+                "No valid choices returned in OpenRouter response",
             )
 
-        msg = choices[0].get("message", {})
+        if not isinstance(choices[0], dict) or not isinstance(choices[0].get("message"), dict):
+            raise AttemptFailed(
+                FailureKind.MALFORMED_RESPONSE,
+                PROVIDER,
+                candidate.model,
+                "OpenRouter choice must contain a message object",
+            )
+        usage_data = data.get("usage", {})
+        if not isinstance(usage_data, dict):
+            raise AttemptFailed(
+                FailureKind.MALFORMED_RESPONSE,
+                PROVIDER,
+                candidate.model,
+                "OpenRouter usage must be an object",
+            )
+        msg = choices[0]["message"]
         content = msg.get("content", "")
-        if not content or not content.strip():
+        if not isinstance(content, str) or not content.strip():
+            reasoning_details = usage_data.get("completion_tokens_details")
             reasoning_tokens = (
-                ((data.get("usage") or {}).get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
+                reasoning_details.get("reasoning_tokens") or 0
+                if isinstance(reasoning_details, dict) else 0
             )
             detail = "Empty text in OpenRouter message choice"
             if reasoning_tokens:
@@ -422,7 +458,6 @@ class OpenRouterAdapter(ProviderAdapter):
                 "Output truncated at max_tokens (finish_reason=length)",
             )
 
-        usage_data = data.get("usage", {})
         usage = TokenUsage(
             input_tokens=usage_data.get("prompt_tokens", 0),
             output_tokens=usage_data.get("completion_tokens", 0),

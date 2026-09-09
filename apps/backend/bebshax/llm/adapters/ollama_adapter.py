@@ -270,6 +270,11 @@ class OllamaAdapter(ProviderAdapter):
                             FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model,
                             "invalid NDJSON stream line",
                         ) from exc
+                    if not isinstance(chunk, dict):
+                        raise AttemptFailed(
+                            FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model,
+                            "NDJSON stream frame must be an object",
+                        )
                     # Ollama can emit {"error": ...} mid-stream AFTER HTTP 200
                     # (e.g. runner OOM) — a partial answer must never pass as
                     # a completed reply (R2).
@@ -278,7 +283,18 @@ class OllamaAdapter(ProviderAdapter):
                             FailureKind.SERVER_ERROR, PROVIDER, candidate.model,
                             f"mid-stream error: {str(chunk['error'])[:200]}",
                         )
-                    piece = (chunk.get("message") or {}).get("content", "")
+                    message = chunk.get("message", {})
+                    if not isinstance(message, dict):
+                        raise AttemptFailed(
+                            FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model,
+                            "NDJSON stream message must be an object",
+                        )
+                    piece = message.get("content", "")
+                    if not isinstance(piece, str):
+                        raise AttemptFailed(
+                            FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model,
+                            "NDJSON stream content must be text",
+                        )
                     if piece:
                         parts.append(piece)
                         yield StreamDelta(text=piece)

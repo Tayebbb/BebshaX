@@ -255,7 +255,8 @@ describe('Adaptive Persona Interviews (Part 6)', () => {
         'study_123',
         'int_001',
         'How much would you pay per month for an alternative meal service?',
-        expect.any(Function)
+        expect.any(Function),
+        expect.any(AbortSignal)
       );
     });
 

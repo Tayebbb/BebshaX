@@ -18,6 +18,7 @@ import logging
 import re
 import time
 import uuid
+from collections import deque
 from collections.abc import Mapping
 from typing import Any, Optional
 
@@ -402,9 +403,11 @@ class UnhandledExceptionEnvelopeMiddleware:
 
 
 class BodySizeLimitMiddleware:
-    """Refuses declared bodies above ``max_bytes`` with the 413 envelope before
-    any handler runs. Only ``Content-Length`` is inspected: streaming/chunked
-    bodies are bounded by the routes that accept them."""
+    """Bounds declared and received bodies before any non-upload handler runs.
+
+    Buffered chunks total at most ``max_bytes``; an overflowing chunk is never
+    retained. Empty intermediate frames are discarded to bound frame overhead.
+    """
 
     def __init__(
         self,
@@ -417,25 +420,48 @@ class BodySizeLimitMiddleware:
         self.exempt_suffixes = exempt_suffixes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http":
-            path = scope.get("path", "")
-            declared = Headers(scope=scope).get("content-length", "")
-            if (
-                declared.isdigit()
-                and int(declared) > self.max_bytes
-                and not path.endswith(self.exempt_suffixes)
-            ):
-                request = Request(scope)
-                response = _envelope(
-                    request,
-                    413,
-                    f"Request body exceeds the {self.max_bytes // (1024 * 1024)} MiB limit.",
-                    "payload_too_large",
-                    {"max_bytes": self.max_bytes},
-                )
-                await response(scope, receive, send)
+        if scope["type"] != "http" or scope.get("path", "").endswith(self.exempt_suffixes):
+            await self.app(scope, receive, send)
+            return
+
+        declared = Headers(scope=scope).get("content-length", "")
+        if declared.isdigit() and int(declared) > self.max_bytes:
+            await self._reject(scope, receive, send)
+            return
+
+        buffered: deque[Message] = deque()
+        received_bytes = 0
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
                 return
-        await self.app(scope, receive, send)
+            chunk = message.get("body", b"")
+            received_bytes += len(chunk)
+            if received_bytes > self.max_bytes:
+                await self._reject(scope, receive, send)
+                return
+            more_body = message.get("more_body", False)
+            if chunk or not more_body:
+                buffered.append(message)
+            if not more_body:
+                break
+
+        async def replay_receive() -> Message:
+            if buffered:
+                return buffered.popleft()
+            return await receive()
+
+        await self.app(scope, replay_receive, send)
+
+    async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
+        response = _envelope(
+            Request(scope),
+            413,
+            f"Request body exceeds the {self.max_bytes // (1024 * 1024)} MiB limit.",
+            "payload_too_large",
+            {"max_bytes": self.max_bytes},
+        )
+        await response(scope, receive, send)
 
 
 __all__ = [

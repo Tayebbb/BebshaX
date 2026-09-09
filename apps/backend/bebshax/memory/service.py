@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timezone
 
 from pydantic import BaseModel
@@ -112,15 +113,17 @@ class MemoryService:
         *,
         source: str = "persona",
         conversation_id: str | None = None,
+        session: AsyncSession | None = None,
     ) -> MemoryRecord:
+        """Flush into a caller's session, or commit an independently owned session."""
         if kind not in KINDS:
             raise ValueError(f"kind must be one of {KINDS}")
         if source not in SOURCES:
             raise ValueError(f"source must be one of {SOURCES}")
         digest = content_hash(kind, text, source)
-        async with self._sessionmaker() as session:
+        async with (nullcontext(session) if session is not None else self._sessionmaker()) as write_session:
             existing = (
-                await session.execute(
+                await write_session.execute(
                     select(MemoryItems).where(
                         MemoryItems.persona_id == persona_id,
                         MemoryItems.content_hash == digest,
@@ -144,9 +147,12 @@ class MemoryService:
                 conversation_id=conversation_id,
                 content_hash=digest,
             )
-            session.add(item)
-            await session.commit()
-        return _record(item)
+            write_session.add(item)
+            await write_session.flush()
+            record = _record(item)
+            if session is None:
+                await write_session.commit()
+            return record
 
     async def retrieve(
         self,

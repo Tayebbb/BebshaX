@@ -1,8 +1,8 @@
 """Structured claim extraction and empirical evidence classification.
 
 Claims are written by the model from THIS study's evidence chunks and
-verified deterministically (citations must point at shown material;
-confidence derives from independent sources). There is no canned claim list:
+their citations are checked against shown material. Citation coverage does
+not establish semantic entailment or independent corroboration. There is no canned claim list:
 no evidence → no claims; unusable model output → explicit failure.
 """
 
@@ -26,8 +26,8 @@ CLAIM_STATUSES = ("supported", "inference", "unsupported", "contested")
 
 
 def citation_confidence(distinct_sources: int) -> float:
-    """Confidence is a function of verifiable citations, never the model's
-    self-score: 0 sources → 0.0, 1 → 0.5, ≥2 independent sources → 0.8."""
+    """Citation coverage from distinct source IDs, not calibrated certainty:
+    0 sources -> 0.0, 1 -> 0.5, >=2 -> 0.8; never the model's self-score."""
     if distinct_sources <= 0:
         return 0.0
     if distinct_sources == 1:
@@ -67,16 +67,17 @@ async def extract_claims_with_llm(
 
     - No chunks → ``[]`` (the run records ``claims_status="no_evidence"``);
       there is no canned hypothesis list.
+        - Explicit ``{"claims": []}`` is a valid abstention after one call.
     - Unusable model reply → one retry with the same request, then
       ``UnusableModelOutput`` so the run step fails explicitly.
     - ``LLMError`` propagates (infrastructure is never masked).
-    Verification is deterministic: "supported" only with a citation to a shown
-    chunk/source; confidence derives from the number of distinct cited sources.
+    Citation checking is deterministic, not semantic entailment verification:
+    confidence derives from the number of distinct cited source IDs.
     """
     if not chunks or not sources:
         return []
 
-    shown_chunks = rank_chunks_for_idea(idea, chunks)
+    shown_chunks = rank_chunks_for_idea(idea, chunks, limit=len(chunks))
     chunk_context = "\n\n".join(
         f"--- CHUNK ID: {c.id} (Source ID: {c.source_id}) ---\n{c.content}" for c in shown_chunks
     )
@@ -92,6 +93,10 @@ async def extract_claims_with_llm(
         "- 'contested' (AMBER): The provided chunks DISAGREE with each other on this point — list the disagreeing "
         "source IDs in conflicts_with.\n"
         "- 'unsupported' (RED): An unverified assumption from the product idea or contradicted by the evidence.\n\n"
+        "If the chunks contain no relevant claims, abstain by returning {\"claims\": []}. "
+        "Do not invent claims to meet a requested count.\n"
+        "Preserve uncertainty and any synthetic or sample-data qualifications. Synthetic statements do not establish observed customer demand. "
+        "Citation IDs are checked for existence, not semantic entailment; do not claim independent verification.\n"
         "NEVER silently promote unsupported information to 'supported'. Whenever two chunks contradict each other "
         "on a claim, report both sides via conflicts_with instead of picking one.\n"
         "Output ONLY a valid JSON object with one key \"claims\" holding an array of objects with keys: "
@@ -130,6 +135,8 @@ async def extract_claims_with_llm(
             parsed = parse_llm_json(result.text)
         except ValueError:
             parsed = None
+        if isinstance(parsed, dict) and parsed.get("claims") == []:
+            return []
         items = unwrap_list(parsed, keys=("claims", "extracted_claims"), item_keys=("claim_text",))
         if not items:
             logger.warning("claim extraction reply unusable (attempt %d/%d)", attempt, _MAX_ATTEMPTS)

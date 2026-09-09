@@ -16,6 +16,7 @@ import uuid
 from typing import Any, Optional
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -233,7 +234,7 @@ class ResearchEngineService:
 
                 raw_chunks_for_source = chunk_document(d.content, chunk_size=400, chunk_overlap=40)
                 if not raw_chunks_for_source:
-                    raw_chunks_for_source = [d.content[:400]]
+                    raw_chunks_for_source = [d.content]
                 all_chunks_meta.append((source_id, d, raw_chunks_for_source))
                 all_raw_chunks.extend(raw_chunks_for_source)
 
@@ -294,7 +295,11 @@ class ResearchEngineService:
                 step_progress["discovering_datasets"]["status"] = "completed"
                 step_progress["evaluating_datasets"]["status"] = "completed"
                 step_progress["importing_datasets"]["status"] = "completed"
+            except SQLAlchemyError:
+                raise
             except Exception as ds_err:
+                if not session.is_active:
+                    raise
                 logger.warning("dataset discovery step failed for run %s: %s", run_id, type(ds_err).__name__)
                 summary["dataset_discovery_error"] = type(ds_err).__name__
                 step_progress["discovering_datasets"]["status"] = "completed_with_warnings"
@@ -362,15 +367,26 @@ class ResearchEngineService:
 
         except Exception as exc:
             error_code, message = _safe_error(exc)
+            database_failed = isinstance(exc, SQLAlchemyError) or not session.is_active
+            failed_step = next(
+                (name for name, progress in step_progress.items() if progress.get("status") == "in_progress"),
+                "finalizing",
+            )
             # Full detail to the server log only; the stored message is user-facing.
             logger.warning(
                 "research run %s failed at %s: %s",
                 run_id,
-                run.current_step,
+                failed_step,
                 type(exc).__name__,
                 exc_info=not isinstance(exc, ExplicitFailure),
             )
+            await session.rollback()
+            run = await session.get(ResearchRuns, run_id)
+            if run is None:
+                raise
             summary["error_code"] = error_code
+            if failed_step in step_progress:
+                step_progress[failed_step]["status"] = "failed"
             run.status = "failed"
             run.current_step = "failed"
             run.error_message = message
@@ -378,6 +394,8 @@ class ResearchEngineService:
             run.completed_at = datetime.datetime.now(timezone.utc)
             await session.commit()
             await session.refresh(run)
+            if database_failed:
+                raise
             return run
 
     async def get_research_plan(

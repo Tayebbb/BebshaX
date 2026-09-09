@@ -3269,9 +3269,11 @@ export const api = {
     studyId: string,
     interviewId: string,
     content: string,
-    onDelta: (text: string) => void
+    onDelta: (text: string) => void,
+    signal?: AbortSignal
   ): Promise<any> {
     if (this.isMockMode()) throw new Error('Backend required for live persona interview');
+    signal?.throwIfAborted();
 
     const res = await fetch(
       `${API_BASE}/studies/${studyId}/interviews/${interviewId}/messages/stream`,
@@ -3279,20 +3281,30 @@ export const api = {
         method: 'POST',
         headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ content }),
+        signal,
       }
     );
     if (!res.ok || !res.body) {
+      signal?.throwIfAborted();
       lastKnownLive = false;
       throw await apiErrorFrom(res, 'Stream failed');
     }
-    lastKnownLive = true;
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let done: any = null;
+    let done: unknown = null;
+    let completed = false;
+    let cancelled = false;
+    const cancelReader = () => {
+      if (cancelled) return;
+      cancelled = true;
+      void reader.cancel().catch(() => {});
+    };
+    signal?.addEventListener('abort', cancelReader, { once: true });
 
     const handleFrame = (frame: string) => {
+      signal?.throwIfAborted();
       const lines = frame.split(/\r?\n/);
       const eventLine = lines.find((l) => l.startsWith('event:'));
       // Per the SSE spec, multiple data: lines concatenate with newlines.
@@ -3304,7 +3316,11 @@ export const api = {
       const event = eventLine.slice(6).trim();
       const data = JSON.parse(dataPayload);
       if (event === 'delta') onDelta(data.text || '');
-      else if (event === 'done') done = data;
+      else if (event === 'done') {
+        if (!data) throw new Error('Stream ended without a final reply');
+        done = data;
+        completed = true;
+      }
       else if (event === 'error') {
         // Stream errors carry the same envelope fields as HTTP errors plus the
         // backend failure `kind`; keep both so the workspace can classify.
@@ -3315,25 +3331,30 @@ export const api = {
     };
 
     try {
+      signal?.throwIfAborted();
+      lastKnownLive = true;
       for (;;) {
         const { value, done: eof } = await reader.read();
-        if (eof) break;
-        buffer += decoder.decode(value, { stream: true });
+        signal?.throwIfAborted();
+        buffer += eof ? decoder.decode() : decoder.decode(value, { stream: true });
         let match: RegExpExecArray | null;
         const boundary = /\r?\n\r?\n/;
         while ((match = boundary.exec(buffer)) !== null) {
           const frame = buffer.slice(0, match.index);
           buffer = buffer.slice(match.index + match[0].length);
           handleFrame(frame);
+          if (completed) return done;
         }
+        if (eof) break;
       }
       if (buffer.trim()) handleFrame(buffer);
+      if (completed) return done;
+      throw new Error('Stream ended without a final reply');
     } finally {
-      reader.cancel().catch(() => {});
+      signal?.removeEventListener('abort', cancelReader);
+      cancelReader();
+      reader.releaseLock();
     }
-
-    if (!done) throw new Error('Stream ended without a final reply');
-    return done;
   },
 
   async completeStudyInterview(studyId: string, interviewId: string): Promise<any> {

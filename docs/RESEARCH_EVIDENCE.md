@@ -80,7 +80,7 @@ The question bundles five separable claims. They are **not** interchangeable and
 | `avg_tokens_per_sec: 120.5` in eval JSON                             | constant                                | `null` / "not measured"                                                                        |
 | "Local 3B scored 9.65/10"                                            | one run quoted                          | all three runs quoted (9.65 / 9.05 / 9.2 vs 8.25 / 8.05 / 8.2), n = 1 × 5, judge overlap noted |
 | "identity held across 4 providers mid-interview"                     | unstored smoke observation              | labelled as such; replaced by the stored cross-route artifact (§4)                             |
-| "~100 personas/day validated as feasible"                            | asserted                                | historical LLM-era planning target, not measured throughput or a current ML capacity result |
+| "~100 personas/day validated as feasible"                            | asserted                                | historical LLM-era planning target, not measured throughput or a current ML capacity result    |
 | Seeded demo provenance row (pollinations/deepseek-r1, 1180 ms)       | fabricated, rendered as real            | deleted; demo mode seeds **no** `llm_requests` rows                                            |
 
 ## 6. Reproduce
@@ -113,17 +113,17 @@ is a stored sanitized verification record, not a CI result. The live
 API/provider/container/browser observations below predate upstream sync and
 were not repeated.
 
-| Claim | Recorded evidence | Honest scope |
-| --- | --- | --- |
-| Genuine non-LLM training | Training-fitted TF-IDF vocabulary/IDF, NMF topics and profile representations; four fits, 43.70 s, two CPU threads | Source-prototype selection with diversity, not new identities or an LLM/learned router |
-| Approved data only | 6,000 pinned CC-BY-4.0 NVIDIA USA-synthetic rows; 4,694 schema-accepted; 3,594 complete/deduplicated; seed-42 splits 2,516/539/539 | R9 synthetic-only exception; no uploads/private studies/conversations or LLM fine-tuning |
-| Retrieval | Validation MRR 0.418117 vs lexical 0.716645; held-out test 0.432654 vs 0.751621 across 539 identities | NMF blend underperforms; cross-view proxy, zero real business-labelled evaluations |
-| Generation structure | 160 selections, no failed batches or within-batch duplicate IDs/names/descriptions; source reuse 100%, diversity 0.877963, age JS 0.030183 | Exact reuse is intentional; 72/160 `not_in_workforce` reveals bias, not population validity |
-| Timing | Warm five-profile p95 34.3 ms | Excludes cold loading, API scheduling, DB, network; no API SLA or throughput result |
-| Persistence and existing LLM flow | Five unique age-bounded profiles saved/read back, 22 synthetic claims reported, zero LLM generation calls; context, ten role suggestions, two interview turns, four 384-dimensional memories | Fresh local PostgreSQL only; cloud DB untouched; ten scratch rows from two cohorts retained |
-| Provider smoke | Seven successful responses, `llm7/codestral-latest` through `freellmpool/auto` | Not a provider success rate, independent route comparison, or large-sample quality trial |
-| Cross-platform serving | Windows artifact loaded in Linux image and selected five profiles with networking disabled | Exact NumPy/SciPy/scikit-learn pins; not bit-for-bit training portability or full Compose rehearsal |
-| Browser | Before upstream styling, desktop 1440×1000 passed and mobile 390×844 clipped persona-header controls | The later token-only correction neither fixes nor reverifies that defect; no all-green UI verdict |
+| Claim                             | Recorded evidence                                                                                                                                                                            | Honest scope                                                                                        |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Genuine non-LLM training          | Training-fitted TF-IDF vocabulary/IDF, NMF topics and profile representations; four fits, 43.70 s, two CPU threads                                                                           | Source-prototype selection with diversity, not new identities or an LLM/learned router              |
+| Approved data only                | 6,000 pinned CC-BY-4.0 NVIDIA USA-synthetic rows; 4,694 schema-accepted; 3,594 complete/deduplicated; seed-42 splits 2,516/539/539                                                           | R9 synthetic-only exception; no uploads/private studies/conversations or LLM fine-tuning            |
+| Retrieval                         | Validation MRR 0.418117 vs lexical 0.716645; held-out test 0.432654 vs 0.751621 across 539 identities                                                                                        | NMF blend underperforms; cross-view proxy, zero real business-labelled evaluations                  |
+| Generation structure              | 160 selections, no failed batches or within-batch duplicate IDs/names/descriptions; source reuse 100%, diversity 0.877963, age JS 0.030183                                                   | Exact reuse is intentional; 72/160 `not_in_workforce` reveals bias, not population validity         |
+| Timing                            | Warm five-profile p95 34.3 ms                                                                                                                                                                | Excludes cold loading, API scheduling, DB, network; no API SLA or throughput result                 |
+| Persistence and existing LLM flow | Five unique age-bounded profiles saved/read back, 22 synthetic claims reported, zero LLM generation calls; context, ten role suggestions, two interview turns, four 384-dimensional memories | Fresh local PostgreSQL only; cloud DB untouched; ten scratch rows from two cohorts retained         |
+| Provider smoke                    | Seven successful responses, `llm7/codestral-latest` through `freellmpool/auto`                                                                                                               | Not a provider success rate, independent route comparison, or large-sample quality trial            |
+| Cross-platform serving            | Windows artifact loaded in Linux image and selected five profiles with networking disabled                                                                                                   | Exact NumPy/SciPy/scikit-learn pins; not bit-for-bit training portability or full Compose rehearsal |
+| Browser                           | Before upstream styling, desktop 1440×1000 passed and mobile 390×844 clipped persona-header controls                                                                                         | The later token-only correction neither fixes nor reverifies that defect; no all-green UI verdict   |
 
 **Not verified:** customer/demand/purchasing validity, student/Bangladesh fit,
 real population representativeness, concurrent cross-process identity uniqueness,

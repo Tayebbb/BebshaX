@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Check, ChevronLeft, Lock } from 'lucide-react';
 import {
   Study,
@@ -47,6 +47,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
   const { navigate } = useNavigation();
+  const studyEpochRef = useRef({ active: false });
+  useLayoutEffect(() => {
+    const epoch = { active: true };
+    studyEpochRef.current = epoch;
+    return () => { epoch.active = false; };
+  }, [studyId]);
   const stepViewRef = useViewMotion<HTMLDivElement>([currentStep]);
   const [study, setStudy] = useState<Study | null>(null);
   // Example studies are readable by everyone but writable by no one — the UI
@@ -114,17 +120,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   // endpoint, and it never blocks the copilot path.
   const [evidenceProbe, setEvidenceProbe] = useState<EvidenceProbe>({ state: 'checking' });
   const evidenceProbeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const evidenceProbeAliveRef = useRef<boolean>(true);
 
   const copilotMessagesRef = useRef<CopilotMessage[]>([]);
   const isFetchingCopilotRef = useRef<boolean>(false);
   const initialPromptHandledRef = useRef<string | null>(null);
+  const pendingInitialPromptRef = useRef<CopilotMessage | null>(null);
   const roleSelectionRef = useRef<HTMLDivElement | null>(null);
   const copilotChatRef = useRef<HTMLDivElement | null>(null);
   const interviewChatRef = useRef<HTMLDivElement | null>(null);
   const step1InputRef = useRef<HTMLTextAreaElement | null>(null);
   const personaModalTriggerRef = useRef<HTMLElement | null>(null);
   const personaModalRef = useRef<HTMLDivElement | null>(null);
+  const interviewEpochRef = useRef({ active: false, pending: false, revision: 0 });
+
+  useLayoutEffect(() => {
+    const epoch = { active: true, pending: false, revision: 0 };
+    interviewEpochRef.current = epoch;
+    setIsSimulating(false);
+    setUserInputMessage('');
+    setConversationId(null);
+    setChatMessages([]);
+    return () => { epoch.active = false; };
+  }, [studyId, activeInterviewPersonaId]);
 
   // Chats must stay pinned to the newest message — both containers scroll internally.
   useEffect(() => {
@@ -144,6 +161,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   // the turns live in the backend; only the conversation id is kept locally.
   useEffect(() => {
     if (!studyId || !activeInterviewPersonaId) return;
+    const epoch = interviewEpochRef.current;
+    const revision = epoch.revision;
     const storedConvId = localStorage.getItem(
       `bebshax_conv_${studyId}_${activeInterviewPersonaId}`
     );
@@ -152,16 +171,17 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       setChatMessages([]);
       return;
     }
+    setConversationId(storedConvId);
     let cancelled = false;
     api
       .getConversation(storedConvId)
       .then((conv) => {
-        if (cancelled || !conv) return;
+        if (cancelled || !epoch.active || epoch.revision !== revision || !conv) return;
         setConversationId(conv.id);
         setChatMessages(conv.turns || []);
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && epoch.active && epoch.revision === revision) {
           localStorage.removeItem(`bebshax_conv_${studyId}_${activeInterviewPersonaId}`);
           setConversationId(null);
           setChatMessages([]);
@@ -173,11 +193,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   }, [studyId, activeInterviewPersonaId]);
 
   const handleStepChange = (newStep: number, opts?: { reportReady?: boolean }) => {
+    const epoch = studyEpochRef.current;
+    if (!epoch.active) return;
     const clamped = Math.max(1, Math.min(newStep, 5));
     setCurrentStep(clamped);
     onStepChange?.(clamped);
     // Read-only example studies never PATCH — the write gate would refuse.
-    if (studyId && !isReadOnly) {
+    if (studyId && !isReadOnly && epoch.active) {
       // 'completed' is earned by a generated report — never by visiting step 5.
       const reportExists = opts?.reportReady || report !== null || availableReports.length > 0;
       api
@@ -199,10 +221,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   // Restore full study state from DB on mount / refresh
   useEffect(() => {
     if (!studyId) return;
+    const epoch = studyEpochRef.current;
     api
       .getStudy(studyId)
       .then((s) => {
-        if (!s) return;
+        if (!epoch.active || !s) return;
         setStudy(s);
         if (s.prompt && !promptInput) setPromptInput(s.prompt);
         // Saved history wins whenever it is longer than what's in memory
@@ -245,7 +268,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
     // Load reports if step 5
     api.getStudyReports(studyId).then((reps) => {
-      if (reps && reps.length > 0) {
+      if (epoch.active && reps && reps.length > 0) {
         setAvailableReports(reps);
         setReport(reps[0]);
       }
@@ -257,32 +280,33 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   // A single GET; while a run is in flight it re-checks a bounded number of
   // times so "Looking for…" can actually resolve without a page reload.
   const probeEvidence = React.useCallback(
-    async (attemptsLeft = 8) => {
+    async (attemptsLeft = 8, epoch = studyEpochRef.current) => {
+      if (!epoch.active) return;
       if (!studyId) {
         setEvidenceProbe({ state: 'not_run' });
         return;
       }
       try {
         const summary = await api.getEvidenceSummary(studyId);
-        if (!evidenceProbeAliveRef.current) return;
+        if (!epoch.active) return;
         const next = nextEvidenceProbe(summary, attemptsLeft);
         setEvidenceProbe(next);
         if (next.state === 'searching') {
-          evidenceProbeTimerRef.current = setTimeout(() => probeEvidence(attemptsLeft - 1), 6000);
+          evidenceProbeTimerRef.current = setTimeout(() => {
+            void probeEvidence(attemptsLeft - 1, epoch);
+          }, 6000);
         }
       } catch {
-        if (evidenceProbeAliveRef.current) setEvidenceProbe({ state: 'unavailable' });
+        if (epoch.active) setEvidenceProbe({ state: 'unavailable' });
       }
     },
     [studyId],
   );
 
   useEffect(() => {
-    evidenceProbeAliveRef.current = true;
     setEvidenceProbe({ state: 'checking' });
     probeEvidence();
     return () => {
-      evidenceProbeAliveRef.current = false;
       if (evidenceProbeTimerRef.current) clearTimeout(evidenceProbeTimerRef.current);
     };
   }, [probeEvidence]);
@@ -290,21 +314,26 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   /** Step 1's `not_run` state can start the evidence run directly — same
    * trigger + probe plumbing handleApproveGoal already uses. */
   const handleRunEvidenceResearch = () => {
+    const epoch = studyEpochRef.current;
     // Guard the one-frame window before re-render unmounts the button.
-    if (!studyId || evidenceProbe.state !== 'not_run') return;
+    if (!epoch.active || !studyId || evidenceProbe.state !== 'not_run') return;
     setEvidenceProbe({ state: 'searching' });
     api
       .triggerStudyResearch(studyId)
       .catch(() => {})
-      .finally(() => probeEvidence());
+      .finally(() => {
+        if (epoch.active) return probeEvidence(8, epoch);
+      });
   };
 
   const fetchCopilotTurn = async (history: { role: 'user' | 'assistant'; content: string }[]) => {
-    if (isFetchingCopilotRef.current) return;
+    const epoch = studyEpochRef.current;
+    if (!epoch.active || isFetchingCopilotRef.current) return;
     isFetchingCopilotRef.current = true;
     setIsCopilotTyping(true);
     try {
       const res = await api.sendStudyCopilotMessage(history, initialType, studyId);
+      if (!epoch.active) return;
       const template = isTemplateReply(res);
       const assistantMsg: CopilotMessage = {
         id: `msg_a_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -333,6 +362,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setSuggestedRoles(res.suggested_roles);
       }
     } catch (err) {
+      if (!epoch.active) return;
       const refusal = readOnlyRefusal(err);
       if (refusal) {
         // Read-only refusal: relay the backend's message as a plain reply — no
@@ -368,15 +398,17 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         }
       }
     } finally {
-      setIsCopilotTyping(false);
-      isFetchingCopilotRef.current = false;
+      if (epoch.active) {
+        setIsCopilotTyping(false);
+        isFetchingCopilotRef.current = false;
+      }
     }
   };
 
   const handleSendCopilotMessage = (text?: string) => {
     // Guard first: a second fast click must add nothing at all (it used to
     // append a duplicate user bubble before the in-flight check ran).
-    if (isFetchingCopilotRef.current) return;
+    if (!studyEpochRef.current.active || isFetchingCopilotRef.current) return;
     const inputValue = step1InputRef.current?.value || '';
     const messageToSend = (
       typeof text === 'string' && text.trim() ? text : step1Prompt || promptInput || inputValue
@@ -408,7 +440,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
    * history. Appending a new user message would feed the model its own error
    * line and leave the error visible after a successful retry. */
   const handleRetryCopilotMessage = (errorMessageId: string) => {
-    if (isFetchingCopilotRef.current) return;
+    if (!studyEpochRef.current.active || isFetchingCopilotRef.current) return;
     const trimmed = copilotMessagesRef.current.filter((m) => m.id !== errorMessageId);
     if (trimmed.length === 0) return;
     copilotMessagesRef.current = trimmed;
@@ -424,26 +456,31 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   /** Role discovery is a visible, retryable step — an empty drawer with a live
    * "Generate Personas" button used to be the only sign that it had failed. */
   const loadSuggestedRoles = async (activePrompt: string) => {
+    const epoch = studyEpochRef.current;
+    if (!epoch.active) return;
     lastRolePromptRef.current = activePrompt;
     setIsLoadingRoles(true);
     setRoleError(null);
     try {
       const roles = await api.getSuggestedPersonaRoles(activePrompt);
+      if (!epoch.active) return;
       if (roles && roles.length > 0) {
         setSuggestedRoles(roles);
       } else {
         setRoleError('No roles came back for this goal. Retry, or add your own detail in the chat above.');
       }
     } catch (err: any) {
+      if (!epoch.active) return;
       setRoleError(
         `We couldn't suggest persona roles: ${err?.message || 'the request did not complete.'}`
       );
     } finally {
-      setIsLoadingRoles(false);
+      if (epoch.active) setIsLoadingRoles(false);
     }
   };
 
   const handleRetrySuggestedRoles = () => {
+    if (!studyEpochRef.current.active) return;
     const activePrompt =
       lastRolePromptRef.current ||
       [...copilotMessagesRef.current].reverse().find((m) => m.role === 'user')?.content ||
@@ -459,10 +496,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   };
 
   const handleApproveGoal = async (summary?: string) => {
+    const epoch = studyEpochRef.current;
+    if (!epoch.active) return;
     setShowRoleSelection(true);
     // The drawer mounts below the fold — scroll to it so the click has visible feedback.
     setTimeout(() => {
-      roleSelectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      if (epoch.active) roleSelectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     }, 80);
     const activePrompt =
       summary ||
@@ -481,7 +520,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       api
         .triggerStudyResearch(studyId)
         .catch(() => {})
-        .finally(() => probeEvidence());
+        .finally(() => {
+          if (epoch.active) return probeEvidence(8, epoch);
+        });
     }
 
     // 2. Fetch suggested roles only when the copilot didn't already supply them,
@@ -489,6 +530,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     if (suggestedRoles.length === 0) {
       await loadSuggestedRoles(activePrompt);
     }
+    if (!epoch.active) return;
 
     if (studyId) {
       api.updateStudy(studyId, {
@@ -540,6 +582,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   };
 
   const handleGeneratePersonas = async () => {
+    const epoch = studyEpochRef.current;
+    if (!epoch.active || isGeneratingPersonas) return;
     setPersonaGenError(null);
 
     const activeRoles = suggestedRoles.filter((r) => r.selected && r.count > 0);
@@ -589,6 +633,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         activeRoles,
         studyTitle
       );
+      if (!epoch.active) return;
       const generated = result.personas;
       setPersonaFailedRoles(result.failed_roles);
       setPersonaServedBy(result.served_by);
@@ -608,6 +653,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         });
       }
     } catch (err: any) {
+      if (!epoch.active) return;
       const refusal = readOnlyRefusal(err);
       if (refusal) {
         setReadOnlyNotice(refusal);
@@ -616,12 +662,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setPersonaGenRequestId(fromUnknownError(err).requestId ?? null);
       }
     } finally {
-      setIsGeneratingPersonas(false);
+      if (epoch.active) setIsGeneratingPersonas(false);
     }
   };
 
   const handleRemovePersona = (personaId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!studyEpochRef.current.active) return;
     const nextPersonas = personas.filter((p) => p.id !== personaId);
     setPersonas(nextPersonas);
     setSelectedPersonaIds((prev) => prev.filter((id) => id !== personaId));
@@ -635,11 +682,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   };
 
   const handleGenerateScript = async () => {
-    if (!studyId) return;
+    const epoch = studyEpochRef.current;
+    if (!epoch.active || !studyId || isGeneratingScript) return;
     setIsGeneratingScript(true);
     setScriptError(null);
     try {
       const res = await api.generateStudyScriptQuestions(studyId, study?.prompt || promptInput);
+      if (!epoch.active) return;
       if (res.questions && res.questions.length > 0) {
         setQuestions(res.questions);
         // Only a model-written script counts as "generated"; a canned starter
@@ -658,6 +707,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setScriptError('The generator returned no questions. Your existing script is unchanged — try again.');
       }
     } catch (err: any) {
+      if (!epoch.active) return;
       const refusal = readOnlyRefusal(err);
       if (refusal) {
         setReadOnlyNotice(refusal);
@@ -669,20 +719,15 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         );
       }
     } finally {
-      setIsGeneratingScript(false);
+      if (epoch.active) setIsGeneratingScript(false);
     }
   };
 
   // Step 4: Batch Interviews Execution (async job + polling)
-  const batchPollCancelledRef = useRef<boolean>(false);
-  useEffect(() => {
-    return () => {
-      batchPollCancelledRef.current = true;
-    };
-  }, []);
-
+  const batchPollCancelledRef = useRef(false);
   const handleRunBatchInterviews = async () => {
-    if (!studyId) return;
+    const epoch = studyEpochRef.current;
+    if (!epoch.active || !studyId || isBatchRunning) return;
     setIsBatchRunning(true);
     batchPollCancelledRef.current = false;
 
@@ -695,6 +740,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     setBatchError(null);
 
     const applyJobStatuses = (job: any) => {
+      if (!epoch.active) return;
       const map: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'> = {};
       const reasons: Record<string, string> = {};
       personas.forEach((p) => {
@@ -710,18 +756,22 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
     try {
       const start = await api.runBatchStudyInterviews(studyId, selectedPersonaIds, questions);
+      if (!epoch.active || batchPollCancelledRef.current) return;
       const jobId = start?.job_id;
       if (!jobId) throw new Error('Batch job did not start');
       applyJobStatuses(start);
 
       // Poll until the job leaves "running" (real batches run for many minutes).
       let job: any = start;
-      while (!batchPollCancelledRef.current && job?.status === 'running') {
+      while (epoch.active && !batchPollCancelledRef.current && job?.status === 'running') {
         await new Promise((r) => setTimeout(r, 5000));
+        if (!epoch.active || batchPollCancelledRef.current) return;
         try {
           job = await api.getBatchRunStatus(studyId, jobId);
+          if (!epoch.active || batchPollCancelledRef.current) return;
           applyJobStatuses(job);
         } catch (pollErr: any) {
+          if (!epoch.active || batchPollCancelledRef.current) return;
           if (pollErr?.status === 404) {
             // Job lost (e.g. backend restart) — everything unfinished is failed.
             const lostReason = toUserMessage(pollErr);
@@ -743,8 +793,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           // Transient poll error: keep polling.
         }
       }
+      if (!epoch.active || batchPollCancelledRef.current) return;
       await api.listStudyInterviews(studyId).catch(() => []);
     } catch (err: any) {
+      if (!epoch.active) return;
       const refusal = readOnlyRefusal(err);
       if (refusal) {
         setReadOnlyNotice(refusal);
@@ -764,15 +816,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setInterviewFailureReasons(reasons);
       }
     } finally {
-      setIsBatchRunning(false);
+      if (epoch.active) setIsBatchRunning(false);
     }
   };
 
   const handleSendInterviewMessage = async (e: React.FormEvent) => {
     e.preventDefault();
+    const epoch = interviewEpochRef.current;
     const text = userInputMessage.trim();
-    if (!text || isSimulating || !activeInterviewPersonaId) return;
+    if (!epoch.active || epoch.pending || !text || isSimulating || !activeInterviewPersonaId) return;
 
+    epoch.pending = true;
+    epoch.revision += 1;
     setUserInputMessage('');
     const userTurn: ConversationTurn = {
       id: `turn_u_${Date.now()}`,
@@ -786,17 +841,21 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     try {
       if (conversationId) {
         const res = await api.sendMessage(conversationId, text);
+        if (!epoch.active) return;
         setChatMessages((prev) => [...prev, res.assistantTurn]);
       } else {
         const conv = await api.startConversation(activeInterviewPersonaId, study?.prompt || 'User Research Interview');
+        if (!epoch.active) return;
         setConversationId(conv.id);
         if (studyId) {
           localStorage.setItem(`bebshax_conv_${studyId}_${activeInterviewPersonaId}`, conv.id);
         }
         const res = await api.sendMessage(conv.id, text);
+        if (!epoch.active) return;
         setChatMessages((prev) => [...prev, res.assistantTurn]);
       }
     } catch (err: any) {
+      if (!epoch.active) return;
       const refusal = readOnlyRefusal(err);
       if (refusal) {
         setReadOnlyNotice(refusal);
@@ -814,14 +873,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         ]);
       }
     } finally {
-      setIsSimulating(false);
+      epoch.pending = false;
+      if (epoch.active) setIsSimulating(false);
     }
   };
 
   // Step 5: Report Synthesis
   const [reportError, setReportError] = useState<string | null>(null);
   const handleGenerateFinalReport = async () => {
-    if (!studyId) return;
+    const epoch = studyEpochRef.current;
+    if (!epoch.active || !studyId || isGeneratingReport) return;
     setIsGeneratingReport(true);
     setReportError(null);
     // Move to the report step first: synthesis can take minutes, and waiting
@@ -829,11 +890,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     handleStepChange(5);
     try {
       const rep = await api.generateStudyReport(studyId);
+      if (!epoch.active) return;
       setReport(rep);
       setAvailableReports((prev) => [rep, ...prev.filter((r) => r.id !== rep.id)]);
       // The freshly-generated report is what earns 'completed' status.
       handleStepChange(5, { reportReady: true });
     } catch (err: any) {
+      if (!epoch.active) return;
       const refusal = readOnlyRefusal(err);
       if (refusal) {
         setReadOnlyNotice(refusal);
@@ -842,20 +905,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setReportError(err?.message || 'Report generation failed. Please retry.');
       }
     } finally {
-      setIsGeneratingReport(false);
+      if (epoch.active) setIsGeneratingReport(false);
     }
   };
 
-  const copyReportMarkdown = () => {
-    if (!report) return;
+  const copyReportMarkdown = async () => {
+    const epoch = studyEpochRef.current;
+    if (!epoch.active || !report) return;
     const md = `# ${report.title || 'Research Report'}\n\n## Executive Summary\n${report.executive_summary}\n\n## Key Findings\n${(report.key_findings || []).map((f) => `- ${f}`).join('\n')}\n\n## Recommendations\n${(report.recommendations || []).map((r) => `- ${r}`).join('\n')}`;
-    navigator.clipboard.writeText(md);
-    setCopiedToast(true);
-    setTimeout(() => setCopiedToast(false), 2500);
+    try {
+      await navigator.clipboard.writeText(md);
+      if (!epoch.active) return;
+      setCopiedToast(true);
+      setTimeout(() => {
+        if (epoch.active) setCopiedToast(false);
+      }, 2500);
+    } catch {
+      if (epoch.active) setReportError('Could not copy the report. Please try again.');
+    }
   };
 
   const exportReportMarkdown = () => {
-    if (!report) return;
+    if (!studyEpochRef.current.active || !report) return;
     const md = `# ${report.title || 'Research Report'}\n\n## Executive Summary\n${report.executive_summary}\n\n## Key Findings\n${(report.key_findings || []).map((f) => `- ${f}`).join('\n')}\n\n## Recommendations\n${(report.recommendations || []).map((r) => `- ${r}`).join('\n')}`;
     const blob = new Blob([md], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
@@ -867,25 +938,37 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   };
 
   useEffect(() => {
-    if (initialPrompt && initialPrompt.trim() && initialPromptHandledRef.current !== initialPrompt.trim()) {
-      // Never clobber an existing conversation (restored or in progress).
+    const epoch = studyEpochRef.current;
+    let cancelled = false;
+    const trimmedPrompt = initialPrompt.trim();
+    if (!trimmedPrompt || initialPromptHandledRef.current === trimmedPrompt) return;
+    let userMsg = pendingInitialPromptRef.current;
+    if (!userMsg) {
       if (copilotMessagesRef.current.length > 0) return;
-      initialPromptHandledRef.current = initialPrompt.trim();
-      const userMsg: CopilotMessage = {
+      userMsg = {
         id: `msg_u_${Date.now()}`,
         role: 'user',
-        content: initialPrompt.trim(),
+        content: trimmedPrompt,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase(),
       };
+      pendingInitialPromptRef.current = userMsg;
       copilotMessagesRef.current = [userMsg];
       setCopilotMessages([userMsg]);
-      if (studyId) {
-        api.updateStudy(studyId, { copilot_messages: [userMsg] as any }).catch(() => {});
-      }
-      fetchCopilotTurn([{ role: 'user', content: initialPrompt.trim() }]);
     }
+    const initialMessage = userMsg;
+    queueMicrotask(() => {
+      if (cancelled || !epoch.active) return;
+      if (copilotMessagesRef.current.length !== 1 || copilotMessagesRef.current[0].id !== initialMessage.id) return;
+      initialPromptHandledRef.current = trimmedPrompt;
+      pendingInitialPromptRef.current = null;
+      if (studyId) {
+        api.updateStudy(studyId, { copilot_messages: [initialMessage] }).catch(() => {});
+      }
+      void fetchCopilotTurn([{ role: 'user', content: trimmedPrompt }]);
+    });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPrompt]);
+  }, [initialPrompt, studyId]);
 
   const stepLabels = [
     { num: 1, label: 'Context', sub: 'Describe your idea' },

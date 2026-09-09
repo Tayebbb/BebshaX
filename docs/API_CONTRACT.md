@@ -56,10 +56,10 @@
 
 - **Local persona ML failures (2026-09-09, [ml_adapter.py](../apps/backend/bebshax/personas/ml_adapter.py)).** These are `APIError` envelopes with string `detail`, `error_code`, and `request_id`, not new LLM `FailureKind` values:
 
-  | HTTP | error_code | Raised when |
-  | --- | --- | --- |
-  | 503 | `ml_persona_unavailable` | The configured local artifact cannot be loaded (missing, invalid, unreadable, or incompatible numerical runtime). Default adapter detail: "The local persona model is unavailable." |
-  | 422 | `ml_persona_unsupported_context` | Business context validation or selection fails, including no vocabulary overlap, unsupported ages, or too few distinct eligible candidates after exclusions. Default adapter detail: "The local persona model cannot support the requested context or constraints." |
+  | HTTP | error_code                       | Raised when                                                                                                                                                                                                                                                         |
+  | ---- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | 503  | `ml_persona_unavailable`         | The configured local artifact cannot be loaded (missing, invalid, unreadable, or incompatible numerical runtime). Default adapter detail: "The local persona model is unavailable."                                                                                 |
+  | 422  | `ml_persona_unsupported_context` | Business context validation or selection fails, including no vocabulary overlap, unsupported ages, or too few distinct eligible candidates after exclusions. Default adapter detail: "The local persona model cannot support the requested context or constraints." |
 
   Persona generation does not silently fall back to an LLM. Chat, role suggestions, and interviews retain their existing LLM routing. The local model has been trained/evaluated, but clean checkouts do not include its ignored bundle. Configuration, exact numerical-version compatibility, and build commands are in [SETUP.md](SETUP.md#persona-ml-artifact).
 
@@ -314,17 +314,17 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
 - Optional `min_age` / `max_age` are strict integers in 18-95, inclusive; the resolved minimum must not exceed the maximum. They are hard eligibility constraints, unlike audience/role/location wording, which is only relevance context. The response preserves the selected source occupation and location, never inferring income/budget or relabeling a profile to match the request.
 - **Response `201 Created`:** a `PersonaProfile` serialized by [api/personas.py](../apps/backend/bebshax/api/personas.py), with the source-derived ML fields below. This is a schema description, not a live inference result.
 
-  | Field | Local ML value / meaning |
-  | --- | --- |
-  | `name`, `age`, `occupation`, `location`, `education`, `description` | Top-level identity fields from the selected synthetic record. Missing location/education remain "Not available in training data"; a missing name uses a synthetic record identifier. |
-  | `income_range`, `personality` | "Not available in training data" and `null` respectively; the adapter does not infer measurements. |
-  | `generation_model` | `bebshax-persona-ml/<model_version>`, not an LLM serving route. |
-  | `attributes[]` | Every generated claim has `provenance_class: "SYNTHETIC"`, `evidence_ids: []`, and `confidence: null`. |
-  | `evidence` | `[]`; training membership is not observed customer evidence. |
-  | `detailed_attributes.ml_provenance` | `{source, revision, record_id, model_version, selection_score, topic}` from the selected record/model. Selection score is a relevance score, not empirical confidence or customer demand. |
-  | `detailed_attributes.source_documents` | The selected record's complete source-document mapping. |
-  | `detailed_attributes.claim_provenance` | `goals`, `pain_points`, and `behaviors` arrays of `{value, provenance: "SYNTHETIC", evidence_ids: []}`. |
-  | `detailed_attributes.validation_warnings`, `warnings` | Synthetic-USA-proxy disclosure, missing-field warnings, and any selection limitations. |
+  | Field                                                               | Local ML value / meaning                                                                                                                                                                  |
+  | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `name`, `age`, `occupation`, `location`, `education`, `description` | Top-level identity fields from the selected synthetic record. Missing location/education remain "Not available in training data"; a missing name uses a synthetic record identifier.      |
+  | `income_range`, `personality`                                       | "Not available in training data" and `null` respectively; the adapter does not infer measurements.                                                                                        |
+  | `generation_model`                                                  | `bebshax-persona-ml/<model_version>`, not an LLM serving route.                                                                                                                           |
+  | `attributes[]`                                                      | Every generated claim has `provenance_class: "SYNTHETIC"`, `evidence_ids: []`, and `confidence: null`.                                                                                    |
+  | `evidence`                                                          | `[]`; training membership is not observed customer evidence.                                                                                                                              |
+  | `detailed_attributes.ml_provenance`                                 | `{source, revision, record_id, model_version, selection_score, topic}` from the selected record/model. Selection score is a relevance score, not empirical confidence or customer demand. |
+  | `detailed_attributes.source_documents`                              | The selected record's complete source-document mapping.                                                                                                                                   |
+  | `detailed_attributes.claim_provenance`                              | `goals`, `pain_points`, and `behaviors` arrays of `{value, provenance: "SYNTHETIC", evidence_ids: []}`.                                                                                   |
+  | `detailed_attributes.validation_warnings`, `warnings`               | Synthetic-USA-proxy disclosure, missing-field warnings, and any selection limitations.                                                                                                    |
 
 #### `GET /api/personas/{id}`
 
@@ -334,12 +334,12 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
 
 The study, workflow, and dataset persona-generation paths use the same [ML adapter](../apps/backend/bebshax/personas/ml_adapter.py) and retain their existing response envelopes. Study/workflow records also carry `dataset_refs` containing the same ML provenance object; workflow personas expose `is_synthetic: true`, `grounding_basis: "synthetic_training_proxy"`, and synthetic attributes with empty evidence links. Context claims used to select a record do not make that record's attributes observed evidence.
 
-| Generation Path | Existing Contract / Age Input |
-| --- | --- |
-| `POST /api/businesses/{business_id}/personas` | One `PersonaProfile`; request `min_age` / `max_age` |
-| `POST /api/studies/{study_id}/personas/generate` (and existing jobs/regeneration paths) | Existing study run/persona schemas; `segment.characteristics.demographics.age_range` supplies explicit bounds |
-| `POST /api/study/generate-personas` | Existing workflow envelope; each selected role may carry `min_age` / `max_age`; existing 1-3 per-role count cap is unchanged |
-| `POST /api/datasets/{dataset_id}/generate-personas` | Existing dataset run/persona envelope; segment `constraints.age_range`, or numeric age min/max, supplies bounds; dataset numeric endpoints are rounded inward to integer ages |
+| Generation Path                                                                         | Existing Contract / Age Input                                                                                                                                                 |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/businesses/{business_id}/personas`                                           | One `PersonaProfile`; request `min_age` / `max_age`                                                                                                                           |
+| `POST /api/studies/{study_id}/personas/generate` (and existing jobs/regeneration paths) | Existing study run/persona schemas; `segment.characteristics.demographics.age_range` supplies explicit bounds                                                                 |
+| `POST /api/study/generate-personas`                                                     | Existing workflow envelope; each selected role may carry `min_age` / `max_age`; existing 1-3 per-role count cap is unchanged                                                  |
+| `POST /api/datasets/{dataset_id}/generate-personas`                                     | Existing dataset run/persona envelope; segment `constraints.age_range`, or numeric age min/max, supplies bounds; dataset numeric endpoints are rounded inward to integer ages |
 
 Generated source goals, regex-extracted pain points, and behaviors remain
 `SYNTHETIC` with empty citations, zero grounding, and unset/zero confidence.
@@ -400,10 +400,10 @@ push, and CI results are tracked separately in
 
 Study-scoped persona records expose `data_source`, one of the values below. The legacy `PersonaProfile` response above does not include this field.
 
-| Value      | Meaning                                                                            |
-| ---------- | ---------------------------------------------------------------------------------- |
+| Value      | Meaning                                                                                                                |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `"live"`   | Runtime-generated content, including local ML synthetic selection; not a demo fixture or a claim of observed evidence. |
-| `"cached"` | The content came from the demo seeder — pre-seeded fixtures, not model output.     |
+| `"cached"` | The content came from the demo seeder — pre-seeded fixtures, not model output.                                         |
 
 The value is **persisted on the row at creation time**, not derived from `demo_mode` at read time: the flag flips independently of the rows already in the table, so deriving it would mislabel every persona created before the last flip. Existing rows were backfilled to `"live"` by migration `9f0a1b2c3d4e`, which is correct — the demo seeder is the only cached producer and it did not previously exist as a distinct category.
 

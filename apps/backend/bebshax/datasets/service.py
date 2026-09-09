@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 from collections.abc import Mapping
 from pathlib import Path
 import uuid
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import false as sa_false, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -29,9 +31,11 @@ from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.persona.conflicts import contested_slots, shares_content_token
 from bebshax.personas.ml_adapter import MLPersonaAdapter, build_business_context, to_generated_persona, to_persona_draft
-from bebshax.personas.service import active_source_exclusions
+from bebshax.personas.service import active_source_exclusions, lock_persona_parent
 from bebshax.tenancy import PUBLIC_OWNER_IDS
 from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
+
+logger = logging.getLogger(__name__)
 
 DATASET_PERSONA_UNPARSEABLE = "dataset_persona_unparseable"
 _PERSONA_MAX_ATTEMPTS = 2
@@ -51,6 +55,26 @@ _CLAIM_GROUPS = (
 def _upload_dir() -> Path:
     """Configured upload root (BEBSHAX_UPLOAD_DIR / BEBSHAX_DATA_DIR), resolved at call time."""
     return get_settings().upload_dir_path
+
+
+def _owned_dataset_file(dataset: DatasetSources) -> Path | None:
+    """Only the server-named upload for this dataset is eligible for deletion."""
+    if not dataset.file_path:
+        return None
+    filename = f"{dataset.id}.json"
+    if Path(filename).name != filename:
+        return None
+    root = _upload_dir().absolute()
+    expected = root / filename
+    candidate = Path(dataset.file_path).absolute()
+    if candidate != expected:
+        return None
+    try:
+        if candidate.is_symlink() or candidate.resolve().parent != root.resolve():
+            return None
+    except (OSError, RuntimeError):
+        return None
+    return candidate
 
 
 def _parse_json_object(text: str) -> dict:
@@ -353,21 +377,34 @@ class DatasetService:
     async def delete_dataset(self, dataset_id: str, user_id: Optional[str] = None) -> bool:
         async with self._sessionmaker() as session:
             query = select(DatasetSources).filter_by(id=dataset_id)
-            query = query.filter(self._tenant_write_filter(user_id))
+            query = query.filter(self._tenant_write_filter(user_id)).with_for_update()
             res = await session.execute(query)
             ds = res.scalar_one_or_none()
             if not ds:
                 return False
 
-            if ds.file_path and os.path.exists(ds.file_path):
-                try:
-                    os.remove(ds.file_path)
-                except OSError:
-                    pass
+            owned_file = _owned_dataset_file(ds)
+            try:
+                await session.delete(ds)
+                await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                raise APIError(409, "The dataset still has conflicting references.", error_code="data_integrity") from exc
+            except BaseException:
+                await session.rollback()
+                raise
 
-            await session.delete(ds)
-            await session.commit()
-            return True
+        if owned_file is not None:
+            try:
+                os.remove(owned_file)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                logger.warning(
+                    "Dataset %s was deleted; its owned upload needs cleanup (%s).",
+                    dataset_id, type(exc).__name__,
+                )
+        return True
 
     async def refresh_dataset(self, dataset_id: str, user_id: Optional[str] = None) -> tuple[Optional[DatasetSources], bool]:
         """Re-fetch a URL-based dataset, check content-hash, and re-calculate statistics only if changed.
@@ -542,17 +579,49 @@ class DatasetService:
         business_name: str = "",
         business_description: str = "",
     ) -> dict[str, Any]:
-        """Generate evidence-grounded synthetic personas allocated by the dataset's
-        observed segment shares.
+        """Select and persist a dataset cohort atomically under its parent locks."""
+        async with self._sessionmaker() as session:
+            try:
+                return await self._generate_personas_from_dataset(
+                    session, dataset_id, requested_count, user_id, study_id,
+                    business_name, business_description,
+                )
+            except IntegrityError as exc:
+                await session.rollback()
+                raise APIError(
+                    409, "Dataset persona generation conflicts with existing data.", error_code="data_integrity",
+                ) from exc
+            except BaseException:
+                await session.rollback()
+                raise
 
-        Every persona is written by the model from the segment's OBSERVED
-        constraints and sample records. There is no offline template: without an
-        LLM the call raises ``LLMUnavailable``; a persona whose reply is unusable
-        after one retry is recorded as failed (``failed`` list) instead of being
-        replaced by a stock character.
-        """
-        # Post-verification internal fetch (API layer ran the scoped check).
-        ds = await self._get_dataset_any(dataset_id)
+    async def _lock_dataset_persona_parent(
+        self, session: AsyncSession, dataset_id: str, user_id: Optional[str], study_id: Optional[str],
+    ) -> DatasetSources:
+        """Use study-before-dataset lock order for every persisted dataset cohort."""
+        if study_id is not None:
+            await lock_persona_parent(
+                session, owner_id=user_id or "usr_system_holder", study_id=study_id,
+            )
+        dataset = (await session.execute(
+            select(DatasetSources).where(DatasetSources.id == dataset_id, self._tenant_filter(user_id)),
+        )).scalar_one_or_none()
+        if dataset is None:
+            raise ValueError(f"Dataset '{dataset_id}' not found.")
+        return cast(DatasetSources, await lock_persona_parent(
+            session, owner_id=dataset.user_id or "usr_system_holder", dataset_id=dataset_id,
+        ))
+
+    async def _generate_personas_from_dataset(
+        self, session: AsyncSession, dataset_id: str, requested_count: int,
+        user_id: Optional[str], study_id: Optional[str], business_name: str, business_description: str,
+    ) -> dict[str, Any]:
+        if self._ml_generator is not None:
+            ds = await self._lock_dataset_persona_parent(session, dataset_id, user_id, study_id)
+        else:
+            ds = (await session.execute(
+                select(DatasetSources).where(DatasetSources.id == dataset_id, self._tenant_filter(user_id)),
+            )).scalar_one_or_none()
         if not ds:
             raise ValueError(f"Dataset '{dataset_id}' not found.")
 
@@ -565,14 +634,13 @@ class DatasetService:
         study_context: dict[str, Any] = {}
         claims: list[dict[str, Any]] = []
         if self._ml_generator is not None and study_id:
-            async with self._sessionmaker() as session:
-                study = await session.get(Studies, study_id)
-                if study is not None:
-                    study_context = {field: getattr(study, field) for field in (
-                        "title", "prompt", "goal", "target_audience", "pricing_hypothesis", "copilot_messages", "findings",
-                    )}
-                claim_rows = (await session.execute(select(EvidenceClaims).where(EvidenceClaims.study_id == study_id))).scalars()
-                claims = [{"id": claim.id, "claim_text": claim.claim_text, "category": claim.category} for claim in claim_rows]
+            study = await session.get(Studies, study_id)
+            if study is not None:
+                study_context = {field: getattr(study, field) for field in (
+                    "title", "prompt", "goal", "target_audience", "pricing_hypothesis", "copilot_messages", "findings",
+                )}
+            claim_rows = (await session.execute(select(EvidenceClaims).where(EvidenceClaims.study_id == study_id))).scalars()
+            claims = [{"id": claim.id, "claim_text": claim.claim_text, "category": claim.category} for claim in claim_rows]
 
         # 1. Mathematically determine exact persona quotas per segment
         quota_distribution = calculate_segment_persona_distribution(segments, requested_count)
@@ -599,10 +667,11 @@ class DatasetService:
                         DatasetPersonaRuns.user_id == user_id,
                     )
                 )
-            async with self._sessionmaker() as session:
-                used_source_ids, used_names = await active_source_exclusions(
-                    session, owner_id=user_id or "usr_system_holder", scope=scope,
-                )
+            used_source_ids, used_names = await active_source_exclusions(
+                session, owner_id=user_id or "usr_system_holder", scope=scope,
+            )
+        else:
+            await session.commit()
 
         # 2. Synthesize personas for each segment quota
         for seg in segments:
@@ -790,92 +859,87 @@ class DatasetService:
             validation_results=validation_results + [{"failed": f} for f in failed],
         )
 
-        async with self._sessionmaker() as session:
-            session.add(run_record)
-            # Update dataset persona generation count
-            res = await session.execute(select(DatasetSources).filter_by(id=dataset_id))
-            target_ds = res.scalar_one_or_none()
-            if target_ds:
-                target_ds.persona_count_generated = (target_ds.persona_count_generated or 0) + len(generated_personas)
+        if self._ml_generator is None:
+            ds = await self._lock_dataset_persona_parent(session, dataset_id, user_id, study_id)
+        session.add(run_record)
+        ds.persona_count_generated = (ds.persona_count_generated or 0) + len(generated_personas)
+        await session.flush()
 
-            # Persist each persona to the Personas table for user dashboard access.
-            # Only STATED values are stored: a missing age/location/budget stays
-            # missing (the identity card renders "not stated"), never a literal
-            # the model never produced.
-            for p_data in generated_personas:
-                p_id = f"per_{uuid.uuid4().hex[:12]}"
-                prefs = p_data.get("preferences") or []
-                if isinstance(prefs, str):
-                    prefs = [prefs]
-                commercial = p_data.get("commercial_profile") if isinstance(p_data.get("commercial_profile"), dict) else {}
-                p_entity = Personas(
-                    id=p_id,
-                    study_id=study_id,
-                    user_id=user_id,
-                    owner_id=user_id or "usr_system_holder",
-                    segment_id=p_data.get("segment_id"),
-                    generation_run_id=run_id,
-                    name=p_data.get("name", "Synthetic Persona"),
-                    status="ready" if p_data.get("validation", {}).get("status") == "VALID" else "needs_review",
-                    version=1,
-                    generation_model=p_data.get("served_by") or p_data.get("model_used"),
-                    archetype=p_data.get("archetype") or p_data.get("occupation") or None,
-                    tagline=p_data.get("tagline") or None,
-                    country_code=p_data.get("country_code") or None,
-                    personality=p_data.get("personality") or {},
-                    detailed_attributes=p_data.get("detailed_attributes", {}),
-                    demographics=_stated_only(
-                        {
-                            "age": p_data.get("age"),
-                            "occupation": p_data.get("occupation"),
-                            "location": p_data.get("location"),
-                            "education": p_data.get("education"),
-                            "income_or_budget": p_data.get("income_range"),
-                        }
-                    ),
-                    bio=p_data.get("description") or None,
-                    quote=p_data.get("quote") or None,
-                    goals=[g.get("value") if isinstance(g, dict) else str(g) for g in p_data.get("goals", [])],
-                    needs=[n.get("value") if isinstance(n, dict) else str(n) for n in p_data.get("needs", [])],
-                    pain_points=[pp.get("value") if isinstance(pp, dict) else str(pp) for pp in p_data.get("pain_points", [])],
-                    behaviors=[b.get("value") if isinstance(b, dict) else str(b) for b in p_data.get("behaviors", [])],
-                    preferences=[str(x) for x in prefs],
-                    motivations=[m.get("value") if isinstance(m, dict) else str(m) for m in p_data.get("motivations", [])],
-                    objections=[o.get("value") if isinstance(o, dict) else str(o) for o in p_data.get("objections", [])],
-                    commercial_profile=_stated_only(
-                        {
-                            "monthly_budget": commercial.get("monthly_budget") or p_data.get("monthly_budget"),
-                            "currency": commercial.get("currency") or p_data.get("currency"),
-                            "price_sensitivity": commercial.get("price_sensitivity") or p_data.get("price_sensitivity"),
-                            "payment_preference": commercial.get("payment_preference") or p_data.get("payment_preference"),
-                        }
-                    ),
-                    technology_profile=p_data.get("technology_profile") or {},
-                    evidence_citations=p_data.get("evidence_citations", []) or [],
-                    dataset_refs=p_data.get("dataset_refs") or [{"dataset_id": ds.id, "dataset_name": ds.name, "variable": "segment", "value": p_data.get("segment_name")}],
-                    # Honest scores: pass through what validation computed, never constants.
-                    grounding_score=float(p_data.get("grounding_score") or 0.0),
-                    confidence=float(p_data.get("confidence") or 0.0),
-                    validation_warnings=p_data.get("validation", {}).get("warnings", []),
-                    is_synthetic=True,
-                    created_at=_utcnow(),
-                    updated_at=_utcnow(),
-                )
-                session.add(p_entity)
+        for p_data in generated_personas:
+            p_id = f"per_{uuid.uuid4().hex[:12]}"
+            p_data["id"] = p_id
+            p_data["study_id"] = study_id
+            prefs = p_data.get("preferences") or []
+            if isinstance(prefs, str):
+                prefs = [prefs]
+            commercial = p_data.get("commercial_profile") if isinstance(p_data.get("commercial_profile"), dict) else {}
+            p_entity = Personas(
+                id=p_id,
+                study_id=study_id,
+                user_id=user_id,
+                owner_id=user_id or "usr_system_holder",
+                segment_id=p_data.get("segment_id"),
+                generation_run_id=run_id,
+                name=p_data.get("name", "Synthetic Persona"),
+                status="ready" if p_data.get("validation", {}).get("status") == "VALID" else "needs_review",
+                version=1,
+                generation_model=p_data.get("served_by") or p_data.get("model_used"),
+                archetype=p_data.get("archetype") or p_data.get("occupation") or None,
+                tagline=p_data.get("tagline") or None,
+                country_code=p_data.get("country_code") or None,
+                personality=p_data.get("personality") or {},
+                detailed_attributes=p_data.get("detailed_attributes", {}),
+                demographics=_stated_only(
+                    {
+                        "age": p_data.get("age"),
+                        "occupation": p_data.get("occupation"),
+                        "location": p_data.get("location"),
+                        "education": p_data.get("education"),
+                        "income_or_budget": p_data.get("income_range"),
+                    }
+                ),
+                bio=p_data.get("description") or None,
+                quote=p_data.get("quote") or None,
+                goals=[g.get("value") if isinstance(g, dict) else str(g) for g in p_data.get("goals", [])],
+                needs=[n.get("value") if isinstance(n, dict) else str(n) for n in p_data.get("needs", [])],
+                pain_points=[pp.get("value") if isinstance(pp, dict) else str(pp) for pp in p_data.get("pain_points", [])],
+                behaviors=[b.get("value") if isinstance(b, dict) else str(b) for b in p_data.get("behaviors", [])],
+                preferences=[str(x) for x in prefs],
+                motivations=[m.get("value") if isinstance(m, dict) else str(m) for m in p_data.get("motivations", [])],
+                objections=[o.get("value") if isinstance(o, dict) else str(o) for o in p_data.get("objections", [])],
+                commercial_profile=_stated_only(
+                    {
+                        "monthly_budget": commercial.get("monthly_budget") or p_data.get("monthly_budget"),
+                        "currency": commercial.get("currency") or p_data.get("currency"),
+                        "price_sensitivity": commercial.get("price_sensitivity") or p_data.get("price_sensitivity"),
+                        "payment_preference": commercial.get("payment_preference") or p_data.get("payment_preference"),
+                    }
+                ),
+                technology_profile=p_data.get("technology_profile") or {},
+                evidence_citations=p_data.get("evidence_citations", []) or [],
+                dataset_refs=p_data.get("dataset_refs") or [{"dataset_id": ds.id, "dataset_name": ds.name, "variable": "segment", "value": p_data.get("segment_name")}],
+                grounding_score=float(p_data.get("grounding_score") or 0.0),
+                confidence=float(p_data.get("confidence") or 0.0),
+                validation_warnings=p_data.get("validation", {}).get("warnings", []),
+                is_synthetic=True,
+                created_at=_utcnow(),
+                updated_at=_utcnow(),
+            )
+            session.add(p_entity)
 
-            if study_id is not None:
-                study = await session.get(Studies, study_id)
-                if study is not None:
-                    await session.flush()
-                    study.persona_count = await session.scalar(
-                        select(func.count()).select_from(Personas).where(
-                            Personas.study_id == study_id,
-                            Personas.owner_id == (user_id or "usr_system_holder"),
-                            Personas.status != "archived",
-                        )
+        if study_id is not None:
+            study = await session.get(Studies, study_id)
+            if study is not None:
+                await session.flush()
+                study.persona_count = await session.scalar(
+                    select(func.count()).select_from(Personas).where(
+                        Personas.study_id == study_id,
+                        Personas.owner_id == (user_id or "usr_system_holder"),
+                        Personas.status != "archived",
                     )
+                )
 
-            await session.commit()
+        await session.commit()
 
         return {
             "run_id": run_id,

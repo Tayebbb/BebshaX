@@ -103,6 +103,10 @@ def _serialize_user(user: Users) -> UserProfileResponse:
     )
 
 
+def _verification_required(user: Users) -> bool:
+    return get_settings().email_verification_enforced and not user.is_verified
+
+
 async def get_session(request: Request) -> AsyncSession:
     sessionmaker = getattr(request.app.state, "db_sessionmaker", None) or getattr(
         request.app.state, "sessionmaker", None
@@ -146,6 +150,17 @@ async def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found or inactive",
             )
+        if _verification_required(user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email address not verified.",
+            )
+        if payload.get("session_version", 0) != user.session_version:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session has been revoked. Please sign in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         return user
 
 
@@ -170,7 +185,10 @@ async def get_optional_current_user(
     try:
         async with sessionmaker() as session:
             user = await get_user_by_id(session, user_id)
-            if user and user.is_active:
+            if (
+                user and user.is_active and not _verification_required(user)
+                and payload.get("session_version", 0) == user.session_version
+            ):
                 return user
     except Exception:
         # Fail-open to anonymous by design (optional auth), but a DB outage
@@ -228,9 +246,13 @@ async def signup(
         except Exception as mail_exc:
             logger.warning("Background email dispatch warning: %s", mail_exc)
 
-        token = create_access_token(user_id=user.id)
+        verification_required = _verification_required(user)
+        token = ""
+        if not verification_required:
+            token = create_access_token(user_id=user.id, session_version=user.session_version)
         return AuthResponse(
             access_token=token,
+            verification_required=verification_required,
             user=_serialize_user(user),
         )
     except HTTPException:
@@ -325,12 +347,22 @@ async def verify_email(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verification link expired.",
         )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled.",
+        )
 
     user.is_verified = True
     record.used_at = datetime.now(timezone.utc)
     await session.commit()
+    await session.refresh(user)
     _verify_failures.pop(user.id, None)
-    return {"detail": "Email verified successfully."}
+    response = AuthResponse(
+        access_token=create_access_token(user_id=user.id, session_version=user.session_version),
+        user=_serialize_user(user),
+    )
+    return {"detail": "Email verified successfully.", **response.model_dump()}
 
 
 class ResendVerificationRequest(BaseModel):
@@ -417,7 +449,7 @@ async def signin(
     # H9: the verification link is only meaningful if an unverified account
     # cannot sign in. Gated on environment (Settings.email_verification_enforced)
     # so the local demo keeps working; production and staging enforce.
-    if get_settings().email_verification_enforced and not user.is_verified:
+    if _verification_required(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
@@ -427,7 +459,7 @@ async def signin(
             ),
         )
 
-    token = create_access_token(user_id=user.id)
+    token = create_access_token(user_id=user.id, session_version=user.session_version)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(user),
@@ -493,7 +525,7 @@ async def sync_user(
             detail="Invalid Neon session payload",
         )
 
-    if not neon_user.get("emailVerified", False):
+    if neon_user.get("emailVerified") is not True:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email not verified with identity provider",
@@ -522,8 +554,14 @@ async def sync_user(
             avatar_url=avatar_url,
         )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled.",
+        )
+
     updated = False
-    if user.auth_provider == "email" and not user.is_verified and user.hashed_password:
+    if not user.is_verified and user.hashed_password:
         # Pre-hijack defence: someone may have signed up with THIS address
         # (never proving they own it) and set a password. Linking the verified
         # Neon identity to that row must not leave their password as a
@@ -539,6 +577,9 @@ async def sync_user(
     if not user.is_verified:
         user.is_verified = True
         updated = True
+    if user.auth_provider != "neon":
+        user.auth_provider = "neon"
+        updated = True
     if full_name and user.full_name != full_name:
         user.full_name = full_name
         updated = True
@@ -549,7 +590,7 @@ async def sync_user(
         await session.commit()
         await session.refresh(user)
 
-    token = create_access_token(user_id=user.id)
+    token = create_access_token(user_id=user.id, session_version=user.session_version)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(user),
@@ -568,7 +609,7 @@ async def get_me(current_user: Users = Depends(get_current_user)):
 @auth_router.post("/refresh", response_model=AuthResponse)
 async def refresh_token(current_user: Users = Depends(get_current_user)):
     """Refresh a valid access token and return a new persistent JWT session."""
-    token = create_access_token(user_id=current_user.id)
+    token = create_access_token(user_id=current_user.id, session_version=current_user.session_version)
     return AuthResponse(
         access_token=token,
         user=_serialize_user(current_user),

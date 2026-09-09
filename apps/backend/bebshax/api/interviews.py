@@ -12,8 +12,9 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import (
@@ -30,8 +31,8 @@ from bebshax.db.models import Personas, Studies
 from bebshax.interview.engine import ConversationNotFound, InterviewEngine, InterviewFinished, PersonaNotFound
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
-from bebshax.tenancy import ANONYMOUS_OWNER_ID
-from bebshax.utils.explicit_failures import LLMUnavailable
+from bebshax.tenancy import ANONYMOUS_OWNER_ID, allowed_owner_ids
+from bebshax.utils.explicit_failures import ExplicitFailure, LLMUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +193,7 @@ def _require_interview_in_study(
     ``conversation.study_id and ...``, so a row with a NULL/empty ``study_id``
     skipped the check entirely and was accepted under *any* study id.
 
+    Reads also require access to the conversation's own tenant stamp.
     ``write=True`` additionally applies the strict write predicate to the row's
     own tenant stamp, mirroring ``_guard_legacy_conversation``.
     """
@@ -199,9 +201,18 @@ def _require_interview_in_study(
         raise HTTPException(status_code=404, detail="Interview not found")
     if conversation.study_id != study_id:
         raise HTTPException(status_code=403, detail="Interview does not belong to this study")
+    if not owner_accessible(conversation.user_id, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to access this interview")
     if write and not owner_can_write(conversation.user_id, current_user):
         raise HTTPException(status_code=403, detail="Not authorized to modify this interview")
     return conversation
+
+
+def _conversation_read_scope(current_user: Optional[Users]) -> ColumnElement[bool]:
+    return or_(
+        Conversations.user_id.is_(None),
+        Conversations.user_id.in_(allowed_owner_ids(current_user.id if current_user else None)),
+    )
 
 
 # ============================================================================
@@ -258,7 +269,9 @@ async def list_study_interviews(
     """List all interviews conducted in this study with filtering and search."""
     await _get_study_and_verify_access(session, study_id, current_user)
 
-    stmt = select(Conversations).where(Conversations.study_id == study_id)
+    stmt = select(Conversations).where(
+        Conversations.study_id == study_id, _conversation_read_scope(current_user)
+    )
     if persona_id:
         stmt = stmt.where(Conversations.persona_id == persona_id)
     if status and status != "all":
@@ -311,7 +324,7 @@ async def get_study_interview_metrics(
         func.count().label("total"),
         func.sum(case((Conversations.status == "active", 1), else_=0)).label("active"),
         func.sum(case((Conversations.status == "completed", 1), else_=0)).label("completed"),
-    ).where(Conversations.study_id == study_id)
+    ).where(Conversations.study_id == study_id, _conversation_read_scope(current_user))
     row = (await session.execute(agg_stmt)).one()
     total = row.total or 0
     active = row.active or 0
@@ -319,8 +332,12 @@ async def get_study_interview_metrics(
 
     insights_count = (
         await session.execute(
-            select(func.count()).select_from(InterviewInsights).where(
-                InterviewInsights.study_id == study_id
+            select(func.count()).select_from(InterviewInsights).join(
+                Conversations, InterviewInsights.interview_id == Conversations.id
+            ).where(
+                InterviewInsights.study_id == study_id,
+                Conversations.study_id == study_id,
+                _conversation_read_scope(current_user),
             )
         )
     ).scalar() or 0
@@ -560,6 +577,15 @@ async def post_study_interview_message_stream(
                 ],
                 routing_path=list(exc.provenance.routing_path),
             )
+        except ExplicitFailure as exc:
+            yield _sse("error", {
+                **exc.extra,
+                "kind": "conflict" if exc.status_code == 409 else "explicit_failure",
+                "error_code": exc.error_code,
+                "status_code": exc.status_code,
+                "detail": exc.detail,
+                "request_id": http_request_id,
+            })
         except Exception:
             logger.warning("interview stream failed for %s", interview_id, exc_info=True)
             yield _error("generic", "internal_error", "interview turn failed")
@@ -621,13 +647,17 @@ async def get_study_interview_insights(
 async def _guard_legacy_persona(
     request: Request, persona_id: str, current_user: Optional[Users]
 ) -> None:
-    """Owner gate for un-nested legacy endpoints: anonymous callers may only
-    touch shared/system personas, never another tenant's (B6 stage 3)."""
+    """Require a private conversation owner and write access to any inherited study."""
     async with request.app.state.db_sessionmaker() as session:
         p_row = await session.get(Personas, persona_id)
-    # Missing row falls through — the engine raises PersonaNotFound canonically.
-    if p_row is not None and not owner_accessible(p_row.owner_id, current_user):
-        raise HTTPException(status_code=404, detail="persona not found")
+        if p_row is None:
+            return
+        if not owner_accessible(p_row.owner_id, current_user):
+            raise HTTPException(status_code=404, detail="persona not found")
+        if current_user is None:
+            raise HTTPException(status_code=403, detail="Sign in to start an interview")
+        if p_row.study_id:
+            await _get_study_and_verify_access(session, p_row.study_id, current_user, write=True)
 
 
 async def _guard_legacy_conversation(
@@ -646,10 +676,14 @@ async def _guard_legacy_conversation(
             return  # engine raises ConversationNotFound canonically
         if not predicate(conv.user_id, current_user):
             raise HTTPException(status_code=404, detail="conversation not found")
+        if write and conv.study_id:
+            await _get_study_and_verify_access(session, conv.study_id, current_user, write=True)
         if conv.persona_id:
             p_row = await session.get(Personas, conv.persona_id)
             if p_row is not None and not owner_accessible(p_row.owner_id, current_user):
                 raise HTTPException(status_code=404, detail="conversation not found")
+            if write and p_row is not None and p_row.study_id and p_row.study_id != conv.study_id:
+                await _get_study_and_verify_access(session, p_row.study_id, current_user, write=True)
 
 
 @router.post("/personas/{persona_id}/conversations", status_code=201)

@@ -5,15 +5,15 @@ not a production-readiness or customer-fit certification.
 
 ## Model And Intended Use
 
-| Property | Recorded Value |
-| --- | --- |
-| Package / algorithm | `bebshax-persona-ml` 0.1.0 / `tfidf-nmf-mmr-v1` |
-| Model version | `7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247` |
-| Training candidates | 2,516 complete, deduplicated synthetic adult profiles |
-| Representation | Training-fitted TF-IDF with 8,000 features and 32 NMF topics |
-| Selection | 0.7 lexical / 0.3 topic similarity, diversity weight 0.25, temperature 0.03 |
-| Reproducibility | Seed 42, maximum 300 NMF iterations; exact numerical runtime recorded below |
-| Runtime | CPU only; no LLM, provider call, API key, PyTorch, or GPU |
+| Property            | Recorded Value                                                              |
+| ------------------- | --------------------------------------------------------------------------- |
+| Package / algorithm | `bebshax-persona-ml` 0.1.0 / `tfidf-nmf-mmr-v1`                             |
+| Model version       | `7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247`          |
+| Training candidates | 2,516 complete, deduplicated synthetic adult profiles                       |
+| Representation      | Training-fitted TF-IDF with 8,000 features and 32 NMF topics                |
+| Selection           | 0.7 lexical / 0.3 topic similarity, diversity weight 0.25, temperature 0.03 |
+| Reproducibility     | Seed 42, maximum 300 NMF iterations; exact numerical runtime recorded below |
+| Runtime             | CPU only; no LLM, provider call, API key, PyTorch, or GPU                   |
 
 Use the model to explore explicitly synthetic persona hypotheses for a business
 and pass coherent source profiles into BebshaX's existing research workflows.
@@ -84,12 +84,12 @@ hobby text queries rank complementary professional, sports, arts, travel,
 skills, and goal narratives from the held-out identities using training-fitted
 transforms. This tests cross-view retrieval, not real business relevance.
 
-| Method | Test MRR | Recall@1 | Recall@5 | Recall@10 |
-| --- | --- | --- | --- | --- |
-| Selected TF-IDF + NMF | 0.432654 | 0.341373 | 0.530612 | 0.614100 |
-| Lexical TF-IDF | 0.751621 | 0.660482 | 0.871985 | 0.929499 |
-| Expected random ranking | 0.012742 | 0.001855 | 0.009276 | 0.018553 |
-| Training occupation-frequency ranking | 0.011943 | 0.001855 | 0.009276 | 0.012987 |
+| Method                                | Test MRR | Recall@1 | Recall@5 | Recall@10 |
+| ------------------------------------- | -------- | -------- | -------- | --------- |
+| Selected TF-IDF + NMF                 | 0.432654 | 0.341373 | 0.530612 | 0.614100  |
+| Lexical TF-IDF                        | 0.751621 | 0.660482 | 0.871985 | 0.929499  |
+| Expected random ranking               | 0.012742 | 0.001855 | 0.009276 | 0.018553  |
+| Training occupation-frequency ranking | 0.011943 | 0.001855 | 0.009276 | 0.012987  |
 
 **The custom NMF blend underperforms lexical TF-IDF on both validation and
 test.** Selection among the four NMF configurations is not a claim that the
@@ -131,14 +131,14 @@ database work, and network time; it is not an API SLA. Peak RAM was not measured
 
 The default local bundle is `data/processed/ml_persona/model/`:
 
-| File | Recorded Bytes |
-| --- | --- |
-| `config.json` | 154 |
-| `metadata.json` | 779 |
-| `parameters.npz` | 14,525,542 |
-| `records.json` | 19,458,538 |
-| `vocabulary.json` | 137,597 |
-| Total | 34,122,610 (about 32.54 MiB; not runtime RAM usage) |
+| File              | Recorded Bytes                                      |
+| ----------------- | --------------------------------------------------- |
+| `config.json`     | 154                                                 |
+| `metadata.json`   | 779                                                 |
+| `parameters.npz`  | 14,525,542                                          |
+| `records.json`    | 19,458,538                                          |
+| `vocabulary.json` | 137,597                                             |
+| Total             | 34,122,610 (about 32.54 MiB; not runtime RAM usage) |
 
 Bundles are ignored by Git and built locally. The backend override is
 `BEBSHAX_ML_PERSONA_ARTIFACT_DIR`; loading is lazy and cached. JSON/NPZ loading

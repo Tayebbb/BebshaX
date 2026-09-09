@@ -44,12 +44,12 @@ CPU-only pipeline matches the available hardware and approved scope.
 
 ## C. Dataset Research
 
-| Dataset | Source / License | Size / Purpose / Fields |
-| --- | --- | --- |
-| NVIDIA Nemotron-Personas-USA | [Pinned source](https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA/blob/5b4cd35ab46490c1da1bd2b5a2324d6f871be180/README.md), NVIDIA Corporation, CC-BY-4.0 | 6,000 hash-selected synthetic profiles from one 244 MB shard; UUID, age, occupation, education, source geography and full narratives/skills/interests/goals; synthetic training priors only |
-| Google Synthetic-Persona-Chat | [Source](https://huggingface.co/datasets/google/Synthetic-Persona-Chat), CC-BY-4.0 | Researched, not used for ML: missing required demographics |
-| PersonaHub | [Source](https://huggingface.co/datasets/proj-persona/PersonaHub), CC-BY-NC-SA-4.0 | Researched, not used for ML: license restrictions and insufficient structure |
-| UCI Restaurant Consumer Data | [Source](https://archive.ics.uci.edu/dataset/232/restaurant+consumer+data), CC-BY-4.0 | 138 people / 1,161 ratings; not downloaded or used: real-person privacy and narrow domain conflict with the approved synthetic-only policy |
+| Dataset                       | Source / License                                                                                                                                                     | Size / Purpose / Fields                                                                                                                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NVIDIA Nemotron-Personas-USA  | [Pinned source](https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA/blob/5b4cd35ab46490c1da1bd2b5a2324d6f871be180/README.md), NVIDIA Corporation, CC-BY-4.0 | 6,000 hash-selected synthetic profiles from one 244 MB shard; UUID, age, occupation, education, source geography and full narratives/skills/interests/goals; synthetic training priors only |
+| Google Synthetic-Persona-Chat | [Source](https://huggingface.co/datasets/google/Synthetic-Persona-Chat), CC-BY-4.0                                                                                   | Researched, not used for ML: missing required demographics                                                                                                                                  |
+| PersonaHub                    | [Source](https://huggingface.co/datasets/proj-persona/PersonaHub), CC-BY-NC-SA-4.0                                                                                   | Researched, not used for ML: license restrictions and insufficient structure                                                                                                                |
+| UCI Restaurant Consumer Data  | [Source](https://archive.ics.uci.edu/dataset/232/restaurant+consumer+data), CC-BY-4.0                                                                                | 138 people / 1,161 ratings; not downloaded or used: real-person privacy and narrow domain conflict with the approved synthetic-only policy                                                  |
 
 The approved revision is `5b4cd35ab46490c1da1bd2b5a2324d6f871be180`.
 Licensing was rechecked against its upstream card. [DATASETS.md](DATASETS.md)
@@ -77,8 +77,7 @@ Claims remain SYNTHETIC with empty evidence IDs and zero observed grounding.
 Source occupation/location and full documents are preserved; missing income,
 budget, or OCEAN values are not fabricated. Roles/geography are retrieval hints,
 not validated customer membership. Explicit ages are hard constraints.
-Missing/incompatible artifacts yield 503; unsupported/exhausted selection yields
-422. Neither condition falls back to LLM persona writing. Chat still works when
+Missing/incompatible artifacts yield 503; unsupported/exhausted selection yields 422. Neither condition falls back to LLM persona writing. Chat still works when
 the ML artifact is unavailable, as covered by regression tests.
 
 ## E. Training And Artifacts
@@ -105,11 +104,11 @@ third-party model bundles.
 
 ## F. Evaluation
 
-| Method | Test MRR | Recall@1 | Recall@5 |
-| --- | --- | --- | --- |
-| Selected TF-IDF/NMF | 0.432654 | 0.341373 | 0.530612 |
-| Lexical TF-IDF baseline | 0.751621 | 0.660482 | 0.871985 |
-| Expected random | 0.012742 | 0.001855 | 0.009276 |
+| Method                        | Test MRR | Recall@1 | Recall@5 |
+| ----------------------------- | -------- | -------- | -------- |
+| Selected TF-IDF/NMF           | 0.432654 | 0.341373 | 0.530612 |
+| Lexical TF-IDF baseline       | 0.751621 | 0.660482 | 0.871985 |
+| Expected random               | 0.012742 | 0.001855 | 0.009276 |
 | Training occupation frequency | 0.011943 | 0.001855 | 0.009276 |
 
 This is 539-identity held-out cross-view retrieval, not customer-demand or
@@ -144,17 +143,17 @@ Five upstream commits were integrated and the saved ML work reapplied. The
 following direct local checks passed after that sync; their scope and timing
 are explicit so earlier live checks and publication are not conflated.
 
-| Gate | Verified result / scope |
-| --- | --- |
+| Gate                       | Verified result / scope                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Backend full offline suite | 1,284 passed, 3 integration tests deselected; 81.71% coverage; 456.45 s. Includes the packaging regressions previously checked separately. |
-| Independent ML suite | 295 passed; 97% coverage; 42.42 s |
-| Frontend suite | 269 passed across 36 files after upstream sync and the CSS token correction; final run 45.01 s |
-| TypeScript and Vite build | Passed after the CSS token correction; 2,398 modules; Vite build 4.07 s |
-| Theme check | Passed after the correction, with 0 violations; CSS editor diagnostics reported no errors |
-| Ruff | Passed after upstream sync; no Python changes followed that check |
-| Dependency consistency | `pip check` passed |
-| Compose syntax | Both quiet Compose configuration checks passed; this is not a full app/web rehearsal |
-| Real five-stage ML smoke | All 5 stages passed using the existing trained artifact, without LLM, network, or DB settings |
+| Independent ML suite       | 295 passed; 97% coverage; 42.42 s                                                                                                          |
+| Frontend suite             | 269 passed across 36 files after upstream sync and the CSS token correction; final run 45.01 s                                             |
+| TypeScript and Vite build  | Passed after the CSS token correction; 2,398 modules; Vite build 4.07 s                                                                    |
+| Theme check                | Passed after the correction, with 0 violations; CSS editor diagnostics reported no errors                                                  |
+| Ruff                       | Passed after upstream sync; no Python changes followed that check                                                                          |
+| Dependency consistency     | `pip check` passed                                                                                                                         |
+| Compose syntax             | Both quiet Compose configuration checks passed; this is not a full app/web rehearsal                                                       |
+| Real five-stage ML smoke   | All 5 stages passed using the existing trained artifact, without LLM, network, or DB settings                                              |
 
 The documentation was subsequently pushed in `453a403`. Its first CI run passed
 frontend, secret scanning, and Compose configuration, but fresh AnyIO 4.15.1
@@ -194,20 +193,20 @@ no push or CI success is claimed here.
 
 ### Earlier Verification Baseline (Before Upstream Sync)
 
-| Gate | Result |
-| --- | --- |
-| Backend full offline suite | 1,279 passed, 3 integration tests deselected; 81.68% coverage |
-| Independent ML suite | 295 passed; 97% coverage |
-| Frontend suite / build | 269 passed across 36 files; TypeScript and Vite build passed |
-| Packaging after runtime-pin fix | 26 passed, including 5 new tests added after the full backend run |
-| Existing real PostgreSQL integration suite | 2 passed |
-| Ruff / theme / dependency consistency / Compose syntax | Passed |
-| Python vulnerability audit | No known vulnerabilities; two unpublished local packages skipped |
-| Real five-stage ML smoke | Passed, including backend conversions without an LLM or DB |
-| Real application flow | Five unique ML profiles persisted/reloaded; real copilot, 10 role suggestions, two interviews, four memory rows |
-| Freellmpool | Seven successful requests served by `llm7/codestral-latest` through `freellmpool/auto`; existing OpenRouter quota cooldown worked |
-| Docker build and inference | Original Windows-trained bundle loaded in Linux; five unique profiles generated with `--network none` |
-| Browser | Desktop passed; mobile profile-header controls clipped. Zero JS exceptions/console errors/failed API reads in both tested viewports |
+| Gate                                                   | Result                                                                                                                              |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Backend full offline suite                             | 1,279 passed, 3 integration tests deselected; 81.68% coverage                                                                       |
+| Independent ML suite                                   | 295 passed; 97% coverage                                                                                                            |
+| Frontend suite / build                                 | 269 passed across 36 files; TypeScript and Vite build passed                                                                        |
+| Packaging after runtime-pin fix                        | 26 passed, including 5 new tests added after the full backend run                                                                   |
+| Existing real PostgreSQL integration suite             | 2 passed                                                                                                                            |
+| Ruff / theme / dependency consistency / Compose syntax | Passed                                                                                                                              |
+| Python vulnerability audit                             | No known vulnerabilities; two unpublished local packages skipped                                                                    |
+| Real five-stage ML smoke                               | Passed, including backend conversions without an LLM or DB                                                                          |
+| Real application flow                                  | Five unique ML profiles persisted/reloaded; real copilot, 10 role suggestions, two interviews, four memory rows                     |
+| Freellmpool                                            | Seven successful requests served by `llm7/codestral-latest` through `freellmpool/auto`; existing OpenRouter quota cooldown worked   |
+| Docker build and inference                             | Original Windows-trained bundle loaded in Linux; five unique profiles generated with `--network none`                               |
+| Browser                                                | Desktop passed; mobile profile-header controls clipped. Zero JS exceptions/console errors/failed API reads in both tested viewports |
 
 Live verification used a new local database, never the configured cloud DB.
 The complete sanitized local evidence record is
@@ -230,7 +229,7 @@ Runtime and test changes in this continuation:
 - [cli.py](src/bebshax_persona_ml/cli.py),
   [pipeline.py](src/bebshax_persona_ml/pipeline.py),
   [test_ml_pipeline.py](tests/test_ml_pipeline.py).
-- [persona/__init__.py](../apps/backend/bebshax/persona/__init__.py),
+- [persona/**init**.py](../apps/backend/bebshax/persona/__init__.py),
   [persona/generation.py](../apps/backend/bebshax/persona/generation.py),
   [api/personas.py](../apps/backend/bebshax/api/personas.py),
   [personas/service.py](../apps/backend/bebshax/personas/service.py),

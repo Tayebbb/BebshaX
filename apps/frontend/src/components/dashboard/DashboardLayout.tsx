@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 // Dashboard-only assets: kept out of the landing critical path and loaded
 // with this (lazy) chunk. Space Grotesk and Unbounded are used by the
 // new-study and interview stylesheets; ui.css by the bx-* component kit.
@@ -219,6 +219,13 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const { user, logout } = useAuth();
   const { currentPath, navigate } = useNavigation();
   const { theme, toggleTheme } = useTheme();
+  const routeEpochRef = useRef({ active: false, personaRequest: 0 });
+
+  useLayoutEffect(() => {
+    const epoch = { active: true, personaRequest: 0 };
+    routeEpochRef.current = epoch;
+    return () => { epoch.active = false; };
+  }, [currentPath]);
 
   const initialParsed = parseDashboardPath(currentPath);
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialParsed.tab);
@@ -261,9 +268,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [showStartInterviewModal, setShowStartInterviewModal] = useState<boolean>(false);
   const [showCreateBehavioralModal, setShowCreateBehavioralModal] = useState<boolean>(false);
   const [initialBehavioralPersonaId, setInitialBehavioralPersonaId] = useState<string | undefined>(undefined);
+  const renderedRouteEpoch = routeEpochRef.current;
 
   useEffect(() => {
     const parsed = parseDashboardPath(currentPath);
+    setShowStartInterviewModal(false);
+    setModalPersona(null);
+    setShowCreateBehavioralModal(false);
+    setInitialBehavioralPersonaId(undefined);
     setActiveTab(parsed.tab);
     if (parsed.studyId) {
       setActiveStudyId(parsed.studyId);
@@ -286,22 +298,26 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   }, [currentPath]);
 
   useEffect(() => {
+    const epoch = routeEpochRef.current;
     const loadRecent = async () => {
       setLoadingRecent(true);
       try {
         const data = await api.getStudies();
+        if (!epoch.active) return;
         setRecentStudies(data.slice(0, 5));
         setDemoStudy(findExampleStudy(data));
       } catch {
         // fallback
       } finally {
-        setLoadingRecent(false);
-        // Mock fixtures must never masquerade as live research data.
-        setBackendDown(!api.isMockMode() && !api.isLive());
+        if (epoch.active) {
+          setLoadingRecent(false);
+          // Mock fixtures must never masquerade as live research data.
+          setBackendDown(!api.isMockMode() && !api.isLive());
+        }
       }
     };
     loadRecent();
-  }, [activeTab]);
+  }, [currentPath]);
 
   // Dynamic greeting based on time of day
   const getGreeting = () => {
@@ -410,8 +426,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   };
 
   const handleStartStudy = async (type: StudyType, prompt?: string) => {
-    setInitialWorkflowType(type);
-    setInitialWorkflowPrompt(prompt);
+    const epoch = routeEpochRef.current;
+    if (!epoch.active) return;
     setCreateStudyError(null);
     try {
       const created = await api.createStudy({
@@ -420,17 +436,21 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         status: 'in_progress',
         step: 1,
       });
+      if (!epoch.active) return;
 
+      setInitialWorkflowType(type);
+      setInitialWorkflowPrompt(prompt);
       // Optimistically update recent studies list immediately
       setRecentStudies((prev) => [created, ...prev.filter((s) => s.id !== created.id)].slice(0, 5));
       setActiveStudyId(created.id);
       setActiveStep(1);
       navigate(`/research/${created.id}/step1`);
-    } catch (err: any) {
+    } catch (err) {
+      if (!epoch.active) return;
       // Never fabricate a study id: the workflow would look fine while every
       // save silently no-ops and the user's work is lost.
       setCreateStudyError(
-        err?.message
+        err instanceof Error && err.message
           ? `We couldn't create your study: ${err.message}`
           : "We couldn't create your study — the server didn't respond. Please try again."
       );
@@ -536,18 +556,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       return;
     }
     let cancelled = false;
+    const epoch = routeEpochRef.current;
     api
       .getStudyById(activeStudyId)
       .then((s) => {
-        if (!cancelled) setActiveStudyTitle(s?.title ?? undefined);
+        if (!cancelled && epoch.active) setActiveStudyTitle(s?.title ?? undefined);
       })
       .catch(() => {
-        if (!cancelled) setActiveStudyTitle(undefined);
+        if (!cancelled && epoch.active) setActiveStudyTitle(undefined);
       });
     return () => {
       cancelled = true;
     };
-  }, [activeStudyId, recentStudies]);
+  }, [activeStudyId, recentStudies, currentPath]);
 
   // Ctrl/⌘ K jump menu
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -1557,6 +1578,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           <PersonaLibraryView
             studyId={activeStudyId}
             onStartInterviewWithPersona={async (pId, fromStudyId) => {
+              const epoch = routeEpochRef.current;
+              if (!epoch.active) return;
+              const requestId = ++epoch.personaRequest;
               const sid = fromStudyId || activeStudyId;
               if (!sid) {
                 navigate('/dashboard');
@@ -1565,9 +1589,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               setActiveStudyId(sid);
               try {
                 const p = await api.getStudyPersonaDetail(sid, pId);
+                if (!epoch.active || epoch.personaRequest !== requestId) return;
                 setModalPersona(p);
                 setShowStartInterviewModal(true);
               } catch {
+                if (!epoch.active || epoch.personaRequest !== requestId) return;
                 navigate(`/research/${sid}/interviews`);
               }
             }}
@@ -1608,6 +1634,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           activeInterviewId &&
           (activeStudyId ? (
             <InterviewWorkspace
+              key={`${activeStudyId}:${activeInterviewId}`}
               studyId={activeStudyId}
               interviewId={activeInterviewId}
               onBackToInterviews={() => navigate(`/research/${activeStudyId}/interviews`)}
@@ -1681,6 +1708,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
         {activeTab === 'study-workflow' && (
           <StudyWorkflowView
+            key={activeStudyId}
             studyId={activeStudyId}
             initialStep={activeStep}
             initialType={initialWorkflowType}
@@ -1761,12 +1789,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         <StartInterviewModal
           isOpen={showStartInterviewModal}
           onClose={() => {
+            if (!renderedRouteEpoch.active) return;
+            renderedRouteEpoch.personaRequest += 1;
             setShowStartInterviewModal(false);
             setModalPersona(null);
           }}
           persona={modalPersona}
           studyId={activeStudyId}
           onInterviewStarted={(newInterviewId) => {
+            if (!renderedRouteEpoch.active) return;
             setActiveInterviewId(newInterviewId);
             navigate(`/research/${activeStudyId}/interviews/${newInterviewId}`);
           }}
@@ -1778,12 +1809,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
         <CreateBehavioralTestModal
           isOpen={showCreateBehavioralModal}
           onClose={() => {
+            if (!renderedRouteEpoch.active) return;
             setShowCreateBehavioralModal(false);
             setInitialBehavioralPersonaId(undefined);
           }}
           studyId={activeStudyId}
           initialPersonaId={initialBehavioralPersonaId}
           onTestCreated={(testId, runId) => {
+            if (!renderedRouteEpoch.active) return;
             setActiveTestId(testId);
             setActiveRunId(runId);
             navigate(

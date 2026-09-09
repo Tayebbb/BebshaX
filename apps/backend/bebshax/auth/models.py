@@ -3,8 +3,9 @@
 from datetime import datetime, timezone
 import uuid
 
-from sqlalchemy import Boolean, DateTime, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, Integer, String, event, inspect, update
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapped, Mapper, mapped_column
 
 from bebshax.db.models import Base
 
@@ -33,6 +34,9 @@ class Users(Base):
     avatar_url: Mapped[str] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    session_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
     auth_provider: Mapped[str] = mapped_column(
         String(32), default="email", nullable=False
     )
@@ -54,6 +58,25 @@ class Users(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utc_now, onupdate=_utc_now, nullable=False
     )
+
+
+@event.listens_for(Users, "before_update")
+def _revoke_sessions_on_credential_change(
+    _mapper: Mapper[Users], connection: Connection, user: Users,
+) -> None:
+    """Revoke ORM-managed credential changes atomically, including stale snapshots."""
+    state = inspect(user)
+    if not any(
+        state.attrs[field].history.has_changes()
+        for field in ("hashed_password", "auth_provider", "is_verified")
+    ):
+        return
+    user.session_version = connection.execute(
+        update(Users)
+        .where(Users.id == user.id)
+        .values(session_version=Users.session_version + 1)
+        .returning(Users.session_version)
+    ).scalar_one()
 
 
 

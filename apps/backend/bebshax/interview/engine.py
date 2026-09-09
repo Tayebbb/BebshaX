@@ -19,12 +19,12 @@ import re
 import uuid
 from collections import defaultdict
 from collections.abc import AsyncIterator, Mapping
-from contextlib import aclosing
+from contextlib import aclosing, asynccontextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -43,6 +43,7 @@ from bebshax.llm.prompt_safety import (
 from bebshax.memory.service import MemoryService
 from bebshax.persona.schema import PersonaProfile
 from bebshax.persona.store import load_persona
+from bebshax.utils.explicit_failures import ExplicitFailure
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,23 @@ class ConversationNotFound(Exception):
 
 class InterviewFinished(Exception):
     pass
+
+
+class PersonaVersionChanged(ExplicitFailure):
+    status_code = 409
+    error_code = "persona_version_conflict"
+
+
+class InterviewConflict(ExplicitFailure):
+    status_code = 409
+    error_code = "interview_conflict"
+
+
+def _validate_persona_version(conversation: Conversations, persona: Personas) -> None:
+    if persona.version != conversation.persona_version:
+        raise PersonaVersionChanged(
+            "The persona version changed after this interview started. Start a new interview."
+        )
 
 
 SYNTHESIS_UNPARSEABLE = "interview_synthesis_unparseable"
@@ -382,13 +400,13 @@ def build_identity_card(profile: Any) -> str:
 
     # Goals, Needs, Pain points
     if profile.goals:
-        lines.append("Goals: " + "; ".join(profile.goals[:4]))
+        lines.append("Goals: " + "; ".join(profile.goals))
     if profile.pain_points:
-        lines.append("Pain Points: " + "; ".join(profile.pain_points[:4]))
+        lines.append("Pain Points: " + "; ".join(profile.pain_points))
     if profile.objections:
-        lines.append("Common Skepticisms / Objections: " + "; ".join(profile.objections[:3]))
+        lines.append("Common Skepticisms / Objections: " + "; ".join(profile.objections))
     if profile.behaviors:
-        lines.append("Established Behaviors: " + "; ".join(profile.behaviors[:4]))
+        lines.append("Established Behaviors: " + "; ".join(profile.behaviors))
 
     # Devices
     if tech.get("primary_devices"):
@@ -519,12 +537,28 @@ class InterviewEngine:
         # One lock per conversation: prepare → LLM → persist must not interleave
         # (concurrent asks used to persist duplicate turn numbers).
         self._turn_locks: dict[str, asyncio.Lock] = {}
+        self._lock_users: dict[str, int] = {}
 
     def _lock_for(self, conversation_id: str) -> asyncio.Lock:
         lock = self._turn_locks.get(conversation_id)
         if lock is None:
             lock = self._turn_locks[conversation_id] = asyncio.Lock()
         return lock
+
+    @asynccontextmanager
+    async def _conversation_lock(self, conversation_id: str) -> AsyncIterator[None]:
+        lock = self._lock_for(conversation_id)
+        self._lock_users[conversation_id] = self._lock_users.get(conversation_id, 0) + 1
+        try:
+            async with lock:
+                yield
+        finally:
+            remaining = self._lock_users[conversation_id] - 1
+            if remaining:
+                self._lock_users[conversation_id] = remaining
+            else:
+                self._lock_users.pop(conversation_id)
+                self._turn_locks.pop(conversation_id, None)
 
     async def start(
         self,
@@ -655,7 +689,7 @@ class InterviewEngine:
             if segment:
                 seg_info = f"{segment.name}\n- Segment Summary: {segment.description}"
                 if segment.characteristics:
-                    traits = [f"{k}: {v}" for k, v in list(segment.characteristics.items())[:3]]
+                    traits = [f"{k}: {v}" for k, v in segment.characteristics.items()]
                     seg_info += f"\n- Segment Characteristics: {'; '.join(traits)}"
                 system_parts.append(
                     "YOUR MARKET SEGMENT:\n"
@@ -666,14 +700,10 @@ class InterviewEngine:
         evidence_citations = getattr(persona, "evidence_citations", []) or []
         if evidence_citations:
             ev_lines = []
-            for ev in evidence_citations[:3]:
+            for ev in evidence_citations:
                 claim = ev.get("claim", ev.get("text", ""))
                 src = ev.get("source", ev.get("publisher", ""))
                 if claim:
-                    # trim on a word boundary — a mid-word cut reads as
-                    # corrupted evidence to the model
-                    if len(claim) > 180:
-                        claim = claim[:180].rsplit(" ", 1)[0] + "…"
                     ev_lines.append(f"- ({src}) {claim}")
             if ev_lines:
                 system_parts.append(
@@ -905,19 +935,20 @@ class InterviewEngine:
         unexplored = [label for topic_id, label, _ in _TOPIC_DEFINITIONS if topics.get(topic_id) != "explored"]
         demo = getattr(persona, "demographics", {}) or {}
         recent = [
-            {"role": t.role, "text": (t.content or "")[:400]}
-            for t in prior_turns[-6:]
-            if getattr(t, "content", None)
+            {"role": turn.role, "text": turn.content or ""}
+            for turn in prior_turns
         ]
         context = {
             "persona": {
                 "name": getattr(persona, "name", ""),
                 "occupation": demo.get("occupation"),
                 "location": demo.get("location"),
-                "pain_points": list(getattr(persona, "pain_points", []) or [])[:3],
+                "identity": build_identity_card(persona),
+                "pain_points": list(getattr(persona, "pain_points", []) or []),
+                "evidence_citations": getattr(persona, "evidence_citations", []) or [],
             },
             "recent_turns": recent,
-            "topics_not_yet_explored": unexplored[:5],
+            "topics_not_yet_explored": unexplored,
         }
         request = LLMRequest(
             task=TaskType.STRUCTURED_OUTPUT,
@@ -963,6 +994,8 @@ class InterviewEngine:
 
             # Load Persona: check if rich Part 5 Persona or legacy PersonaProfile
             persona = await session.get(Personas, conversation.persona_id)
+            if persona is not None:
+                _validate_persona_version(conversation, persona)
             if persona is not None and not persona.demographics:
                 profile = await load_persona(session, conversation.persona_id)
                 if profile is not None:
@@ -1001,6 +1034,37 @@ class InterviewEngine:
             persona_id=conversation.persona_id,
             conversation_id=conversation.id,
         )
+
+    async def _update_snapshot(
+        self, session: AsyncSession, conversation: Conversations, values: dict[str, Any]
+    ) -> None:
+        persona = await session.get(Personas, conversation.persona_id, with_for_update=True)
+        if persona is None:
+            raise PersonaNotFound(conversation.persona_id)
+        _validate_persona_version(conversation, persona)
+        result = await session.execute(
+            update(Conversations)
+            .where(
+                Conversations.id == conversation.id,
+                Conversations.persona_id == conversation.persona_id,
+                Conversations.persona_version == conversation.persona_version,
+                Conversations.turn_count == conversation.turn_count,
+                Conversations.question_count == conversation.question_count,
+                Conversations.status == conversation.status,
+                Conversations.updated_at == conversation.updated_at,
+                select(Personas.id).where(
+                    Personas.id == conversation.persona_id,
+                    Personas.version == conversation.persona_version,
+                ).exists(),
+            )
+            .values(**values)
+            .returning(Conversations.id)
+            .execution_options(synchronize_session=False)
+        )
+        if result.scalar_one_or_none() is None:
+            raise InterviewConflict(
+                "The interview changed while this request was running. Reload it before retrying."
+            )
 
     async def _finalize_turn(
         self,
@@ -1043,27 +1107,17 @@ class InterviewEngine:
 
         # Persist turns and update conversation in DB
         async with self._sessionmaker() as session:
-            # Turn numbers are assigned at persist time from what is actually
-            # stored — never from the pre-LLM snapshot — so a concurrent turn
-            # that landed meanwhile cannot produce a duplicate number.
-            max_turn = (
-                await session.execute(
-                    select(func.max(ConversationTurns.turn_number)).where(
-                        ConversationTurns.conversation_id == conversation_id
-                    )
-                )
-            ).scalar() or 0
-            researcher_turn_num = max_turn + 1
-            persona_turn_num = max_turn + 2
+            researcher_turn_num = conversation.turn_count + 1
+            persona_turn_num = conversation.turn_count + 2
             total_turns = persona_turn_num
             is_auto_finished = total_turns >= conversation.max_turns
 
-            conv_to_update = await session.get(Conversations, conversation_id)
-            if conv_to_update:
-                conv_to_update.turn_count = total_turns
-                conv_to_update.question_count = question_count
-                conv_to_update.topics_explored = updated_topics
-                conv_to_update.updated_at = datetime.now(timezone.utc)
+            await self._update_snapshot(session, conversation, {
+                "turn_count": total_turns,
+                "question_count": question_count,
+                "topics_explored": updated_topics,
+                "updated_at": datetime.now(timezone.utc),
+            })
 
             session.add(
                 ConversationTurns(
@@ -1101,28 +1155,26 @@ class InterviewEngine:
                     created_at=datetime.now(timezone.utc),
                 )
             )
+            if self._memory is not None:
+                await self._memory.remember(
+                    conversation.persona_id,
+                    reply,
+                    kind="episodic",
+                    importance=0.65 if has_contradiction or memory_kind in ("budget", "decision", "frustration", "objection") else 0.45,
+                    source="persona",
+                    conversation_id=conversation_id,
+                    session=session,
+                )
+                await self._memory.remember(
+                    conversation.persona_id,
+                    interviewer_message,
+                    kind="episodic",
+                    importance=0.2,
+                    source="interviewer",
+                    conversation_id=conversation_id,
+                    session=session,
+                )
             await session.commit()
-
-        # Memory write-back: the persona's OWN reply (full text — R2) is what it
-        # may later recall; the researcher's question is stored separately as
-        # interviewer-sourced audit context and is never replayed as a fact.
-        if self._memory is not None:
-            await self._memory.remember(
-                conversation.persona_id,
-                reply,
-                kind="episodic",
-                importance=0.65 if has_contradiction or memory_kind in ("budget", "decision", "frustration", "objection") else 0.45,
-                source="persona",
-                conversation_id=conversation_id,
-            )
-            await self._memory.remember(
-                conversation.persona_id,
-                interviewer_message,
-                kind="episodic",
-                importance=0.2,
-                source="interviewer",
-                conversation_id=conversation_id,
-            )
 
         # Suggested questions for the next turn — model-written from this
         # transcript INCLUDING the exchange that just happened.
@@ -1159,7 +1211,7 @@ class InterviewEngine:
 
     async def ask(self, conversation_id: str, interviewer_message: str) -> dict[str, Any]:
         """Process a researcher question and return the persona response with updated state."""
-        async with self._lock_for(conversation_id):
+        async with self._conversation_lock(conversation_id):
             start_time = datetime.now(timezone.utc)
             conversation, persona, prior_turns, messages, retrieved_memories = await self._prepare_turn(
                 conversation_id, interviewer_message
@@ -1191,7 +1243,7 @@ class InterviewEngine:
         The per-conversation lock is held for the whole generator lifetime;
         callers must drive it to completion or close it (``aclosing``).
         """
-        async with self._lock_for(conversation_id):
+        async with self._conversation_lock(conversation_id):
             start_time = datetime.now(timezone.utc)
             conversation, persona, prior_turns, messages, retrieved_memories = await self._prepare_turn(
                 conversation_id, interviewer_message
@@ -1225,13 +1277,49 @@ class InterviewEngine:
 
     async def complete(self, conversation_id: str) -> dict[str, Any]:
         """Complete the interview, synthesize findings, and extract structured insights with turn provenance."""
+        async with self._conversation_lock(conversation_id):
+            return await self._complete(conversation_id)
+
+    async def _stored_completion(
+        self, session: AsyncSession, conversation: Conversations
+    ) -> dict[str, Any]:
+        insights = list((await session.execute(
+            select(InterviewInsights)
+            .where(InterviewInsights.interview_id == conversation.id)
+            .order_by(InterviewInsights.created_at, InterviewInsights.id)
+        )).scalars())
+        metadata = (conversation.configuration or {}).get("synthesis", {})
+        return {
+            "id": conversation.id,
+            "status": conversation.status,
+            "summary": conversation.summary,
+            "key_findings": conversation.key_findings or [],
+            "structured_insights": [
+                {key: getattr(insight, key) for key in (
+                    "id", "type", "title", "description", "supporting_turn_numbers",
+                    "confidence", "is_synthetic",
+                )}
+                for insight in insights
+            ],
+            "insights_dropped": metadata.get("insights_dropped", 0),
+            **{key: metadata[key] for key in (
+                "source", "served_by", "error_code", "fallback_reason",
+            ) if key in metadata},
+        }
+
+    async def _complete(self, conversation_id: str) -> dict[str, Any]:
         async with self._sessionmaker() as session:
             conversation = await session.get(Conversations, conversation_id)
             if conversation is None:
                 raise ConversationNotFound(conversation_id)
+            if conversation.status == "completed" and conversation.summary:
+                return await self._stored_completion(session, conversation)
 
             persona = await session.get(Personas, conversation.persona_id)
-            persona_name = persona.name if persona else "Synthetic Persona"
+            if persona is None:
+                raise PersonaNotFound(conversation.persona_id)
+            _validate_persona_version(conversation, persona)
+            persona_name = persona.name
 
             turns = list(
                 (
@@ -1246,12 +1334,15 @@ class InterviewEngine:
         if not turns:
             # Empty interview
             async with self._sessionmaker() as session:
-                conv = await session.get(Conversations, conversation_id)
-                if conv:
-                    conv.status = "completed"
-                    conv.completed_at = datetime.now(timezone.utc)
-                    conv.summary = "Interview concluded with no messages."
-                    await session.commit()
+                await self._update_snapshot(session, conversation, {
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                    "summary": "Interview concluded with no messages.",
+                    "key_findings": [],
+                    "structured_insights": [],
+                })
+                await session.commit()
             return {
                 "id": conversation_id,
                 "status": "completed",
@@ -1278,9 +1369,19 @@ class InterviewEngine:
         objective_block = untrusted_block(
             "OBJECTIVE", conversation.objective, source="conversation.objective"
         )
+        identity_block = untrusted_block(
+            "PERSONA_IDENTITY", build_identity_card(persona), source="persona"
+        )
+        evidence_block = untrusted_json_block(
+            "EVIDENCE", persona.evidence_citations or [], source="persona.evidence_citations"
+        )
 
         analysis_prompt = f"""
 You are a senior qualitative user research analyst reviewing an interview transcript with synthetic persona {neutralise_tags(persona_name)}.
+PERSONA IDENTITY AND EVIDENCE (context, not additional interview testimony):
+{identity_block}
+{evidence_block}
+
 Interview Objective:
 {objective_block}
 
@@ -1323,6 +1424,7 @@ Output valid JSON adhering strictly to this schema:
             json_mode=True,
             temperature=0.3,
             max_output_tokens=1000,
+            persona_id=conversation.persona_id,
             conversation_id=conversation_id,
         )
 
@@ -1368,14 +1470,14 @@ Output valid JSON adhering strictly to this schema:
         saved_insights = []
         insights_dropped = 0
         async with self._sessionmaker() as session:
-            conv = await session.get(Conversations, conversation_id)
-            if conv:
-                conv.status = "completed"
-                conv.completed_at = datetime.now(timezone.utc)
-                conv.summary = summary
-                conv.key_findings = key_findings
-                conv.structured_insights = insights_raw
-                conv.updated_at = datetime.now(timezone.utc)
+            await self._update_snapshot(session, conversation, {
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc),
+                "summary": summary,
+                "key_findings": key_findings,
+                "structured_insights": insights_raw,
+                "updated_at": datetime.now(timezone.utc),
+            })
 
             for ins in insights_raw:
                 labels = coerce_insight_labels(ins)
@@ -1415,9 +1517,21 @@ Output valid JSON adhering strictly to this schema:
                     "is_synthetic": True,
                 })
 
+            await session.execute(
+                update(Conversations).where(Conversations.id == conversation_id).values(
+                    configuration={
+                        **(conversation.configuration or {}),
+                        "synthesis": {
+                            "source": synthesis_source,
+                            "served_by": served_by,
+                            "error_code": synthesis_error,
+                            "fallback_reason": None,
+                            "insights_dropped": insights_dropped,
+                        },
+                    }
+                )
+            )
             await session.commit()
-
-        self._turn_locks.pop(conversation_id, None)  # completed conversations take no more turns
 
         return {
             "id": conversation_id,

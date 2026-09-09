@@ -5,6 +5,8 @@ Every source is live and keyless; tests replace the network with
 """
 
 import json
+import socket
+from typing import Any
 
 import httpx
 import pytest
@@ -17,8 +19,19 @@ from bebshax.datasets.discovery.engine import DatasetDiscoveryEngine, default_ad
 from bebshax.datasets.discovery.evaluator import DatasetEvaluator
 from bebshax.datasets.discovery.world_bank_adapter import WorldBankOpenDataAdapter, select_indicators
 from bebshax.datasets.parser import parse_dataset_bytes
+from bebshax.datasets.security import Resolver
 from bebshax.db.models import Base, DatasetCandidates, DatasetSources
 from bebshax.research.planner import DatasetRequirementSpec
+
+
+@pytest.fixture
+def discovery_resolver(monkeypatch: pytest.MonkeyPatch) -> Resolver:
+    def resolve(host: str, port: Any) -> list[tuple[Any, ...]]:
+        assert host == "files.example.org"
+        return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr("bebshax.datasets.discovery.downloader.socket.getaddrinfo", resolve)
+    return resolve
 
 
 def _offline_handler(request: httpx.Request) -> httpx.Response:
@@ -161,25 +174,25 @@ def test_default_adapters_are_all_live_sources():
 
 
 @pytest.mark.asyncio
-async def test_downloader_enforces_scheme_status_and_size():
+async def test_downloader_enforces_scheme_status_and_size(discovery_resolver: Resolver):
     with pytest.raises(DatasetDownloadFailed):
-        await fetch_resource_bytes("ftp://files.example.org/x.csv")
+        await fetch_resource_bytes("ftp://files.example.org/x.csv", resolver=discovery_resolver)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(404))) as client:
         with pytest.raises(DatasetDownloadFailed) as info:
-            await fetch_resource_bytes("https://files.example.org/x.csv", http_client=client)
+            await fetch_resource_bytes("https://files.example.org/x.csv", http_client=client, resolver=discovery_resolver)
         assert "HTTP 404" in info.value.detail and info.value.status_code == 502
 
     big = httpx.MockTransport(lambda r: httpx.Response(200, content=b"a,b\n" * 100, headers={"content-length": "999999999"}))
     async with httpx.AsyncClient(transport=big) as client:
         with pytest.raises(DatasetDownloadFailed) as info:
-            await fetch_resource_bytes("https://files.example.org/x.csv", http_client=client)
+            await fetch_resource_bytes("https://files.example.org/x.csv", http_client=client, resolver=discovery_resolver)
         assert "at most" in info.value.detail
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=b"a,b\n1,2\n" * 50))) as client:
         with pytest.raises(DatasetDownloadFailed):
-            await fetch_resource_bytes("https://files.example.org/x.csv", http_client=client, max_bytes=100)
-        body, meta = await fetch_resource_bytes("https://files.example.org/x.csv", http_client=client)
+            await fetch_resource_bytes("https://files.example.org/x.csv", http_client=client, max_bytes=100, resolver=discovery_resolver)
+        body, meta = await fetch_resource_bytes("https://files.example.org/x.csv", http_client=client, resolver=discovery_resolver)
     assert body.startswith(b"a,b\n1,2") and meta["size_bytes"] == len(body)
 
 
@@ -249,7 +262,9 @@ class _OneCandidateAdapter:
 
 
 @pytest.mark.asyncio
-async def test_engine_imports_selected_candidates_by_downloading_the_real_resource(tmp_path, monkeypatch):
+async def test_engine_imports_selected_candidates_by_downloading_the_real_resource(
+    tmp_path, monkeypatch, discovery_resolver: Resolver,
+):
     monkeypatch.setenv("BEBSHAX_UPLOAD_DIR", str(tmp_path))
     from bebshax.config import get_settings
 
@@ -264,7 +279,8 @@ async def test_engine_imports_selected_candidates_by_downloading_the_real_resour
     )
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert str(request.url) == "https://files.example.org/cafes.csv"
+        assert str(request.url) == "https://93.184.216.34/cafes.csv"
+        assert request.headers["host"] == "files.example.org"
         return httpx.Response(200, content=csv_body.encode(), headers={"content-type": "text/csv"})
 
     good = _cand()

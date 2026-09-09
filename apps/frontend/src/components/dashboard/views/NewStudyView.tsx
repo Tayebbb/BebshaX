@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import {
   Users,
   Compass,
@@ -31,6 +31,13 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpen
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const submissionRef = useRef({ active: false, pending: false });
+
+  useLayoutEffect(() => {
+    const epoch = { active: true, pending: false };
+    submissionRef.current = epoch;
+    return () => { epoch.active = false; };
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -41,6 +48,8 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpen
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    const epoch = submissionRef.current;
+    if (!epoch.active || epoch.pending) return;
     const cleanPrompt = prompt.trim();
 
     if (!cleanPrompt) {
@@ -49,24 +58,38 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpen
     }
 
     setValidationError(null);
+    epoch.pending = true;
     setIsSubmitting(true);
     try {
       await onStartStudy(selectedType, cleanPrompt);
-    } catch {
-      setIsSubmitting(false);
+    } catch (error) {
+      if (epoch.active) {
+        setValidationError(error instanceof Error ? error.message : "We couldn't create your study. Please try again.");
+      }
+    } finally {
+      epoch.pending = false;
+      if (epoch.active) setIsSubmitting(false);
     }
   };
 
   const handleCardClick = async (type: StudyType) => {
+    const epoch = submissionRef.current;
+    if (!epoch.active || epoch.pending) return;
     setSelectedType(type);
     setValidationError(null);
     const cleanPrompt = prompt.trim();
     if (cleanPrompt) {
+      epoch.pending = true;
       setIsSubmitting(true);
       try {
         await onStartStudy(type, cleanPrompt);
-      } catch {
-        setIsSubmitting(false);
+      } catch (error) {
+        if (epoch.active) {
+          setValidationError(error instanceof Error ? error.message : "We couldn't create your study. Please try again.");
+        }
+      } finally {
+        epoch.pending = false;
+        if (epoch.active) setIsSubmitting(false);
       }
     }
   };

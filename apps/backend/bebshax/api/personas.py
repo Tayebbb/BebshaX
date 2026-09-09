@@ -6,7 +6,7 @@ import logging
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_current_user, get_optional_current_user
@@ -17,7 +17,9 @@ from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import MarketSegments, PersonaGenerationRuns, Personas, Studies
 from bebshax.db.models import DATA_SOURCE_LIVE
+from bebshax.interview.orm import Conversations
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
+from bebshax.memory.orm import MemoryItems
 from bebshax.persona.generation import PersonaGenerationFailed
 from bebshax.persona.store import (
     create_business,
@@ -652,16 +654,30 @@ async def get_persona_memories_endpoint(
         p_row = await session.get(Personas, persona_id)
         if p_row is None:
             raise HTTPException(status_code=404, detail="persona not found")
-        # Memories are persona-private — same owner gate as the persona itself.
         if not owner_accessible(p_row.owner_id, current_user):
             raise HTTPException(status_code=404, detail="persona not found")
 
-    memories = await memory_service.list_for_persona(
-        persona_id,
-        kind=kind,
-        limit=limit,
-        sources=None if include_interviewer else ("persona",),
-    )
+        readable_conversations = select(Conversations.id).where(
+            Conversations.persona_id == persona_id,
+            or_(
+                Conversations.user_id.is_(None),
+                Conversations.user_id.in_(allowed_owner_ids(current_user.id if current_user else None)),
+            ),
+        )
+        query = select(MemoryItems).where(
+            MemoryItems.persona_id == persona_id,
+            or_(
+                MemoryItems.conversation_id.is_(None),
+                MemoryItems.conversation_id.in_(readable_conversations),
+            ),
+        )
+        if kind:
+            query = query.where(MemoryItems.kind == kind)
+        if not include_interviewer:
+            query = query.where(MemoryItems.source == "persona")
+        memories = list((await session.execute(
+            query.order_by(MemoryItems.created_at.desc()).limit(limit)
+        )).scalars())
     return [
         {
             "id": m.id,

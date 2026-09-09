@@ -150,6 +150,13 @@ class PoolRouter(LLMService):
                 return f"cooling down for {until - now:.0f}s more{scope}"
         return None
 
+    def _provider_cooling_reason(self, cand: RouteCandidate) -> str | None:
+        now = self._clock()
+        until = self._cooldown_until.get((cand.provider, PROVIDER_WIDE))
+        if until is not None and now < until:
+            return f"cooling down for {until - now:.0f}s more (provider-wide)"
+        return None
+
     def _cooldown_remaining(self, cand: RouteCandidate) -> float:
         now = self._clock()
         return max(
@@ -167,12 +174,14 @@ class PoolRouter(LLMService):
         every feature for 30-60 s. Instead the routes that are capable, fit
         the context and are not already being probed are admitted in order of
         soonest recovery. A probe that fails re-arms its cooldown normally.
+        Provider-wide cooldowns must expire before any route is admitted.
         """
         needed = estimate_request_tokens(request)
         probe = [
             (adapter, cand)
             for adapter, cand in entries
             if self._cooling_reason(cand) is not None
+            and self._provider_cooling_reason(cand) is None
             and capability_skip_reason(cand, request) is None
             and cand.context_window >= needed
             and (cand.provider, cand.model) not in self._probing
@@ -221,8 +230,8 @@ class PoolRouter(LLMService):
     ) -> tuple[list[Entry], Callable[[RouteCandidate], str | None] | None]:
         """Eligible routes plus the per-candidate skip check the attempt loop
         must re-run. When cooldowns alone emptied the list, the cooldown probe
-        is returned instead — with no skip check, since those routes are
-        cooling by definition."""
+        is returned instead. A missing skip check marks a probe; callers must
+        reserve those routes and still recheck provider-wide cooldowns."""
         entries = await self._pool_entries(pool, request, provenance)
         try:
             eligible = filter_eligible(
@@ -262,6 +271,7 @@ class PoolRouter(LLMService):
                     eligible, skip_reason = await self._eligible_entries(pool, request, provenance)
                     if skip_reason is None:
                         probing = self._mark_probing(eligible)
+                        skip_reason = self._provider_cooling_reason
                     return await attempt_candidates(
                         eligible,
                         request,
@@ -307,11 +317,11 @@ class PoolRouter(LLMService):
                     eligible, skip_reason = await self._eligible_entries(pool, request, provenance)
                     if skip_reason is None:
                         probing = self._mark_probing(eligible)
+                        skip_reason = self._provider_cooling_reason
 
                     budget = request_deadline_s(request.task)
                     attempt_no = 0
                     for adapter, cand in eligible:
-                        # started mid-request? (never re-checked for a probe)
                         cooling = skip_reason(cand) if skip_reason is not None else None
                         if cooling is not None:
                             provenance.routing_path.append(

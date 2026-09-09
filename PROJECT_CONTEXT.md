@@ -76,16 +76,16 @@ This addendum does not change the original phase roadmap or completion dates.
 
 ## Stack (decided — do not relitigate casually)
 
-| Layer          | Choice                                                                                                                        | Why                                                    |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Backend        | Python 3.12 + FastAPI, async                                                                                                  | freellmpool is Python; best dataset/eval ecosystem     |
-| Routing engine | freellmpool as a **library** behind `LLMService`                                                                              | MIT, active, failover/quotas/circuits/keyless built in |
-| LiteLLM        | Not installed (Gate B, revisit only if a provider is missing)                                                                 | avoids heavy proxy stack                               |
-| DB             | PG16 + pgvector via `pgvector/pgvector:pg16` on **5433**                                                                      | native PG16 on the dev machine lacks pgvector          |
-| Local fallback | Ollama — `llama3.2:3b` primary / `qwen3:4b` secondary (Phase 4 benchmark)                                                     | 4 GB VRAM ceiling — no 70B fantasies                   |
-| Frontend       | React + Vite, single app                                                                                                      | owner decision                                         |
-| Persona model  | CPU TF-IDF/NMF representations + diversity-aware synthetic source selection | Separate from LLM routing; source identity/provenance retained |
-| Datasets       | Existing profiles: grounding + evaluation only; separate `ml_persona` profile for explicitly reviewed synthetic training data | **no LLM fine-tuning, ever**                           |
+| Layer          | Choice                                                                                                                        | Why                                                            |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Backend        | Python 3.12 + FastAPI, async                                                                                                  | freellmpool is Python; best dataset/eval ecosystem             |
+| Routing engine | freellmpool as a **library** behind `LLMService`                                                                              | MIT, active, failover/quotas/circuits/keyless built in         |
+| LiteLLM        | Not installed (Gate B, revisit only if a provider is missing)                                                                 | avoids heavy proxy stack                                       |
+| DB             | PG16 + pgvector via `pgvector/pgvector:pg16` on **5433**                                                                      | native PG16 on the dev machine lacks pgvector                  |
+| Local fallback | Ollama — `llama3.2:3b` primary / `qwen3:4b` secondary (Phase 4 benchmark)                                                     | 4 GB VRAM ceiling — no 70B fantasies                           |
+| Frontend       | React + Vite, single app                                                                                                      | owner decision                                                 |
+| Persona model  | CPU TF-IDF/NMF representations + diversity-aware synthetic source selection                                                   | Separate from LLM routing; source identity/provenance retained |
+| Datasets       | Existing profiles: grounding + evaluation only; separate `ml_persona` profile for explicitly reviewed synthetic training data | **no LLM fine-tuning, ever**                                   |
 
 ## Phase roadmap and status
 
@@ -125,17 +125,17 @@ Detailed deliverables/exit criteria: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMEN
 
 ## Document map
 
-| Question                                 | Document                                                                                                 |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| What is this project / current state?    | **this file**                                                                                            |
-| What must every AI agent/tool obey?      | [AGENTS.md](AGENTS.md) (auto-loaded by Copilot/Cursor/Claude Code/Codex)                                 |
-| What are the engineering rules?          | [RULES.md](RULES.md)                                                                                     |
-| What exactly is phase N?                 | [docs/PHASES.md](docs/PHASES.md) (executable specs)                                                      |
-| Who works on what, without collisions?   | [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md)                                                     |
-| How do I set up my machine?              | [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md)                                                                 |
-| What's the plan / what changed?          | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) (implementation log at the bottom)            |
-| Why these OSS choices / hardware limits? | [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md)                                       |
-| How does the LLM actually work here?     | [docs/AI_IMPLEMENTATION_PLAN.md](docs/AI_IMPLEMENTATION_PLAN.md) (routing vs aggregation, plain-English) |
+| Question                                   | Document                                                                                                                            |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| What is this project / current state?      | **this file**                                                                                                                       |
+| What must every AI agent/tool obey?        | [AGENTS.md](AGENTS.md) (auto-loaded by Copilot/Cursor/Claude Code/Codex)                                                            |
+| What are the engineering rules?            | [RULES.md](RULES.md)                                                                                                                |
+| What exactly is phase N?                   | [docs/PHASES.md](docs/PHASES.md) (executable specs)                                                                                 |
+| Who works on what, without collisions?     | [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md)                                                                                |
+| How do I set up my machine?                | [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md)                                                                                            |
+| What's the plan / what changed?            | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) (implementation log at the bottom)                                       |
+| Why these OSS choices / hardware limits?   | [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md)                                                                  |
+| How does the LLM actually work here?       | [docs/AI_IMPLEMENTATION_PLAN.md](docs/AI_IMPLEMENTATION_PLAN.md) (routing vs aggregation, plain-English)                            |
 | How are personas trained and selected now? | [ml_persona/README.md](ml_persona/README.md), [model card](ml_persona/MODEL_CARD.md), [application adapter](docs/PERSONA_ENGINE.md) |
-| How does routing work / provider config? | [docs/ROUTING.md](docs/ROUTING.md)                                                                       |
-| Who fixes which audit finding?           | [docs/AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md)                                                   |
+| How does routing work / provider config?   | [docs/ROUTING.md](docs/ROUTING.md)                                                                                                  |
+| Who fixes which audit finding?             | [docs/AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md)                                                                              |

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   ChevronLeft,
@@ -138,6 +138,8 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   // so chunks are buffered and flushed at most once per frame.
   const streamBufferRef = useRef<string>('');
   const streamRafRef = useRef<number | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const workspaceEpochRef = useRef({ active: false, sending: false, completing: false, load: 0 });
 
   const cancelStreamFlush = useCallback(() => {
     if (streamRafRef.current !== null) {
@@ -146,16 +148,47 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     }
   }, []);
 
-  const pushStreamChunk = useCallback((chunk: string) => {
+  useLayoutEffect(() => {
+    const epoch = { active: true, sending: false, completing: false, load: 0 };
+    workspaceEpochRef.current = epoch;
+    setInterview(null);
+    setPersona(null);
+    setTurns([]);
+    setInsights([]);
+    setSuggested([]);
+    setInput('');
+    setIsLoading(true);
+    setLoadError(null);
+    setIsSending(false);
+    setIsCompleting(false);
+    setSendError(null);
+    setElapsedS(0);
+    setCopiedTurnId(null);
+    setFlashTurn(null);
+    setRailOpen(false);
+    setLastRevealId(null);
+    setStreamText(null);
+    pendingQuestionRef.current = '';
+    streamBufferRef.current = '';
+    turnRefs.current = {};
+    return () => {
+      epoch.active = false;
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+      cancelStreamFlush();
+    };
+  }, [studyId, interviewId, cancelStreamFlush]);
+
+  const pushStreamChunk = useCallback((chunk: string, isCurrent: () => boolean) => {
+    if (!isCurrent()) return;
     streamBufferRef.current += chunk;
     if (streamRafRef.current !== null) return;
     streamRafRef.current = requestAnimationFrame(() => {
+      if (!isCurrent()) return;
       streamRafRef.current = null;
       setStreamText(streamBufferRef.current);
     });
   }, []);
-
-  useEffect(() => cancelStreamFlush, [cancelStreamFlush]);
 
   // Pause ambient motion when the tab is hidden (performance §33).
   useEffect(() => {
@@ -166,20 +199,29 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
 
   // Elapsed-time counter: free-tier turns honestly take 60–190s.
   useEffect(() => {
+    const epoch = workspaceEpochRef.current;
     if (!isSending) {
       setElapsedS(0);
       return;
     }
-    const t = setInterval(() => setElapsedS((s) => s + 1), 1000);
+    const t = setInterval(() => {
+      if (epoch.active) setElapsedS((s) => s + 1);
+    }, 1000);
     return () => clearInterval(t);
-  }, [isSending]);
+  }, [isSending, studyId, interviewId]);
 
   const load = useCallback(async () => {
+    const epoch = workspaceEpochRef.current;
+    if (!epoch.active) return;
+    const loadId = ++epoch.load;
+    const isCurrent = () => epoch.active && epoch.load === loadId;
     setIsLoading(true);
     setLoadError(null);
+    setPersona(null);
     try {
       // Backend returns the interview FLAT (id/status/turns at top level).
       const data = await api.getStudyInterviewDetail(studyId, interviewId);
+      if (!isCurrent()) return;
       setInterview(data as Interview);
       setTurns(data.turns || []);
       setInsights(data.structured_insights || []);
@@ -187,13 +229,15 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
       if (data.persona_id) {
         api
           .getStudyPersonaDetail(studyId, data.persona_id)
-          .then(setPersona)
+          .then((loadedPersona) => {
+            if (isCurrent()) setPersona(loadedPersona);
+          })
           .catch(() => {}); // profile rail is optional enrichment
       }
     } catch (err: any) {
-      setLoadError(err?.message || 'Failed to load this interview.');
+      if (isCurrent()) setLoadError(err?.message || 'Failed to load this interview.');
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
   }, [studyId, interviewId]);
 
@@ -221,8 +265,13 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   const isCompleted = interview?.status === 'completed';
 
   const send = async (raw?: string) => {
+    const epoch = workspaceEpochRef.current;
     const text = (raw ?? input).trim();
-    if (!text || isSending || !interview || isCompleted) return;
+    if (!epoch.active || epoch.sending || epoch.completing || !text || isLoading || isSending || isCompleting || !interview || isCompleted) return;
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
+    const isCurrent = () => epoch.active && streamAbortRef.current === abortController && !abortController.signal.aborted;
+    epoch.sending = true;
     setSendError(null);
     setInput('');
     pendingQuestionRef.current = text;
@@ -241,6 +290,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     setTurns((prev) => [...prev, optimistic]);
 
     const applyDone = (res: any, streamed: boolean) => {
+      if (!isCurrent()) return;
       const personaTurn: InterviewTurn = {
         id: `turn_${res.turn_number}_${Date.now()}`,
         turn_number: res.turn_number,
@@ -278,11 +328,13 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
       let streamedAny = false;
       try {
         const res = await api.sendInterviewMessageStream(studyId, interviewId, text, (chunk) => {
+          if (!isCurrent()) return;
           streamedAny = true;
-          pushStreamChunk(chunk);
-        });
+          pushStreamChunk(chunk, isCurrent);
+        }, abortController.signal);
         applyDone(res, streamedAny);
       } catch (streamErr: any) {
+        if (!isCurrent()) return;
         // Older backend without the stream route — or transport-level failure
         // before anything streamed — falls back to the blocking endpoint.
         if (!streamedAny && (streamErr?.status === 404 || streamErr?.status === 405)) {
@@ -293,6 +345,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
         }
       }
     } catch (err: any) {
+      if (!isCurrent()) return;
       // Honest failure: remove the unanswered question from the transcript,
       // return it to the composer, and classify the failure.
       setTurns((prev) => prev.filter((t) => t.id !== optimistic.id));
@@ -304,19 +357,26 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
           : classifyFailure(err?.message || '', err?.status);
       setSendError({ kind, detail: err?.message || 'Unknown failure', requestId: fromUnknownError(err).requestId ?? null });
     } finally {
-      cancelStreamFlush();
-      streamBufferRef.current = '';
-      setStreamText(null);
-      setIsSending(false);
+      epoch.sending = false;
+      if (epoch.active && streamAbortRef.current === abortController) {
+        streamAbortRef.current = null;
+        cancelStreamFlush();
+        streamBufferRef.current = '';
+        setStreamText(null);
+        setIsSending(false);
+      }
     }
   };
 
   const completeInterview = async () => {
-    if (isCompleting || !interview) return;
+    const epoch = workspaceEpochRef.current;
+    if (!epoch.active || epoch.completing || epoch.sending || isLoading || isCompleting || isSending || !interview) return;
+    epoch.completing = true;
     setIsCompleting(true);
     setSendError(null);
     try {
       const res = await api.completeStudyInterview(studyId, interviewId);
+      if (!epoch.active) return;
       setInterview((prev) =>
         prev
           ? {
@@ -330,31 +390,45 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
       if (Array.isArray(res.structured_insights)) setInsights(res.structured_insights);
       setRailOpen(true);
     } catch (err: any) {
-      setSendError({ kind: 'generic', detail: err?.message || 'Synthesis failed', requestId: fromUnknownError(err).requestId ?? null });
+      if (epoch.active) setSendError({ kind: 'generic', detail: err?.message || 'Synthesis failed', requestId: fromUnknownError(err).requestId ?? null });
     } finally {
-      setIsCompleting(false);
+      epoch.completing = false;
+      if (epoch.active) setIsCompleting(false);
     }
   };
 
-  const copyTurn = (turn: InterviewTurn) => {
+  const copyTurn = async (turn: InterviewTurn) => {
+    const epoch = workspaceEpochRef.current;
+    if (!epoch.active) return;
     const speaker = turn.role === 'persona' ? personaName : 'You';
-    navigator.clipboard.writeText(`${speaker}: ${turn.content}`);
-    setCopiedTurnId(turn.id);
-    setTimeout(() => setCopiedTurnId(null), 1800);
+    try {
+      await navigator.clipboard.writeText(`${speaker}: ${turn.content}`);
+      if (!epoch.active) return;
+      setCopiedTurnId(turn.id);
+      setTimeout(() => {
+        if (epoch.active) setCopiedTurnId(null);
+      }, 1800);
+    } catch {
+      if (epoch.active) setCopiedTurnId(null);
+    }
   };
 
   const jumpToTurn = (turnNumber: number) => {
+    const epoch = workspaceEpochRef.current;
+    if (!epoch.active) return;
     setRailOpen(false);
     setFlashTurn(turnNumber);
     turnRefs.current[turnNumber]?.scrollIntoView({
       behavior: prefersReducedMotion() ? 'auto' : 'smooth',
       block: 'center',
     });
-    setTimeout(() => setFlashTurn(null), 2600);
+    setTimeout(() => {
+      if (epoch.active) setFlashTurn(null);
+    }, 2600);
   };
 
   const exportTranscript = () => {
-    if (!interview) return;
+    if (!workspaceEpochRef.current.active || !interview) return;
     const header = `# Interview — ${personaName}\nObjective: ${interview.objective}\nDate: ${new Date(
       interview.created_at
     ).toLocaleString()}\n\n---\n\n`;
@@ -505,7 +579,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                       type="button"
                       className="iv-suggestion"
                       onClick={() => send(q)}
-                      disabled={isSending}
+                      disabled={isSending || isCompleting}
                     >
                       {q}
                     </button>
@@ -624,7 +698,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                       type="button"
                       className="iv-ghost-btn iv-primary"
                       onClick={() => send(pendingQuestionRef.current || input)}
-                      disabled={isSending}
+                      disabled={isSending || isCompleting}
                     >
                       Retry question
                     </button>
@@ -634,7 +708,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                       type="button"
                       className="iv-ghost-btn iv-primary"
                       onClick={completeInterview}
-                      disabled={isCompleting}
+                      disabled={isCompleting || isSending}
                     >
                       Generate synthesis
                     </button>
@@ -654,7 +728,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                     type="button"
                     className="iv-chip"
                     onClick={() => send(q)}
-                    disabled={isSending}
+                    disabled={isSending || isCompleting}
                     title={q}
                   >
                     {q}
@@ -670,7 +744,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                 onValueChange={setInput}
                 onSend={(text) => send(text)}
                 isLoading={isSending}
-                disabled={isSending}
+                disabled={isSending || isCompleting}
                 maxHeight={140}
                 placeholder={`Ask ${personaName.split(' ')[0]} about their world…`}
                 aria-label={`Interview question for ${personaName}`}

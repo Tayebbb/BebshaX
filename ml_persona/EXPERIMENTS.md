@@ -16,14 +16,14 @@ evaluated after resuming on 2026-09-09. Numerical results below come from the
 saved experiment and the completed held-out evaluation. The recovered model
 was not retrained or retuned after inspecting the test results.
 
-| Record | Local Path |
-| --- | --- |
-| Ingestion | `data/metadata/nemotron_personas_usa_ml.json` |
-| Preparation | `data/processed/ml_persona/preparation.json` |
-| Selection | `data/processed/ml_persona/experiment.json` |
+| Record              | Local Path                                                   |
+| ------------------- | ------------------------------------------------------------ |
+| Ingestion           | `data/metadata/nemotron_personas_usa_ml.json`                |
+| Preparation         | `data/processed/ml_persona/preparation.json`                 |
+| Selection           | `data/processed/ml_persona/experiment.json`                  |
 | Versioned selection | `data/processed/ml_persona/experiments/<model_version>.json` |
-| Final test | `data/processed/ml_persona/evaluation.json` |
-| Fitted bundle | `data/processed/ml_persona/model/` |
+| Final test          | `data/processed/ml_persona/evaluation.json`                  |
+| Fitted bundle       | `data/processed/ml_persona/model/`                           |
 
 These are local outputs, not clean-checkout download links. The selected model
 version is `7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247`.
@@ -52,13 +52,13 @@ are seed 42, 8,000 maximum features, 300 maximum iterations, diversity weight
 validation `retrieval.model.mrr`; a tie uses ascending canonical config JSON.
 The test partition does not select hyperparameters or refit the model.
 
-| Topics | Lexical Weight | Validation MRR |
-| --- | --- | --- |
-| 16 | 0.35 | 0.19710149642765074 |
-| 16 | 0.70 | 0.36913421943750657 |
-| 32 | 0.35 | 0.2383700341543759 |
-| 32 | 0.70 | **0.41811696827631073** |
-| Lexical TF-IDF baseline | 1.00 | **0.7166454265071603** |
+| Topics                  | Lexical Weight | Validation MRR          |
+| ----------------------- | -------------- | ----------------------- |
+| 16                      | 0.35           | 0.19710149642765074     |
+| 16                      | 0.70           | 0.36913421943750657     |
+| 32                      | 0.35           | 0.2383700341543759      |
+| 32                      | 0.70           | **0.41811696827631073** |
+| Lexical TF-IDF baseline | 1.00           | **0.7166454265071603**  |
 
 The last NMF configuration wins the configured grid but loses to the lexical
 baseline. The standalone lexical baseline is evaluated, not installed as the
@@ -88,11 +88,11 @@ The popularity baseline uses training occupation frequencies with seeded random
 ties. Neither baseline fits held-out labels. Retrieval results do not evaluate
 MMR batch selection quality directly; generation has separate structural probes.
 
-| Method | MRR | Recall@1 | Recall@5 | Recall@10 |
-| --- | --- | --- | --- | --- |
-| Selected model | 0.43265430767833196 | 0.3413729128 | 0.5306122449 | 0.6141001855 |
-| Lexical TF-IDF | 0.7516210382537256 | 0.6604823748 | 0.8719851577 | 0.9294990724 |
-| Expected random | 0.012741852676724338 | 0.0018552876 | 0.0092764378 | 0.0185528757 |
+| Method             | MRR                  | Recall@1     | Recall@5     | Recall@10    |
+| ------------------ | -------------------- | ------------ | ------------ | ------------ |
+| Selected model     | 0.43265430767833196  | 0.3413729128 | 0.5306122449 | 0.6141001855 |
+| Lexical TF-IDF     | 0.7516210382537256   | 0.6604823748 | 0.8719851577 | 0.9294990724 |
+| Expected random    | 0.012741852676724338 | 0.0018552876 | 0.0092764378 | 0.0185528757 |
 | Popular occupation | 0.011943168742486186 | 0.0018552876 | 0.0092764378 | 0.0129870130 |
 
 No tuning followed this test. The NMF blend is weaker than lexical TF-IDF on
@@ -106,17 +106,17 @@ Up to 32 seeded, scorable held-out queries request five training prototypes
 each. Oversized contexts would be skipped rather than truncated. The recorded
 test run produced 32 successful batches and 160 selected profiles.
 
-| Check | Result |
-| --- | --- |
-| Failed batches | 0 |
-| Incomplete / underage profiles | 0 / 0 |
-| Within-batch duplicate IDs / names / descriptions | 0 / 0 / 0 |
-| Bundle mismatch / location rewrite | 0 / 0 |
-| Exact normalized-source reuse | 1.0, expected for prototype selection |
-| Mean within-batch TF-IDF cosine distance | 0.8779632658 over 320 pairs |
-| Age Jensen-Shannon divergence | 0.030183258935548987, base 2, against held-out synthetic records |
-| Selected `not_in_workforce` occupation | 72 / 160, a material bias |
-| Warm five-persona generation | Mean 32.971875 ms; p95 34.304875 ms, two CPU threads |
+| Check                                             | Result                                                           |
+| ------------------------------------------------- | ---------------------------------------------------------------- |
+| Failed batches                                    | 0                                                                |
+| Incomplete / underage profiles                    | 0 / 0                                                            |
+| Within-batch duplicate IDs / names / descriptions | 0 / 0 / 0                                                        |
+| Bundle mismatch / location rewrite                | 0 / 0                                                            |
+| Exact normalized-source reuse                     | 1.0, expected for prototype selection                            |
+| Mean within-batch TF-IDF cosine distance          | 0.8779632658 over 320 pairs                                      |
+| Age Jensen-Shannon divergence                     | 0.030183258935548987, base 2, against held-out synthetic records |
+| Selected `not_in_workforce` occupation            | 72 / 160, a material bias                                        |
+| Warm five-persona generation                      | Mean 32.971875 ms; p95 34.304875 ms, two CPU threads             |
 
 Duplicate counts are within batches, not a promise of globally unique future
 requests. Age divergence excludes unknown/invalid ages and counts them
@@ -132,17 +132,17 @@ These direct local checks passed after upstream sync. Exact timings and scope
 are in the [post-sync verification record](IMPLEMENTATION_REPORT.md#post-sync-verification-2026-09-09);
 commit, push, and CI results are separate from these local passes.
 
-| Gate | Reported Result |
-| --- | --- |
-| Backend offline suite | 1,284 passed, 3 deselected; coverage 81.71%, floor 68% |
-| Independent ML suite | 295 passed; coverage 97% |
-| Frontend suite | 269 passed across 36 files after sync and the CSS token correction; final run 45.01 s |
-| Packaging regressions | Included in the full 1,284-test backend run; earlier standalone 26-case result retained in the implementation report's baseline |
-| Build / TypeScript / theme checks | Latest checks PASS after the four-declaration CSS token correction; 0 theme violations; no frontend `lint` script is declared |
-| Ruff | PASS after upstream sync; no subsequent Python changes |
-| Dependency consistency / Compose default and full syntax | `pip check` PASS; both quiet Compose syntax checks PASS |
-| Real CLI `smoke --backend --input ml_persona/examples/business.json` | PASS: source, prepared, model, generation, backend conversion |
-| Pyright | Unavailable; remaining static-analysis debt is advisory, not a passing Pyright run |
+| Gate                                                                 | Reported Result                                                                                                                 |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Backend offline suite                                                | 1,284 passed, 3 deselected; coverage 81.71%, floor 68%                                                                          |
+| Independent ML suite                                                 | 295 passed; coverage 97%                                                                                                        |
+| Frontend suite                                                       | 269 passed across 36 files after sync and the CSS token correction; final run 45.01 s                                           |
+| Packaging regressions                                                | Included in the full 1,284-test backend run; earlier standalone 26-case result retained in the implementation report's baseline |
+| Build / TypeScript / theme checks                                    | Latest checks PASS after the four-declaration CSS token correction; 0 theme violations; no frontend `lint` script is declared   |
+| Ruff                                                                 | PASS after upstream sync; no subsequent Python changes                                                                          |
+| Dependency consistency / Compose default and full syntax             | `pip check` PASS; both quiet Compose syntax checks PASS                                                                         |
+| Real CLI `smoke --backend --input ml_persona/examples/business.json` | PASS: source, prepared, model, generation, backend conversion                                                                   |
+| Pyright                                                              | Unavailable; remaining static-analysis debt is advisory, not a passing Pyright run                                              |
 
 After documentation push `453a403`, fresh CI dependencies exposed an exact
 Starlette/AnyIO deprecation during test collection. The approved warning-policy
@@ -161,13 +161,13 @@ changed evaluation. Linux CI must confirm the corrected fixture independently.
 
 These checks predate upstream sync and were not repeated:
 
-| Gate | Reported Result |
-| --- | --- |
-| Existing PostgreSQL integration tests | 2 passed against the isolated local database |
-| Python dependency audit | No known vulnerabilities; local `bebshax` and `bebshax-persona-ml` packages skipped as not on PyPI |
-| Backend Docker build and offline inference | PASS with reference-runtime constraints; five unique sources, ages 19/20/19/20/24, networking disabled |
-| Live API / database / provider flow | 5 unique ML profiles persisted/reloaded, 22 SYNTHETIC attributes reported, zero persona-generation LLM calls; real copilot, 10 role suggestions, 2 interview turns, 4 memory rows |
-| Live browser | Desktop 1440x1000 passed; mobile 390x844 showed clipped profile-header controls. Both had zero JS exceptions, console errors, or failed API reads |
+| Gate                                       | Reported Result                                                                                                                                                                   |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Existing PostgreSQL integration tests      | 2 passed against the isolated local database                                                                                                                                      |
+| Python dependency audit                    | No known vulnerabilities; local `bebshax` and `bebshax-persona-ml` packages skipped as not on PyPI                                                                                |
+| Backend Docker build and offline inference | PASS with reference-runtime constraints; five unique sources, ages 19/20/19/20/24, networking disabled                                                                            |
+| Live API / database / provider flow        | 5 unique ML profiles persisted/reloaded, 22 SYNTHETIC attributes reported, zero persona-generation LLM calls; real copilot, 10 role suggestions, 2 interview turns, 4 memory rows |
+| Live browser                               | Desktop 1440x1000 passed; mobile 390x844 showed clipped profile-header controls. Both had zero JS exceptions, console errors, or failed API reads                                 |
 
 The browser result predates upstream styling. The later token-only correction
 does not fix the mobile clipping or constitute browser re-verification.

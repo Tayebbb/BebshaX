@@ -78,3 +78,42 @@ async def test_retrieve_updates_last_accessed(service, session_maker) -> None:
 async def test_invalid_kind_rejected(service) -> None:
     with pytest.raises(ValueError):
         await service.remember("p1", "x", kind="prophetic")
+
+
+@pytest.mark.parametrize("commit", [False, True])
+async def test_remember_leaves_caller_transaction_in_control(
+    service, session_maker, commit: bool
+) -> None:
+    async with session_maker() as session:
+        record = await service.remember(
+            "p1", "Full caller-owned memory text.", session=session,
+            source="persona", conversation_id="conversation-test",
+        )
+        assert session.in_transaction()
+        row = await session.get(MemoryItems, record.id)
+        assert row is not None
+        assert row not in session.new
+        assert row.text == record.text
+        assert row.conversation_id == "conversation-test"
+        assert record.created_at is not None
+        if commit:
+            await session.commit()
+        else:
+            await session.rollback()
+
+    async with session_maker() as session:
+        rows = list((await session.execute(select(MemoryItems))).scalars())
+        assert [row.id for row in rows] == ([record.id] if commit else [])
+
+
+async def test_remember_deduplicates_within_caller_transaction_without_committing(
+    service, session_maker
+) -> None:
+    async with session_maker() as session:
+        first = await service.remember("p1", "I compare meal prices.", session=session)
+        second = await service.remember("p1", "I compare meal prices.", session=session)
+        assert first.id == second.id
+        assert session.in_transaction()
+        await session.rollback()
+
+    assert await service.list_for_persona("p1") == []
