@@ -76,6 +76,10 @@ filterwarnings = [
     # dependency change and needs an R8 review first. REMOVE WITH: httpx2 review + swap.
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
 
+    # Starlette 1.6.0 uses AnyIO's deprecated BlockingPortal alias.
+    # Remove when Starlette imports anyio.from_thread.BlockingPortal.
+    'ignore:^The anyio\.abc\.BlockingPortal alias is deprecated, use anyio\.from_thread\.BlockingPortal instead\.$:DeprecationWarning',
+
     # slowapi 0.1.9 calls asyncio.iscoroutinefunction (removed in Python 3.16).
     # Upstream fix required. REMOVE WITH: slowapi release that uses inspect.iscoroutinefunction.
     "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning",

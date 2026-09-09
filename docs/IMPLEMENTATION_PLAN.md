@@ -55,6 +55,30 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 > **Ordering note (2026-08-26):** entries are newest-on-top down to Phase 1 — EXCEPT the "Parts 1–7" series and four 2026-08-25 maintenance entries, which were appended _below_ Phase 1 (from "Universal AI Workflow" onward). They are left in place to avoid conflicting with in-flight branches; go by entry dates, not file position.
 
+### Maintenance (2026-09-09): Exact Starlette/AnyIO warning compatibility after publication
+
+Documentation and the approved theme-gate corrections were pushed in
+`453a403` after the independently published ML commits `7bab126` and `9269eff`.
+[The first CI run](https://github.com/Tayebbb/BebshaX/actions/runs/34297613416)
+passed frontend, secret-scan, and Compose jobs but stopped backend and migration
+test collection: fresh AnyIO 4.15.1 deprecates `anyio.abc.BlockingPortal`, which
+Starlette 1.6.0 still imports. The advisory typecheck job also failed; no passing
+Pyright result is implied.
+
+The user explicitly approved a narrow test-configuration fix, without package
+upgrades or application changes. The pytest warning policy now exempts only
+the anchored exact alias message. Its removal criterion is Starlette switching
+to `anyio.from_thread.BlockingPortal`. Three subprocess regression cases use
+the real backend configuration: the known message passes, while an unrelated
+deprecation and the same message with additional text still fail. All existing
+warnings-as-errors rules remain in place.
+
+Focused RED/GREEN was observed, then the complete backend gate passed:
+**1,287 passed / 3 deselected**, **81.64%** coverage, 474.91 seconds. Configured
+Ruff and editor diagnostics passed. This follow-up changes only test policy,
+its regression tests, and these verification records. Linux CI must be rerun
+after its push; local results are not a remote CI success claim.
+
 ### Maintenance (2026-09-09): Persona ML documentation sync and publication gate
 
 User requested updating all docs and pushing the completed continuation.

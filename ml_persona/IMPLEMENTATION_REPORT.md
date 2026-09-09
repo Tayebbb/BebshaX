@@ -148,6 +148,16 @@ are explicit so earlier live checks and publication are not conflated.
 | Compose syntax | Both quiet Compose configuration checks passed; this is not a full app/web rehearsal |
 | Real five-stage ML smoke | All 5 stages passed using the existing trained artifact, without LLM, network, or DB settings |
 
+The documentation was subsequently pushed in `453a403`. Its first CI run passed
+frontend, secret scanning, and Compose configuration, but fresh AnyIO 4.15.1
+made Starlette's deprecated `BlockingPortal` import fatal during test collection.
+The user-approved follow-up exempts only that exact third-party warning and
+adds three tests proving other deprecations still fail. The full local backend
+rerun passed **1,287 tests / 3 deselected**, **81.64%** coverage, in 474.91 s.
+No package upgrades, application changes, or blanket warning suppression were
+introduced. See the [implementation log](../docs/IMPLEMENTATION_PLAN.md) for
+the initial CI failure and follow-up publication status.
+
 The theme check initially failed on upstream CSS. The user-approved correction
 replaced four declarations across three stylesheets with existing theme tokens:
 the new-study send shadow and studies CTA shadow use `var(--reflect)`, the light

@@ -137,6 +137,13 @@ commit, push, and CI results are separate from these local passes.
 | Real CLI `smoke --backend --input ml_persona/examples/business.json` | PASS: source, prepared, model, generation, backend conversion |
 | Pyright | Unavailable; remaining static-analysis debt is advisory, not a passing Pyright run |
 
+After documentation push `453a403`, fresh CI dependencies exposed an exact
+Starlette/AnyIO deprecation during test collection. The approved warning-policy
+follow-up passed **1,287 backend tests / 3 deselected, 81.64% coverage**, including
+three tests that preserve fatal handling of unrelated warnings. This does not
+change the model, training, or evaluation. The [implementation log](../docs/IMPLEMENTATION_PLAN.md)
+separates the first CI failure from local follow-up verification.
+
 ### Earlier Live And Dependency Checks
 
 These checks predate upstream sync and were not repeated:
