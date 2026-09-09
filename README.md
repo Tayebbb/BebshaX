@@ -16,7 +16,7 @@ BebshaX is a synthetic-user / persona research system: a trained CPU-only model 
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/backend/`                                 | FastAPI backend (Python 3.12, async) — package `bebshax`                                                                                                                                |
 | `apps/frontend/`                                | React + Vite single-page app (added in Phase 12)                                                                                                                                        |
-| `ml_persona/`                                   | Independent TF-IDF/NMF training, source selection, CLI, model card, and evaluation; no LLM or GPU |
+| `ml_persona/`                                   | Independent TF-IDF/NMF training, source selection, CLI, model card, and evaluation; no LLM or GPU                                                                                       |
 | `services` (inside backend)                     | `bebshax.llm` policy layer → adapters → freellmpool / Ollama                                                                                                                            |
 | `data/raw` · `data/processed` · `data/metadata` | Datasets (reproducible via `scripts/`, not committed)                                                                                                                                   |
 | `scripts/`                                      | Setup, dataset, and evaluation tooling                                                                                                                                                  |
@@ -93,7 +93,7 @@ the API restarts.
 | Start only the backend     | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
 | Start only the frontend    | `npm --prefix apps/frontend run dev`                                            |
 | Start the Postgres service | `docker compose up -d --wait db`                                                |
-| Apply migrations           | `.venv/Scripts/python.exe -m alembic -c apps/backend/alembic.ini upgrade head`    |
+| Apply migrations           | `.venv/Scripts/python.exe -m alembic -c apps/backend/alembic.ini upgrade head`  |
 | Run backend tests          | `.venv\Scripts\python -m pytest apps/backend/tests -q`                          |
 | Build frontend             | `npm --prefix apps/frontend run build`                                          |
 

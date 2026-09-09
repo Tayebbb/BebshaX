@@ -1,0 +1,897 @@
+{
+  "started_at": "2026-09-08T21:50:04.181812+00:00",
+  "database": "bebshax_ml_verify_20260908_215004_181812",
+  "api_url": "http://127.0.0.1:8012",
+  "frontend_url": "http://127.0.0.1:5182",
+  "tracked_diff_sha256_before": "cdaaf578c50e402d81a723f1090ed5562d783eeec69eca6feb82054d94309f64",
+  "scope": "Live synthetic ML personas; scratch PostgreSQL only; no training or source edits",
+  "gates": {
+    "scratch_migration_pgvector": {
+      "status": "passed",
+      "classification": null,
+      "alembic_revision": "f2a3b4c5d6e7",
+      "expected_heads": [
+        "f2a3b4c5d6e7"
+      ],
+      "pgvector_version": "0.8.6",
+      "roundtrip": [
+        {
+          "sample_id": "sample_near",
+          "embedding": "[1,0,0]",
+          "dimensions": 3,
+          "distance": 0
+        },
+        {
+          "sample_id": "sample_far",
+          "embedding": "[0,1,0]",
+          "dimensions": 3,
+          "distance": 1
+        }
+      ],
+      "database": "bebshax_ml_verify_20260908_215004_181812"
+    },
+    "authentication": {
+      "status": "passed",
+      "duration_ms": 111,
+      "signup": "normal API flow with ephemeral example.test identity",
+      "authenticated_me": true,
+      "health": {
+        "status": "ok",
+        "app": "BebshaX",
+        "version": "0.1.0",
+        "environment": "development",
+        "demo_mode": false,
+        "db": "ok",
+        "local_tier_up": false,
+        "sink": {
+          "written": 2,
+          "dropped": 0,
+          "db_errors": 0
+        }
+      }
+    },
+    "ml_generation_no_llm": {
+      "status": "passed",
+      "duration_ms": 363,
+      "endpoint": "/api/study/generate-personas",
+      "profile_count": 5,
+      "unique_source_ids": 5,
+      "ages": [
+        22,
+        24,
+        18,
+        18,
+        21
+      ],
+      "synthetic_attribute_count": 22,
+      "observed_attribute_count": 0,
+      "llm_requests_before": 2,
+      "llm_requests_after": 2,
+      "served_by": [
+        "bebshax-persona-ml/7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247"
+      ],
+      "role_constraint": "soft, no student occupation assertion"
+    },
+    "ml_persistence_reload": {
+      "status": "passed",
+      "duration_ms": 231,
+      "individual_gets_compared": 5,
+      "list_count": 5,
+      "database_active_rows": 5,
+      "study_persona_count": 5,
+      "source_document_hashes_equal": true
+    },
+    "copilot_live": {
+      "status": "passed",
+      "duration_ms": 55182,
+      "endpoint": "/api/study/copilot",
+      "served_by": "llm7/codestral-latest",
+      "llm_request_id": "96bece413c9a43ebb394d5b0d4525ba9",
+      "reply_chars": 408
+    },
+    "role_collection_live": {
+      "status": "passed",
+      "duration_ms": 10717,
+      "endpoint": "/api/study/suggest-roles",
+      "role_count": 10,
+      "unique_role_ids": 10,
+      "saved_to_study": true
+    },
+    "interview_identity_memory": {
+      "status": "passed",
+      "duration_ms": 9424,
+      "real_turns": 2,
+      "transcript_persona_turns": 2,
+      "memory_count_before": 0,
+      "memory_count_after": 2,
+      "original_identity_unchanged": true,
+      "served_by": [
+        "llm7/codestral-latest",
+        "llm7/codestral-latest"
+      ],
+      "pgvector_memory_rows": 4,
+      "embedding_dimensions": 384,
+      "persona_authored_memory_rows": 2,
+      "interviewer_authored_memory_rows": 2
+    },
+    "desktop_ui": {
+      "status": "passed",
+      "duration_ms": 1709,
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "actual_ml_cards": 5,
+      "actual_identity_in_details": true,
+      "js_error_count": 0,
+      "live_api_reads": 1,
+      "screenshots": {
+        "cards": "C:\\Users\\moham\\AppData\\Local\\Temp\\bebshax_ml_verify_20260908_215004_181812_desktop_cards.png",
+        "details": "C:\\Users\\moham\\AppData\\Local\\Temp\\bebshax_ml_verify_20260908_215004_181812_desktop_details.png"
+      },
+      "bootstrap": "Real API signup/study/ML generation; UI navigation and profile opening through Playwright",
+      "forced_profile_click": "Allowed workaround for existing infinite animation",
+      "trace": "Not persisted: traces contain session authorization headers"
+    },
+    "mobile_ui": {
+      "status": "failed",
+      "classification": "app",
+      "duration_ms": 1449,
+      "error": "Persona detail text and controls must fit panel\n\n2 !== 0\n"
+    },
+    "route_provenance": {
+      "status": "passed",
+      "duration_ms": 119,
+      "persisted_requests": 7,
+      "successful_requests": 7,
+      "actual_routes": [
+        "llm7/codestral-latest"
+      ],
+      "freellmpool_confirmed_by_via": true
+    },
+    "tracked_files_preserved": {
+      "status": "passed",
+      "tracked_diff_unchanged": true
+    }
+  },
+  "limitations": [
+    "USA synthetic source data is a proxy, not observed customer evidence or Bangladesh validation.",
+    "A requested role is soft context; student occupation is not asserted.",
+    "Browser tool discovery is not exposed in this session; use only an existing Playwright runtime if available.",
+    "The initial in-memory session was discarded. A second five-profile scratch-only cohort was generated to complete failed probe checks; the first cohort and provider calls remain preserved.",
+    "Hard ages 18-24 passed. City fit is not guaranteed: selected profiles retain their actual USA locations rather than being rewritten to Austin.",
+    "Synthetic model answers, including any proposed meal budget, are not observed customer evidence.",
+    "API bootstrap was used; signup/study entry was not hand-typed through the UI. Persona card/profile navigation used the actual live UI.",
+    "Browser contexts were closed and no session state or login credentials were persisted. Preview URLs do not open an authenticated test account.",
+    "The final JSON is the only added repository artifact and is untracked, not ignored; no ignore settings were changed."
+  ],
+  "runtime": {
+    "playwright": "1.59.1",
+    "browser": "152.0.4191.66",
+    "dependencies_added": false,
+    "mocks": false,
+    "api_bootstrap": true,
+    "provider_requests": "sequential, total nine-minute budget; no capacity stress test"
+  },
+  "study_id": "study_35b9c0f01a5b4b08",
+  "persona_ids": [
+    "per_07bf7ee957ba",
+    "per_5b853a87ad99",
+    "per_e1df9679e32a",
+    "per_9cbdab675791",
+    "per_8e24850704d7"
+  ],
+  "source_record_ids": [
+    "6e75cb9f901671f07f8b0c98e88dfafcb0ec84334270969eacc6cd37b455bb48",
+    "62e19b80f509b6f05c0fb08d9e6087c7b07ea5e41a09a4716a18489c55711a8a",
+    "f5dc211c100a60d7f7e917363459270599c159b61a56cc9a62bd9f92b566ab9a",
+    "6dfc9c8496804a4c29c041cc868de12dbb9145c7f39eb97cb53045ab201259d2",
+    "37047526bfa749878b71275848b5287f2ad9a1a6f3a0a1f6ff8e6f03ace5142a"
+  ],
+  "model_versions": [
+    "bebshax-persona-ml/7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247"
+  ],
+  "ml_metadata": [
+    {
+      "persona_id": "per_07bf7ee957ba",
+      "source": "nvidia/Nemotron-Personas-USA",
+      "revision": "5b4cd35ab46490c1da1bd2b5a2324d6f871be180",
+      "record_id": "6e75cb9f901671f07f8b0c98e88dfafcb0ec84334270969eacc6cd37b455bb48",
+      "model_version": "7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247",
+      "selection_score": 0.36485921681880085,
+      "topic": 29
+    },
+    {
+      "persona_id": "per_5b853a87ad99",
+      "source": "nvidia/Nemotron-Personas-USA",
+      "revision": "5b4cd35ab46490c1da1bd2b5a2324d6f871be180",
+      "record_id": "62e19b80f509b6f05c0fb08d9e6087c7b07ea5e41a09a4716a18489c55711a8a",
+      "model_version": "7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247",
+      "selection_score": 0.37035330836691616,
+      "topic": 29
+    },
+    {
+      "persona_id": "per_e1df9679e32a",
+      "source": "nvidia/Nemotron-Personas-USA",
+      "revision": "5b4cd35ab46490c1da1bd2b5a2324d6f871be180",
+      "record_id": "f5dc211c100a60d7f7e917363459270599c159b61a56cc9a62bd9f92b566ab9a",
+      "model_version": "7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247",
+      "selection_score": 0.33273380641364403,
+      "topic": 29
+    },
+    {
+      "persona_id": "per_9cbdab675791",
+      "source": "nvidia/Nemotron-Personas-USA",
+      "revision": "5b4cd35ab46490c1da1bd2b5a2324d6f871be180",
+      "record_id": "6dfc9c8496804a4c29c041cc868de12dbb9145c7f39eb97cb53045ab201259d2",
+      "model_version": "7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247",
+      "selection_score": 0.29140107826728096,
+      "topic": 29
+    },
+    {
+      "persona_id": "per_8e24850704d7",
+      "source": "nvidia/Nemotron-Personas-USA",
+      "revision": "5b4cd35ab46490c1da1bd2b5a2324d6f871be180",
+      "record_id": "37047526bfa749878b71275848b5287f2ad9a1a6f3a0a1f6ff8e6f03ace5142a",
+      "model_version": "7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247",
+      "selection_score": 0.3726736624294917,
+      "topic": 29
+    }
+  ],
+  "copilot": {
+    "reply": "Thanks for sharing your business idea for affordable food delivery and meal planning for young adults in Austin, Texas! This sounds like a great opportunity to improve accessibility and convenience for this demographic. To help you validate this idea, we can conduct user interviews to understand their pain points and preferences. Could you please specify the age range of the young adults you're targeting?",
+    "served_by": "llm7/codestral-latest",
+    "llm_request_id": "96bece413c9a43ebb394d5b0d4525ba9",
+    "ready_for_approval": false,
+    "suggested_role_count": 0
+  },
+  "roles": [
+    {
+      "id": "role_1",
+      "role": "BUDGET-CONSCIOUS FOODIE",
+      "description": "Validates the affordability aspect of the product. Insights into their meal planning strategies and willingness to pay for convenience."
+    },
+    {
+      "id": "role_2",
+      "role": "BUSY PROFESSIONAL",
+      "description": "Primary user group. Insights into time constraints, preferences for meal planning, and willingness to use a delivery service."
+    },
+    {
+      "id": "role_3",
+      "role": "HEALTH-CONSCIOUS YOUNG ADULT",
+      "description": "Validates the health-focused meal planning aspect. Insights into dietary preferences, meal planning habits, and willingness to pay for healthy options."
+    },
+    {
+      "id": "role_4",
+      "role": "PARENT WITH KIDS",
+      "description": "Secondary stakeholder. Insights into family meal planning, preferences for kid-friendly meals, and willingness to pay for convenience."
+    },
+    {
+      "id": "role_5",
+      "role": "SINGLE PAYER",
+      "description": "Secondary stakeholder. Insights into financial constraints, preferences for affordable meal options, and willingness to use a delivery service."
+    },
+    {
+      "id": "role_6",
+      "role": "FOOD INFLUENCER",
+      "description": "Secondary stakeholder. Insights into social media trends, preferences for meal planning, and willingness to promote the product."
+    },
+    {
+      "id": "role_7",
+      "role": "LOCAL RESTAURANT OWNER",
+      "description": "Channel partner. Insights into local food trends, preferences for meal planning, and willingness to partner with the product."
+    },
+    {
+      "id": "role_8",
+      "role": "VEGETARIAN/VEGAN",
+      "description": "Edge case. Insights into dietary preferences, meal planning habits, and willingness to pay for specialized meal options."
+    },
+    {
+      "id": "role_9",
+      "role": "SKEPTICAL USER",
+      "description": "Edge case. Insights into concerns about food quality, delivery times, and overall satisfaction with meal planning services."
+    },
+    {
+      "id": "role_10",
+      "role": "POWER USER",
+      "description": "Edge case. Insights into advanced meal planning techniques, preferences for customization, and willingness to pay for premium features."
+    }
+  ],
+  "browser_artifacts": {
+    "desktop": {
+      "cards": "C:\\Users\\moham\\AppData\\Local\\Temp\\bebshax_ml_verify_20260908_215004_181812_desktop_cards.png",
+      "details": "C:\\Users\\moham\\AppData\\Local\\Temp\\bebshax_ml_verify_20260908_215004_181812_desktop_details.png"
+    },
+    "mobile": {
+      "cards": "C:\\Users\\moham\\AppData\\Local\\Temp\\bebshax_ml_verify_20260908_215004_181812_mobile_cards.png",
+      "details": "C:\\Users\\moham\\AppData\\Local\\Temp\\bebshax_ml_verify_20260908_215004_181812_mobile_details.png",
+      "failure": "C:\\Users\\moham\\AppData\\Local\\Temp\\bebshax_ml_verify_20260908_215004_181812_mobile_failure.png"
+    }
+  },
+  "browser_observations": {
+    "desktop": {
+      "actual_ml_cards": 5,
+      "actual_identity_in_details": true,
+      "js_errors": [],
+      "console_errors": [],
+      "failed_api_responses": [],
+      "live_persona_reads": 1,
+      "layout": {
+        "viewport_width": 1440,
+        "document_width": 1440,
+        "dialog_left": 270,
+        "dialog_right": 1170,
+        "overflowing_text": []
+      }
+    },
+    "mobile": {
+      "actual_ml_cards": 5,
+      "actual_identity_in_details": true,
+      "js_errors": [],
+      "console_errors": [],
+      "failed_api_responses": [],
+      "live_persona_reads": 1,
+      "layout": {
+        "viewport_width": 390,
+        "document_width": 390,
+        "dialog_left": 10,
+        "dialog_right": 380,
+        "overflowing_text": [
+          {
+            "tag": "BUTTON",
+            "text": "Regenerate",
+            "accessible_label": null,
+            "left": 337.453125,
+            "right": 453.8125
+          },
+          {
+            "tag": "BUTTON",
+            "text": "",
+            "accessible_label": "Close persona details",
+            "left": 461.8125,
+            "right": 491.8125
+          }
+        ]
+      }
+    }
+  },
+  "route_provenance": [
+    {
+      "request_id": "96bece413c9a43ebb394d5b0d4525ba9",
+      "task": "STRUCTURED_OUTPUT",
+      "pool": "structured",
+      "persona_id": null,
+      "conversation_id": null,
+      "routing_path": [
+        "[context estimate ~2338 tokens incl. max_output 1024 (default)]",
+        "[params temperature=0.5 max_output_tokens=None json_mode=True]",
+        "openrouter/dots-studio/dots-3-note-preview:free",
+        "openrouter/google/gemma-4-26b-a4b-it:free",
+        "openrouter/google/gemma-4-31b-it:free",
+        "openrouter/nex-agi/nex-n2.5-mini:free",
+        "freellmpool/auto",
+        "openrouter/google/gemma-4-26b-a4b-it:free [skipped: cooling down for 7434s more (provider-wide)]",
+        "openrouter/google/gemma-4-31b-it:free [skipped: cooling down for 7434s more (provider-wide)]",
+        "openrouter/nex-agi/nex-n2.5-mini:free [skipped: cooling down for 7434s more (provider-wide)]"
+      ],
+      "served_by_provider": "llm7",
+      "served_by_model": "codestral-latest",
+      "success": true,
+      "input_tokens": 884,
+      "output_tokens": 126,
+      "total_latency_ms": 55166.96689999662,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "provider": "openrouter",
+          "model": "dots-studio/dots-3-note-preview:free",
+          "via": null,
+          "success": false,
+          "failure_kind": "QUOTA_EXHAUSTED",
+          "latency_ms": 338.93059998808894
+        },
+        {
+          "attempt_number": 2,
+          "provider": "llm7",
+          "model": "codestral-latest",
+          "via": "freellmpool/auto",
+          "success": true,
+          "failure_kind": null,
+          "latency_ms": 52324.12859999749
+        }
+      ]
+    },
+    {
+      "request_id": "156ecee4e5044b149d003a5f2edf2adc",
+      "task": "STRUCTURED_OUTPUT",
+      "pool": "structured",
+      "persona_id": null,
+      "conversation_id": null,
+      "routing_path": [
+        "[context estimate ~3424 tokens incl. max_output 2500]",
+        "[params temperature=0.6 max_output_tokens=2500 json_mode=True]",
+        "openrouter/dots-studio/dots-3-note-preview:free [skipped: cooling down for 7379s more (provider-wide)]",
+        "openrouter/google/gemma-4-26b-a4b-it:free [skipped: cooling down for 7379s more (provider-wide)]",
+        "openrouter/google/gemma-4-31b-it:free [skipped: cooling down for 7379s more (provider-wide)]",
+        "openrouter/nex-agi/nex-n2.5-mini:free [skipped: cooling down for 7379s more (provider-wide)]",
+        "freellmpool/auto"
+      ],
+      "served_by_provider": "llm7",
+      "served_by_model": "codestral-latest",
+      "success": true,
+      "input_tokens": 508,
+      "output_tokens": 717,
+      "total_latency_ms": 10673.723200001405,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "provider": "llm7",
+          "model": "codestral-latest",
+          "via": "freellmpool/auto",
+          "success": true,
+          "failure_kind": null,
+          "latency_ms": 8355.529799999204
+        }
+      ]
+    },
+    {
+      "request_id": "936d4d09e05742a4b3e50fa9765ade04",
+      "task": "PERSONA_INTERVIEW",
+      "pool": "conversation",
+      "persona_id": "per_07bf7ee957ba",
+      "conversation_id": "118d6effcbfe44968d009f2bcfe7a79e",
+      "routing_path": [
+        "[context estimate ~2798 tokens incl. max_output 900]",
+        "[params temperature=0.7 max_output_tokens=900 json_mode=False]",
+        "freellmpool/auto",
+        "openrouter/dots-studio/dots-3-note-preview:free [skipped: cooling down for 7217s more (provider-wide)]",
+        "openrouter/google/gemma-4-26b-a4b-it:free [skipped: cooling down for 7217s more (provider-wide)]",
+        "openrouter/google/gemma-4-31b-it:free [skipped: cooling down for 7217s more (provider-wide)]",
+        "openrouter/nex-agi/nex-n2.5-mini:free [skipped: cooling down for 7217s more (provider-wide)]"
+      ],
+      "served_by_provider": "llm7",
+      "served_by_model": "codestral-latest",
+      "success": true,
+      "input_tokens": 1184,
+      "output_tokens": 148,
+      "total_latency_ms": 4162.099199995282,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "provider": "llm7",
+          "model": "codestral-latest",
+          "via": "freellmpool/auto",
+          "success": true,
+          "failure_kind": null,
+          "latency_ms": 1857.6277999964077
+        }
+      ]
+    },
+    {
+      "request_id": "d79b82b8c2fc4de9b8e9d3f1fc7a9f32",
+      "task": "STRUCTURED_OUTPUT",
+      "pool": "structured",
+      "persona_id": "per_07bf7ee957ba",
+      "conversation_id": "118d6effcbfe44968d009f2bcfe7a79e",
+      "routing_path": [
+        "[context estimate ~1037 tokens incl. max_output 300]",
+        "[params temperature=0.4 max_output_tokens=300 json_mode=True]",
+        "openrouter/dots-studio/dots-3-note-preview:free [skipped: cooling down for 7215s more (provider-wide)]",
+        "openrouter/google/gemma-4-26b-a4b-it:free [skipped: cooling down for 7215s more (provider-wide)]",
+        "openrouter/google/gemma-4-31b-it:free [skipped: cooling down for 7215s more (provider-wide)]",
+        "openrouter/nex-agi/nex-n2.5-mini:free [skipped: cooling down for 7215s more (provider-wide)]",
+        "freellmpool/auto"
+      ],
+      "served_by_provider": "llm7",
+      "served_by_model": "codestral-latest",
+      "success": true,
+      "input_tokens": 497,
+      "output_tokens": 76,
+      "total_latency_ms": 1848.712399994838,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "provider": "llm7",
+          "model": "codestral-latest",
+          "via": "freellmpool/auto",
+          "success": true,
+          "failure_kind": null,
+          "latency_ms": 1848.5756000009133
+        }
+      ]
+    },
+    {
+      "request_id": "9104eb521deb4ebba743a0044408a1d8",
+      "task": "PERSONA_INTERVIEW",
+      "pool": "conversation",
+      "persona_id": "per_07bf7ee957ba",
+      "conversation_id": "118d6effcbfe44968d009f2bcfe7a79e",
+      "routing_path": [
+        "[context estimate ~3089 tokens incl. max_output 900]",
+        "[params temperature=0.7 max_output_tokens=900 json_mode=False]",
+        "freellmpool/auto",
+        "openrouter/dots-studio/dots-3-note-preview:free [skipped: cooling down for 7213s more (provider-wide)]",
+        "openrouter/google/gemma-4-26b-a4b-it:free [skipped: cooling down for 7213s more (provider-wide)]",
+        "openrouter/google/gemma-4-31b-it:free [skipped: cooling down for 7213s more (provider-wide)]",
+        "openrouter/nex-agi/nex-n2.5-mini:free [skipped: cooling down for 7213s more (provider-wide)]"
+      ],
+      "served_by_provider": "llm7",
+      "served_by_model": "codestral-latest",
+      "success": true,
+      "input_tokens": 1377,
+      "output_tokens": 146,
+      "total_latency_ms": 1680.6259000004502,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "provider": "llm7",
+          "model": "codestral-latest",
+          "via": "freellmpool/auto",
+          "success": true,
+          "failure_kind": null,
+          "latency_ms": 1680.4878000111785
+        }
+      ]
+    },
+    {
+      "request_id": "372ffc4cb57c4cbe9f66852b191300cc",
+      "task": "STRUCTURED_OUTPUT",
+      "pool": "structured",
+      "persona_id": "per_07bf7ee957ba",
+      "conversation_id": "118d6effcbfe44968d009f2bcfe7a79e",
+      "routing_path": [
+        "[context estimate ~1240 tokens incl. max_output 300]",
+        "[params temperature=0.4 max_output_tokens=300 json_mode=True]",
+        "openrouter/dots-studio/dots-3-note-preview:free [skipped: cooling down for 7211s more (provider-wide)]",
+        "openrouter/google/gemma-4-26b-a4b-it:free [skipped: cooling down for 7211s more (provider-wide)]",
+        "openrouter/google/gemma-4-31b-it:free [skipped: cooling down for 7211s more (provider-wide)]",
+        "openrouter/nex-agi/nex-n2.5-mini:free [skipped: cooling down for 7211s more (provider-wide)]",
+        "freellmpool/auto"
+      ],
+      "served_by_provider": "llm7",
+      "served_by_model": "codestral-latest",
+      "success": true,
+      "input_tokens": 638,
+      "output_tokens": 86,
+      "total_latency_ms": 1186.5150000085123,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "provider": "llm7",
+          "model": "codestral-latest",
+          "via": "freellmpool/auto",
+          "success": true,
+          "failure_kind": null,
+          "latency_ms": 1186.384900007397
+        }
+      ]
+    },
+    {
+      "request_id": "2c77192333fe48c29ab223bc29d8e23b",
+      "task": "STRUCTURED_OUTPUT",
+      "pool": "structured",
+      "persona_id": "per_07bf7ee957ba",
+      "conversation_id": "118d6effcbfe44968d009f2bcfe7a79e",
+      "routing_path": [
+        "[context estimate ~1240 tokens incl. max_output 300]",
+        "[params temperature=0.4 max_output_tokens=300 json_mode=True]",
+        "openrouter/dots-studio/dots-3-note-preview:free [skipped: cooling down for 7210s more (provider-wide)]",
+        "openrouter/google/gemma-4-26b-a4b-it:free [skipped: cooling down for 7210s more (provider-wide)]",
+        "openrouter/google/gemma-4-31b-it:free [skipped: cooling down for 7210s more (provider-wide)]",
+        "openrouter/nex-agi/nex-n2.5-mini:free [skipped: cooling down for 7210s more (provider-wide)]",
+        "freellmpool/auto"
+      ],
+      "served_by_provider": "llm7",
+      "served_by_model": "codestral-latest",
+      "success": true,
+      "input_tokens": 638,
+      "output_tokens": 86,
+      "total_latency_ms": 240.83289998816326,
+      "attempts": [
+        {
+          "attempt_number": 1,
+          "provider": "llm7",
+          "model": "codestral-latest",
+          "via": "freellmpool/auto",
+          "success": true,
+          "failure_kind": null,
+          "latency_ms": 240.7064999861177
+        }
+      ]
+    }
+  ],
+  "tracked_diff_sha256_after": "cdaaf578c50e402d81a723f1090ed5562d783eeec69eca6feb82054d94309f64",
+  "finished_at": "2026-09-08T22:04:08.323390+00:00",
+  "summary": {
+    "passed": 10,
+    "failed": 1,
+    "not_run": 0,
+    "flaky_or_quarantined": 0
+  },
+  "initial_cohort": {
+    "study_id": "study_4564cf76d8e04f17",
+    "persona_ids": [
+      "per_d75719736f80",
+      "per_43faa27eddb3",
+      "per_861d4dbc938a",
+      "per_2e115b5562d6",
+      "per_53042cd8e242"
+    ],
+    "source_record_ids": [
+      "6e75cb9f901671f07f8b0c98e88dfafcb0ec84334270969eacc6cd37b455bb48",
+      "62e19b80f509b6f05c0fb08d9e6087c7b07ea5e41a09a4716a18489c55711a8a",
+      "f5dc211c100a60d7f7e917363459270599c159b61a56cc9a62bd9f92b566ab9a",
+      "6dfc9c8496804a4c29c041cc868de12dbb9145c7f39eb97cb53045ab201259d2",
+      "37047526bfa749878b71275848b5287f2ad9a1a6f3a0a1f6ff8e6f03ace5142a"
+    ],
+    "ml_generation": {
+      "status": "passed",
+      "duration_ms": 924,
+      "endpoint": "/api/study/generate-personas",
+      "profile_count": 5,
+      "unique_source_ids": 5,
+      "ages": [
+        22,
+        24,
+        18,
+        18,
+        21
+      ],
+      "synthetic_attribute_count": 22,
+      "observed_attribute_count": 0,
+      "llm_requests_before": 0,
+      "llm_requests_after": 0,
+      "served_by": [
+        "bebshax-persona-ml/7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247"
+      ],
+      "role_constraint": "soft, no student occupation assertion"
+    },
+    "copilot_and_roles_verified_here": true,
+    "postgres_value_comparison": "All five persona rows equal saved workflow snapshots for names, demographics, and detailed source data"
+  },
+  "probe_corrections": [
+    {
+      "classification": "test",
+      "issue": "PostgreSQL JSONB changes object key order; byte-ordered JSON comparison incorrectly failed",
+      "correction": "Recursively canonicalized object keys; arrays and every identity/source value still compared"
+    },
+    {
+      "classification": "test",
+      "issue": "Off-screen tabs inside an intentional horizontal scroller were misclassified as overflow",
+      "correction": "Exclude scroll-container content only; keep failing non-scrollable mobile header controls"
+    },
+    {
+      "classification": "test",
+      "issue": "Database provenance uses response_model/request_model, not served_by_model",
+      "correction": "Use real persisted model columns and require model presence"
+    }
+  ],
+  "interview": {
+    "conversation_id": "118d6effcbfe44968d009f2bcfe7a79e",
+    "persona_id": "per_07bf7ee957ba",
+    "source_record_id": "6e75cb9f901671f07f8b0c98e88dfafcb0ec84334270969eacc6cd37b455bb48",
+    "source_identity": {
+      "name": "Edward Huang",
+      "age": 22,
+      "location": "Milano, TX, USA",
+      "education": "high_school",
+      "occupation": "project_management_specialist",
+      "income_or_budget": "Not available in training data"
+    },
+    "identity_sha256_before": "250cd0ebddd4619b8f00d8bf371b2f9d6fd3429f674bb623ea5a3aaedaadd7d9",
+    "identity_sha256_after": "250cd0ebddd4619b8f00d8bf371b2f9d6fd3429f674bb623ea5a3aaedaadd7d9",
+    "replies": [
+      {
+        "reply": "I'm Edward Huang, 22 years old, a project management specialist living in Milano, TX. I currently plan my meals based on what I have in my pantry and fridge, trying to use ingredients that I already have on hand to save money. I usually make a list of what I need to buy each week and stick to it, but sometimes I deviate if I see something on sale. Affordable food delivery is useful to me, but I'm careful about how much I spend. I prefer to use services that have discounts or free delivery thresholds, and I try to order in bulk when possible to save on shipping costs. I also like to cook at home because it's cheaper and healthier than eating out.",
+        "served_by": "llm7/codestral-latest",
+        "identity_drift": false,
+        "drift_notes": [],
+        "retrieved_memories": []
+      },
+      {
+        "reply": "I think affordable meal planning and delivery would be great for me because I'm always looking for ways to save money. I'm careful with my spending, so I would want to make sure that the service or app I'm using is within my budget. I would also want to see if they have any discounts or promotions that I can take advantage of. I'm not sure how much I would spend on a meal delivery service, but I would probably try to keep it under $10 per meal. I would also want to make sure that the meals are healthy and fit my dietary needs. Overall, I think affordable meal planning and delivery could be a good fit for me if it's within my budget and meets my needs.",
+        "served_by": "llm7/codestral-latest",
+        "identity_drift": false,
+        "drift_notes": [],
+        "retrieved_memories": []
+      }
+    ],
+    "persisted_persona_memory_ids": [
+      "1f2a01d4e9ff4d08b654ea6ea91b6c49",
+      "6959cb8a512e40c38435f7d7d243b8b5"
+    ]
+  },
+  "database_final_evidence": {
+    "memory_rows": [
+      {
+        "memory_id": "6959cb8a512e40c38435f7d7d243b8b5",
+        "source": "persona",
+        "kind": "episodic",
+        "embedding_dimensions": 384
+      },
+      {
+        "memory_id": "5d3b02486dc1424cbdc6e27f2459de15",
+        "source": "interviewer",
+        "kind": "episodic",
+        "embedding_dimensions": 384
+      },
+      {
+        "memory_id": "1f2a01d4e9ff4d08b654ea6ea91b6c49",
+        "source": "persona",
+        "kind": "episodic",
+        "embedding_dimensions": 384
+      },
+      {
+        "memory_id": "30a70388ea054ec8b8586ebb6af40fd6",
+        "source": "interviewer",
+        "kind": "episodic",
+        "embedding_dimensions": 384
+      }
+    ],
+    "selected_profile_fit": [
+      {
+        "persona_id": "per_07bf7ee957ba",
+        "source_record_id": "6e75cb9f901671f07f8b0c98e88dfafcb0ec84334270969eacc6cd37b455bb48",
+        "age": 22,
+        "occupation": "project_management_specialist",
+        "location": "Milano, TX, USA"
+      },
+      {
+        "persona_id": "per_5b853a87ad99",
+        "source_record_id": "62e19b80f509b6f05c0fb08d9e6087c7b07ea5e41a09a4716a18489c55711a8a",
+        "age": 24,
+        "occupation": "child_family_or_school_social_worker",
+        "location": "Austin, TX, USA"
+      },
+      {
+        "persona_id": "per_8e24850704d7",
+        "source_record_id": "37047526bfa749878b71275848b5287f2ad9a1a6f3a0a1f6ff8e6f03ace5142a",
+        "age": 21,
+        "occupation": "securities_commodities_or_financial_services_sales_agent",
+        "location": "Austin, TX, USA"
+      },
+      {
+        "persona_id": "per_9cbdab675791",
+        "source_record_id": "6dfc9c8496804a4c29c041cc868de12dbb9145c7f39eb97cb53045ab201259d2",
+        "age": 18,
+        "occupation": "not_in_workforce",
+        "location": "Red Oak, TX, USA"
+      },
+      {
+        "persona_id": "per_e1df9679e32a",
+        "source_record_id": "f5dc211c100a60d7f7e917363459270599c159b61a56cc9a62bd9f92b566ab9a",
+        "age": 18,
+        "occupation": "bill_or_account_collector",
+        "location": "Fort Worth, TX, USA"
+      }
+    ],
+    "scratch_study_count": 2,
+    "scratch_persona_count": 10
+  },
+  "failures": [
+    {
+      "gate": "mobile_ui",
+      "classification": "app",
+      "severity": "medium",
+      "file": "apps/frontend/src/components/dashboard/views/PersonaLibraryView.tsx",
+      "line": 1087,
+      "related_line": 1149,
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "reproduction": [
+        "Authenticate through the normal API and create a study using the documented synthetic Austin meal-planning context.",
+        "Generate five ML personas using two soft role groups (3 + 2), each with hard min_age=18 and max_age=24.",
+        "Navigate the actual frontend to /persona-library, select the study, and open the first ML profile.",
+        "At 390x844, inspect the fixed-width persona header: Regenerate and the header close control extend beyond the panel's right edge."
+      ],
+      "expected": "Header text and controls remain within the mobile panel and reachable.",
+      "observed": {
+        "viewport_width": 390,
+        "document_width": 390,
+        "dialog_left": 10,
+        "dialog_right": 380,
+        "overflowing_text": [
+          {
+            "tag": "BUTTON",
+            "text": "Regenerate",
+            "accessible_label": null,
+            "left": 337.453125,
+            "right": 453.8125
+          },
+          {
+            "tag": "BUTTON",
+            "text": "",
+            "accessible_label": "Close persona details",
+            "left": 461.8125,
+            "right": 491.8125
+          }
+        ]
+      },
+      "workaround": "The lower Close button remains visible; the rendered identity itself is correct.",
+      "next_action": "Implementer: make the inspector header responsive with wrapping/stacking actions and shrinkable identity content. No production edit made by this runner.",
+      "screenshot": "C:\\Users\\moham\\AppData\\Local\\Temp\\bebshax_ml_verify_20260908_215004_181812_mobile_details.png"
+    }
+  ],
+  "identity_review": {
+    "first_reply_matches_source_name_age_occupation_location": true,
+    "basis": "First actual reply states Edward Huang, 22, project management specialist, Milano TX; persisted identity hashes are equal after both turns.",
+    "source_location_not_rewritten_to_austin": true,
+    "reported_retrieved_memories": [
+      0,
+      0
+    ],
+    "memory_scope": "Two answers and two researcher questions persisted with vectors. Cross-conversation retrieval was not separately exercised."
+  },
+  "server_handles": [
+    {
+      "service": "API",
+      "url": "http://127.0.0.1:8012",
+      "health_url": "http://127.0.0.1:8012/api/health",
+      "terminal_id": "59320fd2-9134-4f86-8275-07a9ae9bf60e",
+      "database": "bebshax_ml_verify_20260908_215004_181812"
+    },
+    {
+      "service": "Vite",
+      "url": "http://127.0.0.1:5182/persona-library",
+      "terminal_id": "d67b47d9-9e98-4526-ba03-339144c6a723",
+      "api": "http://127.0.0.1:8012/api"
+    }
+  ],
+  "commands_used": [
+    "docker exec bebshax-db createdb -U bebshax bebshax_ml_verify_20260908_215004_181812",
+    "E:/BebshaX/.venv/Scripts/python.exe -m alembic -c E:/BebshaX/apps/backend/alembic.ini upgrade head (scratch process environment, repository root CWD)",
+    "E:/BebshaX/.venv/Scripts/python.exe C:/Users/moham/AppData/Local/Temp/bebshax_ml_live_3576753c_20260909.py serve --report E:/BebshaX/data/metadata/ml_persona_live_20260909_20260908_215004_181812.json",
+    "E:/BebshaX/.venv/Scripts/python.exe C:/Users/moham/AppData/Local/Temp/bebshax_ml_live_3576753c_20260909.py frontend",
+    "node E:/BebshaX/apps/frontend/node_modules/vite/bin/vite.js E:/BebshaX/apps/frontend --config E:/BebshaX/apps/frontend/vite.config.ts --host 127.0.0.1 --port 5182 --strictPort (frontend process environment)",
+    "node C:/Users/moham/AppData/Local/Temp/bebshax_ml_journey_3576753c_20260909.cjs E:/BebshaX/data/metadata/ml_persona_live_20260909_20260908_215004_181812.json",
+    "node C:/Users/moham/AppData/Local/Temp/bebshax_ml_journey_3576753c_20260909.cjs E:/BebshaX/data/metadata/ml_persona_live_20260909_20260908_215004_181812.json --resume-local"
+  ],
+  "process_configuration": {
+    "backend": {
+      "BEBSHAX_DATABASE_URL": "compose-local PostgreSQL at 127.0.0.1:5433/bebshax_ml_verify_20260908_215004_181812; public compose credentials; no cloud database",
+      "BEBSHAX_ENVIRONMENT": "development",
+      "BEBSHAX_DEMO_MODE": "false",
+      "BEBSHAX_REQUIRE_EMAIL_VERIFICATION": "false",
+      "BEBSHAX_NEON_AUTH_URL": "",
+      "BEBSHAX_JWT_SECRET": "Generated in process, not recorded",
+      "BEBSHAX_ML_PERSONA_ARTIFACT_DIR": "E:/BebshaX/data/processed/ml_persona/model"
+    },
+    "frontend": {
+      "VITE_MOCK": "0",
+      "VITE_API_BASE": "http://127.0.0.1:8012/api",
+      "VITE_NEON_AUTH_URL": ""
+    },
+    "env_files": "Never inspected, printed, overwritten, or edited by the probes. Existing provider configuration was loaded normally by the application.",
+    "browser": "Cached Playwright 1.59.1 with installed Microsoft Edge 152.0.4191.66. tool_search/open_browser_page were unavailable; no dependencies or browsers downloaded."
+  },
+  "not_run": [
+    {
+      "check": "Full offline suites",
+      "reason": "Owner already reported 1279 backend, 295 ML, and 269 frontend tests passed; not rerun or claimed as this runner's results."
+    },
+    {
+      "check": "Provider capacity stress test",
+      "reason": "Optional and omitted to respect free-tier limits."
+    },
+    {
+      "check": "Standalone freellmpool smoke",
+      "reason": "Not needed: all seven successful persisted requests name freellmpool/auto as via and llm7/codestral-latest as the serving route."
+    },
+    {
+      "check": "Cross-conversation semantic memory retrieval",
+      "reason": "Stored memory and vectors verified; the two responses report no retrieved-memory items."
+    },
+    {
+      "check": "Docker image build",
+      "reason": "Explicitly reserved for main, outside this bounded live verification."
+    }
+  ],
+  "artifact_sanitization": {
+    "session_token_and_login_identifier_pattern_check": "passed",
+    "secrets_or_auth_headers_persisted": false,
+    "final_screenshots_mask_login_identity": true,
+    "browser_trace_persisted": false
+  }
+}

@@ -142,11 +142,11 @@ Scope: preserve the pending `ml_persona` and backend integration work; fix only 
 
 **R8 review (before npm install).** The committed [frontend manifest](../apps/frontend/package.json) already declares the following packages, and the existing [composer](../apps/frontend/src/components/ui/ai-prompt-box.tsx) imports them. Their missing [lockfile](../apps/frontend/package-lock.json) entries caused the coordinating sync's reported `npm ci` EUSAGE and TypeScript TS2307 failures. Registry license/activity metadata below was verified by the coordinating sync via `npm view` for exact versions 1.1.23, 1.2.16, and 13.2.0 respectively; this docs-only pass did not query the registry.
 
-| Existing dependency range | Provides / necessity | License | Registry `time.modified` (UTC) |
-| --- | --- | --- | --- |
-| `@radix-ui/react-dialog ^1.1.23` | Accessible dialogs used by the existing composer; retain rather than redesign. | MIT | `2026-07-31T15:49:47.510Z` |
-| `@radix-ui/react-tooltip ^1.2.16` | Accessible tooltips used by the existing composer; retain rather than redesign. | MIT | `2026-07-31T15:50:37.394Z` |
-| `framer-motion ^13.2.0` | Existing composer motion and mount/unmount transitions; retain rather than redesign. | MIT | `2026-09-02T15:25:46.139Z` |
+| Existing dependency range         | Provides / necessity                                                                 | License | Registry `time.modified` (UTC) |
+| --------------------------------- | ------------------------------------------------------------------------------------ | ------- | ------------------------------ |
+| `@radix-ui/react-dialog ^1.1.23`  | Accessible dialogs used by the existing composer; retain rather than redesign.       | MIT     | `2026-07-31T15:49:47.510Z`     |
+| `@radix-ui/react-tooltip ^1.2.16` | Accessible tooltips used by the existing composer; retain rather than redesign.      | MIT     | `2026-07-31T15:50:37.394Z`     |
+| `framer-motion ^13.2.0`           | Existing composer motion and mount/unmount transitions; retain rather than redesign. | MIT     | `2026-09-02T15:25:46.139Z`     |
 
 This review authorizes alignment of missing lock entries only: no newly selected library or deliberate version upgrades. `framer-motion` overlaps GSAP's role and is retained only as an existing dependency, with no expanded usage. The separate ML dependency review remains in [ml_persona/ARCHITECTURE.md](../ml_persona/ARCHITECTURE.md).
 
