@@ -17,11 +17,15 @@ def test_emergency_pool_is_local_first() -> None:
     assert POOLS["emergency"].adapters[0] == "ollama"
 
 
-def test_interactive_pools_are_local_first() -> None:
-    # Locked by the judged gate (2026-08-26): local 3B scored 9.65/10 ≥ 8/10
-    # bar at ~6s/turn; cloud free tiers measured 50-185s per turn.
-    assert POOLS["conversation"].adapters[0] == "ollama"
-    assert POOLS["fast"].adapters[0] == "ollama"
+def test_interactive_pools_prefer_openrouter() -> None:
+    # Owner decision 2026-09-09: local Ollama measured 14-24 s/turn on the dev
+    # machine under real load, so interactive replies prefer OpenRouter's fast
+    # free models. Ollama stays LAST as the on-machine fallback (asserted by
+    # test_every_pool_reaches_the_local_adapter).
+    assert POOLS["conversation"].adapters[0] == "openrouter"
+    assert POOLS["fast"].adapters[0] == "openrouter"
+    assert POOLS["conversation"].adapters[-1] == "ollama"
+    assert POOLS["fast"].adapters[-1] == "ollama"
 
 
 def test_every_pool_reaches_the_local_adapter() -> None:

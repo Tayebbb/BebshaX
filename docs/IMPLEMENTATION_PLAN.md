@@ -53,6 +53,174 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-09-09): Repository organization and verified dead-code cleanup
+
+Added [docs/README.md](README.md) as the documentation index and corrected the
+root README's package, test, deployment, and data ownership map. Historical
+reports retain their original paths; no bookmarked guides or audit evidence
+were relocated or deleted. The design-system inventory now distinguishes
+retained CSS from removed unused React wrappers.
+
+Reference-verified cleanup:
+
+- Removed unused private copilot LLM persona generation and grounding helpers,
+  their exclusive initials helper, unused claim-limit/list-field constants,
+  and unused imports. Active ML selection, provider routing, public prompts,
+  shared normalizers, and tested compatibility paths remain unchanged.
+- Removed unused PageHeader, Badge, and Skeleton component modules and their
+  barrel exports. Kept shared styles used directly by views. Removed the
+  unused DemoOne barrel export but retained its direct component test.
+- Removed unreachable auth-modal state, lazy import, and rendering from App.
+  All supported auth actions already use dedicated routes; the test-used
+  AuthModal component remains. The production build no longer emits its
+  unused chunk.
+- Frontend dependencies now belong only to its workspace manifest: removed
+  17 duplicate root declarations and synchronized only root dependency metadata
+  in the workspace lockfile. Kept Neon CLI configuration/dependencies and both
+  installation-root lockfiles. No resolved package version was changed.
+- Moved three standalone literal-address SSRF checks into
+  `apps/backend/tests/datasets/test_discovery_literal_addresses.py`. They now
+  run with the standard backend suite, keep default-resolver coverage, and
+  avoid a duplicate module basename. Removed the stale backend .dockerignore;
+  both images already use the root build context and ignore file.
+- The full backend check exposed a defaults test inheriting real environment
+  values despite `_env_file=None`. A module-local monkeypatch fixture now
+  isolates application settings and provides a test-only JWT, preserving
+  actual environment values after every test. No local configuration was edited.
+
+Verification so far: 84 targeted backend cleanup tests, 26 SSRF checks,
+43 configuration/deployment checks, and all 355 frontend tests (44 files)
+passed. The root workspace build passed in 4.09 seconds; unused-import lint
+is clean across backend, ML, and scripts. Offline npm CI dry-run with scripts
+disabled accepts the manifests; quiet full-profile Compose validation passed.
+No generated cache/build/debug artifacts were found tracked. Independent
+read-only reviews found no concrete cleanup regressions. The final backend
+rerun is in progress; its result will be added before task completion.
+
+Preserved: the pre-existing report-cohort fix and documentation edits, API and
+CLI entry points, ORM registrations and migrations, datasets/uploads, trained
+artifacts, environment files, installed dependencies, local runtime caches,
+test fixtures, and historical reports. No commit, push, dependency upgrade,
+schema change, model training, or service restart was performed by this cleanup.
+
+### Maintenance (2026-09-09): Interactive replies prefer OpenRouter
+
+Chat/interview replies were slow because the `conversation` and `fast` pools
+were local-first and `ollama/llama3.2:3b` measured 14–24 s/turn on the dev
+machine under real load (VRAM/RAM pressure), well above the ~6 s/turn of the
+2026-08-26 judged gate. Per owner decision, both interactive pools now order
+`openrouter → freellmpool → ollama` (OpenRouter's fast free models first),
+with Ollama kept last so cross-adapter fallback still terminates on-machine.
+This is a data-table change in [`bebshax/llm/pools.py`](../apps/backend/bebshax/llm/pools.py);
+`OPENROUTER_API_KEY` is configured in `.env`, so the first hop is live.
+
+Tests: `test_interactive_pools_are_local_first` → `test_interactive_pools_prefer_openrouter`
+(asserts OpenRouter first, Ollama last); the two `test_tournaments_e2e` cases
+that scripted the old Ollama-first order were updated (happy-path interview now
+served by OpenRouter; total-failure attempt/kind order flipped). Verified: LLM
+package 421 passed, tournaments/pools/evaluation-metrics green. `docs/ROUTING.md`
+updated (pool table, historical gate note, local-adapter summary). No routing
+logic, estimator, cooldown, or provenance changes; the judged gate data is
+retained in ROUTING.md as historical.
+
+### Maintenance (2026-09-09): Live E2E report recovery and final verification
+
+The authenticated E2E journey reached report v1 after one provider-timeout
+failure and a normal UI retry. The retry completed in 128.8 seconds via
+`llm7/codestral-latest`, storing `rep_e91cea576f964b32` for
+`study_2dce227cb3544449`. The study became `completed`, step 5, with one active
+persona. Its summary, three findings, and three recommendations reflected the
+six-turn interview; demand/confidence scores remained null and limitations
+explicitly described synthetic hypotheses rather than observed customers.
+Refresh restored the report on mobile without overflow. Export generated
+1,434 characters of `text/markdown` with the summary and recommendations;
+download-to-filesystem completion was unavailable in the embedded browser.
+
+The final persisted-data check found that report metrics counted the unused
+archived age-ineligible profile. Report cohort selection now includes active
+personas plus archived personas referenced by the study's conversations or
+behavioral results, excluding unused archived profiles without dropping
+historical evidence or rewriting previous report versions. Five failing
+regressions became green; the combined report scope passed 31 tests and
+independent source review approved it. Live v2 generation was attempted but
+failed after 156.7 seconds on provider exhaustion. V1 remained unchanged,
+readable, and exportable; its historical count of two was not overwritten.
+The corrected count still needs a successful live regeneration.
+
+Additional live negatives: duplicate CSV headers returned 400, wrong-password
+sign-in returned 401, valid synthetic-account sign-in and token verification
+returned 200. Temporary test credentials were removed from browser session
+storage. The 355-test frontend suite, 210-test affected backend scope, final
+build/theme checks, changed-code Ruff, and diff hygiene passed as recorded
+below; the later 31-test report scope overlaps that coverage and is not a new
+full backend gate. No secrets, migrations, model weights, provider quotas,
+commits, or pushes were changed. Existing concurrent work was preserved.
+
+Verdict: **READY WITH RESERVATIONS** for the exercised core journey, not an
+exhaustive production sign-off. The first report attempt recorded ~35,593
+tokens, OpenRouter quota cooldown, local 16,384-token ineligibility, and a
+151.05-second free-pool timeout. No input was shortened and no cooldown was
+cleared. Report/provider reliability, live corrected-v2 verification, real
+email delivery, broader AI quality, and the untested paths in
+[SHIP_READINESS_REPORT.md](SHIP_READINESS_REPORT.md) remain explicit limits.
+
+### Maintenance (2026-09-09): Authenticated live E2E fixes; report PENDING
+
+Verified a new synthetic test account against real authentication, Neon DB, and
+LLMs, not mocks, using study `study_2dce227cb3544449`
+(`E2eVerificationmealplanning`). Signup returned 201; automatic resend hit 500
+during stale database authentication. Study creation initially saved before a
+post-commit refresh failed with `InvalidPassword`/500. Creation now flushes,
+refreshes, and serializes before commit with rollback on failure; dashboard
+checks avoid duplicate creation. Fresh appendix study `study_cf3fad6503b34b40`
+returned 201, verifying the repaired path.
+
+Live/mock caches now have separate namespaces and user-filtered stored metadata;
+dashboard recents require ownership or explicit public-demo status. Step 1/2
+badges distinguish synthetic ML sources from observed evidence. Explicit age
+ranges in description/target text now intersect structured bounds, with invalid
+ranges rejected at 422: the live 25-45 request previously selected age 71, then
+regenerated and saved Cecelia, age 25, source `cookper_af0775501759`, in 4.418 s.
+Discovery now preserves overlength candidate metadata in
+`evaluation_details.raw_metadata`, records field-length errors and `import_failed`,
+and continues valid candidates; manual import rejects these errors with 422
+`invalid_metadata` before downloading.
+
+Interview detail GET reads saved suggestions or `[]` without LLM calls. Optional
+suggestions are bounded to 3 s before atomically persisting the reply pair,
+memories, and suggestion list (including empty lists). Two blocking replies
+returned 200 in 22.337/22.185 s via `ollama/llama3.2:3b`, preserving name/age and
+Sunday-plan/Wednesday-groceries continuity with 1 then 2 recalled memories. A
+third SSE turn returned 200 in 24.371 s; six unique turns numbered 1-6 persisted,
+and the canonical reply exactly matched the UI. Detail reads took 1.959/2.532 s
+instead of the earlier 35-60 s LLM-on-read path. Completion/synthesis succeeded;
+the UI displayed the read-only transcript, summary, and insight. The mobile
+actions row wraps; cold reload at width 390 showed main left 0, context toggle
+right 366, dismiss control right 163, and no overflow. Resize artifacts did not
+reproduce after cold reload.
+
+Appendix CSV upload returned 201 with six `weekly_spend` values 10-60 in steps
+of 10, mean/median 35, and two three-person categories at 50% each; study plus
+upload took 4,218 ms. Empty create returned 400; unauthenticated study/transcript
+reads returned 404/403. Reported checks: frontend 355 passed/44 files (61.29 s),
+TypeScript/Vite PASS (4.94 s), theme 0, dashboard chunk warning 690.39 KB;
+combined affected backend 210 passed (52.08 s), changed-backend Ruff PASS, no
+editor errors. Focused counts overlap: age 122 including 42 new; cache 15 new
+plus 32 neighboring passes; labels 22 and evidence 4. Independent reviews closed
+age/cache/study atomicity/discovery/manual-import/suggestion read-write findings
+with no remaining P1/P2. The earlier 1,639-test full backend/coverage run is
+historical, not repeated here.
+
+**PENDING:** report job `job_1d6f6ef7fea5` was still pending at 90 s; no report
+success or unconditional readiness is claimed. Real OTP delivery, payment,
+Google sign-in, 50-turn conversations, full Compose, cross-process concurrency,
+and entire accessibility coverage were not tested. Transient pool 5+5 starvation
+during concurrent research recovered without a claimed root fix; individual
+provider 404/402/429 responses do not mean all routes are down. Hypothetical
+interview routines are not observed evidence or broader population/hallucination
+validation. ML remains frozen, with no LLM fine-tuning. No new dependencies,
+schema/weights/environment changes, commits, or pushes in this pass.
+
 ### Maintenance (2026-09-09): Interview list independent loading
 
 The Interview Lab now renders saved interviews as soon as the list request

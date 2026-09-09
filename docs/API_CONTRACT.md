@@ -311,7 +311,7 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
     "max_age": 65
   }
   ```
-- Optional `min_age` / `max_age` are strict integers in 18-95, inclusive; the resolved minimum must not exceed the maximum. They are hard eligibility constraints, unlike audience/role/location wording, which is only relevance context. The response preserves the selected source occupation and location, never inferring income/budget or relabeling a profile to match the request.
+- Optional `min_age` / `max_age` are strict integers in 18-95, inclusive; the resolved minimum must not exceed the maximum. The shared adapter also parses explicit age ranges in description/target-audience text and intersects them with structured bounds. Invalid or conflicting ranges return 422 `ml_persona_unsupported_context`; role/location wording remains relevance context, not a hard constraint. The response preserves the selected source occupation and location, never inferring income/budget or relabeling a profile to match the request.
 - **Response `201 Created`:** a `PersonaProfile` serialized by [api/personas.py](../apps/backend/bebshax/api/personas.py), with the source-derived ML fields below. This is a schema description, not a live inference result.
 
   | Field                                                               | Local ML value / meaning                                                                                                                                                                  |
@@ -479,13 +479,24 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
   }
   ```
 
+#### Study creation and discovered dataset import (2026-09-09)
+
+- `POST /api/studies` flushes, refreshes, and serializes the study before committing; failures roll back. There is no post-commit refresh that can fail after saving and encourage a duplicate retry.
+- Discovery rejects overlength candidate metadata with `selection_status: "import_failed"`, retaining the full candidate in `evaluation_details.raw_metadata` and per-field `metadata_errors` (`actual_length`, `max_length`). Valid candidates in the batch continue.
+- Manual import of a candidate with `metadata_errors` returns 422 `invalid_metadata` before download; the error identifies the retained raw metadata for correction.
+
+#### `GET /api/studies/{study_id}/interviews/{interview_id}`
+
+- Reads persisted transcript, insights, and `suggested_questions` without LLM calls. Suggestions come from the latest turn containing a saved list, otherwise the saved conversation configuration, otherwise `[]`. A saved empty list is authoritative.
+
 #### `POST /api/studies/{study_id}/interviews/{interview_id}/messages/stream`
 
 - **Optional follow-ups (streaming and non-streaming):** shared finalization gives
-  model-written suggestion generation a 3-second timeout after answer persistence.
-  Fast suggestions are returned normally. On timeout, generation is cancelled
-  and the answer returns without generated suggestions; `suggested_questions`
-  is empty unless existing deterministic contradiction guidance is present.
+  model-written suggestion generation a 3-second timeout before the atomic write
+  of the turn pair and memories. The resulting `suggested_questions` list is
+  persisted with the reply and returned unchanged. On timeout, generation is
+  cancelled and an empty list is persisted unless existing deterministic
+  contradiction guidance is present.
   Primary answer generation, full context, memory, and routing are unchanged.
   This is not an end-to-end request deadline; async cancellation is cooperative.
 - **SSE variant** of the study-scoped message endpoint (same auth/ownership checks). `Content-Type: text/event-stream`. Events, in order:

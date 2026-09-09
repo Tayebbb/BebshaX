@@ -46,12 +46,13 @@ from bebshax.persona.generation import PersonaEngine
 _OWNER = "usr_judge_owner"
 
 # One scripted route per adapter slot; pool order decides who is tried first
-# (reasoning: openrouter → freellmpool → ollama; conversation: ollama first).
+# (reasoning/conversation: openrouter → freellmpool → ollama).
 _ROUTE_OR = RouteCandidate(provider="openrouter", model="meta-llama/llama-3.3-70b-instruct:free")
 _ROUTE_A = RouteCandidate(provider="groq", model="llama-3.1-8b-instant")
 _ROUTE_B = RouteCandidate(provider="llm7", model="codestral-latest")
 _ROUTE_LOCAL = RouteCandidate(provider="ollama", model="llama3.2:3b", context_window=8192)
 _LOCAL = "ollama/llama3.2:3b"
+_OPENROUTER = "openrouter/meta-llama/llama-3.3-70b-instruct:free"
 
 _BUSINESS = {
     "name": "ShomoySuchi",
@@ -350,14 +351,16 @@ async def test_tournament_a_happy_path_evidence_persona_interview_memory_evaluat
     groups_claim = "see the whole week of classes and study groups on one screen"
     lab = _install(
         app, tmp_path,
-        freellmpool=[FakeRoute(_ROUTE_A, replies=[_persona_json(
-            pain_points=[
-                _claim(shifts_claim, [_eid(_EV_SHIFTS)]),
-                {"value": "paper planners run out mid-semester", "provenance": "SYNTHETIC", "evidence_ids": []},
-            ],
-            goals=[_claim(groups_claim, [_eid(_EV_GROUPS)])],
-        )])],
-        ollama=[FakeRoute(_ROUTE_LOCAL, replies=_IN_CHARACTER[:2])],
+        openrouter=[FakeRoute(_ROUTE_OR, replies=[
+            _persona_json(
+                pain_points=[
+                    _claim(shifts_claim, [_eid(_EV_SHIFTS)]),
+                    {"value": "paper planners run out mid-semester", "provenance": "SYNTHETIC", "evidence_ids": []},
+                ],
+                goals=[_claim(groups_claim, [_eid(_EV_GROUPS)])],
+            ),
+            *_IN_CHARACTER[:2],
+        ])],
         evidence=[_EV_SHIFTS, _EV_GROUPS],
     )
 
@@ -376,7 +379,7 @@ async def test_tournament_a_happy_path_evidence_persona_interview_memory_evaluat
     for question in _QUESTIONS[:2]:
         res = _ask(api_test_app, headers, conversation_id, question)
         assert res.status_code == 200, res.text
-        assert res.json()["served_by"] == _LOCAL
+        assert res.json()["served_by"] == _OPENROUTER
         turn_numbers.append(res.json()["turn_number"])
     assert turn_numbers == [2, 4]
     turns = _turns(api_test_app, headers, conversation_id)
@@ -483,9 +486,9 @@ async def test_tournament_c_total_failure_is_explicit_and_never_fabricates(
     # every attempt made is in the body: 4 routes, ollama retried once (CONNECTION policy)
     assert len(body["attempts"]) == len(lab.calls()) == 5
     assert [a["failure_kind"] for a in body["attempts"]] == [
-        "CONNECTION", "CONNECTION", "SERVER_ERROR", "SERVER_ERROR", "SERVER_ERROR"
+        "SERVER_ERROR", "SERVER_ERROR", "SERVER_ERROR", "CONNECTION", "CONNECTION"
     ]
-    assert [a["provider"] for a in body["attempts"]] == ["ollama", "ollama", "groq", "llm7", "openrouter"]
+    assert [a["provider"] for a in body["attempts"]] == ["openrouter", "groq", "llm7", "ollama", "ollama"]
     assert all(set(a) == {"provider", "model", "failure_kind", "fallback_reason"} for a in body["attempts"])
     assert isinstance(body["routing_path"], list) and _LOCAL in body["routing_path"]
     # nothing fabricated: no reply key, no default fake reply, no provider detail

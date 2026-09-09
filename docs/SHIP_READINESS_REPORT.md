@@ -2,7 +2,57 @@
 
 > One page per subsystem: what is implemented, how it was verified in this pass, and its status. ✅ VERIFIED COMPLETE · 🟡 PARTIALLY COMPLETE · 🔴 BLOCKED · ⏸️ DEFERRED. Detailed checklists: [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md); audit narrative: [COMPETITION_AUDIT.md](COMPETITION_AUDIT.md) (re-audit 2026-09-08: 86/100, live AI audit 56/56); evidence classification: [RESEARCH_EVIDENCE.md](RESEARCH_EVIDENCE.md); attack matrix: [ADVERSARIAL_TESTS.md](ADVERSARIAL_TESTS.md).
 
-## Current ML maintenance status (2026-09-09)
+## Current authenticated E2E verification (2026-09-09)
+
+**READY WITH RESERVATIONS: core journey exercised; regeneration remains provider-dependent.** Live-run evidence uses
+a newly registered synthetic test account, real authentication, real Neon DB,
+and real LLMs, not mocks. Report job `job_1d6f6ef7fea5` failed after the free-pool
+attempt timed out at 151.05 seconds. The recorded full-context estimate was
+35,593 tokens; OpenRouter was quota-limited and local 16,384-token routes were
+ineligible. One normal UI retry succeeded in 128.8 seconds via
+`llm7/codestral-latest`, without clearing quotas or truncating input. Report v1
+`rep_e91cea576f964b32` persisted, the study became completed at step 5, and
+refresh restored its summary and enabled export. The export action generated
+1,434 characters of Markdown with summary and recommendations; the embedded
+browser did not expose a download-completion event, so filesystem download
+completion is not certified. The UI displayed failure, restored retry, and kept
+export disabled before a report existed. This section supersedes
+earlier readiness wording, not the historical phase records.
+
+Final consistency check found v1's `metrics.total_personas=2` counted an unused
+archived profile although the active study had one persona. Report selection
+now excludes unused archived profiles while retaining any archived persona
+referenced by that study's interviews or behavioral results. Five regression
+cases failed before the fix; 31 report tests passed afterward, and independent
+review approved the scope. An attempted v2 using the corrected code failed on
+provider exhaustion after 156.7 seconds. V1 remained unchanged and readable;
+its historical count was not rewritten. Live verification of the corrected
+count in a newly generated report remains outstanding.
+
+| Check | Result / scope |
+| ----- | -------------- |
+| Signup / study | Signup 201; automatic resend 500 during stale database authentication. Initial create saved before a post-commit refresh raised `InvalidPassword`/500. Pre-commit flush/refresh/serialization plus rollback now avoids that failure path; dashboard checks avoid duplicate creation. Fresh appendix study `study_cf3fad6503b34b40` returned 201. Real OTP delivery is unverified; development email was nonblocking. |
+| Sign-in / report recovery | Synthetic-account wrong password 401, valid sign-in 200, resulting `/auth/me` 200. Report v1 recovered through a normal UI retry; summary, three findings and three recommendations persisted, scores remained null. Failed v2 preserved v1 and completed study status. |
+| Main study / persona | `study_2dce227cb3544449`, title `E2e Verification: a Meal-Planning and Grocery-List App`. Explicit ages 25-45 previously yielded age 71; description/target age parsing now intersects structured bounds and rejects invalid ranges with 422. Regenerated Cecelia, age 25, occupation `cook`, persona `per_af0775501759`, saved/read back; generation returned in 4.418 s. |
+| Cache / provenance | Live/mock cache namespaces and user-filtered stored metadata; dashboard recents owner-scoped with explicit public demos. Step 1/2 badges distinguish ML sources from observed evidence. Reported regressions: cache 15 new plus 32 neighboring passes; labels 22 plus evidence 4; age 122 focused passes including 42 new. These counts overlap broader suites and are not additive. |
+| Discovery | CKAN geography up to 256 characters exceeded a varchar(128) field. Invalid metadata now retains raw values and field-length diagnostics with `import_failed`; valid batch candidates continue. Manual import rejects `metadata_errors` with 422 `invalid_metadata` before download. |
+| Interview / memory | Two blocking HTTP 200 replies: 22.337 s / 22.185 s, `ollama/llama3.2:3b`; Cecelia's name/age and Sunday planning/Wednesday groceries stayed consistent; 1 then 2 recalled memories. Third SSE HTTP 200: 24.371 s; six unique persisted turn numbers 1-6; canonical reply exactly matched the UI. Detail reads 1.959 s / 2.532 s, versus earlier LLM-on-read 35-60 s. GET now reads saved suggestions without LLM calls; writes bound optional suggestions to 3 s before atomic persistence. |
+| Completion / mobile | Completion and synthesis succeeded; actual UI showed read-only transcript, summary, and insight. Only the interview actions row wrap changed. After cold reload, main left edge was 0; at viewport 390, context toggle right edge 366 and verification dismiss right edge 163, no overflow. JavaScript resize artifacts were not reproduced after cold reload; this is not an entire accessibility audit. |
+| Appendix / negative paths | CSV upload 201, 6 rows: `weekly_spend` 10,20,30,40,50,60; mean/median 35; two three-person categories 50% each. New study plus upload: 4,218 ms. Duplicate-header CSV rejected with 400. Empty create 400; unauthenticated study read 404 and transcript read 403. |
+| Current checks | Frontend 355 passed / 44 files, 61.29 s; TypeScript/Vite PASS, 4.94 s; theme 0; dashboard chunk 690.39 KB warning. Combined affected backend 210 passed, 52.08 s, **not a full backend rerun**. Changed-backend Ruff PASS; no editor errors reported. Independent age/cache/study atomicity/discovery/manual-import/interview suggestion read-write reviews reported no remaining P1/P2 findings. |
+
+The earlier 1,639-test backend run and coverage are historical, not rerun evidence.
+Transient API pool 5+5 starvation during concurrent research recovered; no root
+fix is claimed. Provider-specific 404/402/429 responses do not establish global
+route failure. Interview routines are hypothetical model output, not observed
+evidence or population/hallucination validation. ML weights remain frozen; no
+LLM fine-tuning, new dependencies, schema/weights/environment changes, commits,
+or pushes in this pass. Payment, Google sign-in, 50-turn conversations, full
+Compose, cross-process concurrency, and entire accessibility coverage were not
+tested. The core journey reached a saved report, but long-context free-provider
+reliability and live v2 cohort-count verification remain reservations.
+
+## Earlier ML maintenance status (2026-09-09)
 
 The original 15 phases and dates are unchanged. The subsystem/test tables below
 are historical September 7–8 snapshots, not current ML acceptance or publication
@@ -30,11 +80,11 @@ passed at the recorded scopes; commit, push, and remote CI results are tracked
 separately in the [implementation log](IMPLEMENTATION_PLAN.md), not claimed
 successful here. See the [current readiness assessment](PRODUCTION_READINESS.md).
 
-## Current Hardening Verification (2026-09-09)
+## Earlier Hardening Verification (2026-09-09)
 
-**READY WITH RESERVATIONS.** The results below were executed locally during the
-hardening pass. Earlier evidence above and the September 7-8 tables below remain
-historical, not current acceptance gates.
+**Historical verdict: READY WITH RESERVATIONS.** The results below were executed
+locally during the earlier hardening pass. They are not the current E2E verdict;
+the authenticated run above remains **PENDING** full report.
 
 | Check                  | Current result / scope                                                                                                                                                                                                                                                                   |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

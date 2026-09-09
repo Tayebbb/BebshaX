@@ -1002,8 +1002,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         aria-label={`Start an interview with ${persona.name}`}
                         title={`Start an adaptive interview with ${persona.name}`}
                         style={{
-                          background: 'rgba(34, 211, 238, 0.1)',
-                          border: '1px solid rgba(34, 211, 238, 0.25)',
+                          background: 'rgba(34, 211, 238, 0.22)',
+                          border: '1px solid rgba(34, 211, 238, 0.55)',
                           borderRadius: '8px',
                           padding: '7px 10px',
                           color: 'var(--accent-cyan)',
@@ -1011,6 +1011,15 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          transition: 'all 0.16s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(34, 211, 238, 0.35)';
+                          e.currentTarget.style.borderColor = 'var(--accent-cyan)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(34, 211, 238, 0.22)';
+                          e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.55)';
                         }}
                       >
                         <MessageSquare size={14} />
@@ -1033,6 +1042,15 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          transition: 'all 0.16s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--accent-teal)';
+                          e.currentTarget.style.color = 'var(--accent-teal)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--accent-glow)';
+                          e.currentTarget.style.color = 'var(--accent-teal)';
                         }}
                       >
                         <Sliders size={14} />

@@ -17,9 +17,6 @@ const DashboardLayout = React.lazy(() =>
 const AuthPage = React.lazy(() =>
   import('./components/auth/AuthPage').then((m) => ({ default: m.AuthPage }))
 );
-const AuthModal = React.lazy(() =>
-  import('./components/auth/AuthModal').then((m) => ({ default: m.AuthModal }))
-);
 
 // Painted while a route chunk streams in. Deliberately just the page
 // background: a spinner that shows for 40ms reads as a flash, not as progress.
@@ -29,10 +26,6 @@ const RouteFallback: React.FC = () => (
 
 const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [authInitialView, setAuthInitialView] = useState<
-    'signin' | 'signup-options' | 'signup-email'
-  >('signin');
 
   const { isAuthenticated, isLoading } = useAuth();
   const { currentPath, navigate } = useNavigation();
@@ -60,9 +53,6 @@ const AppContent: React.FC = () => {
       navigate('/auth/signin');
     } else if (view === 'signup-options' || view === 'signup-email') {
       navigate('/auth/signup');
-    } else {
-      setAuthInitialView(view);
-      setIsAuthModalOpen(true);
     }
   };
 
@@ -220,17 +210,6 @@ const AppContent: React.FC = () => {
         onOpenApp={handleOpenApp}
         onOpenAuth={handleOpenAuth}
       />
-
-      {/* Modal Fallback */}
-      {isAuthModalOpen && (
-        <Suspense fallback={null}>
-          <AuthModal
-            isOpen={isAuthModalOpen}
-            initialView={authInitialView}
-            onClose={() => setIsAuthModalOpen(false)}
-          />
-        </Suspense>
-      )}
     </>
   );
 };

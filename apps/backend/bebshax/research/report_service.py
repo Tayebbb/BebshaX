@@ -245,7 +245,18 @@ class StudyReportService:
         personas = list(
             (
                 await self.session.execute(
-                    select(Personas).where(Personas.study_id == study_id)
+                    select(Personas).where(
+                        Personas.study_id == study_id,
+                        (Personas.status != "archived")
+                        | Personas.id.in_(
+                            select(Conversations.persona_id).where(Conversations.study_id == study_id)
+                        )
+                        | Personas.id.in_(
+                            select(BehavioralTestResults.persona_id).where(
+                                BehavioralTestResults.study_id == study_id
+                            )
+                        ),
+                    )
                 )
             ).scalars()
         )

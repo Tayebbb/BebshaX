@@ -13,14 +13,14 @@ from urllib.parse import urlparse
 
 from sqlalchemy import func, select
 
-from bebshax.config import Settings, get_settings
+from bebshax.config import get_settings
 from bebshax.db.engine import (
     create_async_sessionmaker,
     create_engine,
     init_database,
     normalize_async_database_url,
 )
-from bebshax.db.models import Base, Businesses, Studies
+from bebshax.db.models import Businesses, Studies
 from bebshax.auth.models import Users
 
 

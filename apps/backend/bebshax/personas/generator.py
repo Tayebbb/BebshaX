@@ -42,7 +42,6 @@ _MAX_ATTEMPTS_PER_BATCH = 2
 # Claim groups that carry per-claim provenance classes (the research-critical
 # ones); other list fields stay plain strings.
 _CLASSED_GROUPS = ("goals", "needs", "pain_points")
-_PLAIN_LIST_FIELDS = ("behaviors", "preferences", "motivations", "objections")
 _BIG_FIVE = ("openness", "conscientiousness", "extroversion", "agreeableness", "neuroticism")
 
 # Currency hints are DERIVED from the study's own text; nothing is assumed.

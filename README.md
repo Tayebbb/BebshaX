@@ -8,6 +8,10 @@ BebshaX is a synthetic-user / persona research system: a trained CPU-only model 
 
 **All 15 phases are complete** — the summary of what was built, on what, and with which limitations is [FINAL_IMPLEMENTATION_REPORT.md](FINAL_IMPLEMENTATION_REPORT.md). System internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/FAILOVER.md](docs/FAILOVER.md) · [docs/MODEL_REGISTRY.md](docs/MODEL_REGISTRY.md) · [docs/DEMO.md](docs/DEMO.md) (demo walkthrough + offline drill).
 
+**Find a guide:** [Documentation index](docs/README.md) groups setup, architecture,
+research, UI, exhibition, and historical records. Current verification belongs in
+[ship readiness](docs/SHIP_READINESS_REPORT.md), not old audit snapshots.
+
 **Working with an AI agent?** It auto-loads [AGENTS.md](AGENTS.md). To build the next milestone, just tell it: **“Implement phase N”** — specs live in [docs/PHASES.md](docs/PHASES.md).
 
 ## Repository layout
@@ -17,10 +21,19 @@ BebshaX is a synthetic-user / persona research system: a trained CPU-only model 
 | `apps/backend/`                                 | FastAPI backend (Python 3.12, async) — package `bebshax`                                                                                                                                |
 | `apps/frontend/`                                | React + Vite single-page app (added in Phase 12)                                                                                                                                        |
 | `ml_persona/`                                   | Independent TF-IDF/NMF training, source selection, CLI, model card, and evaluation; no LLM or GPU                                                                                       |
-| `services` (inside backend)                     | `bebshax.llm` policy layer → adapters → freellmpool / Ollama                                                                                                                            |
-| `data/raw` · `data/processed` · `data/metadata` | Datasets (reproducible via `scripts/`, not committed)                                                                                                                                   |
+| `apps/backend/bebshax/llm/`                     | LLM policy layer → adapters → freellmpool / Ollama                                                                                                                                    |
+| `apps/backend/tests/` · `apps/frontend/tests/` · `ml_persona/tests/` | Tests live with the application or package they verify                                                                                                           |
+| `data/raw/` · `data/processed/` · `data/uploads/` | Local datasets, trained artifacts, and uploads; Git-ignored                                                                                                                       |
+| `data/metadata/`                                | Tracked dataset manifests and verification evidence                                                                                                                                  |
 | `scripts/`                                      | Setup, dataset, and evaluation tooling                                                                                                                                                  |
-| `docs/`                                         | [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [FAILOVER.md](docs/FAILOVER.md) · [SETUP.md](docs/SETUP.md) · [DEMO.md](docs/DEMO.md) · [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) |
+| `deploy/`                                       | nginx configuration and frontend container build                                                                                                                                       |
+| `docs/`                                         | [Documentation index](docs/README.md), current guides, and dated audits                                                                                                                   |
+
+The root npm workspace owns launch commands and Neon CLI tooling; frontend
+dependencies are declared in [apps/frontend/package.json](apps/frontend/package.json).
+Both npm lockfiles are intentional: root workspace installs and standalone
+frontend container installs use different installation roots. Both container
+builds use the root [.dockerignore](.dockerignore).
 
 ## Quickstart (state: Phases 1–15 ✅ complete)
 

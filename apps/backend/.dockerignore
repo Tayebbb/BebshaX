@@ -1,3 +1,0 @@
-# STALE — kept only as a signpost. The backend image now builds from the REPO
-# ROOT context (docker-compose.yml: dockerfile apps/backend/Dockerfile), so
-# only the root .dockerignore applies. Edit e:\BebshaX\.dockerignore instead.

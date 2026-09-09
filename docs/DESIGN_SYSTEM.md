@@ -73,17 +73,22 @@ All primitives are CSS classes (`ui.css`) with thin React wrappers so inline-sty
 | Primitive                   | Class                                                                           | Notes                                                                                                      |
 | --------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `Button`                    | `.bx-btn --primary/--secondary/--ghost/--danger --sm/--lg --icon --block`       | `loading` → disabled + `aria-busy` + spinner. Icon-only buttons must pass `aria-label`.                    |
-| `PageHeader`                | `.bx-page-header .bx-eyebrow .bx-title .bx-lede`                                | Exactly one `h1` per view.                                                                                 |
+| Page header CSS             | `.bx-page-header .bx-eyebrow .bx-title .bx-lede`                                | Exactly one `h1` per view; no React wrapper is exported.                                                   |
 | `EmptyState`                | `.bx-empty`                                                                     | Title + _why it matters_ + next action. Never "No data".                                                   |
 | `Callout`                   | `.bx-callout --info/--success/--warn/--error`                                   | Errors get `role="alert"`, others `role="status"`.                                                         |
-| `Badge`                     | `.bx-badge --tone --mono` + `.bx-dot --live`                                    | Dot is decorative; text is mandatory.                                                                      |
+| Badge CSS                   | `.bx-badge --tone --mono` + `.bx-dot --live`                                    | Dot is decorative; text is mandatory; use domain evidence badges where appropriate.                       |
 | `ConfidenceBar`             | `.bx-conf`                                                                      | `role="meter"`; `null` → "not measured"; tone by meaning (≥50 % success, >0 warn, 0 muted).                |
 | `Metric`                    | `.bx-metric` (+ `.bx-metric-grid`)                                              | `null` → `—` with `aria-label="not measured"`; always carries a footnote.                                  |
-| `Skeleton` / `SkeletonText` | `.bx-skeleton .bx-skel-*`                                                       | Shape-true; shimmer off under reduced motion.                                                              |
+| Skeleton CSS                | `.bx-skeleton .bx-skel-*`                                                       | Shape-true; shimmer off under reduced motion; views use these classes directly.                           |
 | `CommandMenu`               | `.bx-cmdk*`                                                                     | Ctrl/⌘ K; `role="dialog"` + `combobox`/`listbox`; shares the Escape-stacking protocol via `useDialogA11y`. |
 | Shell                       | `.bx-nav-group .bx-nav-item .bx-study-chip .bx-topbar .bx-health .bx-skip-link` | `aria-current="page"` marks the active destination; the study chip marks the open study.                   |
 
 Existing domain components remain the canonical way to show honesty: `ProvenanceChip`, `EvidenceBadge`, `TemplateBadge`, `RequestIdTag`, `MemoryDisclosure`, `RouteDisclosure`, `ProvenanceTraceRow`, `EvaluationCard`.
+
+Unused `PageHeader`, `Badge`, `Skeleton`, and `SkeletonText` wrappers were removed
+during repository cleanup; their shared CSS remains available. The prompt-box
+demo and legacy auth modal are retained for their direct component tests, but
+are no longer exported or wired through unused application entry points.
 
 ## Interaction patterns
 

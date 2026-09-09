@@ -8,7 +8,6 @@ envelope (RULES.md R2) so the UI can say so and offer a retry.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import uuid
@@ -25,7 +24,6 @@ from bebshax.api.errors import APIError
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import EvidenceClaims, Personas, Studies
-from bebshax.llm.failures import LLMError
 from bebshax.llm.json_utils import parse_llm_json, unwrap_list
 from bebshax.llm.placeholders import contains_placeholder, is_placeholder
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
@@ -33,7 +31,6 @@ from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.personas.ml_adapter import build_business_context, get_persona_ml, to_workflow_persona
 from bebshax.personas.service import active_source_exclusions, lock_persona_parent
 from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
-from bebshax.utils.safe_errors import safe_error_summary
 
 logger = logging.getLogger(__name__)
 
@@ -498,56 +495,6 @@ class GeneratePersonasRequest(BaseModel):
     roles: list[PersonaGenerationRole] = Field(default_factory=list, max_length=10)
 
 
-def _get_initials(name: str) -> str:
-    parts = name.split()
-    return "".join(p[0].upper() for p in parts[:2]) if len(parts) >= 2 else name[:2].upper()
-
-
-# Claims shown to the model on the copilot persona path; mirrors the generator's
-# own prompt budget so a large study cannot blow the context window.
-_COPILOT_CLAIM_LIMIT = 6
-
-
-def _apply_evidence_grounding(
-    persona: dict[str, Any], evidence_claims: list[dict[str, Any]]
-) -> None:
-    """Score grounding from verified citations and label the basis honestly.
-
-    OBSERVED means "cited a claim we actually showed the model" — citation
-    existence, not semantic entailment. Unverifiable citations are stripped and
-    the attribute downgrades to INFERRED (downgrade-only, never upgraded).
-    ``grounding_basis`` tells the UI whether 0.0 is a measurement or an absence
-    of evidence, so a bare "0% Grounded" badge cannot imply the former.
-    """
-    alias_to_claim = {c["alias"]: c["claim_id"] for c in evidence_claims}
-    attributes = [a for a in (persona.get("attributes") or []) if isinstance(a, dict)]
-    observed = 0
-    for attr in attributes:
-        raw = attr.get("evidence")
-        cited = raw if isinstance(raw, list) else ([raw] if isinstance(raw, str) else [])
-        resolved = list(
-            dict.fromkeys(
-                alias_to_claim[str(cid).strip().upper()]
-                for cid in cited
-                if str(cid).strip().upper() in alias_to_claim
-            )
-        )
-        if resolved:
-            attr["evidence"] = resolved
-            attr["provenance_class"] = "OBSERVED"
-            observed += 1
-        else:
-            attr["evidence"] = None
-            attr["provenance_class"] = "INFERRED"
-
-    persona["grounding_ratio"] = round(observed / len(attributes), 4) if attributes else 0.0
-    persona["consistency_score"] = 0.0
-    persona["evidence_claim_count"] = len(evidence_claims)
-    persona["grounding_basis"] = (
-        "citations_verified" if evidence_claims else "no_evidence_retrieved"
-    )
-
-
 class FailedRole(BaseModel):
     role_id: str
     role: str
@@ -598,105 +545,6 @@ def _clean_persona_payload(p: dict[str, Any]) -> dict[str, Any]:
         )
     p.pop("created_at", None)  # the server owns timestamps
     return p
-
-
-async def _generate_persona_via_llm(
-    llm_router: Any,
-    role: PersonaRoleSuggestion,
-    *,
-    context_block: str,
-    count: int,
-    evidence_claims: Optional[list[dict[str, Any]]] = None,
-    other_roles: Optional[list[str]] = None,
-    avoid_names: Optional[list[str]] = None,
-) -> list[dict[str, Any]]:
-    """Personas for one role, written by the model for THIS study's context.
-
-    ``other_roles`` are the sibling roles generated for the same study, so each
-    persona is written to be distinct from them; ``avoid_names`` are names the
-    study already uses (a regeneration after a duplicate)."""
-    # NOTE: .replace(), not .format() — the template embeds a JSON example
-    # whose braces make str.format() raise KeyError.
-    prompt = (
-        PERSONA_GENERATION_PROMPT
-        .replace("{count}", str(count))
-        .replace("{study_prompt}", "see STUDY_CONTEXT below")
-        .replace("{role_title}", role.role or "")
-        .replace("{role_description}", role.description or "")
-        .replace("{role_id}", role.id or "")
-    )
-    prompt += "\n\n" + context_block
-    if other_roles:
-        prompt += (
-            "\n\nOther persona roles being generated for this same study: "
-            + "; ".join(other_roles)
-            + ". Make this persona clearly distinct from them in name, occupation, life situation and voice."
-        )
-    if avoid_names:
-        prompt += (
-            "\n\nNames already used by other personas in this study — do NOT reuse them or close variants: "
-            + ", ".join(avoid_names)
-            + "."
-        )
-    if evidence_claims:
-        claim_lines = "\n".join(f"- {c['alias']}: {c['claim_text']}" for c in evidence_claims)
-        prompt += (
-            "\n\n"
-            + untrusted_block("EVIDENCE_CLAIMS", claim_lines, source="evidence_claims")
-            + "\nWhen an attribute is directly supported by one of these claims, set its "
-            '"evidence" field to an array of the supporting claim ids (e.g. ["C1"]) and '
-            'its "provenance_class" to "OBSERVED". Never invent claim ids; leave '
-            '"evidence" null when no listed claim supports the attribute.'
-        )
-    llm_req = LLMRequest(
-        task=TaskType.PERSONA_NARRATIVE,
-        messages=[
-            ChatMessage(
-                role="system",
-                content=(
-                    "You are a synthetic persona generator. Return ONLY a valid JSON object, no markdown. "
-                    "Keep every description under 40 words so the full array always fits in the response. "
-                    "Derive country, city, currency and habits from the study context — never assume a region. "
-                    + UNTRUSTED_RULE
-                ),
-            ),
-            ChatMessage(role="user", content=prompt),
-        ],
-        json_mode=True,
-        temperature=0.8,
-        max_output_tokens=4096,
-    )
-
-    def _usable_name(p: Any) -> bool:
-        name = str(p.get("name") or "").strip() if isinstance(p, dict) else ""
-        return bool(name) and not is_placeholder(name)  # "Full Name" is the prompt's example
-
-    def _accept(parsed: Any) -> bool:
-        return any(_usable_name(p) for p in unwrap_list(parsed, keys=("personas",), item_keys=("name",)))
-
-    parsed, result, _attempts = await _complete_json(
-        llm_router,
-        llm_req,
-        accept=_accept,
-        error_code="persona_generation_unparseable",
-        what=f"personas for role '{role.role}'",
-    )
-    items = unwrap_list(parsed, keys=("personas",), item_keys=("name",))
-    served_by = _route_of(result)
-    personas: list[dict[str, Any]] = []
-    for p in items:
-        if not _usable_name(p):
-            continue
-        p = _clean_persona_payload(p)
-        p["role_id"] = role.id
-        p["role_title"] = role.role
-        p["generation_model"] = served_by  # the real route, never the prompt's example
-        p["status"] = "active"
-        p["version"] = 1
-        if not p.get("initials"):
-            p["initials"] = _get_initials(str(p["name"]))
-        personas.append(p)
-    return personas[:count]
 
 
 def _attr_titles(persona: dict[str, Any], category: str) -> list[str]:

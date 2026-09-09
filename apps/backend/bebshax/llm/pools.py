@@ -27,12 +27,14 @@ POOLS: dict[str, PoolConfig] = {
     p.name: p
     for p in [
         PoolConfig(name="reasoning", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=2),
-        # Local-first (gate 2026-08-26: llama3.2:3b judged 9.65/10 ≥ 8/10 bar at
-        # ~6s/turn vs 53s cloud — data/metadata/local_3b_gate_20260826_235633.json).
-        PoolConfig(name="conversation", adapters=[OLLAMA, FREELLMPOOL, OPENROUTER], max_concurrency=5),
+        # OpenRouter-first (owner decision 2026-09-09): local Ollama measured
+        # 14-24 s/turn on this machine under real load, so interactive replies now
+        # prefer OpenRouter's fast free models; Ollama stays last as the on-machine
+        # fallback so cross-adapter failover still terminates locally.
+        PoolConfig(name="conversation", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=5),
         PoolConfig(name="long_context", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=2),
         PoolConfig(name="structured", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=3),
-        PoolConfig(name="fast", adapters=[OLLAMA, FREELLMPOOL, OPENROUTER], max_concurrency=5),
+        PoolConfig(name="fast", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=5),
         PoolConfig(name="local", adapters=[OLLAMA], max_concurrency=2),
         PoolConfig(name="emergency", adapters=[OLLAMA, FREELLMPOOL], max_concurrency=2),
     ]

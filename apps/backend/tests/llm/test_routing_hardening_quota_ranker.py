@@ -81,7 +81,7 @@ def test_local_adapter_keeps_its_configured_position_in_every_pool_shape() -> No
         "openrouter",
         "ollama",
     ]
-    # local-first pool (conversation/fast): ollama stays FIRST, remotes re-rank behind it
+    # local-first pool shape: ollama stays FIRST, remotes re-rank behind it
     assert _providers(rank(_entries("ollama", "openrouter", "freellmpool"))) == [
         "ollama",
         "freellmpool",

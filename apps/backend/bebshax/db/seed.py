@@ -249,8 +249,7 @@ def _claim_provenance(profile: PersonaProfile) -> dict[str, list[dict[str, Any]]
 
 def workflow_persona_payload(profile: PersonaProfile, study_id: str) -> dict[str, Any]:
     """Serialize the seeded persona into the shape ``Studies.personas_data``
-    carries — the JSON the 5-step workflow reads (the contract ``api/copilot.py``
-    persists after ``_apply_evidence_grounding``).
+    carries — the JSON the 5-step workflow reads and ``api/copilot.py`` persists.
 
     Provenance is copied from the SAME PersonaProfile that ``save_persona``
     stores, and grounding is measured from it with the validator's ratio, so

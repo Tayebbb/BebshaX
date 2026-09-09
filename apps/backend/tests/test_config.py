@@ -1,4 +1,13 @@
+import pytest
+
 from bebshax.config import Settings
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for field in Settings.model_fields:
+        monkeypatch.delenv(f"BEBSHAX_{field.upper()}", raising=False)
+    monkeypatch.setenv("BEBSHAX_JWT_SECRET", "test-config-only-secret-not-for-production-0123456789")
 
 
 def test_defaults() -> None:

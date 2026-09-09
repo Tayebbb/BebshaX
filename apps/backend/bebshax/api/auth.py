@@ -1,13 +1,12 @@
-import asyncio
 import logging
 import secrets
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,9 +21,6 @@ from bebshax.config import get_settings
 logger = logging.getLogger(__name__)
 
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
-
-
-from pydantic import BaseModel, Field, field_validator
 
 
 class SignUpRequest(BaseModel):
