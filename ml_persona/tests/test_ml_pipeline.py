@@ -1,5 +1,6 @@
 """Offline lifecycle contracts using tiny, explicitly synthetic local corpora."""
 
+import builtins
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -19,6 +21,7 @@ SOURCE = "nvidia/Nemotron-Personas-USA"
 REVISION = "a" * 40
 PROCESSED = Path("data/processed/ml_persona")
 RUN_PROCESS = subprocess.run
+SOCKET_CONNECT = socket.socket.connect
 
 
 def _digest(path: Path) -> str:
@@ -85,8 +88,17 @@ def source_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             {**rows[0], "uuid": "underage", "age": 17}, {**rows[0], "uuid": "overage", "age": 96}]
     entry = _publish_source(tmp_path, rows)
     (tmp_path / "scripts").mkdir()
-    for name in ("setup_datasets.py", "persona_ml_dataset.py", "dataset_manifest.py"):
-        (tmp_path / "scripts" / name).write_text("", encoding="utf-8")
+    (tmp_path / "scripts/setup_datasets.py").write_text("", encoding="utf-8")
+    (tmp_path / "scripts/dataset_manifest.py").write_text(
+        "import json\nfrom types import SimpleNamespace\n"
+        f"entry = json.loads({json.dumps(entry)!r})\n"
+        "ML_DATASET_MANIFEST = [SimpleNamespace(**entry, to_dict=lambda: entry)]\n", encoding="utf-8",
+    )
+    (tmp_path / "scripts/persona_ml_dataset.py").write_text(
+        "import json\ndef verify_ml_dataset(entry, raw_dir, processed_dir, metadata_dir):\n"
+        "    metadata = json.loads((metadata_dir / (entry.dataset_id + '.json')).read_text())\n"
+        "    return metadata['actual_raw_sha256'], metadata['actual_processed_sha256']\n", encoding="utf-8",
+    )
 
     def official_verifier(arguments: list[str], **options: object) -> subprocess.CompletedProcess:
         assert arguments[0] == sys.executable and arguments[1] == "-c"
@@ -416,6 +428,253 @@ def test_smoke_reports_local_failed_stages_without_writing(tmp_path: Path, capsy
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.fixture
+def local_asyncio_socketpair(monkeypatch: pytest.MonkeyPatch) -> None:
+    original = socket.socketpair
+
+    def local_pair(*args: object, **kwargs: object) -> tuple[socket.socket, socket.socket]:
+        with monkeypatch.context() as local:
+            local.setattr(socket.socket, "connect", SOCKET_CONNECT)
+            return original(*args, **kwargs)
+
+    monkeypatch.setattr(socket, "socketpair", local_pair)
+
+
+@pytest.fixture
+def backend_smoke_case(prepared_case: Path, local_asyncio_socketpair: None) -> Path:
+    from bebshax_persona_ml import pipeline
+
+    pipeline.train(prepared_case, config=pipeline.TrainingConfig(**_tiny_config()),
+                   model_path=Path("artifacts/smoke-model"))
+    business = {"description": "electrical wiring circuits equipment", "location": "Requested City", "role": "electrician"}
+    (prepared_case / "business.json").write_text(json.dumps(business), encoding="utf-8")
+    return prepared_case
+
+
+def _backend_smoke(capsys: pytest.CaptureFixture, root: Path, *arguments: str) -> tuple[int, dict]:
+    return _invoke(capsys, root, "smoke", "--backend", "--input", "business.json",
+                   "--model", "artifacts/smoke-model", "--seed", "7", "--threads", "1", *arguments)
+
+
+@pytest.fixture
+def backend_adapter() -> ModuleType:
+    from bebshax.persona import schema
+    from bebshax.personas import ml_adapter
+
+    assert ml_adapter.GeneratedPersona is schema.GeneratedPersona
+    return ml_adapter
+
+
+def test_smoke_backend_validates_real_conversions_from_explicit_artifact(
+    backend_smoke_case: Path, backend_adapter: ModuleType, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ml_adapter = backend_adapter
+
+    root = backend_smoke_case
+    original_generate = ml_adapter.MLPersonaAdapter.generate
+    selected_ids = []
+    converted_ids = {name: [] for name in (
+        "to_generated_persona", "to_persona_profile", "to_persona_draft", "to_workflow_persona",
+    )}
+
+    async def generate(adapter, context, num_personas=5, seed=None):
+        assert adapter.artifact_dir == root / "artifacts/smoke-model"
+        assert context == BusinessContext.model_validate_json((root / "business.json").read_text())
+        assert num_personas == 5 and seed == 7
+        selections = await original_generate(adapter, context, num_personas, seed)
+        selected_ids.extend(selection.record.record_id for selection in selections)
+        return selections
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Smoke must not read backend settings")
+
+    monkeypatch.setattr(ml_adapter.MLPersonaAdapter, "generate", generate)
+    monkeypatch.setattr(ml_adapter.MLPersonaAdapter, "from_settings", forbidden)
+    for name in converted_ids:
+        original = getattr(ml_adapter, name)
+
+        def convert(selection, *args, original=original, name=name, **kwargs):
+            result = original(selection, *args, **kwargs)
+            converted_ids[name].append(selection.record.record_id)
+            return result
+
+        monkeypatch.setattr(ml_adapter, name, convert)
+    files = {path: path.read_bytes() for path in root.rglob("*") if path.is_file()}
+
+    status, result = _backend_smoke(capsys, root)
+
+    assert status == 0, result
+    assert result["ok"] is True and result["command"] == "smoke"
+    assert result["result"] == {"num_personas": 5, "stages": [
+        {"name": name, "ok": True} for name in ("source", "prepared", "model", "generation", "backend")
+    ]}
+    assert len(set(selected_ids)) == 5
+    assert all(set(identifiers) == set(selected_ids) for identifiers in converted_ids.values())
+    assert {path: path.read_bytes() for path in root.rglob("*") if path.is_file()} == files
+
+
+@pytest.mark.parametrize("converter, field_path, replacement", [
+    ("to_generated_persona", ("age",), 1),
+    ("to_generated_persona", ("name",), "private-changed-identity"),
+    ("to_generated_persona", ("description",), "private-changed-description"),
+    ("to_generated_persona", ("goals", 0, "value"), "private-invented-goal"),
+    ("to_generated_persona", ("goals", 0, "provenance"), "OBSERVED"),
+    ("to_generated_persona", ("goals", 0, "evidence_ids"), ["private-evidence"]),
+    ("to_generated_persona", ("detailed_attributes", "ml_provenance", "record_id"), "private-wrong-record"),
+    ("to_generated_persona", ("detailed_attributes", "source_documents"), {}),
+    ("to_persona_profile", ("id",), ""),
+    ("to_persona_profile", ("id",), "duplicate-profile"),
+    ("to_persona_profile", ("business_id",), "private-wrong-business"),
+    ("to_persona_profile", ("name",), "private-changed-profile"),
+    ("to_persona_profile", ("attributes", 0, "provenance_class"), "OBSERVED"),
+    ("to_persona_profile", ("attributes", 0, "evidence_ids"), ["private-evidence"]),
+    ("to_persona_profile", ("evidence",), [{"source": "private-source", "text": "private-fabricated-evidence"}]),
+    ("to_persona_draft", ("demographics", "age"), 94),
+    ("to_persona_draft", ("bio",), "private-changed-bio"),
+    ("to_persona_draft", ("dataset_refs", 0, "revision"), "private-wrong-revision"),
+    ("to_persona_draft", ("evidence_citations",), [{"id": "private-evidence"}]),
+    ("to_persona_draft", ("grounding_score",), 0.9),
+    ("to_persona_draft", ("confidence",), 0.9),
+    ("to_persona_draft", ("generation_model",), "private-wrong-model"),
+    ("to_workflow_persona", ("id",), " "),
+    ("to_workflow_persona", ("id",), "duplicate-workflow"),
+    ("to_workflow_persona", ("role_id",), "private-wrong-role"),
+    ("to_workflow_persona", ("role_title",), "private-wrong-title"),
+    ("to_workflow_persona", ("is_synthetic",), False),
+    ("to_workflow_persona", ("attributes", 0, "title"), "private-invented-goal"),
+    ("to_workflow_persona", ("attributes", 0, "provenance_class"), "OBSERVED"),
+    ("to_workflow_persona", ("attributes", 0, "evidence_ids"), ["private-evidence"]),
+    ("to_workflow_persona", ("attributes", 0, "evidence"), {"text": "private-evidence"}),
+    ("to_workflow_persona", ("grounding_ratio",), 0.9),
+    ("to_workflow_persona", ("evidence_claim_count",), 1),
+    ("to_workflow_persona", ("grounding_basis",), "observed"),
+])
+def test_smoke_backend_rejects_invalid_mapping_without_leaking_details(
+    backend_smoke_case: Path, backend_adapter: ModuleType, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch,
+    converter: str, field_path: tuple[str | int, ...], replacement: object,
+) -> None:
+    ml_adapter = backend_adapter
+
+    original = getattr(ml_adapter, converter)
+
+    def corrupt(*args, **kwargs):
+        converted = original(*args, **kwargs)
+        if not isinstance(converted, dict) and len(field_path) == 1 and not isinstance(replacement, (dict, list)):
+            return converted.model_copy(update={field_path[0]: replacement})
+        payload = converted if isinstance(converted, dict) else converted.model_dump()
+        target = payload
+        for part in field_path[:-1]:
+            target = target[part]
+        target[field_path[-1]] = replacement
+        return payload if isinstance(converted, dict) else type(converted).model_validate(payload)
+
+    monkeypatch.setattr(ml_adapter, converter, corrupt)
+    status, result = _backend_smoke(capsys, backend_smoke_case)
+
+    assert status == 1, result
+    assert result["ok"] is False and result["error"]["code"] == "smoke_failed"
+    assert result["result"]["stages"][-1]["name"] == "backend"
+    assert result["result"]["stages"][-1]["ok"] is False
+    assert all(stage["ok"] for stage in result["result"]["stages"][:-1])
+    assert "private" not in json.dumps(result).lower()
+
+
+@pytest.mark.parametrize("backend", [False, True])
+def test_smoke_backend_is_optional_and_unavailable_import_is_a_redacted_failure(
+    backend_smoke_case: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch, backend: bool,
+) -> None:
+    original = builtins.__import__
+
+    def unavailable(name: str, *args: object, **kwargs: object):
+        if name.split(".")[0] == "bebshax":
+            raise ImportError("private-backend-installation-detail")
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", unavailable)
+    status, result = _invoke(capsys, backend_smoke_case, "smoke", "--model", "artifacts/smoke-model",
+                             *(["--backend"] if backend else []))
+
+    assert status == (1 if backend else 0)
+    assert result["ok"] is not backend
+    assert len(result["result"]["stages"]) == (5 if backend else 4)
+    if backend:
+        assert result["error"]["code"] == "smoke_failed"
+        assert result["result"]["stages"][-1] == {
+            "name": "backend", "ok": False,
+            "error": {"code": "dependency_error", "message": "A required local dependency is unavailable."},
+        }
+    else:
+        assert all(stage["ok"] for stage in result["result"]["stages"])
+    assert "private" not in json.dumps(result).lower()
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_smoke_backend_rejects_empty_or_duplicate_selections(
+    backend_smoke_case: Path, backend_adapter: ModuleType, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch, empty: bool,
+) -> None:
+    ml_adapter = backend_adapter
+
+    original = ml_adapter.MLPersonaAdapter.generate
+
+    async def invalid_selection(*args, **kwargs):
+        selections = await original(*args, **kwargs)
+        return [] if empty else [selections[0]] * 5
+
+    monkeypatch.setattr(ml_adapter.MLPersonaAdapter, "generate", invalid_selection)
+    status, result = _backend_smoke(capsys, backend_smoke_case)
+    assert status == 1, result
+    assert result["result"]["stages"][-1]["ok"] is False
+
+
+def test_smoke_backend_reports_missing_artifact_without_fallback(
+    backend_smoke_case: Path, capsys: pytest.CaptureFixture,
+) -> None:
+    status, result = _backend_smoke(capsys, backend_smoke_case, "--model", "private-missing-model")
+    assert status == 1
+    assert result["ok"] is False and result["error"]["code"] == "smoke_failed"
+    assert result["result"]["stages"][-1]["name"] == "backend"
+    assert result["result"]["stages"][-1]["ok"] is False
+    assert "private" not in json.dumps(result).lower()
+
+
+def test_smoke_backend_fresh_process_avoids_settings_reads_and_external_services(backend_smoke_case: Path) -> None:
+    program = """import importlib.abc, socket, sys
+from pydantic_settings import BaseSettings
+def no_settings(*args, **kwargs):
+    raise AssertionError('Backend settings reads forbidden')
+BaseSettings.__init__ = no_settings
+class BlockExternal(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in {'openai', 'anthropic', 'freellmpool', 'ollama', 'litellm',
+                                     'asyncpg', 'psycopg', 'psycopg2', 'aiosqlite', 'sqlite3'}:
+            raise AssertionError(f'Forbidden backend smoke dependency: {fullname}')
+sys.meta_path.insert(0, BlockExternal())
+original_connect = socket.socket.connect
+original_pair = socket.socketpair
+def no_network(*args, **kwargs):
+    raise AssertionError('Network forbidden')
+def local_pair(*args, **kwargs):
+    socket.socket.connect = original_connect
+    try:
+        return original_pair(*args, **kwargs)
+    finally:
+        socket.socket.connect = no_network
+socket.socketpair = local_pair
+socket.socket.connect = no_network
+socket.create_connection = no_network
+from bebshax_persona_ml.cli import main
+raise SystemExit(main(['--root', sys.argv[1], 'smoke', '--backend', '--input', 'business.json',
+                       '--model', 'artifacts/smoke-model', '--seed', '7', '--threads', '1']))
+"""
+    completed = RUN_PROCESS([sys.executable, "-c", program, str(backend_smoke_case)], cwd=backend_smoke_case,
+                            capture_output=True, text=True, encoding="utf-8", check=False)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert not completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["ok"] is True
+    assert result["result"]["stages"][-1] == {"name": "backend", "ok": True}
+
+
 def test_download_delegates_only_setup_script_with_active_python_and_cwd(
     source_case: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
 ) -> None:
@@ -513,6 +772,91 @@ def _rehash_partition(root: Path, name: str, rows: list[dict]) -> None:
     (directory / "preparation.json").write_text(json.dumps(metadata), encoding="utf-8")
 
 
+@pytest.mark.parametrize("operation", ["validate", "train"])
+def test_rehashed_goal_is_rejected_before_fitting_or_saving(
+    prepared_case: Path, monkeypatch: pytest.MonkeyPatch, operation: str,
+) -> None:
+    from bebshax_persona_ml import pipeline
+
+    directory = prepared_case / PROCESSED
+    rows = [json.loads(line) for line in (directory / "train.jsonl").read_text().splitlines()]
+    rows[0]["goals"] = ["Pursue a forged ambition absent from the approved source."]
+    _rehash_partition(prepared_case, "train", rows)
+    original = {path: path.read_bytes() for path in prepared_case.rglob("*") if path.is_file()}
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Forged records reached model fitting or saving")
+
+    monkeypatch.setattr(PersonaModel, "fit", forbidden)
+    monkeypatch.setattr(PersonaModel, "save", forbidden)
+    with pytest.raises(pipeline.PipelineError, match="(?i)source|membership"):
+        getattr(pipeline, operation)(prepared_case)
+
+    assert {path: path.read_bytes() for path in prepared_case.rglob("*") if path.is_file()} == original
+
+
+def test_validate_rejects_rehashed_split_membership_without_identity_overlap(prepared_case: Path) -> None:
+    from bebshax_persona_ml import pipeline
+
+    directory = prepared_case / PROCESSED
+    training = [json.loads(line) for line in (directory / "train.jsonl").read_text().splitlines()]
+    testing = [json.loads(line) for line in (directory / "test.jsonl").read_text().splitlines()]
+    training[0], testing[0] = testing[0], training[0]
+    _rehash_partition(prepared_case, "train", training)
+    _rehash_partition(prepared_case, "test", testing)
+
+    with pytest.raises(pipeline.PipelineError, match="(?i)source|membership"):
+        pipeline.validate(prepared_case)
+
+
+@pytest.mark.parametrize("field,value", [("hf_repo_id", "private/forged-source"), ("manifest_sha256", "b" * 64)])
+def test_validate_rejects_resealed_source_labels_or_manifest(
+    prepared_case: Path, field: str, value: str,
+) -> None:
+    from bebshax_persona_ml import pipeline
+
+    directory = prepared_case / PROCESSED
+    path = directory / "preparation.json"
+    report = json.loads(path.read_text())
+    report["source"][field] = value
+    path.write_text(json.dumps(report), encoding="utf-8")
+    for split in ("train", "validation", "test"):
+        rows = [json.loads(line) for line in (directory / f"{split}.jsonl").read_text().splitlines()]
+        if field == "hf_repo_id":
+            for row in rows:
+                row["source"] = value
+        _rehash_partition(prepared_case, split, rows)
+
+    with pytest.raises(pipeline.PipelineError, match="(?i)approved source"):
+        pipeline.validate(prepared_case)
+
+
+@pytest.mark.parametrize("approved", [True, False])
+def test_validate_rechecks_approved_source_once(
+    prepared_case: Path, monkeypatch: pytest.MonkeyPatch, approved: bool,
+) -> None:
+    from bebshax_persona_ml import pipeline
+
+    original = subprocess.run
+    calls = []
+
+    def verifier(arguments: list[str], **options: object) -> subprocess.CompletedProcess:
+        calls.append(arguments)
+        if not approved:
+            return subprocess.CompletedProcess(arguments, 1, "", "sensitive verification detail")
+        return original(arguments, **options)
+
+    monkeypatch.setattr(subprocess, "run", verifier)
+    if approved:
+        report = json.loads((prepared_case / PROCESSED / "preparation.json").read_text())
+        assert pipeline.validate(prepared_case) == report
+    else:
+        with pytest.raises(pipeline.PipelineError, match="Approved source verification failed") as failure:
+            pipeline.validate(prepared_case)
+        assert "sensitive" not in str(failure.value)
+    assert len(calls) == 1
+
+
 @pytest.mark.parametrize("field", ["record_id", "name", "description", "format_description"])
 def test_validate_rejects_rehashed_cross_split_identity_overlap(prepared_case: Path, field: str) -> None:
     from bebshax_persona_ml import pipeline
@@ -584,18 +928,6 @@ def test_actual_verification_subprocess_uses_only_root_fixture_scripts(
 ) -> None:
     from bebshax_persona_ml import pipeline
 
-    metadata = json.loads((source_case / f"data/metadata/{DATASET_ID}.json").read_text())
-    entry = {key: metadata[key] for key in ("dataset_id", "hf_repo_id", "pinned_revision", "training_allowed", "profiles", "files_or_patterns")}
-    (source_case / "scripts/dataset_manifest.py").write_text(
-        "import json\nfrom types import SimpleNamespace\n"
-        f"entry = json.loads({json.dumps(entry)!r})\n"
-        "ML_DATASET_MANIFEST = [SimpleNamespace(**entry, to_dict=lambda: entry)]\n", encoding="utf-8",
-    )
-    (source_case / "scripts/persona_ml_dataset.py").write_text(
-        "import json\ndef verify_ml_dataset(entry, raw_dir, processed_dir, metadata_dir):\n"
-        "    metadata = json.loads((metadata_dir / (entry.dataset_id + '.json')).read_text())\n"
-        "    return metadata['actual_raw_sha256'], metadata['actual_processed_sha256']\n", encoding="utf-8",
-    )
     monkeypatch.setattr(subprocess, "run", RUN_PROCESS)
     assert pipeline.prepare(source_case)["source"]["hf_repo_id"] == SOURCE
 

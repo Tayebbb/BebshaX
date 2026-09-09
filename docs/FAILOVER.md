@@ -2,6 +2,14 @@
 
 The complete failure-handling contract: pools, the task map, the closed failure taxonomy, cooldowns, and context budgeting. Strategy background lives in [ROUTING.md](ROUTING.md); architecture context in [ARCHITECTURE.md](ARCHITECTURE.md).
 
+**Scope after Persona ML maintenance (2026-09-09):** these are LLM routing
+policies. All four production persona-generation paths use the separate local
+`MLPersonaAdapter`. A missing/invalid bundle returns 503 `ml_persona_unavailable`;
+unsupported/exhausted selection returns 422 `ml_persona_unsupported_context`.
+These API errors are not new `FailureKind` values and never trigger LLM persona
+fallback. Copilot, interviews, and other LLM features retain this routing layer.
+See [PERSONA_ENGINE.md](PERSONA_ENGINE.md).
+
 ## Pools (config-as-data, `llm/pools.py`)
 
 Order inside a pool = preference order. Bold = local-first.
@@ -30,6 +38,9 @@ Order inside a pool = preference order. Bold = local-first.
 | emergency    | EMERGENCY_FALLBACK                                                                                                                |
 
 Both tables are data, not branches — extending them means adding a row plus a test (`tests/llm/test_pools.py` enforces every task type is mapped).
+
+Persona-generation/refinement/validation task values remain for compatibility;
+their table entries do not imply production LLM persona writing.
 
 ## Failure taxonomy (closed set, `llm/failures.py`)
 
@@ -82,6 +93,11 @@ freellmpool applies its `timeout` argument **per inner target**: when `freellmpo
 Per-task attempt timeouts, applied to remote adapters only: interactive 25 s (interview, response, memory, emergency), standard 75 s, long-context 150 s (report generation), default 90 s.
 
 ## Offline behavior
+
+Offline persona selection separately requires its compatible local ML bundle,
+not Ollama. Package installation and cached demo content do not supply weights;
+see [SETUP.md](SETUP.md#persona-ml-artifact). The behavior below concerns LLM
+requests only.
 
 With no network: remote attempts fail fast (CONNECTION → retry once → advance), cooldowns quiet the dead routes, and the local pool serves via Ollama (`llama3.2:3b` primary, `qwen3:4b` secondary — chosen for the 4 GB VRAM dev GPU). Without Ollama, requests fail **explicitly** with `AllCandidatesFailed`; the demo's cached content is unaffected ([DEMO.md](DEMO.md) §6).
 

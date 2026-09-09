@@ -1,8 +1,36 @@
 # BebshaX — Persona Engine (Phase 8)
 
-How a persona goes from a business description to a stored, evidence-grounded, consistency-checked profile.
+How a persona goes from business context to a stored profile. As of 2026-09-09,
+runtime generation uses the isolated local non-LLM selector. The original
+Phase-8 LLM path remains for explicit compatibility callers; it is not fallback
+behavior for an unavailable model.
 
 ## Pipeline
+
+```text
+business / study segment / selected role / dataset context
+  -> strict BusinessContext + explicit age bounds + source exclusions
+  -> shared MLPersonaAdapter (lazy local load, bounded off-event-loop inference)
+  -> training-fitted TF-IDF + NMF similarity and diversity-aware selection
+  -> complete normalized synthetic source bundles, without replacement
+  -> existing GeneratedPersona / PersonaProfile / GeneratedPersonaDraft mappings
+  -> existing persona tables and JSON fields; SYNTHETIC claims, empty citations
+```
+
+The four paths, mappings, and ownership are detailed in
+[ml_persona/ARCHITECTURE.md](../ml_persona/ARCHITECTURE.md). Selection makes no
+LLM calls and performs no training or download in a request. It preserves source
+names, ages, occupation, geography, goals, pain points, behaviors, and documents.
+Income/budget and OCEAN/personality measurements remain unavailable, never
+invented. Role and location are soft hints, with mismatch warnings; explicit
+`min_age`/`max_age` are hard inclusive integer constraints in 18–95. A student-oriented request
+does not relabel a selected adult as a student or establish real customer fit.
+
+### Retained LLM Compatibility Path
+
+The following branch runs only when `PersonaEngine` is constructed without an
+ML adapter. Normal API wiring supplies the adapter. It remains relevant to the
+historical Phase-8 checks, not the current model's training or generation metrics.
 
 ```
 business (name + description)
@@ -22,8 +50,17 @@ business (name + description)
                                       persona_evidence (Postgres, alembic a8f3c2d91e04)
 ```
 
-## Provenance is enforced in code, not trusted from the LLM
+## Provenance is enforced in code
 
+For ML selections, [ml_adapter.py](../apps/backend/bebshax/personas/ml_adapter.py)
+marks every generated claim `SYNTHETIC` with empty evidence IDs/citations.
+`detailed_attributes.ml_provenance` carries source, revision, record ID, model
+version, selection score, and topic; `source_documents` preserves full normalized
+narratives. Draft/workflow `dataset_refs` are source metadata, not evidence.
+Grounding and confidence remain zero/unset. Source-derived goals and regex-selected
+pain points are hypotheses; training membership never proves an `OBSERVED` claim.
+
+The shared coercion rules also remain available to the LLM compatibility path.
 Every attribute carries `OBSERVED | INFERRED | SYNTHETIC` (`bebshax/persona/schema.py::coerce_provenance`):
 
 | Model claims                                                    | We store                        |
@@ -33,9 +70,22 @@ Every attribute carries `OBSERVED | INFERRED | SYNTHETIC` (`bebshax/persona/sche
 | INFERRED                                                        | INFERRED                        |
 | anything else / garbage label                                   | SYNTHETIC                       |
 
-Downgrades only — a claim can never be upgraded past what its citations prove. With zero evidence available, the prompt explicitly forbids OBSERVED. Live verification (2026-08-23): real generation produced 3 OBSERVED (verified citations) + 13 INFERRED.
+Downgrades only — a claim can never be upgraded past what its citations prove. With zero evidence available, the compatibility prompt explicitly forbids OBSERVED. Historical LLM verification (2026-08-23) produced 3 OBSERVED (verified citations) + 13 INFERRED; this is not the current ML output contract.
 
 ## Failure discipline (R2)
+
+ML loading failures produce 503 `ml_persona_unavailable`; invalid context, no
+vocabulary overlap, unsupported ages, or insufficient unique eligible candidates
+produce 422 `ml_persona_unsupported_context`. No LLM, fabricated identity, or
+smaller selection batch is substituted. The model lives at the default
+`data/processed/ml_persona/model` or `BEBSHAX_ML_PERSONA_ARTIFACT_DIR`; see
+[SETUP.md](SETUP.md#persona-ml-artifact) for reproduction and compatibility.
+Fresh installs contain the package but not the ignored bundle. Exact numerical
+versions are pinned in [constraints.txt](../ml_persona/constraints.txt), used
+by local and Docker installs. Loading is cached; restart after replacing a
+trusted validated artifact. A live chat route does not repair a missing model.
+
+For the retained LLM compatibility path:
 
 - Transport/429/timeout/malformed-JSON are **infrastructure** — handled inside `LLMService`/`PoolRouter`, invisible here.
 - Schema-invalid or contradiction-carrying output is a **content** problem: exactly ONE `PERSONA_REFINEMENT` round, then explicit `PersonaGenerationFailed` (HTTP 422 with violations). Never silently degraded, never truncated.
@@ -50,11 +100,35 @@ Downgrades only — a claim can never be upgraded past what its citations prove.
 
 Extend by adding table entries + a test, not code branches.
 
-## Dataset usage (optimized, not heavy)
+The default `PersonaEngine` ML branch returns its source-preserving mapped
+profile before this LLM refinement/critic pipeline. Bundle preservation and age
+eligibility are not claims of universally correct semantic consistency.
 
-- Lazy one-time load, ≤30k records/dataset, texts truncated to 500 chars, tiny df-index → milliseconds per retrieval, a few MB of RAM, zero new dependencies.
-- Evidence blocks in prompts are id-tagged and truncated — whole prompt stays ~2–3k tokens, fitting every pool member including the 16k local models.
-- Semantic (pgvector) retrieval replaces the lexical scorer in Phase 9 without changing the engine (EvidenceStore is the seam).
+## Dataset usage
+
+Only the reviewed synthetic NVIDIA source in the independent `ml_persona`
+profile trains the model. Legacy grounding/evaluation datasets, user uploads,
+private studies, and conversations do not become training data. Study/dataset
+context can inform selection without grounding the selected identity or claims.
+Normalization preserves narrative content rather than truncating it to fit a
+model. The original `EvidenceStore` and diversity seeds belong to the retained
+LLM path, not default ML generation. See [training data](../ml_persona/DATASETS.md).
+
+## Persistence And Repeated Generation
+
+Existing tables and `GeneratedPersona`, `PersonaProfile`, and
+`GeneratedPersonaDraft` contracts remain authoritative. Legacy business, study
+(including regeneration), and dataset generation load nonarchived source IDs
+and names through owner-scoped `active_source_exclusions`. New study/dataset
+segments also exclude earlier selections in the same batch; exhaustion fails
+with 422 before saving a partial persona batch. Study `persona_count` counts all
+active owner-scoped rows, not just the latest run.
+
+Role-based generation still archives the old cohort on persistence and prevents
+sibling reuse within the request; it retains `failed_roles` when other roles
+succeed. Independent overlapping requests have no transactional uniqueness lock,
+so sequential exclusion is not a guarantee of cross-process uniqueness. There
+is no new DB migration, frontend, provider, or competing storage schema.
 
 ## Memory (Phase 9)
 
@@ -64,7 +138,7 @@ Persistent persona memory: a pgvector stream implementing the generative-agents 
 - **Retrieval score:** `0.60·cosine + 0.25·recency + 0.15·importance`, recency = exponential decay with a 48 h half-life (weights injectable on `MemoryService`). Retrieval touches `last_accessed`; scoring runs in Python (identical on sqlite unit paths and Postgres), with an HNSW cosine index on the pg side for future SQL-side pre-filtering.
 - **Embeddings & the space-consistency rule** (documented deviation from the spec): cosine is only meaningful within ONE embedding space, but freellmpool's embed failover can serve different models per call. Therefore: the **default backend is a deterministic local hash embedding** (`local-hash-384` — offline, free, stable forever; lexical-strength semantics), and the **freellmpool backend requires a pinned model** (`BEBSHAX_EMBEDDING_BACKEND=freellmpool` + `BEBSHAX_EMBEDDING_MODEL=…`). Every row stores its `embedding_space` tag and retrieval filters to the query's space — vectors from different spaces are never compared.
 - **Reflection:** ≥8 episodic memories → latest batch summarized via `MEMORY_SUMMARIZATION` (fast pool) into ≤3 first-person `reflection` items at importance 0.8. Best-effort: unparseable output logs and skips — reflection can never break a conversation.
-- Verified live on pgvector: 20 memories → expected top-k ordering; reflection stored and retrievable (`pytest -m integration apps/backend/tests/memory/test_pg_integration.py`).
+- Historical Phase-9 pgvector verification: 20 memories → expected top-k ordering; reflection stored and retrievable. The ML continuation passed the two existing PostgreSQL integration tests, but did not exercise cross-conversation retrieval live.
 
 ## Interviews (Phase 10)
 
@@ -73,7 +147,7 @@ Multi-turn interviews with a **stable identity** — the persona is composed per
 - **Per-turn composition** (`bebshax/interview/engine.py`): system = immutable identity card (`build_identity_card`, byte-identical every turn) + in-character constraints + business context + objective + top-k retrieved memories (Phase 9) + evidence themes; history = ALL prior turns; then the new interviewer message. If nothing fits, the router raises `ContextWindowExceeded` — identity/evidence are never truncated (R2). Memories legitimately evolve between turns; the identity never does.
 - **Routing:** `PERSONA_INTERVIEW` → conversation pool. Each exchange is written back as an episodic observation memory (importance 0.4); `MemoryService.reflect()` distills them after conversations.
 - **REST:** `POST /api/personas/{id}/conversations` · `POST /api/conversations/{id}/messages` → `{reply, turn_number, served_by}` · `GET /api/conversations/{id}` (transcript). 404/413/503 mappings as elsewhere.
-- **Live verification (2026-08-23):** 5-turn interview of a freshly generated persona served by FOUR different providers mid-conversation (kilo/llm7/ovh) — name, age, and occupation stayed consistent (`scripts/smoke_interview.py`). Observed free-tier quality artifact (a reasoning model leaking its thinking) is a Phase-11 evaluation concern, not an infrastructure failure — by design.
+- **Historical verification (2026-08-23):** an unstored 5-turn LLM-era interview smoke reported provider changes with name, age, and occupation retained. The old authless interview script is not the current authenticated demo procedure. This observation is not a benchmark of ML personas or cross-route quality.
 
 ## REST API (`bebshax/api/personas.py`)
 
@@ -81,12 +155,32 @@ Multi-turn interviews with a **stable identity** — the persona is composed per
 | ------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `POST /api/businesses`               | create business                                   | —                                                                                             |
 | `GET /api/businesses`                | list                                              | —                                                                                             |
-| `POST /api/businesses/{id}/personas` | generate + store one persona                      | 404 unknown business · 422 generation failed (violations listed) · 413 context · 503 no route |
+| `POST /api/businesses/{id}/personas` | select + store one synthetic persona              | 404 unknown business · 422 unsupported ML context/exhaustion · 503 unavailable local model |
 | `GET /api/personas/{id}`             | full profile incl. attributes, evidence, warnings | 404                                                                                           |
 
 App wiring (`main.py` lifespan) now also connects **Sazid's `ProvenanceSink` to the PoolRouter** — every LLM request lands in `llm_requests` (fail-soft; DB issues never fail a request).
 
 ## Verification
 
-- Unit: `apps/backend/tests/persona/` — 26 tests (coercion, retrieval, rules, refinement budget, explicit failure, critic, round-trip persistence, HTTP flow).
-- Live: `python scripts/smoke_persona.py` (needs `docker compose up -d db`, `alembic upgrade head`, optionally `setup_datasets.py --profile minimal`).
+After building the local artifact, the focused offline conversion check is:
+
+```powershell
+.venv/Scripts/python.exe -m bebshax_persona_ml smoke --backend --input ml_persona/examples/business.json
+```
+
+The recorded 2026-09-09 run passed all five stages: source, prepared, model,
+generation, backend mappings/schema/zero observed evidence. This does not invoke
+settings, a DB, network, or an LLM. Aggregate offline suite results and the weaker
+performance than lexical TF-IDF are recorded in
+[EXPERIMENTS.md](../ml_persona/EXPERIMENTS.md).
+
+Separate live checks persisted and read back five unique age-bounded personas
+with 22 synthetic claims and zero LLM generation calls in a fresh local
+PostgreSQL database. Seven Freellmpool responses covered context, ten role
+suggestions, and two interview turns with four 384-dimensional memory rows.
+Linux loaded the Windows-trained artifact and generated five profiles with
+networking disabled. These are smoke observations, not a success rate or
+customer-quality result. Desktop passed; mobile header clipping remains.
+Full Compose app/web rehearsal and cross-conversation retrieval were not run;
+final post-sync gates/publication remain separately reported. The older dated
+examples above remain historical. See the [ML report](../ml_persona/IMPLEMENTATION_REPORT.md).

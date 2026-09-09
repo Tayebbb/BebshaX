@@ -2,6 +2,10 @@
 
 > Written from the implementation, not the pitch. Where a claim is not backed by an artifact it says so. See [RESEARCH_EVIDENCE.md](RESEARCH_EVIDENCE.md) for the classification of every number.
 
+Persona ML answers refreshed 2026-09-09. Older dated routing experiments retain
+their original scope; seven later provider smoke responses are not a new
+success-rate or cross-route benchmark. Original phase dates are unchanged.
+
 **1. Why does BebshaX need multiple models?**
 Because the project has a $0 API budget and free tiers are individually unreliable (429s, daily caps, outages, 30–120 s queues). No single free endpoint can sustain a research workflow; the union of 18 keyless/free providers plus a local model can. Multiple models are a **capacity** answer, not a quality one — we never claim a weaker model answers better.
 
@@ -11,20 +15,24 @@ We would, if it were free and always up. The local `llama3.2:3b` is the always-a
 **3. What exactly is being routed?**
 An `LLMRequest` with a declared `TaskType` (18 fixed kinds). Task → pool (7 pools, a data table) → candidate routes in preference order → pre-flight filter (capabilities, estimated context, cooldowns) → attempt loop governed by a closed `FailureKind` policy table → fallback across adapters → `ProvenanceRecord`. The router never inspects answer quality.
 
+The four production persona-generation paths do not enter this router: they
+use `MLPersonaAdapter`. Copilot context/role suggestions, interviews, and other
+LLM features are unchanged; legacy persona task enums remain for compatibility.
+
 **4. What is the actual research contribution?**
-An engineering-plus-measurement contribution: (a) a routing policy layer where quality degradation is structurally impossible to hide (no truncation, no identity swap, explicit `ContextWindowExceeded`/`AllCandidatesFailed`, full provenance); (b) an evidence-grounded persona pipeline whose provenance classes (OBSERVED/INFERRED/SYNTHETIC) are **enforced in code**, not requested from the model; (c) a first deterministic cross-route persona-consistency measurement. Not a new model, not a learned router.
+An engineering-plus-measurement contribution: governed LLM routing with explicit failures and provenance; code-enforced claim provenance; and scoped persona/route evaluations. The maintenance continuation adds genuinely fitted TF-IDF/NMF vocabulary, IDF, topics, and profile representations with diversity-aware source selection. It is not a new foundation model or learned router, and it selects source prototypes rather than inventing identities.
 
 **5. What is novel?**
 The combination is unusual: provenance enforcement that can only downgrade, a closed failure taxonomy where quality is not a failure, memory items labelled by source so a researcher cannot author the persona's "recollections", prompt-injection defense applied to every untrusted field, and a Judge Lab that runs failure drills through the production router. Individually each is known good practice; as a whole system for synthetic-user research on free capacity it is, to our knowledge, not available off the shelf.
 
 **6. How do you measure persona quality?**
-Deterministically first: grounding ratio (OBSERVED ∧ real evidence, no bonuses), schema validity, rule-based consistency, numeric self-contradiction, identity drift, cross-route retention/agreement. LLM judging exists (6-dimension rubric) but only with a judge route disjoint from every arm, and it is labelled as such. What we do **not** have: a human panel or a behavioural-plausibility metric.
+Separate layers: ML structural/provenance checks, held-out cross-view retrieval, and existing interview/routing metrics. The selected NMF blend's test MRR is 0.432654 versus lexical TF-IDF 0.751621: it underperforms. All 160 probe profiles passed structural checks, but 72/160 were `not_in_workforce`. No real business-labelled relevance, human panel, population-validity, or demand evaluation exists. Historical LLM judging carries its own small-sample and judge-overlap caveats.
 
 **7. How do you know personas resemble real users?**
-We don't claim they do. The datasets are slices, not representative samples (`data/DATASETS.md` says so). A persona is a research signal; Step 5 of the workflow lists its SYNTHETIC/INFERRED claims first under "Validate with real customers next". The honest limitation is stated in the product, not hidden in a footnote.
+We do not know that they do. The selector uses USA-only synthetic NVIDIA source profiles. Role/location are soft hints; a student prompt does not turn an adult into a student or move them to Bangladesh. Source occupation/location is preserved, age bounds are hard within 18–95, and missing income/budget/OCEAN stays unknown. These profiles generate hypotheses for real research, not validated customer identities.
 
 **8. How do you prevent hallucination?**
-We cannot prevent a model from generating; we prevent the system from **believing** it. A claim becomes OBSERVED only if it cites evidence that was actually shown, shares content with it, and the cited sources do not disagree on identity facts. Everything else is INFERRED or SYNTHETIC and rendered that way. Confidence numbers are derived from citation counts, never from model self-scores.
+ML generation does not ask an LLM to invent attributes: it preserves complete source bundles, with all claims `SYNTHETIC`, empty observed citations, and zero observed grounding. Source reuse is intentional, not a truth guarantee. The separate evidence pipeline checks citations and contested claims; interview fluency and retrieval scores must not be presented as customer evidence or purchase confidence.
 
 **9. How do you handle contradictory evidence?**
 `contested_slots` detects disjoint numeric values (age always; price/count when the claim asserts them) across the sources a claim cites → the claim is INFERRED with `grounding_basis = contested_evidence` and the persona carries `contested:age`. Tournament F tests it end to end; the Judge Lab `evidence_conflict` scenario shows it live.
@@ -35,6 +43,11 @@ Every researcher/document/dataset/memory field is wrapped in an `<UNTRUSTED_*>` 
 **11. What happens when every provider fails?**
 `AllCandidatesFailed` → HTTP 503 with `error_code = all_candidates_failed`, the LLM request id, every attempt with its `FailureKind`, and the routing path. No turn is written, no template answer is produced (tournament C). The UI shows the classified reason and a copyable request id.
 
+ML failures are independent: 503 `ml_persona_unavailable` for missing/invalid
+artifacts, 422 `ml_persona_unsupported_context` for unsupported/exhausted selection.
+Neither causes LLM persona fallback. A multi-role response may retain successful
+roles and list `failed_roles`.
+
 **12. Why is Ollama necessary?**
 It is the availability floor: the only route that does not depend on someone else's quota. It is also the offline-venue path. It is not the quality ceiling — the pools put cloud routes first for reasoning tasks and local first for conversational ones.
 
@@ -42,10 +55,10 @@ It is the availability floor: the only route that does not depend on someone els
 Pre-flight: the script-aware estimator rejects candidates whose window is too small; if none fits, `ContextWindowExceeded` → 413 **before any call** (tournament E asserts zero adapter calls). At attempt time, if every route reports a context error the same exception is raised. Nothing is ever truncated to fit.
 
 **14. How do you prevent silent degradation?**
-Structurally: quality is not a `FailureKind` (test-enforced), so the router has no code path that "falls back because the answer was bad"; templates carry `source`/`fallback_reason` markers the UI renders as "Template — not AI-generated"; provenance is written in a `finally` block, failures included.
+Quality is not a `FailureKind` (test-enforced), so it never causes infrastructure fallback. LLM attempts carry provenance. ML selection either preserves a complete supported source batch or fails; no template/skeleton/LLM fills gaps. Full source narratives are retained, and feature filtering is not claimed as complete PII removal or demographic neutrality.
 
 **15. How do you prove routing improves the system?**
-Availability: yes — fallback and explicit-failure behaviour are tested and observed live (2/8 free-pool requests fell back to local in the stored run). Quality preservation: **a first, small measurement** — identity retention 16/16 across three real models, zero budget overspend, cross-route agreement 0.41 vs cross-persona baseline 0.36 (ratio 1.15). The CIs overlap; we do not claim significance. Cost, latency and UX improvements are supported by design and logs, not by a controlled study.
+The historical 2026-09-07 evidence record reports 2/8 free-pool requests falling back locally, identity retention 16/16 across three real models, zero budget overspend, and agreement 0.41 versus cross-persona 0.36 (ratio 1.15). The CIs overlap; no significance is claimed. These are not evaluations of the new ML personas. The continuation's seven successful Freellmpool responses are a separate smoke sample, not a reliability estimate or controlled cost/UX study.
 
 **16. How reproducible are your experiments?**
 Offline pipeline checks are deterministic (`--fake`, seeded, CI-tested). Real runs are reproducible in procedure (`scripts/run_cross_route_eval.py … --seed 42`) but not in output: free providers drift, temperature 0 is not deterministic across vendors. Every artifact stores the raw answers and per-answer provenance so a reviewer can re-score them.
@@ -54,7 +67,7 @@ Offline pipeline checks are deterministic (`--fake`, seeded, CI-tested). Real ru
 $0 in API spend by design: keyless freellmpool providers, OpenRouter free models only (the paid `openrouter/auto` default was removed), local Ollama. There is no cost ledger artifact; the quota ledger tracks request counts per provider per day.
 
 **18. What happens at 100 concurrent users?**
-It degrades explicitly, not silently: per-pool semaphores (2–5 concurrent per pool) queue requests; free-tier caps trigger provider-level cooldowns; the local model serialises. A test drives 20 concurrent generations successfully; 100 real users would mostly wait and see honest latency. We have not load-tested at that scale and say so.
+We have not load-tested that scale. LLM pools use concurrency limits; ML inference is bounded separately. The old 20-generation acceptance test predates this selector and is not a cross-process identity guarantee. Sequential owner-scoped source exclusions exist, but independent overlapping requests have no transactional uniqueness lock. End-to-end capacity remains unvalidated.
 
 **19. What happens if a provider changes its API?**
 Only `bebshax/llm/adapters/` may import provider SDKs (AST-enforced). freellmpool absorbs most provider churn; an adapter failure becomes a classified `FailureKind` and the route cools down; our own bug becomes `INTERNAL_ERROR` and surfaces instead of being swallowed.
@@ -69,10 +82,16 @@ A generic router optimises cost/latency and may truncate or retry on "bad output
 They shouldn't, blindly — and the product says so at Step 5. Trust is scoped: an OBSERVED claim links to the evidence record; INFERRED and SYNTHETIC are labelled; grounding is a ratio computed from real evidence, never a default. Personas are for generating hypotheses to test with real people.
 
 **23. What are the limitations?**
-Small evaluation n; hash-based embeddings by default (offline, stable, weak semantics); LLM judging only for one gate; no human validation; free-tier latency (up to minutes); single-process locks/lockouts; provenance from the eval script is not written to the DB; datasets are English-centric slices; the demo evidence corpus is US product reviews labelled as such.
+USA-only synthetic coverage, weak student/geographic fit, selection bias, and an NMF blend that loses to lexical TF-IDF. No customer-demand or learned purchasing/OCEAN claims. Hash embeddings, provider latency, process-local constraints, and small LLM evaluation samples remain. Desktop passed but mobile persona-header clipping persists; full Compose app/web rehearsal, cross-conversation retrieval, and Pyright were not completed in the continuation. It is not a production-readiness verdict.
 
 **24. What ethical risks exist?**
-Mistaking synthetic signals for real user research; personas inheriting dataset biases; researchers over-trusting fluent output; free-tier providers that train on prompts (we send only synthetic data, never PII). Mitigations: explicit provenance, "validate with real customers" card, no PII ingestion rule, no fine-tuning, honest limitation notes in every report.
+Mistaking synthetic signals for real research, inheriting corpus/protected-trait biases, and over-trusting fluent interviews. R9 permits only reviewed public synthetic data for non-LLM training (owner-approved 2026-09-08); private studies/uploads/conversations are excluded, and LLM fine-tuning is still forbidden. Attribution and synthetic labels are mandatory. Filtering selected fields/contact text is not proof that narratives are PII-free or unbiased.
 
 **25. What happens when the synthetic persona is wrong?**
-It is wrong visibly: the claim is INFERRED/SYNTHETIC, the identity-drift or contradiction chip appears on the turn, the grounding ratio is low, and the report tells the researcher what to validate. What we cannot do is know it is wrong when the evidence itself is wrong — which is why sources are cited and conflicts are flagged rather than resolved by fiat.
+Synthetic labels and warnings expose the evidence limit, not every factual error. Structural checks cannot determine whether an upstream narrative is true or a selected profile suits a business. Researchers must test hypotheses with real people; no UI chip or zero-grounding score makes a persona reliable.
+
+**26. What was trained, and how fast is it?**
+Six thousand pinned NVIDIA Nemotron-Personas-USA rows (CC-BY-4.0) became 3,594 complete unique profiles, split 2,516/539/539 with seed 42. Four 16/32-topic × 0.35/0.7 lexical-weight fits took 43.70 s on two CPU threads. Warm five-profile p95 was 34.3 ms, excluding cold loading, API, DB, and network. The ignored ~32.54 MiB artifact requires exact pinned numerical versions; see [MODEL_CARD.md](../ml_persona/MODEL_CARD.md).
+
+**27. What was checked live after ML integration?**
+Five unique age-bounded profiles persisted/read back with synthetic claims and zero LLM generation calls. Seven Freellmpool responses covered context, ten role suggestions, and two interview turns with four 384-dimensional memories. Linux loaded the Windows artifact and selected five profiles with networking disabled. The cloud DB was untouched. Final post-sync gate counts, push, and CI are separately reported, not implied by these checks.

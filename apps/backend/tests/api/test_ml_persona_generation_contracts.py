@@ -5,15 +5,295 @@ from collections import Counter
 import pytest
 from sqlalchemy import select
 
-from bebshax.db.models import DatasetPersonaRuns, DatasetSources, Personas, Studies
+from bebshax.api.limiter import limiter
+from bebshax.auth.models import Users
+from bebshax.db.models import DatasetPersonaRuns, DatasetSources, MarketSegments, PersonaGenerationRuns, Personas, Studies
 from bebshax.llm.types import TaskType
 from bebshax.personas.ml_adapter import MLPersonaAdapter
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    limiter._limiter.storage.reset()
+    yield
+    limiter._limiter.storage.reset()
 
 
 def test_main_wires_local_adapter_without_eager_loading(ml_api_app) -> None:
     adapter = ml_api_app.app.state.persona_ml
     assert isinstance(adapter, MLPersonaAdapter)
     assert adapter._model is None
+    assert ml_api_app.app.state.ml_test_llm.calls == []
+
+
+@pytest.mark.parametrize("background", [False, True], ids=["sync", "job"])
+async def test_repeated_study_generation_appends_distinct_sources_and_updates_active_count(
+    ml_api_app, ml_auth_headers, ml_study, background,
+) -> None:
+    async def finish_jobs() -> None:
+        await asyncio.gather(*tuple(ml_api_app.app.state.async_job_tasks))
+
+    source_batches = []
+    for generation_number in range(2):
+        endpoint = f"/api/studies/{ml_study}/personas/generate"
+        response = ml_api_app.post(
+            f"{endpoint}/jobs" if background else endpoint,
+            json={"target_count": 2}, headers=ml_auth_headers,
+        )
+        assert response.status_code == (202 if background else 201), response.text
+        if background:
+            ml_api_app.portal.call(finish_jobs)
+            response = ml_api_app.get(
+                f"{endpoint}/jobs/{response.json()['job_id']}", headers=ml_auth_headers,
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["status"] == "completed", response.text
+            result = response.json()["result"]
+        else:
+            result = response.json()
+        assert result["run"]["generated_count"] == result["run"]["target_count"] == 2
+        source_batches.append({
+            persona["detailed_attributes"]["ml_provenance"]["record_id"]
+            for persona in result["personas"]
+        })
+        assert len(source_batches[-1]) == 2
+        async with ml_api_app.app.state.db_sessionmaker() as session:
+            active = list((await session.scalars(select(Personas).where(
+                Personas.study_id == ml_study, Personas.owner_id == "usr_test_fixture",
+                Personas.status != "archived",
+            ))).all())
+            assert len(active) == (generation_number + 1) * 2
+            assert (await session.get(Studies, ml_study)).persona_count == len(active)
+    assert source_batches[0].isdisjoint(source_batches[1])
+    assert ml_api_app.app.state.ml_test_llm.calls == []
+
+
+async def test_repeated_business_generation_appends_distinct_source_profiles(
+    ml_api_app, ml_auth_headers,
+) -> None:
+    business = ml_api_app.post(
+        "/api/businesses", json={"name": "Meal Planner", "description": "Food delivery and study planning"},
+        headers=ml_auth_headers,
+    )
+    assert business.status_code == 201, business.text
+    business_id = business.json()["id"]
+    personas = []
+    for generation_number in range(2):
+        response = ml_api_app.post(
+            f"/api/businesses/{business_id}/personas", json={}, headers=ml_auth_headers,
+        )
+        assert response.status_code == 201, response.text
+        personas.append(response.json())
+    assert len({persona["detailed_attributes"]["ml_provenance"]["record_id"] for persona in personas}) == 2
+    async with ml_api_app.app.state.db_sessionmaker() as session:
+        active = list((await session.scalars(select(Personas).where(
+            Personas.business_id == business_id, Personas.owner_id == "usr_test_fixture",
+            Personas.status != "archived",
+        ))).all())
+        assert {persona.id for persona in active} == {persona["id"] for persona in personas}
+    original = ml_api_app.get(f"/api/personas/{personas[0]['id']}", headers=ml_auth_headers)
+    assert original.status_code == 200, original.text
+    for field in ("name", "age", "occupation", "location", "description", "detailed_attributes"):
+        assert original.json()[field] == personas[0][field]
+    assert ml_api_app.app.state.ml_test_llm.calls == []
+
+
+@pytest.mark.parametrize("attach_study", [True, False], ids=["study", "standalone"])
+async def test_repeated_dataset_generation_appends_distinct_sources_and_updates_active_count(
+    ml_api_app, ml_auth_headers, ml_uploaded_dataset, ml_study, attach_study,
+) -> None:
+    dataset_id = ml_uploaded_dataset["id"]
+    study_id = ml_study if attach_study else None
+    source_batches = []
+    for generation_number in range(2):
+        response = ml_api_app.post(
+            f"/api/datasets/{dataset_id}/generate-personas",
+            json={"requested_count": 2, "study_id": study_id, "business_description": "Food delivery and study planning"},
+            headers=ml_auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["generated_count"] == result["requested_count"] == 2
+        assert result["failed_count"] == 0
+        source_batches.append({
+            persona["detailed_attributes"]["ml_provenance"]["record_id"]
+            for persona in result["personas"]
+        })
+        assert len(source_batches[-1]) == 2
+    assert source_batches[0].isdisjoint(source_batches[1])
+    async with ml_api_app.app.state.db_sessionmaker() as session:
+        active = list((await session.scalars(select(Personas).where(
+            Personas.study_id == study_id, Personas.owner_id == "usr_test_fixture",
+            Personas.status != "archived",
+        ))).all())
+        assert len(active) == 4
+        assert (await session.get(DatasetSources, dataset_id)).persona_count_generated == 4
+        if attach_study:
+            assert (await session.get(Studies, ml_study)).persona_count == len(active)
+    assert ml_api_app.app.state.ml_test_llm.calls == []
+
+
+@pytest.mark.parametrize("generation_path", ["study", "job", "dataset", "standalone"])
+async def test_repeated_generation_exhaustion_preserves_original_batch_and_error_contract(
+    ml_api_app, ml_auth_headers, ml_study, generation_path, request,
+) -> None:
+    is_dataset = generation_path in {"dataset", "standalone"}
+    study_id = None if generation_path == "standalone" else ml_study
+    age_ranges = [[21, 24], [27, 27]]
+    if is_dataset:
+        dataset_id = request.getfixturevalue("ml_uploaded_dataset")["id"]
+        endpoint = f"/api/datasets/{dataset_id}/generate-personas"
+        payload = {"requested_count": 2, "study_id": study_id, "business_description": "Food delivery and study planning"}
+        async with ml_api_app.app.state.db_sessionmaker() as session:
+            dataset = await session.get(DatasetSources, dataset_id)
+            dataset.segments = [
+                {**segment, "constraints": {"age_range": age_range}}
+                for segment, age_range in zip(dataset.segments, age_ranges, strict=True)
+            ]
+            await session.commit()
+    else:
+        endpoint = f"/api/studies/{ml_study}/personas/generate"
+        payload = {"target_count": 2, "distribution_strategy": "equal"}
+        async with ml_api_app.app.state.db_sessionmaker() as session:
+            segments = list((await session.scalars(select(MarketSegments).where(
+                MarketSegments.study_id == ml_study,
+            ).order_by(MarketSegments.created_at.desc()))).all())
+            for segment, age_range in zip(segments, age_ranges, strict=True):
+                segment.characteristics = {"demographics": {"age_range": age_range}}
+            await session.commit()
+
+    async def finish_jobs() -> None:
+        await asyncio.gather(*tuple(ml_api_app.app.state.async_job_tasks))
+
+    original = {}
+    for generation_number in range(2):
+        response = ml_api_app.post(
+            f"{endpoint}/jobs" if generation_path == "job" else endpoint,
+            json=payload, headers=ml_auth_headers,
+        )
+        if generation_path == "job":
+            assert response.status_code == 202, response.text
+            ml_api_app.portal.call(finish_jobs)
+            response = ml_api_app.get(
+                f"{endpoint}/jobs/{response.json()['job_id']}", headers=ml_auth_headers,
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["status"] == ("completed" if generation_number == 0 else "failed"), response.text
+        else:
+            expected_status = (200 if is_dataset else 201) if generation_number == 0 else 422
+            assert response.status_code == expected_status, response.text
+        if generation_number == 1:
+            assert response.json()["error_code"] == "ml_persona_unsupported_context"
+            if generation_path != "job":
+                assert response.json()["request_id"]
+            if is_dataset:
+                assert response.json()["failed"]
+        async with ml_api_app.app.state.db_sessionmaker() as session:
+            active = list((await session.scalars(select(Personas).where(
+                Personas.study_id == study_id, Personas.owner_id == "usr_test_fixture",
+                Personas.status != "archived",
+            ))).all())
+            assert len(active) == 2
+            stored = {persona.id: (persona.name, persona.detailed_attributes) for persona in active}
+            if generation_number == 0:
+                original = stored
+            else:
+                assert stored == original
+            if study_id:
+                assert (await session.get(Studies, study_id)).persona_count == 2
+            if is_dataset:
+                assert (await session.get(DatasetSources, dataset_id)).persona_count_generated == 2
+                runs = list((await session.scalars(select(DatasetPersonaRuns).where(
+                    DatasetPersonaRuns.dataset_id == dataset_id,
+                ))).all())
+                assert len(runs) == 1
+            else:
+                runs = list((await session.scalars(select(PersonaGenerationRuns).where(
+                    PersonaGenerationRuns.study_id == study_id,
+                ).order_by(PersonaGenerationRuns.created_at))).all())
+                assert [run.status for run in runs] == ["completed", *(["failed"] if generation_number else [])]
+                assert runs[-1].generated_count == (2 if generation_number == 0 else 0)
+    assert ml_api_app.app.state.ml_test_llm.calls == []
+
+
+@pytest.mark.parametrize("generation_path", ["legacy", "study", "dataset"])
+@pytest.mark.parametrize("existing_source", ["record_id", "normalized_name", "other_owner", "other_scope", "archived"])
+async def test_generation_exclusions_respect_owner_scope_archives_and_normalized_names(
+    ml_api_app, ml_auth_headers, ml_study, ml_training_records, generation_path, existing_source, request,
+) -> None:
+    source = ml_training_records[0]
+    owner_id = "usr_foreign_ml" if existing_source == "other_owner" else "usr_test_fixture"
+    if generation_path == "legacy":
+        business = ml_api_app.post(
+            "/api/businesses", json={"name": "Meal Planner", "description": "Food delivery and study planning"},
+            headers=ml_auth_headers,
+        )
+        assert business.status_code == 201, business.text
+        business_id = business.json()["id"]
+        scope = Personas.business_id == business_id
+        stored_scope = {"business_id": business_id}
+        if existing_source == "other_scope":
+            other_business = ml_api_app.post(
+                "/api/businesses", json={"name": "Another Planner"}, headers=ml_auth_headers,
+            )
+            assert other_business.status_code == 201, other_business.text
+            stored_scope = {"business_id": other_business.json()["id"]}
+        endpoint = f"/api/businesses/{business_id}/personas"
+        payload = {"min_age": 21, "max_age": 21}
+    else:
+        scope = Personas.study_id == ml_study
+        stored_scope = {"study_id": "std_other_ml_scope" if existing_source == "other_scope" else ml_study}
+        if generation_path == "study":
+            endpoint = f"/api/studies/{ml_study}/personas/generate"
+            payload = {"target_count": 1}
+        else:
+            dataset_id = request.getfixturevalue("ml_uploaded_dataset")["id"]
+            endpoint = f"/api/datasets/{dataset_id}/generate-personas"
+            payload = {"requested_count": 1, "study_id": ml_study, "business_description": "Food delivery planning"}
+
+    async with ml_api_app.app.state.db_sessionmaker() as session:
+        if existing_source == "other_owner":
+            session.add(Users(
+                id=owner_id, email="foreign-ml@test.local", full_name="Foreign Synthetic Owner",
+                auth_provider="email", is_active=True, is_verified=True,
+            ))
+        if existing_source == "other_scope" and generation_path != "legacy":
+            session.add(Studies(id="std_other_ml_scope", user_id=owner_id, title="Another private study"))
+        if generation_path == "study":
+            segments = (await session.scalars(select(MarketSegments).where(MarketSegments.study_id == ml_study))).all()
+            for segment in segments:
+                segment.characteristics = {"demographics": {"age_range": [21, 21]}}
+        elif generation_path == "dataset":
+            dataset = await session.get(DatasetSources, dataset_id)
+            dataset.segments = [{**segment, "constraints": {"age_range": [21, 21]}} for segment in dataset.segments]
+        session.add(Personas(
+            id="per_existing_source", **stored_scope, user_id=owner_id, owner_id=owner_id,
+            name="  TEST   PERSON   0  " if existing_source == "normalized_name" else "Unrelated stored label",
+            status="archived" if existing_source == "archived" else "ready",
+            detailed_attributes={} if existing_source == "normalized_name" else {"ml_provenance": {"record_id": source.record_id}},
+        ))
+        if existing_source in {"record_id", "normalized_name"} and generation_path != "legacy":
+            (await session.get(Studies, ml_study)).persona_count = 1
+        await session.commit()
+
+    response = ml_api_app.post(endpoint, json=payload, headers=ml_auth_headers)
+    exhausted = existing_source in {"record_id", "normalized_name"}
+    assert response.status_code == (422 if exhausted else (200 if generation_path == "dataset" else 201)), response.text
+    if exhausted:
+        assert response.json()["error_code"] == "ml_persona_unsupported_context"
+        assert response.json()["request_id"]
+    else:
+        persona = response.json() if generation_path == "legacy" else response.json()["personas"][0]
+        assert persona["name"] == source.name
+        assert persona["detailed_attributes"]["ml_provenance"]["record_id"] == source.record_id
+    async with ml_api_app.app.state.db_sessionmaker() as session:
+        active = list((await session.scalars(select(Personas).where(
+            scope, Personas.owner_id == "usr_test_fixture", Personas.status != "archived",
+        ))).all())
+        assert len(active) == 1
+        assert (active[0].id == "per_existing_source") is exhausted
+        if generation_path != "legacy":
+            assert (await session.get(Studies, ml_study)).persona_count == len(active)
     assert ml_api_app.app.state.ml_test_llm.calls == []
 
 

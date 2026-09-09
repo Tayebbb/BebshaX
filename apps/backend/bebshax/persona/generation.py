@@ -161,6 +161,8 @@ class PersonaEngine:
         target_market: str | None = None,
         min_age: int | None = None,
         max_age: int | None = None,
+        exclude_ids: set[str] | None = None,
+        exclude_names: set[str] | None = None,
     ) -> PersonaProfile:
         if self._ml_generator is not None:
             from bebshax.personas.ml_adapter import build_business_context, to_persona_profile
@@ -173,7 +175,9 @@ class PersonaEngine:
                 min_age=min_age,
                 max_age=max_age,
             )
-            selections = await self._ml_generator.generate(context, num_personas=1)
+            selections = await self._ml_generator.generate(
+                context, num_personas=1, exclude_ids=exclude_ids, exclude_names=exclude_names,
+            )
             return to_persona_profile(selections[0], business_id)
 
         persona_id = uuid.uuid4().hex

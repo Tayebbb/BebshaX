@@ -2,7 +2,11 @@
 
 > **Research Question:** _Can intelligent multi-model routing aggregate free LLM capacity while preserving synthetic persona quality and user experience?_
 
-The `bebshax.evaluation` module provides a comprehensive, automated evaluation suite for synthetic persona quality, multi-model routing strategy performance under chaos, and offline benchmark dataset replays.
+The `bebshax.evaluation` module provides persona metrics, routing control-flow experiments under chaos, and replay scaffolding. The withdrawn offline replay results are not valid routing benchmarks (section 3).
+
+The isolated non-LLM persona model has a separate package and lifecycle; its
+2026-09-09 results are in section 5 below. Its retrieval scores are not grounding
+scores and do not replace the original Phase-11 routing research question.
 
 ---
 
@@ -16,6 +20,10 @@ Synthetic persona quality is evaluated across four core dimensions:
    Attributes with provenance class `OBSERVED` or explicit evidence links contribute to grounding.
 3. **Deterministic Cross-Attribute Consistency:** Rule-based verification enforcing real-world constraints (e.g., age vs occupation boundaries, income tier vs spending behavior, location vs timezone/currency).
 4. **Contradiction Detection:** Scans persona descriptions and interview dialogue transcripts for self-contradictory statements (e.g., budget buyer vs luxury enthusiast).
+
+Current ML profiles deliberately carry zero observed grounding and unknown
+income/OCEAN. These older metrics do not establish predictive accuracy or
+business relevance; a `SYNTHETIC` profile is not an infrastructure failure.
 
 ---
 
@@ -46,12 +54,12 @@ The chaos simulator tests `PoolRouter` resilience by injecting stochastic rate l
 
 ## 3. Offline Benchmark Replays
 
-Evaluates routing strategies against literature benchmarks without live network overhead:
+The retained scaffolding was intended to compare routing strategies without live network overhead:
 
-- **`router_arena`**: Evaluates strategy candidate selection against crowdsourced model win-rate distributions from LLM routing research.
-- **`xroute_bench`**: Evaluates strategy model selection against pre-recorded multi-model execution logs.
+- **`router_arena`**: intended candidate comparison, but the available slice does not supply usable per-model score evidence.
+- **`xroute_bench`**: intended execution-log comparison, but the downloaded slice lacks candidate executions.
 
-> **Status (2026-09-06): results withdrawn, scaffolding kept.** The 2026-08 replay reports (`eval_report_20260822_*`, `eval_report_20260828_*`) claimed 100 % strategy alignment, but the replay was found unusable: the RouterArena preprocessing read lowercase column names that do not exist in the parquet (every row ended up with an empty prompt and no model scores), and the xRouteBench slice contains no candidate executions, so the evaluator's default model made every strategy agree with itself. Do not cite those numbers. The corrected evidence inventory lives in docs/RESEARCH_EVIDENCE.md (pending); the cross-route persona-consistency evaluation (`scripts/run_cross_route_eval.py`, `bebshax/evaluation/cross_route_consistency.py`) is the replacement measurement for the routing thesis.
+> **Status (2026-09-06): results withdrawn, scaffolding kept.** The 2026-08 replay reports (`eval_report_20260822_*`, `eval_report_20260828_*`) claimed 100 % alignment, but nonexistent RouterArena column names and absent xRouteBench candidate executions made the evaluator agree with its own default. Do not cite those numbers. The [evidence inventory](RESEARCH_EVIDENCE.md) records the separate [cross-route measurement](../scripts/run_cross_route_eval.py) and its small-sample limits. Neither replay nor cross-route results measure the new ML selector's business relevance.
 
 ---
 
@@ -74,3 +82,98 @@ Output artifacts are generated in `data/metadata/`:
 
 - Markdown Report: `eval_report_<timestamp>.md`
 - JSON Report: `eval_report_<timestamp>.json`
+
+---
+
+## 5. Isolated Persona ML Evaluation (2026-09-09)
+
+The independent [evaluation implementation](../ml_persona/src/bebshax_persona_ml/evaluation.py)
+measures synthetic cross-view retrieval and generation structure. It does not
+measure customer demand, real business-labelled relevance, or attribute
+predictive accuracy. All source-derived claims stay `SYNTHETIC`; empty evidence
+and zero grounding are correct, not reasons to fall back to an LLM.
+
+### Protocol
+
+The approved 6,000-record subset yields 3,594 usable normalized identities.
+Seed-42 splits are 2,516 training, 539 validation, and 539 test records. TF-IDF
+vocabulary/IDF and NMF components fit training only. A four-point search over
+16/32 topics and lexical weights 0.35/0.7 selects on validation MRR, with
+canonical-config tie breaking. The frozen 32-topic/0.7 selection was evaluated
+on test after the interrupted session resumed; no tuning followed that test.
+
+Culinary and hobby narratives query complementary professional, sports, arts,
+travel, skills, and goal narratives for the same held-out identities. Rankings
+are among held-out records using training-fitted transforms. Missing/OOV views
+count as misses rather than being dropped; this run had 539/539 valid test pairs.
+Random is exact expected uniform ranking; popularity uses training occupation
+frequencies and seeded tie breaking. These are proxies, not supervised
+business-to-persona labels or direct MMR batch-quality comparisons.
+
+| Method | Validation MRR | Test MRR |
+| --- | --- | --- |
+| Selected TF-IDF + NMF | 0.41811696827631073 | 0.43265430767833196 |
+| Lexical TF-IDF | 0.7166454265071603 | 0.7516210382537256 |
+| Expected random | Not reproduced here | 0.012741852676724338 |
+| Popular occupation | Not reproduced here | 0.011943168742486186 |
+
+**The custom model underperforms lexical TF-IDF on validation and test.** It is
+not established as a superior production selector. Full recall tables and all
+four candidate measurements are in [EXPERIMENTS.md](../ml_persona/EXPERIMENTS.md).
+
+### Generation And Timing
+
+The test probe generated 32 batches of five training prototypes: 160 selections,
+zero failed batches, and zero incomplete/underage profiles, within-batch duplicate
+IDs/names/descriptions, bundle mismatches, or location rewrites. Exact normalized
+source reuse is 1.0 by design, not novel identity synthesis. Within-batch TF-IDF
+cosine distance is 0.8779632658 over 320 pairs; age Jensen-Shannon divergence
+against the held-out synthetic reference is 0.03018325894. `not_in_workforce`
+accounts for 72/160 selections, exposing bias despite those structural checks.
+
+Warm five-persona generation measured mean 32.971875 ms and p95 34.304875 ms with
+two CPU threads. This is loaded-model timing, not cold-load latency, API queuing,
+DB persistence, or an SLA. The 4 GB GPU is unused. Source coverage is USA-only
+synthetic data; no Bangladesh or student fit, income/budget prediction, OCEAN
+accuracy, or real-business relevance is established.
+
+### Reproduction And Status
+
+After the [ML installation/download/preparation steps](../ml_persona/README.md),
+run from the repository root:
+
+```powershell
+.venv/Scripts/python.exe -m bebshax_persona_ml train --config ml_persona/configs/training.json
+.venv/Scripts/python.exe -m bebshax_persona_ml evaluate
+.venv/Scripts/python.exe -m bebshax_persona_ml smoke --backend --input ml_persona/examples/business.json
+```
+
+Training writes local `data/processed/ml_persona/experiment.json` and
+`experiments/<model_version>.json`; evaluation writes
+`data/processed/ml_persona/evaluation.json`. Existing outputs require a different
+path or explicit `--force`, not silent overwrite. These ignored artifacts are
+not linked as distributed files. Model/source/preparation fingerprints and
+exact numerical-runtime compatibility are checked; they are not signatures.
+
+The recorded pre-sync baseline (`fca5c0f`, 2026-09-09) passed backend 1,279 tests/3 deselected (81.68%
+coverage, floor 68%), ML 295 passed (97%), frontend 269 passed/36 files, and all
+five local backend-smoke stages passing. Build/TypeScript/lint/theme, `pip check`,
+and Compose default/full syntax checks passed. The subsequent Docker pin fix
+passed 26 packaging cases, including 5 new cases. Existing PostgreSQL integration
+tests passed 2/2. Live persistence, Freellmpool chat/roles/interviews, and
+network-disabled Linux-container inference passed. Desktop rendering passed;
+mobile profile-header controls were clipped. Pyright was not installed.
+See [the implementation report](../ml_persona/IMPLEMENTATION_REPORT.md) for
+evidence, exact commands, and remaining verification limits.
+
+These are recorded continuation results, not new post-sync gates, a provider
+success rate, or proof of production readiness. Full Compose app/web rehearsal
+and cross-conversation memory retrieval were not run. The probe's zero
+within-batch duplicates do not prove concurrent uniqueness: production source
+exclusions are owner-scoped reads without a transactional identity lock.
+Final gate counts and publication belong in the [implementation log](IMPLEMENTATION_PLAN.md).
+
+Next work is a validation-only comparison of TF-IDF with equivalent diversity
+selection, plus authorized held-out business-labelled relevance judgments.
+These are proposals, not implemented features or permission to retune against
+the already-inspected test set.

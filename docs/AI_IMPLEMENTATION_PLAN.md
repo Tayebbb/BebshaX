@@ -1,6 +1,6 @@
 # BebshaX — AI / LLM Implementation Plan (plain-English)
 
-> **The one-sentence answer:** BebshaX uses **aggregation _and_ routing, but not ensembling**. Free providers are **aggregated** into one big pool of models, a **router** picks one model per request based on the task, and if that model fails the router walks down a **fallback ladder** until something answers — ending on the local Ollama model. Exactly **one model answers each request**; we never merge or vote on multiple answers.
+> **The one-sentence answer:** BebshaX aggregates and routes legitimate free LLM capacity without merging answers, while persona generation separately uses a trained CPU TF-IDF/NMF source selector with no LLM call or fallback.
 
 Companion docs: [ROUTING.md](ROUTING.md) is the reference (tables, failure codes, dependency reviews). This file explains the _mental model_ — read this first.
 
@@ -22,7 +22,9 @@ So: **aggregate the supply, route each request, never blend the outputs.**
 
 ```mermaid
 flowchart TD
-    A["Feature code<br/>persona · interview · memory · evaluation"] -->|"LLMRequest(task=...)"| B
+    A["LLM feature code<br/>copilot · interview · memory · research"] -->|"LLMRequest(task=...)"| B
+    P["Four persona generation paths"] --> ML["MLPersonaAdapter<br/>CPU TF-IDF/NMF + source selection"]
+    ML --> STORE["Existing persona schemas / storage<br/>SYNTHETIC source-model provenance"]
     B["LLMService.complete()<br/>THE only entry point"] --> C
     C["PoolRouter — BebshaX policy<br/>task → pool → candidates → filter → attempt → fallback"] --> D
     C --> E
@@ -95,16 +97,20 @@ Configuration as **data**, so extending it = edit a table + add a test, never ad
 | `reasoning`    | openrouter† → freellmpool → ollama                                                                                                                                                    | 2              | PERSONA_GENERATION, PERSONA_REFINEMENT, PERSONA_VALIDATION, CONTRADICTION_CHECK, CRITIC, PERSONA_NARRATIVE, BEHAVIORAL_SIMULATION |
 | `conversation` | **ollama → freellmpool → openrouter** (judged gate 2026-08-26/27, 3 runs: local 3B 9.65 / 9.05 / 9.2 vs cloud-fast 8.25 / 8.05 / 8.2; n = 1 persona × 5 questions; ~5–7 s/turn local) | 5              | PERSONA_INTERVIEW, PERSONA_RESPONSE                                                                                               |
 | `structured`   | openrouter† → freellmpool → ollama                                                                                                                                                    | 3              | STRUCTURED_OUTPUT, EVIDENCE_EXTRACTION, EVIDENCE_CLASSIFICATION, BROWSER_AGENT, TOOL_CALLING                                      |
-| `fast`         | openrouter† → freellmpool → ollama                                                                                                                                                    | 5              | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION                                                                                            |
+| `fast`         | **ollama → freellmpool → openrouter** | 5 | MEMORY_RETRIEVAL, MEMORY_SUMMARIZATION |
 | `long_context` | openrouter† → freellmpool → ollama                                                                                                                                                    | 2              | REPORT_GENERATION                                                                                                                 |
 | `local`        | ollama only                                                                                                                                                                           | 2              | reserved for explicit local-only work                                                                                             |
 | `emergency`    | **ollama → freellmpool**                                                                                                                                                              | 2              | EMERGENCY_FALLBACK (local **first** — when the internet is the problem)                                                           |
 
 † testing-only first preference — see the note in [§2](#2-the-layer-cake); keyless → contributes no routes.
 
+`PERSONA_GENERATION`, `PERSONA_REFINEMENT`, and `PERSONA_VALIDATION` remain as
+compatibility enum/map entries. Production business/study/role/dataset persona
+writing bypasses the pools and uses ML selection.
+
 Two invariants worth memorising:
 
-1. **Every pool ends at the local adapter.** The fallback ladder always terminates on this machine, so "all free providers are down" degrades to _slow_, not _broken_.
+1. **Every pool includes the local adapter.** Conversation/fast and emergency are local-first; other remote pools place Ollama last. A local route still requires a running daemon, a loadable model, and enough context; total failure remains possible.
 2. **All 18 task types must be mapped.** A unit test fails the build if someone adds a `TaskType` without a pool — and a second test fails on references to task types that don't exist.
 
 ---
@@ -124,7 +130,7 @@ Only **infrastructure** problems trigger fallback. Full mapping table in [ROUTIN
 
 There is **no `LOW_QUALITY` failure kind**, and a test enforces that there never will be. A weak-but-valid answer is a **content** problem, handled by:
 
-- the persona pipeline (schema validation → one refinement round → deterministic consistency rules → optional critic), and
+- content/schema validation in the calling feature (the retained LLM persona compatibility pipeline has one refinement round), and
 - the evaluation layer, [apps/backend/bebshax/evaluation/](../apps/backend/bebshax/evaluation/).
 
 If bad answers could trigger silent re-routing, our research question ("can free capacity preserve quality?") would be unanswerable — the infrastructure would be hiding the very thing we're measuring.
@@ -140,7 +146,7 @@ The obvious idea is "ask 3 free models and pick the best". We do **not**, for fo
 3. **Merging personas is incoherent.** Averaging three personas produces a fourth person nobody described. Persona identity must stay one consistent voice.
 4. **Judging needs another LLM call** — and a free judge model grading free worker models is a weak signal we'd then be tempted to trust.
 
-**What we do instead:** a _sequential_ pipeline where each extra call has a distinct, cheap job (validate → refine → critique), plus deterministic Python rules that need no LLM at all.
+**What we do instead:** LLM features use governed calls and explicit validation. The separate persona model blends lexical/topic similarity scores to select whole source profiles; that is not voting on LLM answers or merging persona identities.
 
 **Where multi-sampling is legitimate:** offline evaluation runs in [apps/backend/bebshax/evaluation/](../apps/backend/bebshax/evaluation/) and the routing simulator — those _do_ aggregate many runs, but into **metrics and reports**, never into a user-facing answer.
 
@@ -148,31 +154,27 @@ The obvious idea is "ask 3 free models and pick the best". We do **not**, for fo
 
 ## 8. How each feature actually uses the LLM
 
-### Persona generation — up to 4 calls, all sequential
+### Persona generation — zero LLM calls
 
-[apps/backend/bebshax/persona/generation.py](../apps/backend/bebshax/persona/generation.py)
+[MLPersonaAdapter](../apps/backend/bebshax/personas/ml_adapter.py) is shared by
+legacy business, study sync/jobs/regeneration, workflow-role, and dataset paths.
 
 ```mermaid
 flowchart LR
-    A["Business description"] --> B["Retrieve evidence<br/>(no LLM)"]
-    B --> C["PERSONA_GENERATION<br/>json_mode"]
-    C --> D{"Valid JSON?"}
-    D -- no --> E["PERSONA_REFINEMENT<br/>(exactly once)"]
-    D -- yes --> F["Consistency rules<br/>(pure Python)"]
-    E --> F
-    F --> G{"Errors?"}
-    G -- "yes, refinement unused" --> E
-    G -- "yes, already refined" --> H["❌ PersonaGenerationFailed"]
-    G -- no --> I["CRITIC (optional)<br/>→ warnings only"]
-    I --> J["✅ Stored persona"]
+    A["Business / study / role / dataset context"] --> B["Strict context + hard age bounds"]
+    B --> C["Local fitted TF-IDF/NMF<br/>diversity-aware source selection"]
+    C --> D["Complete synthetic source bundles"]
+    D --> E["Existing schemas / DB JSON<br/>source-model provenance"]
+    E --> F["Unchanged LLM interviews and memory"]
 ```
 
 Key points:
 
-- Schema-invalid output gets **exactly one** repair round, then an honest failure. No infinite retry loop, no "good enough" fallback.
-- The consistency checks (age vs occupation, income vs spending) are **plain Python rules** in [consistency.py](../apps/backend/bebshax/persona/consistency.py) — deterministic, free, testable.
-- The critic pass is **advisory**: its findings become `warnings`, never blockers. If the critic's own output is unparseable, we note that and move on.
-- Every attribute carries a provenance class: `OBSERVED` (cites an evidence id) / `INFERRED` / `SYNTHETIC`. The model is instructed that this is machine-verified.
+- Training fits vocabulary/IDF, topics, and representations on approved synthetic records. It does not fine-tune an LLM or invent new identities.
+- Source occupation/location/full narratives are retained. Role/location hints do not guarantee customer fit; explicit ages in 18–95 are hard bounds. Income/budget/OCEAN values are not inferred.
+- All claims are `SYNTHETIC`, with no observed citations. Missing/invalid artifacts return 503; unsupported/exhausted contexts return 422. No LLM/template/skeleton fallback writes profiles.
+- Active owner-scoped source exclusions prevent sequential reuse, not concurrent cross-process duplicates. Existing multi-role `failed_roles` behavior remains.
+- The explicit legacy LLM path remains for compatibility only; see [PERSONA_ENGINE.md](PERSONA_ENGINE.md). Current model and baseline results are in [MODEL_CARD.md](../ml_persona/MODEL_CARD.md): the NMF blend underperforms lexical TF-IDF.
 
 ### Interview — exactly 1 call per turn
 
@@ -194,9 +196,9 @@ Relevance dominates, recency keeps conversations fresh (48 h half-life), importa
 
 ---
 
-## 9. Provenance: one row per request
+## 9. Provenance: one row per LLM request
 
-Every request produces a `ProvenanceRecord` → the `llm_requests` table:
+Every LLM request produces a `ProvenanceRecord` → the `llm_requests` table:
 
 - `request_id`, `task`, `pool`, `persona_id`, `conversation_id`
 - `routing_path` — every candidate **considered**, including skipped ones with the reason (`[skipped: context 8192 < ~12000]`, `[skipped: cooling down for 43s more]`)
@@ -204,13 +206,13 @@ Every request produces a `ProvenanceRecord` → the `llm_requests` table:
 - `served_by_provider` / `served_by_model` — the **concrete** route, never `auto`
 - token counts, total latency, success flag
 
-This is what makes the research question answerable: for any persona or interview turn, we can say exactly which free model produced it and what it cost.
+LLM provenance identifies the actual serving route and recorded usage. ML profiles instead store their source/revision/record ID and model version in existing persona fields; they create no fabricated LLM request or provider-cost record.
 
 ---
 
 ## 10. Capacity: making the free tiers last
 
-The worry: _"personas + conversations burn a lot of tokens — will we run out?"_ Decisions recorded 2026-08-25: target ≈ **100 personas + interviews/day** (~2–5M tokens/day ≈ 60–150M/month), **strictly $0 spend**, everything **near-real-time**. That volume is comfortably inside the summed legitimate free tiers — _if_ consumption is spread across providers instead of hammering the first preference.
+The historical 2026-08-25 plan targeted approximately **100 personas plus interviews/day** on $0, with 2–5M tokens/day estimated. This was a planning target, not measured throughput or a near-real-time guarantee. Current ML profile selection consumes no LLM generation quota; copilot/interview/report traffic still does. End-to-end capacity needs a new measured workload rather than extrapolation from warm model timing.
 
 ### We already own the "cycler"
 
@@ -250,12 +252,13 @@ Honest ceiling: real-time + free tiers is bounded by the _sum of per-minute limi
 | Ollama local fallback (benchmarked on 4 GB VRAM)                                         | ✅ Phase 4                                                                                                  |
 | `PoolRouter`: pools, context budget, cooldowns, concurrency                              | ✅ Phase 5                                                                                                  |
 | Provenance + model registry persisted to Postgres                                        | ✅ Phase 6                                                                                                  |
-| Persona / memory / interview pipelines on the router                                     | ✅ Phases 8–10                                                                                              |
+| Original persona / memory / interview delivery | ✅ Phases 8–10; current persona writing uses ML, interviews/memory retain LLM routing |
+| CPU Persona ML source selection | Maintenance 2026-09-09; four runtime paths, trained/evaluated with documented limitations, not phase 16 |
 | Routing strategy experiments + evaluation metrics                                        | ✅ Phase 11                                                                                                 |
 | **Registry-driven ranking** (quality/latency/health scores feeding the `ranker` hook)    | ⬜ open — hook exists, scores not wired                                                                     |
 | **Tool calling**                                                                         | ⬜ open — no adapter advertises `supports_tools`, so `TOOL_CALLING` fails explicitly rather than pretending |
 | **Quota-aware capacity layer** (ledger, ranker, persistent cooldowns, capacity endpoint) | ✅ built 2026-08-26, live-verified — see [§10](#10-capacity-making-the-free-tiers-last)                     |
-| Full test matrix / acceptance tests                                                      | ⬜ Phase 14                                                                                                 |
+| Original full test matrix / acceptance tests | ✅ Phase 14, 2026-08-28; unchanged historical acceptance, not current ML publication gates |
 
 ---
 
@@ -275,12 +278,17 @@ Honest ceiling: real-time + free tiers is bounded by the _sum of per-minute limi
 
 **What if I have zero API keys?** Supported and tested — freellmpool starts keyless, and Ollama is local. Teammates add their own legitimately-owned keys via `.env`.
 
+**What does the persona model need?** Both Python packages installed with
+the [runtime constraints](../ml_persona/constraints.txt) and a trusted compatible
+local artifact. A fresh checkout/image lacks weights; follow [ML setup](SETUP.md#persona-ml-artifact).
+No GPU/API key is needed. The model is lazy-loaded/cached; restart after replacement.
+
 **What if all free providers are exhausted?** The ladder ends at Ollama, which serves `llama3.2:3b`. Chaos-tested. If Ollama is also down, you get `AllCandidatesFailed` with the complete attempt trail — an honest error, not a fabricated answer.
 
 **Why do we need Ollama at all — isn't freellmpool enough?** Ollama is **insurance, not horsepower**:
 
 1. Every remote free tier can fail _at the same time_ — a shared 429 storm, an internet outage, zero keys configured, or a provider policy change. Ollama is the only route we fully control: no quota, no rate limit, no ToS, no network.
-2. It converts "all providers exhausted" from a hard error into a slow-but-real answer — that's why **every pool terminates at the local adapter**, and why the `emergency` pool is local-_first_.
+2. It can serve when remote routes fail, provided the daemon/model/context are available. Pool order differs by task; emergency is local-first. It is not fallback for ML artifact failures.
 3. It makes zero-API-keys a supported configuration for teammates and demos.
 4. It is deliberately **not** counted as capacity: ~25 tok/s on the 4 GB card (~2M tokens/day theoretical ceiling). The capacity plan in [§10](#10-capacity-making-the-free-tiers-last) never relies on it for volume — resilience is this tier's only job.
 
@@ -294,6 +302,6 @@ Honest ceiling: real-time + free tiers is bounded by the _sum of per-minute limi
 | **B. Frontend on Vercel, backend on the dev PC**        | Still `localhost` to the backend                                          | Tunnel only the backend; point the frontend's API base at the tunnel URL; tighten `allow_origins` to the Vercel domain first                                          |
 | **C. Backend in the cloud, Ollama at home**             | `OLLAMA_API_BASE=https://<tunnel-host>` in the cloud env — no code change | Inverts Ollama's purpose (internet now sits inside the "no-internet" tier); Ollama has **no auth**, so never expose `:11434` raw — Cloudflare Access / Tailscale only |
 
-Notes that make this safe by design: Vercel itself can only host the _frontend_ (persona generation runs ~44 s and interview turns 40–89 s — beyond serverless limits, and `PoolRouter` holds in-memory cooldowns/semaphores that need a long-running process). And if the tunnel/PC is unreachable, `OllamaAdapter.candidates()` returns `[]` — the router simply routes without the local tier instead of erroring.
+This repository's Vercel setup hosts the frontend and calls a separately hosted API. The old ~44 s persona-generation and 40–89 s interview figures were LLM-era observations, not current ML timing or generic platform limits. The backend still has process-local state and needs its local ML artifact; deployment guidance is in [SETUP.md](SETUP.md). If the local tier is unreachable it contributes no usable route; requests succeed elsewhere or fail explicitly.
 
 **Is a slow/dumb answer a failure?** No. Infrastructure only reacts to 429s, quotas, timeouts, 5xx, context, and capability errors. Quality is measured, not routed around.

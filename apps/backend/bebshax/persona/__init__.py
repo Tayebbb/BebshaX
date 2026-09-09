@@ -1,15 +1,9 @@
-"""BebshaX persona engine: evidence-grounded persona generation.
+"""Persona contracts with lazily loaded generation and evidence services."""
 
-Pipeline (brief §15): business context → evidence retrieval (Phase-7 datasets)
-→ persona-driven prompt (PersonaHub methodology: a seed persona diversifies
-perspective, it is never copied) → PERSONA_GENERATION via LLMService →
-parse/validate → provenance coercion → deterministic consistency rules →
-optional CRITIC → store.
-"""
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
 
 from bebshax.persona.consistency import ConsistencyViolation, check_consistency
-from bebshax.persona.evidence import EvidenceStore
-from bebshax.persona.generation import PersonaEngine, PersonaGenerationFailed
 from bebshax.persona.schema import (
     EvidenceItem,
     GeneratedPersona,
@@ -17,6 +11,23 @@ from bebshax.persona.schema import (
     PersonaProfile,
     ProvenanceClass,
 )
+
+if TYPE_CHECKING:
+    from bebshax.persona.evidence import EvidenceStore
+    from bebshax.persona.generation import PersonaEngine, PersonaGenerationFailed
+
+_SERVICE_MODULES = {
+    "EvidenceStore": "bebshax.persona.evidence",
+    "PersonaEngine": "bebshax.persona.generation",
+    "PersonaGenerationFailed": "bebshax.persona.generation",
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _SERVICE_MODULES:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(_SERVICE_MODULES[name]), name)
+
 
 __all__ = [
     "ConsistencyViolation",

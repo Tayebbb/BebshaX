@@ -2,10 +2,17 @@
 
 How an LLM request travels through BebshaX, and why the routing dependencies were chosen.
 
+**Persona ML boundary (2026-09-09):** business, study/jobs/regeneration, workflow
+role, and dataset persona generation use the shared CPU `MLPersonaAdapter`, not
+this request path. No LLM call or fallback writes those profiles. Copilot context,
+role suggestions, interviews, memory, and other LLM features keep the existing
+router. Source/model provenance is stored with the persona; it is not a synthetic
+`llm_requests` entry. See [PERSONA_ENGINE.md](PERSONA_ENGINE.md).
+
 ## Request path (current, Phase 5)
 
 ```
-caller (persona engine, API, ...)
+LLM caller (copilot, interview, research, report, compatibility code, ...)
   → PoolRouter.complete(LLMRequest{task, ...})                       [bebshax/llm/router.py]
       task → pool (config map, all 18 task types)                    [bebshax/llm/pools.py]
       per-pool asyncio.Semaphore (concurrency limits)
@@ -37,6 +44,12 @@ Wired in `create_app` lifespan: `app.state.llm_router = PoolRouter(build_default
 | `local`        | ollama                                 | 2           | (reserved for explicit local-only calls)                                                                                          |
 | `emergency`    | **ollama → freellmpool** (local-first) | 2           | EMERGENCY_FALLBACK                                                                                                                |
 
+`PERSONA_GENERATION`, `PERSONA_REFINEMENT`, and `PERSONA_VALIDATION` remain in
+the exhaustive task map for compatibility. Their presence does not mean the
+production persona-generation routes still invoke an LLM. A missing/invalid ML
+artifact yields 503; an unsupported/exhausted selection yields 422, not a router
+attempt, cooldown, or LLM fallback.
+
 † **OpenRouterAdapter is a TESTING-ONLY first preference** (owner decision 2026-08-26). Keyless → it contributes no routes and the pool behaves as before. Free-tier reality at $0: 20 req/min, 50 req/day (extra accounts do not raise limits); paid `openrouter/auto` was removed from freellmpool's override list — do not fund the key. Its pool position contradicts D1/the capacity plan and must be revisited before production (`docs/AI_IMPLEMENTATION_PLAN.md` §10).
 
 **OpenRouter free catalogue is discovered, not hard-coded (2026-09-08).** The previous three `:free` seeds had all been delisted (404 → `MODEL_UNAVAILABLE` → three dead attempts and three 60 s cooldowns per request). With a key present the production adapter (`OpenRouterAdapter(discover_catalogue=True)`, wired only in `adapters/factory.py`) fetches the public `/api/v1/models` catalogue (no key needed), keeps the `:free` chat models (safety/code/reasoning families excluded), prefers routes that accept `response_format`, then larger context windows, and offers the top 4 with their real context windows and capability flags. Cached 30 min; a failed refresh keeps the last good list and records the error. Precedence: `BEBSHAX_OPENROUTER_MODELS` pin → discovered catalogue → `DEFAULT_MODELS` seed (offline only). `GET /api/health/openrouter` reports `catalogue` (pinned / discovered / error). Unit tests never discover (default off).
@@ -51,7 +64,7 @@ Wired in `create_app` lifespan: `app.state.llm_router = PoolRouter(build_default
 
 Reading: local clears the 8/10 bar in all three runs and beats cloud-fast on quality by ~1 point each time, but this is a small-n gate (one persona, five questions, one judge family), not a benchmark; the latency advantage is real in 2 of 3 runs and reversed in run 2. Earlier docs quoted only run 1 ("9.65 vs 53 s"). `FreellmpoolAdapter(routing="fast")` enables freellmpool's smoothed-latency-first ranking; per-task attempt budgets live in `bebshax/llm/latency.py` (interactive 25 s / standard 75 s / long-context 150 s → TIMEOUT advances the candidate chain). The repo's `providers.toml` is now actually loaded (`FREELLMPOOL_CONFIG` set by `bebshax.main`); it removes Kilo's double-proxy routes (`openrouter/free`, `kilo-auto/free`) and the 185 s nemotron-120b, and keeps only measured-fast OpenRouter models.
 
-- Every pool terminates at the local adapter (chaos-tested: remote exhausted → Ollama serves).
+- Every pool includes the local adapter. Conversation/fast and emergency are local-first; reasoning/structured/long-context put Ollama last, as shown in the source-backed table above.
 - **Ranking:** pool/adapter order today; `PoolRouter(ranker=...)` is the hook where Phase-6 registry scores (quality/latency/health) and Phase-11 strategy experiments plug in.
 - **Cooldowns:** failure kinds with `cooldown_route=True` (429, quota, 5xx, auth, provider/model unavailable) cool the route for 60 s (TIMEOUT: 30 s, `FailurePolicy.cooldown_seconds`); RATE_LIMITED / QUOTA_EXHAUSTED / AUTH_INVALID are **provider-scoped** (key `(provider, "*")`, added 2026-09-06) because they are account-level signals, the rest are route-scoped `(provider, model)`. Cooling routes are skipped with a routing-path note (`(provider-wide)` suffix for provider scope) and return automatically; state persists in `model_registry.cooldown_until` via `CooldownStore` and is restored at startup ([FAILOVER.md](FAILOVER.md) § Cooldowns).
 - **Cooldown probe (half-open breaker, 2026-09-08):** when cooldowns alone leave a pool with nothing eligible, the router does **not** fail in 0 ms. The routes that are capable, fit the context and are not already being probed are admitted in order of soonest recovery (`[cooldown probe: …]` in the routing path), one in-flight probe per route; a probe that fails re-arms its cooldown normally. Observed live before the fix: a single 75 s freellmpool timeout benched the only keyless route and every feature returned `all_candidates_failed` instantly for 30 s. Capability and context exclusions are never overridden.
@@ -97,7 +110,7 @@ Low answer quality is deliberately absent — it is handled by the evaluation la
 
 - Keys are environment variables only (see [.env.example](../.env.example)); freellmpool reads standard names (`GROQ_API_KEY`, `GEMINI_API_KEY`, `NVIDIA_API_KEY`, ...). Multiple keys per provider: comma-separated. Zero keys is a supported configuration (keyless providers).
 - The BebshaX app never hard-codes a provider list (owner decision #10); enabling/disabling providers is freellmpool configuration (`providers.toml` / env), surfaced later via the model registry (Phase 5/6).
-- Routing mode: `FreellmpoolAdapter(routing=...)` accepts freellmpool modes (`quality`, `fast`, `fair`, ...); task-type → routing-mode mapping arrives with Phase 5 pools.
+- Routing mode: `FreellmpoolAdapter(routing=...)` accepts freellmpool modes (`quality`, `fast`, `fair`, ...); the existing `TASK_POOL_MAP` chooses BebshaX pools, separately from freellmpool's internal ranking mode.
 
 ## Local fallback (Ollama) — Phase 4
 
@@ -116,6 +129,14 @@ Low answer quality is deliberately absent — it is handled by the evaluation la
 - Ops note (H2, 2026-08-26): the Ollama daemon has **no autostart** on the dev machine — after a reboot run `ollama serve` (or launch the desktop app). The backend logs a startup WARNING and sets `app.state.local_tier_up=False` when the local tier contributes no routes.
 
 ## Verification
+
+The 2026-09-09 ML continuation recorded seven successful Freellmpool responses
+served by `llm7/codestral-latest` through `freellmpool/auto`, for copilot context,
+role suggestions, and two interview turns. Existing OpenRouter quota cooldown
+was observed. Seven successes in this smoke sample are not a measured provider
+success rate or a cross-route benchmark. Persona selection made zero LLM calls.
+Historical local-model latency/quality tables above retain their original dates
+and small-sample limits; ML warm-selection latency is not LLM/API latency.
 
 - Unit (no network): `apps/backend/tests/llm/test_freellmpool_adapter.py` (error mapping, parameter passthrough, concrete-route provenance), `test_ollama_adapter.py` (mock-transport error mapping, candidate discovery/caps, `num_ctx` passthrough, oversize refusal), `test_boundary.py` (R1 enforcement).
 - Live keyless smoke: `python scripts/smoke_freellmpool.py`.

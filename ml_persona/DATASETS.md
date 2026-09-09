@@ -1,5 +1,7 @@
 # Persona ML Training Data
 
+Last verified: 2026-09-09.
+
 ## Policy And Source Of Truth
 
 The owner-approved 2026-09-08 exception to R9 permits only reviewed public
@@ -32,8 +34,15 @@ researched-source table are in [../data/DATASETS.md](../data/DATASETS.md).
 and [CC-BY-4.0 license](https://creativecommons.org/licenses/by/4.0/).
 Attribute NVIDIA Corporation, retain license and attribution notices, and
 identify the hash-ranked subset and field projection as BebshaX modifications.
-Synthetic names in the allowed full narratives are synthetic identifiers, not
-real-person PII. This is a synthetic prior, **not empirical consumer data**.
+Source-derived bundles also retain attribution and notices of normalization or
+other changes. The source license does not assign a license to BebshaX software
+or its dependencies. Names are intended to be synthetic identifiers; retained
+narratives may still contain cultural or protected information. Neither the
+allowlist nor synthetic origin proves complete PII removal. This is a synthetic
+prior, **not empirical consumer data**.
+
+The manifest records its license review on 2026-09-08. The pinned upstream card
+was fetched again and its CC-BY-4.0 license confirmed on 2026-09-09.
 
 ## Commands And Artifacts
 
@@ -45,10 +54,11 @@ From the repository root on the configured Windows development machine:
 .venv/Scripts/python.exe scripts/setup_datasets.py --profile ml_persona --force
 ```
 
-The implementation session does not run a real download. Main owns the first
-approved live run, checksum pinning, package normalization, split generation,
-model training, and model-card results. Generating documentation is not evidence
-that download, data validation, or training succeeded.
+The approved download, preparation, and local training have completed; the saved
+test evaluation was produced on the 2026-09-09 resume. The independent
+[CLI lifecycle](README.md) wraps the same downloader with
+`python -m bebshax_persona_ml download`, then provides `prepare`, `validate`,
+`train`, `evaluate`, `generate`, and `smoke`.
 
 Ingestion creates:
 
@@ -63,8 +73,27 @@ No downloader imports the `ml_persona` package. The existing `huggingface_hub`,
 `fastparquet`, and pydantic dependencies suffice; no `datasets`, `pyarrow`,
 provider SDK, or new dependency installation is introduced. The existing Hub
 dependency PyYAML is used only to classify structured-card parse failures.
-Splits and model artifacts are controlled by main under
-`data/processed/ml_persona/`; ingestion does not create them.
+Splits and model artifacts are produced by the independent package under
+`data/processed/ml_persona/`; ingestion itself does not create them. Local raw,
+processed, and model artifacts are ignored by Git and are not distributed with
+a clean checkout.
+
+## Recorded Ingestion
+
+| Measurement | Saved Value |
+| --- | --- |
+| Shard scan | 90,910 rows, all 5 row groups |
+| Selected profiles | 6,000, hash-ranked across the shard |
+| Raw shard bytes | 244,151,718 |
+| Projected JSONL bytes | 30,146,176 |
+| Raw SHA-256 | `af5d3e1c0ca2ca9cd12b5bcfc6ca5a850cdc6b7d6c24eb89ce948b23bed9c7e7` |
+| Processed SHA-256 | `02e5db3063fa79c5cbcf61fbb3419dd3cf62c368cc98cbb8745495f8cb80b0a2` |
+| Projected fields | 17; no missing columns; scalar missing/invalid counters all zero |
+
+The counters cover ingestion type/presence inspection across scanned rows.
+They are not the later `TrainingRecord` schema or candidate-completeness checks.
+The full per-location distributions remain in local reports rather than this
+summary; the subset is not a population-representative sample.
 
 ## Determinism And Verification
 
@@ -110,15 +139,17 @@ Inspection counters cover all scanned rows, not only the selected subset.
 Missing values remain `null` or their original empty text; invalid non-UUID
 values remain visible for strict normalization to reject. No values are
 imputed. The metadata hash detects corruption, not adversarial coordinated
-rewrites of local metadata and artifacts. After the first run, main can pin
-recorded `raw_sha256` and `processed_sha256` in the manifest; existing valid local
-artifacts remain verifiable after those pins are added.
+rewrites of local metadata and artifacts. Manifest `raw_sha256` and
+`processed_sha256` remain `null`; the recorded actual digests above are verified
+against retained upstream LFS/local metadata, not checked-in checksum pins or
+cryptographically signed source attestation.
 
-## Normalization Handoff
+## Normalization And Splits
 
-The output is suitable for the package owner's
-`prepare_records(rows, source, revision)` boundary. Ingestion does not generate
-normalized model records or import that function.
+[data.py](src/bebshax_persona_ml/data.py) owns
+`prepare_records(rows, source, revision)`;
+[pipeline.py](src/bebshax_persona_ml/pipeline.py) owns completeness filtering,
+split persistence, and re-verification. Ingestion does not import either one.
 
 | Upstream Fields | Meaning At The Handoff |
 | --- | --- |
@@ -129,11 +160,53 @@ normalized model records or import that function.
 | `cultural_background`, `skills_and_expertise`, `hobbies_and_interests` | Complete synthetic background and interest text |
 | `career_goals_and_ambitions` | Goal candidates, not measured customer objectives |
 
-Sex, zipcode, list variants, and other unapproved columns are not emitted.
+Explicit sex, zipcode, bachelors field, marital status, and the hobbies/skills
+list variants are not emitted. Cultural background is retained as source text;
+protected information may also occur elsewhere in narratives.
 Downstream regex extraction of `pain_points` produces candidate hypotheses,
 **not ground truth labels**. Income is absent and remains unknown. Never infer
 income, purchasing power, or budget from age or occupation. No supervised
 business-to-customer or customer-demand labels are supplied by this corpus.
+
+Normalization applies Unicode NFKC and whitespace collapse to strings, but does
+not summarize or truncate narratives. It requires a source UUID and identity
+description, hashes source/UUID for the stable record ID, preserves revision and
+documents, extracts a name only when the source text supports it, and rejects
+detected email/URL contact text. Goals come from source career-goal text;
+behaviors retain source hobby/identity text; pain points are whole matching
+sentences. Missing values are not imputed and source locations are not rewritten.
+
+| Preparation Stage | Recorded Result |
+| --- | --- |
+| Projected input | 6,000 |
+| Normalization accepted | 4,694 |
+| Normalization rejected | 1,306, all labelled `invalid_schema` |
+| Initial ID/content duplicates | 0 |
+| Incomplete candidates removed | 1,078 |
+| Duplicate identities/names removed | 22 |
+| Usable candidates | 3,594 |
+| Train / validation / test | 2,516 / 539 / 539; seed 42, 70/15/15 |
+
+`invalid_schema` is the `TrainingRecord` pydantic-validation branch, not a
+missing-input or scalar-ingestion error. In particular, age must be a strict
+integer in 18-95 when present; the saved aggregate does not retain per-row
+validation details. Completeness separately requires an adult age, source ID,
+description, occupation, at least one goal, and at least one extracted pain
+point. Zero scalar-ingestion missingness therefore does not mean every profile
+is schema-valid or complete for selection.
+
+The pipeline deterministically orders candidates, deduplicates IDs, normalized
+names, and descriptions, and groups related identities before the seeded split.
+Training, validation, and test never share those identities. `validate`, `train`,
+and `evaluate` re-verify the approved source through `_verify_source`, check
+source/split/record/preparation digests, and reconstruct normalized records and
+canonical split membership from that source. Rehashed forged preparation/split
+files still fail this source comparison; local hashes are not an independent
+trust anchor against coordinated replacement of all source metadata.
+
+The model fits only training records, selects hyperparameters on validation,
+and evaluates the frozen model on test. See [EXPERIMENTS.md](EXPERIMENTS.md) for
+the recorded results and [MODEL_CARD.md](MODEL_CARD.md) for intended use/limits.
 
 ## Research Decisions And Limits
 

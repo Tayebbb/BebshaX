@@ -50,7 +50,7 @@
   | 400  | `segmentation_requires_data` · `behavioral_requires_personas` · `scenario_required` · `script_required` · `nothing_to_review` · `business_description_required` · `report_requires_data`                                                                                                                                                                                         | the input the feature analyses is missing (no dataset rows / personas / scenario text / interview script / artefacts). `business_description_required`: script generation on a study with no prompt (a title is not a business). `report_requires_data`: report generation on a study with no personas, interviews, evidence, segments, behavioral results or datasets — a report over nothing would be a template. `nothing_to_review` also fires when a report row is the study's ONLY artefact. |
   | 404  | `scenario_not_found`                                                                                                                                                                                                                                                                                                                                                             | `POST …/behavioral-tests/{id}/runs` named a `scenario_id` that does not belong to that test (the run is refused, never silently substituted with the description)                                                                                                                                                                                                                                                                                                                                  |
 
-  Partial outcomes are reported, never hidden: `POST /api/study/generate-personas` returns `{personas, failed_roles[{role_id, role, error_code, detail}], served_by[]}`; dataset persona generation returns `failed[]`/`failed_count`; interview completion returns `insights.source = "unavailable"` with `error_code` when synthesis failed, and `insights_dropped` (also on each `personas[id]` entry of a batch-run job) counts insight rows the database rejected — the interview itself still completes; research runs expose `summary.error_code`.
+  Partial outcomes are reported, never hidden: `POST /api/study/generate-personas` returns `{personas, failed_roles[{role_id, role, error_code, detail}], served_by[]}`; retained dataset LLM-compatibility generation exposes `failed[]`/`failed_count`, while runtime ML dataset failures abort the persona batch before persistence and may include `failed[]` in the error; interview completion returns `insights.source = "unavailable"` with `error_code` when synthesis failed, and `insights_dropped` (also on each `personas[id]` entry of a batch-run job) counts insight rows the database rejected — the interview itself still completes; research runs expose `summary.error_code`.
 
   Behavioral runs resolve their scenario from the request body's `scenario_text`, else the test's stored scenario (`scenario_id` if given, otherwise the most recent), else the test description; `run.scenario_id` links only to a scenario row verified to belong to the test.
 
@@ -58,10 +58,10 @@
 
   | HTTP | error_code | Raised when |
   | --- | --- | --- |
-  | 503 | `ml_persona_unavailable` | The configured local artifact cannot be loaded (missing, invalid, or unreadable). Default adapter detail: "The local persona model is unavailable." |
-  | 422 | `ml_persona_unsupported_context` | Business context validation or model selection cannot support the requested context/constraints, or a selected record lacks the required age. Default adapter detail: "The local persona model cannot support the requested context or constraints." |
+  | 503 | `ml_persona_unavailable` | The configured local artifact cannot be loaded (missing, invalid, unreadable, or incompatible numerical runtime). Default adapter detail: "The local persona model is unavailable." |
+  | 422 | `ml_persona_unsupported_context` | Business context validation or selection fails, including no vocabulary overlap, unsupported ages, or too few distinct eligible candidates after exclusions. Default adapter detail: "The local persona model cannot support the requested context or constraints." |
 
-  Persona generation does not silently fall back to an LLM. Chat, role suggestions, and interviews retain their existing LLM routing. Artifact configuration and the absence of a supplied production artifact are documented in [SETUP.md](SETUP.md#persona-ml-artifact).
+  Persona generation does not silently fall back to an LLM. Chat, role suggestions, and interviews retain their existing LLM routing. The local model has been trained/evaluated, but clean checkouts do not include its ignored bundle. Configuration, exact numerical-version compatibility, and build commands are in [SETUP.md](SETUP.md#persona-ml-artifact).
 
 ---
 
@@ -306,9 +306,12 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
     "generation_hints": [
       "Prioritize irregular cashflow challenges",
       "Mobile-first technology user"
-    ]
+    ],
+    "min_age": 18,
+    "max_age": 65
   }
   ```
+- Optional `min_age` / `max_age` are strict integers in 18-95, inclusive; the resolved minimum must not exceed the maximum. They are hard eligibility constraints, unlike audience/role/location wording, which is only relevance context. The response preserves the selected source occupation and location, never inferring income/budget or relabeling a profile to match the request.
 - **Response `201 Created`:** a `PersonaProfile` serialized by [api/personas.py](../apps/backend/bebshax/api/personas.py), with the source-derived ML fields below. This is a schema description, not a live inference result.
 
   | Field | Local ML value / meaning |
@@ -331,9 +334,62 @@ export type MemoryKind = "semantic" | "episodic" | "reflection";
 
 The study, workflow, and dataset persona-generation paths use the same [ML adapter](../apps/backend/bebshax/personas/ml_adapter.py) and retain their existing response envelopes. Study/workflow records also carry `dataset_refs` containing the same ML provenance object; workflow personas expose `is_synthetic: true`, `grounding_basis: "synthetic_training_proxy"`, and synthetic attributes with empty evidence links. Context claims used to select a record do not make that record's attributes observed evidence.
 
+| Generation Path | Existing Contract / Age Input |
+| --- | --- |
+| `POST /api/businesses/{business_id}/personas` | One `PersonaProfile`; request `min_age` / `max_age` |
+| `POST /api/studies/{study_id}/personas/generate` (and existing jobs/regeneration paths) | Existing study run/persona schemas; `segment.characteristics.demographics.age_range` supplies explicit bounds |
+| `POST /api/study/generate-personas` | Existing workflow envelope; each selected role may carry `min_age` / `max_age`; existing 1-3 per-role count cap is unchanged |
+| `POST /api/datasets/{dataset_id}/generate-personas` | Existing dataset run/persona envelope; segment `constraints.age_range`, or numeric age min/max, supplies bounds; dataset numeric endpoints are rounded inward to integer ages |
+
+Generated source goals, regex-extracted pain points, and behaviors remain
+`SYNTHETIC` with empty citations, zero grounding, and unset/zero confidence.
+Unknown income/budget and OCEAN/personality measurements are not invented.
+`role_title` is workflow metadata, not proof of the selected occupation. Dataset
+`dataset_refs` can additionally describe the segment with `usage:
+"selection_context"`; that is not evidence supporting the selected identity.
+The role endpoint's `evidence_claim_count` counts available study context claims,
+not grounded ML attributes; those still have no evidence IDs. Source documents
+are complete normalized text, and source/model hashes are not signed attestation.
+
 `POST /api/study/generate-personas` still returns `{personas, failed_roles, served_by}`. `served_by[]` contains the successful `bebshax-persona-ml/<model_version>` identifiers. If some roles fail, HTTP 200 retains their `{role_id, role, error_code, detail}` entries in `failed_roles`; if all fail, the last coded error is raised with its HTTP status (including the ML 503/422 errors in section 1).
 
-These fields describe the pending integration's serialization contract, not a supplied trained artifact, completed training, or measured live quality. Synthetic-selection scope and limitations remain in [ml_persona/ARCHITECTURE.md](../ml_persona/ARCHITECTURE.md).
+#### Active-source exclusions and persistence
+
+[active_source_exclusions](../apps/backend/bebshax/personas/service.py) reads
+nonarchived source IDs and names within the owner and applicable scope. Business
+generation scopes to the business; study generation/regeneration scopes to the
+study; dataset generation uses the study when present, otherwise that owner's
+study-less generation runs for the dataset. Study/dataset segments also exclude
+selections already made in the current batch. Repeated sequential requests
+therefore avoid active sources rather than repeatedly selecting the same record.
+
+ML study/dataset generation that cannot fill the requested eligible batch raises
+422 without saving a partial persona batch; a study run can remain recorded as
+failed. Dataset selection errors can carry per-segment `failed[]` diagnostics.
+Study `persona_count` is the total of active owner-scoped rows, not just the new
+batch size. Role generation retains its existing behavior: it excludes siblings
+within the request and archives the old cohort when persisting the new one,
+without excluding old-cohort source records from selection. Its partial-role
+success contract above is unchanged.
+
+Exclusions are a read-before-generate check, not a transactional uniqueness lock.
+Overlapping independent requests/processes can still select the same source;
+no cross-process uniqueness guarantee is claimed. Existing persona tables,
+JSON columns, ownership/quota checks, and response schemas remain authoritative.
+There is no new ML database migration, frontend/provider change, or HTTP training
+endpoint.
+
+Recorded 2026-09-09 checks include offline contracts plus five unique ML profiles
+persisted/read back in fresh local PostgreSQL, real copilot/role/interview calls,
+and Linux loading of the Windows-trained artifact with networking disabled.
+They are not an all-route load test or production-readiness certification. The
+model underperforms lexical TF-IDF on the retrieval proxy;
+see [MODEL_CARD.md](../ml_persona/MODEL_CARD.md) and
+[EXPERIMENTS.md](../ml_persona/EXPERIMENTS.md). USA-only synthetic selections do
+not establish student/Bangladesh fit or customer demand. Desktop passed; mobile
+persona-header clipping remains. Full Compose app/web rehearsal and
+cross-conversation retrieval were not run. Final post-sync gates and publication
+are separately recorded in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 #### `data_source` — demo honesty label (audit H3 piece 2)
 
@@ -471,6 +527,7 @@ The study-scoped message endpoint (`POST /api/studies/{study_id}/interviews/{int
 #### `GET /api/evaluation/metrics`
 
 - Every value is **measured** (provenance aggregates from `llm_requests`, persona validation artifacts, judged gate reports). Metrics with no underlying data are `null` — never an invented `0.0`/`1.0`. The former `routing_strategies` array (which included a fabricated "ROUND_ROBIN (Naive)" arm) is **removed**.
+- The JSON below illustrates the response shape, not current ML measurements. `local_serve_rate` counts Ollama LLM responses, not CPU persona selection. ML creates no `PERSONA_GENERATION` LLM request, so request-derived schema/latency metrics cannot measure ML validity or inference time; use the separate [ML evaluation](EVALUATION.md#5-isolated-persona-ml-evaluation-2026-09-09).
 - **Response `200 OK`:**
   ```json
   {

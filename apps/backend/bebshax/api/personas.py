@@ -27,7 +27,7 @@ from bebshax.persona.store import (
     load_persona,
     save_persona,
 )
-from bebshax.personas.service import PersonaGenerationService
+from bebshax.personas.service import PersonaGenerationService, active_source_exclusions
 from bebshax.personas.ml_adapter import get_persona_ml
 from bebshax.tenancy import allowed_owner_ids
 
@@ -548,6 +548,9 @@ async def generate_persona_endpoint(
         # (B6 stage 3; owner_accessible also covers anon-tenant stamps).
         if not owner_accessible(business.owner_id, current_user):
             raise HTTPException(status_code=404, detail="business not found")
+        exclude_ids, exclude_names = await active_source_exclusions(
+            session, owner_id=owner_id, scope=Personas.business_id == business_id,
+        )
 
     engine = request.app.state.persona_engine
 
@@ -573,6 +576,8 @@ async def generate_persona_endpoint(
             target_market=business.target_market,
             min_age=body.min_age,
             max_age=body.max_age,
+            exclude_ids=exclude_ids,
+            exclude_names=exclude_names,
         )
     except PersonaGenerationFailed as exc:
         raise HTTPException(

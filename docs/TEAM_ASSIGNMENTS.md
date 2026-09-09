@@ -1,10 +1,27 @@
 # BebshaX — Team Assignments
 
+## Current maintenance coordination (2026-09-09)
+
+All original 15 phases are complete; their dates and acceptance records remain
+unchanged. The phase blocks below are the historical ownership/convergence plan,
+not instructions to restart completed work. Current status is in
+[PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md).
+
+Persona ML maintenance spans the independent [ML package](../ml_persona/README.md),
+shared backend adapter, dataset setup, and existing business/study/role/dataset
+callers. Coordinate changes across their owners; chat/interview routing, schemas,
+and DB contracts remain in place. Keep tests and affected docs together, record
+maintenance in the append-only [implementation log](IMPLEMENTATION_PLAN.md),
+and keep the Git-ignored source data/splits/model out of commits. Final tests,
+remote integration, and publication must be reported from actual results.
+
+## Original phase ownership plan
+
 Three parallel tracks for **Tayeb**, **Sazid**, **Shehab**. Designed so the current work block has **zero file overlap and zero cross-dependencies**: each track owns disjoint directories, and every contract a track builds against (`LLMService`, `ProvenanceRecord`, `TaskType`, persona field list, `/api/health`) is already frozen in `main` since Phases 1–3.
 
 To do your next task, open your AI tool in this repo and say: **"Implement phase N"** (the agent follows [AGENTS.md](../AGENTS.md) + [PHASES.md](PHASES.md)).
 
-## Current parallel block (start now, any order, no waiting on each other)
+## Original parallel block (historical)
 
 | Teammate   | Track                  | Phases (in order)                                      | You own these paths — nobody else touches them                                                                                                                                                                      |
 | ---------- | ---------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -1,6 +1,6 @@
 # BebshaX — Team Setup
 
-Get from `git clone` to green tests in ~5 minutes. Read [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) and [RULES.md](../RULES.md) first.
+Set up the application, offline tests, and local persona artifact. Download/training time is separate from environment setup. Read [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) and [RULES.md](../RULES.md) first.
 
 ## Prerequisites
 
@@ -19,18 +19,53 @@ git clone https://github.com/Tayebbb/BebshaX.git
 cd BebshaX
 
 python -m venv .venv
-.venv\Scripts\pip install -e ml_persona -e "apps/backend[dev]"
+.venv/Scripts/pip.exe install -c ml_persona/constraints.txt -e ml_persona -e "apps/backend[dev]"
 
 # verify
 .venv\Scripts\python -m pytest apps/backend/tests -q
 .venv\Scripts\python -m pytest ml_persona/tests -q
 
-# run the API
+# After configuring secrets and applying database migrations below, run the API
 .venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000
 # → http://127.0.0.1:8000/api/health
 ```
 
-Install both local Python packages even when no ML artifact is available. Persona ML inference requires a trained artifact directory configured by `BEBSHAX_ML_PERSONA_ARTIFACT_DIR` (default `data/processed/ml_persona/model` with unchanged data roots). This sync provides no trained production artifact and performs no model training; chat/interview LLM routing is unchanged. See [SETUP.md](SETUP.md#persona-ml-artifact) for path resolution and explicit ML failures.
+Install both local Python packages even when no ML artifact is available. The
+CPU-only reference model has been trained/evaluated locally, but its ~32.54 MiB
+bundle is Git-ignored and not supplied by a fresh checkout. Serving uses
+`BEBSHAX_ML_PERSONA_ARTIFACT_DIR`, default `data/processed/ml_persona/model` with
+unchanged data roots. The constraints above pin the exact NumPy/SciPy/scikit-learn
+versions required by that bundle and used by the backend image. The base setup
+helper/CI installs are unconstrained; apply the pins or train a compatible bundle.
+Chat/interview LLM routing is unchanged.
+
+### Prepare the persona artifact
+
+Run from the repository root for a fresh artifact:
+
+```powershell
+.venv/Scripts/python.exe -m bebshax_persona_ml download
+.venv/Scripts/python.exe -m bebshax_persona_ml prepare
+.venv/Scripts/python.exe -m bebshax_persona_ml validate
+.venv/Scripts/python.exe -m bebshax_persona_ml train --config ml_persona/configs/training.json
+.venv/Scripts/python.exe -m bebshax_persona_ml evaluate
+.venv/Scripts/python.exe -m bebshax_persona_ml generate --input ml_persona/examples/business.json --num-personas 5
+.venv/Scripts/python.exe -m bebshax_persona_ml smoke --backend --input ml_persona/examples/business.json
+```
+
+Only download needs network; no API key, API/DB server, LLM, or GPU is needed.
+`download` delegates to the independent `ml_persona` profile, not included in
+`full`. Do not overwrite existing outputs or retune on the inspected test set:
+on the trained checkout, use generation/smoke directly. There is no console
+entry point; use `python -m bebshax_persona_ml`. `--backend` adds schema/conversion
+checks, not live API/DB validation. See [ML README](../ml_persona/README.md).
+
+The model selects synthetic USA source profiles, not new customer identities.
+Role/location are hints, explicit ages are hard bounds in 18–95, and missing
+income/OCEAN stays unknown. It underperforms lexical TF-IDF on held-out retrieval.
+No LLM fallback is attempted: missing/incompatible models return 503;
+unsupported/exhausted contexts return 422. Restart after replacing a trusted
+validated bundle. See [SETUP.md](SETUP.md#persona-ml-artifact) for path resolution.
 
 ### Verified repo commands (Last verified: 2026-09-02)
 
@@ -49,10 +84,11 @@ macOS/Linux: replace `.venv\Scripts\` with `.venv/bin/`.
 ## Configuration
 
 ```powershell
-Copy-Item .env.example .env   # then edit
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 - All BebshaX settings use the `BEBSHAX_*` prefix — see [.env.example](../.env.example).
+- Preserve existing valid secrets and database settings. A new API environment needs a unique `BEBSHAX_JWT_SECRET` of at least 32 characters; use the [secret setup](SETUP.md#3-secrets). JWT expiry defaults to one day.
 - **Provider keys are optional.** The system runs keyless (Pollinations, OVHcloud, Kilo, LLM7). Add whatever legitimate free-tier keys _you personally_ own to raise capacity — never share accounts, never create duplicates (RULES.md R4/R5).
 - Free key signup pages (no card): Groq `console.groq.com/keys` · Google AI Studio `aistudio.google.com/apikey` · NVIDIA NIM `build.nvidia.com` · Mistral `console.mistral.ai/api-keys` · Cerebras · OpenRouter `openrouter.ai/keys` · Cohere `dashboard.cohere.com/api-keys` · GitHub Models (any PAT).
 
@@ -88,6 +124,8 @@ npm run build      # Verifies TypeScript & builds production bundle
 | Refresh dependency lock after changing pyproject | `.venv\Scripts\pip freeze --exclude-editable \| Out-File -Encoding utf8 apps/backend/requirements.lock` |
 | Download datasets (minimal profile)              | `.venv\Scripts\python scripts/setup_datasets.py --profile minimal`                                      |
 | Download datasets (development profile)          | `.venv\Scripts\python scripts/setup_datasets.py --profile development`                                  |
+| Download approved synthetic training profile | `.venv/Scripts/python.exe scripts/setup_datasets.py --profile ml_persona` |
+| ML local/backend-contract smoke (trained checkout) | `.venv/Scripts/python.exe -m bebshax_persona_ml smoke --backend --input ml_persona/examples/business.json` |
 | Verify dataset revisions & files (offline check) | `.venv\Scripts\python scripts/setup_datasets.py --verify-only`                                          |
 
 ## Before you push
@@ -95,4 +133,5 @@ npm run build      # Verifies TypeScript & builds production bundle
 1. Tests green (R7).
 2. No secrets in the diff (R4).
 3. If you added a dependency: write the review (R8).
-4. Phase work? Update the implementation log in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+4. Keep affected docs with the change. ML work is maintenance: add a maintenance entry to [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), not phase 16, and preserve the original phase dates.
+5. Record actual gates after integrating remote changes; historical test counts and smoke observations are not a new CI/push result. Do not commit raw data, splits, model bundles, or secrets.

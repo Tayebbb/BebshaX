@@ -1,6 +1,6 @@
 # BebshaX
 
-BebshaX is a synthetic-user / persona research system: it continuously generates realistic, evidence-grounded personas for a specific business or product and lets those personas participate in interviews and simulations — built on essentially zero API budget by aggregating **legitimate** free LLM capacity behind intelligent routing, failover, and context-aware model selection.
+BebshaX is a synthetic-user / persona research system: a trained CPU-only model selects coherent synthetic source profiles for a business context, then those personas participate in interviews and simulations through governed, **legitimate** free LLM capacity. Selected profiles are research hypotheses, not observed customers or validated demand.
 
 > Renamed from _SignalLens_ on 2026-08-22. No other historical relationship — the project is greenfield.
 
@@ -16,6 +16,7 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/backend/`                                 | FastAPI backend (Python 3.12, async) — package `bebshax`                                                                                                                                |
 | `apps/frontend/`                                | React + Vite single-page app (added in Phase 12)                                                                                                                                        |
+| `ml_persona/`                                   | Independent TF-IDF/NMF training, source selection, CLI, model card, and evaluation; no LLM or GPU |
 | `services` (inside backend)                     | `bebshax.llm` policy layer → adapters → freellmpool / Ollama                                                                                                                            |
 | `data/raw` · `data/processed` · `data/metadata` | Datasets (reproducible via `scripts/`, not committed)                                                                                                                                   |
 | `scripts/`                                      | Setup, dataset, and evaluation tooling                                                                                                                                                  |
@@ -23,16 +24,16 @@ BebshaX is a synthetic-user / persona research system: it continuously generates
 
 ## Quickstart (state: Phases 1–15 ✅ complete)
 
-One-shot: `python scripts/setup.py` (creates venv, installs, bootstraps .env + JWT secret, starts db, migrates, fetches datasets, runs tests). Manual:
+Base bootstrap: `python scripts/setup.py`. It does not supply a trained ML artifact; follow the [ML lifecycle](ml_persona/README.md) before live persona generation. Manual installation uses the reference artifact's numerical constraints:
 
 ```powershell
 # Backend
 python -m venv .venv
-.venv\Scripts\pip install -e ml_persona -e "apps/backend[dev]"
+.venv/Scripts/pip.exe install -c ml_persona/constraints.txt -e ml_persona -e "apps/backend[dev]"
 
 # Required before the API will start (see "Secrets" below)
-copy .env.example .env
-# then generate a real value:
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+# For a new environment, generate a real value; preserve existing secrets:
 .venv\Scripts\python -c "import secrets; print(secrets.token_urlsafe(48))"
 # paste it into BEBSHAX_JWT_SECRET in .env
 
@@ -58,19 +59,43 @@ npm run dev
 # → http://localhost:5173
 ```
 
-**Persona ML prerequisite:** install both local Python packages. Inference additionally requires a trained artifact directory via `BEBSHAX_ML_PERSONA_ARTIFACT_DIR`, or at the default `data/processed/ml_persona/model` under the configured processed-data root. This sync supplies no trained production artifact and includes no model training. See [docs/SETUP.md](docs/SETUP.md#persona-ml-artifact) for the exact setting and explicit failures; chat/interview LLM routing is unchanged.
+**Persona ML status (2026-09-09):** business, study, role, and dataset persona
+generation now share the isolated CPU-only non-LLM selector and existing storage
+contracts. The local model is trained/evaluated; its source-derived claims are
+`SYNTHETIC`, not customer evidence, and it underperforms lexical TF-IDF on the
+retrieval proxy. Install both packages and build the Git-ignored bundle using
+[ml_persona/README.md](ml_persona/README.md). The default is
+`data/processed/ml_persona/model`, overridden by `BEBSHAX_ML_PERSONA_ARTIFACT_DIR`;
+unavailable models return 503 and unsupported/exhausted contexts return 422,
+never an LLM fallback. Source role/location is preserved; only explicit age
+bounds are hard, and income/OCEAN values are not invented. Chat/interviews are
+unchanged. The recorded continuation passed local PostgreSQL persistence,
+seven Freellmpool smoke responses, and Linux loading of the Windows artifact
+with networking disabled. Desktop passed; mobile persona-header clipping
+remains. Full Compose app/web rehearsal and final post-sync publication gates
+are not claimed complete. See the [model card](ml_persona/MODEL_CARD.md) and
+[verification scope](ml_persona/IMPLEMENTATION_REPORT.md); original phase dates
+are unchanged.
 
-### Verified command matrix (Last verified: 2026-09-02)
+The independent CLI is `python -m bebshax_persona_ml`; there is no console
+entry point. After download/preparation/validation/training, use
+`.venv/Scripts/python.exe -m bebshax_persona_ml smoke --backend --input ml_persona/examples/business.json`
+for the five-stage local check. This does not connect to the API or DB. Fresh
+CI/Compose environments install the package but still need a trusted compatible
+bundle; the loader checks exact numerical versions and caches the model until
+the API restarts.
+
+### Command matrix (Windows PowerShell 5.1)
 
 | Purpose                    | Command                                                                         |
 | -------------------------- | ------------------------------------------------------------------------------- |
 | Start the app stack        | `node scripts/dev.js`                                                           |
 | Start only the backend     | `.venv\Scripts\python -m uvicorn bebshax.main:app --host 127.0.0.1 --port 8000` |
-| Start only the frontend    | `cd apps/frontend && npm run dev`                                               |
+| Start only the frontend    | `npm --prefix apps/frontend run dev`                                            |
 | Start the Postgres service | `docker compose up -d --wait db`                                                |
-| Apply migrations           | `cd apps/backend && ..\..\.venv\Scripts\python -m alembic upgrade head`         |
+| Apply migrations           | `.venv/Scripts/python.exe -m alembic -c apps/backend/alembic.ini upgrade head`    |
 | Run backend tests          | `.venv\Scripts\python -m pytest apps/backend/tests -q`                          |
-| Build frontend             | `cd apps/frontend && npm run build`                                             |
+| Build frontend             | `npm --prefix apps/frontend run build`                                          |
 
 The root launcher in [scripts/dev.js](scripts/dev.js) is the current daily-dev entry point: it boots the FastAPI backend and the Vite frontend together and intentionally warns rather than blocking when Docker is unavailable.
 
@@ -90,11 +115,16 @@ Everything below is enforced by [AGENTS.md](AGENTS.md), [RULES.md](RULES.md), te
 
 ## 1. One-time setup (day 1, ~5 min)
 
-1. Follow [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md) exactly: venv → `pip install -e ml_persona -e "apps/backend[dev]"` → run tests. Don't continue until the suite passes.
-2. Copy `.env.example` → `.env`. Provider keys are **optional** (keyless providers work); add only free-tier keys from accounts **you personally own**. Never share keys, never commit `.env`.
+1. Follow [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md): venv → `pip install -c ml_persona/constraints.txt -e ml_persona -e "apps/backend[dev]"` → tests → ML artifact setup. Don't continue until the required gates pass.
+2. Create the local environment file from [.env.example](.env.example) only if absent; preserve existing secrets and database settings. Provider keys are **optional** (keyless providers work); add only keys from accounts **you personally own**. Never share or commit them.
 3. Read, in this order: [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) → [RULES.md](RULES.md) → [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md) (find your name) → your phase's section in [docs/PHASES.md](docs/PHASES.md). ~20 minutes total.
 
 ## 2. Your lane (no overlap, no waiting on each other)
+
+The table below is the historical audit assignment snapshot, not a current
+backlog. All original phases are complete. Coordinate ML maintenance across the
+owning backend/data paths, keep its docs/tests together, and do not add phase 16
+or change original acceptance dates.
 
 | Who        | Track                 | Completed Phases           | Up Next                                                         | You own (nobody else touches)                                                                                       |
 | ---------- | --------------------- | -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -104,7 +134,7 @@ Everything below is enforced by [AGENTS.md](AGENTS.md), [RULES.md](RULES.md), te
 
 Stay inside your paths. Need to change something outside them → PR + ping the owner. Full matrix and the convergence order for phases 8–15: [docs/TEAM_ASSIGNMENTS.md](docs/TEAM_ASSIGNMENTS.md).
 
-`bebshax/api/**` and `bebshax/auth/**` were unowned until the audit — which is exactly where every blocker came from. Ownership is now assigned in the table above and in [docs/AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md#blocking-decision); all three still need to tick the agreement box there.
+`bebshax/api/**` and `bebshax/auth/**` ownership was recorded during the audit in [docs/AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md). Use that historical record for context, not as a fresh verification of outstanding work.
 
 ## 3. How to build your phase
 
@@ -144,7 +174,7 @@ If the agent skipped a doc update, tell it: _"You violated AGENTS.md step 6 — 
 - No provider SDK imports outside `bebshax/llm/adapters/` (a test fails anyway).
 - Never truncate persona/evidence to fit a model — explicit failure, always.
 - Low answer quality is **not** an infrastructure failure — don't add it to fallback.
-- No secrets / `.env` / real PII in commits. No duplicate accounts or rate-limit evasion. No fine-tuning on datasets. No Kubernetes / Redis / queues / custom gateways.
+- No secrets / `.env` / real PII in commits. No duplicate accounts or rate-limit evasion. No LLM fine-tuning. Only the R9-approved synthetic-only `ml_persona` profile may train the non-LLM selector; existing datasets remain grounding/evaluation only. No Kubernetes / Redis / queues / custom gateways.
 
 ## 7. When stuck
 

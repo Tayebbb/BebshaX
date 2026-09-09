@@ -49,7 +49,7 @@ After every phase: run tests, inspect generated files, fix errors, update this p
 
 ## Non-goals (explicit, from brief §42 + owner 2026-08-22)
 
-Kubernetes, microservices, Redis clusters, message queues, ML-learned router in the request path, custom LLM gateway, account-multiplication or any rate-limit evasion. Datasets serve grounding/diversity/behavioral-examples/evaluation only — **this is not a model-training/fine-tuning project**. Low answer quality is never treated as an infrastructure failure.
+Kubernetes, microservices, Redis clusters, message queues, ML-learned router in the request path, custom LLM gateway, account-multiplication or any rate-limit evasion. Existing dataset profiles serve grounding/diversity/behavioral examples/evaluation only. The owner-approved 2026-09-08 exception permits isolated non-LLM persona training on reviewed synthetic data in the independent `ml_persona` profile; **LLM fine-tuning remains prohibited**. Low answer quality is never treated as an infrastructure failure.
 
 ## Implementation log
 
@@ -62,6 +62,79 @@ Frontend only; backend untouched. The authenticated console (`/app`, `/dashboard
 ### Maintenance (2026-09-09, later) — Button kit modernised and adopted on the study workflow
 
 `ui.css` `.bx-btn` family reworked to iOS-style pills: gradient-lit primary with glow, frosted `secondary`, new `tinted` intent (accent text on translucent accent), visible focus ring, hover lift. New `.bx-counter` segmented +/- stepper. The kit was previously unused (every button was inline-styled); the workflow header (Exit Study), Step 1 (evidence actions, Retry, Approve Goal, Generate Personas, role counters) and the email-verify banner now use it. Stepper badges got a lit gradient + halo for the current step. 269 tests green.
+
+### Maintenance (2026-09-09): Persona ML resume, evaluation, integration hardening, and live verification
+
+Recovered the interrupted work from the clean synced checkout (`fca5c0f`) and
+the surviving source/preparation/model artifacts. The earlier pause/stash note
+was obsolete: data ingestion, the CLI, training, and backend integration had
+already landed. The trained model and example output survived the shutdown;
+the final held-out evaluation and end-to-end verification had not completed.
+No stash was applied, no model was retrained, and no commit/push was performed
+by this continuation. Original phase statuses remain unchanged.
+
+**Delivered and corrected:** optional `smoke --backend` checks the existing
+persona contracts without settings, database, provider, or network access;
+lazy persona package exports remove eager settings reads while preserving
+public imports. Prepared data are now checked against canonical records and
+splits derived from the approved source, rejecting substituted claims even
+after coordinated split/report rehashing. Legacy, study, and dataset generation
+exclude active owner-scoped source identities across sequential requests;
+study counts reflect active rows and exhausted dataset requests do not persist
+partial persona batches. Chat, Freellmpool adapters, LLMService, interview
+responses, provider keys, frontend code, and database schema were not replaced.
+
+**Real model:** the recovered 32-topic TF-IDF/NMF/MMR selector uses a licensed,
+revision-pinned 6,000-profile NVIDIA Nemotron-Personas-USA subset. After
+normalization, completeness filtering, and deduplication, 3,594 candidates split
+into 2,516 train / 539 validation / 539 test. The recorded four-candidate fit
+took 43.70 seconds on two CPU threads. Model version starts `7eb2fa6f748fac32`.
+Final test MRR is **0.432654**, below the lexical TF-IDF baseline's **0.751621**;
+no superiority or real-customer-fit claim is made and no tuning followed the
+test. All 160 sampled prototypes passed measured structural checks, with
+within-batch cosine diversity 0.877963. Full methods, biases, and limits are in
+[the model card](../ml_persona/MODEL_CARD.md) and
+[experiment record](../ml_persona/EXPERIMENTS.md).
+
+**Packaging finding and R8 review:** an unconstrained Docker build selected
+NumPy 2.5.3, while the artifact requires 2.5.2; strict loading correctly failed.
+[Runtime constraints](../ml_persona/constraints.txt) now pin already-reviewed
+NumPy 2.5.2, SciPy 1.18.1, and scikit-learn 1.9.0, and the image installs both
+packages under those constraints. The rebuilt Linux image loaded the original
+Windows-trained artifact and generated five distinct profiles with networking
+disabled. No new dependencies or relaxed loader checks were introduced.
+
+**Verification:** backend 1,279 passed / 3 deselected, 81.68% coverage; ML 295
+passed, 97% coverage; frontend 269 passed / 36 files; build/TypeScript/Ruff/theme,
+`pip check`, and both Compose syntax gates passed. After the Docker pin change,
+26 packaging cases passed (5 newly added after the full backend run). Existing
+PostgreSQL integration tests passed 2/2 against a new isolated local database.
+`pip-audit` found no known vulnerabilities, excluding the two local packages
+not published on PyPI. Optional Pyright was unavailable.
+
+**Live results:** five unique age-bounded ML profiles persisted and reloaded with
+22 SYNTHETIC attributes and no persona-generation LLM calls. Real copilot chat,
+10 role suggestions, and two persona interview turns were served through
+Freellmpool (`llm7/codestral-latest`); four 384-dimensional memory rows persisted.
+Desktop persona cards/details passed at 1440x1000. At 390x844, the existing
+profile header clips Regenerate/close controls; the lower Close remains usable.
+Both views had zero JS exceptions, console errors, or failed API reads. This
+UI limitation is reported, not silently fixed outside ML scope. Full Compose
+app/web rehearsal and cross-conversation memory retrieval were not repeated.
+The configured cloud DB, existing databases, and stored provider keys were
+untouched; scratch cohorts are preserved.
+
+**Documentation:** added the requested ML README, model card, experiment record,
+and [implementation report](../ml_persona/IMPLEMENTATION_REPORT.md); updated
+architecture, persona, evaluation, dataset, setup, API, and project-context
+documentation. Prior implementation-log entries are preserved below. The
+result is a working, tested research prototype, not a validated production
+customer model; USA-only synthetic coverage, weak pain-point labels, baseline
+underperformance, and concurrent cross-request identity races remain limits.
+
+Final independent scoped review approved the fixes with no new high/medium
+findings. Work remains uncommitted; `origin/main` advanced by five commits during
+the session and was deliberately not pulled into the tested working tree.
 
 ### Maintenance (2026-09-09): Approved sync blockers (verification pending)
 

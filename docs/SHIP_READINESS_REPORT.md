@@ -2,12 +2,38 @@
 
 > One page per subsystem: what is implemented, how it was verified in this pass, and its status. ✅ VERIFIED COMPLETE · 🟡 PARTIALLY COMPLETE · 🔴 BLOCKED · ⏸️ DEFERRED. Detailed checklists: [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md); audit narrative: [COMPETITION_AUDIT.md](COMPETITION_AUDIT.md) (re-audit 2026-09-08: 86/100, live AI audit 56/56); evidence classification: [RESEARCH_EVIDENCE.md](RESEARCH_EVIDENCE.md); attack matrix: [ADVERSARIAL_TESTS.md](ADVERSARIAL_TESTS.md).
 
+## Current ML maintenance status (2026-09-09)
+
+The original 15 phases and dates are unchanged. The subsystem/test tables below
+are historical September 7–8 snapshots, not current ML acceptance or publication
+gates. In particular, earlier LLM-generated country/budget and full-Compose
+observations are not validation of the new selector.
+
+| Current requirement | Status / evidence |
+| --- | --- |
+| Four generation paths | Shared CPU `MLPersonaAdapter` selects complete synthetic source profiles; existing schemas/DB JSON and LLM interviews remain; 503/422 errors, no LLM fallback |
+| Packaging | Exact numerical versions pinned for local/Docker installs; Windows artifact loaded in Linux with networking disabled, five profiles selected |
+| Fresh deployment | Must train or stage the ignored ~32.54 MiB model; package-only checkout/image is insufficient; restart after validated artifact replacement |
+| Recorded gates | Pre-sync backend 1,279 passed / 3 deselected, ML 295, frontend 269 / 36 files; later packaging 26; PostgreSQL integration 2 |
+| Real workflow | Five unique age-bounded profiles saved/read back, 22 synthetic claims, zero LLM generation calls; seven Freellmpool responses, ten role suggestions, two interview turns, four memory rows |
+| Research limits | NMF retrieval loses to lexical baseline; USA-only source, visible workforce bias, no demand/population/student/Bangladesh validity or inferred budget/OCEAN |
+| Unfinished verification | Full Compose app/web rehearsal and cross-conversation retrieval not run; Pyright unavailable; mobile header controls clip despite passing desktop check |
+
+This is **not a production sign-off**. Sequential source exclusions are not
+cross-process transactional uniqueness. Final integrated-tree gates, publication,
+and remote CI must be reported separately. See [ML report](../ml_persona/IMPLEMENTATION_REPORT.md)
+and [current readiness assessment](PRODUCTION_READINESS.md).
+
 ## Architecture (as built)
 
 ```
 React + Vite SPA ──REST/SSE──▶ FastAPI (bebshax.api)
    error envelope + X-Request-ID on every response · limiter · body cap · CORS
         │
+         ├── business / study / workflow roles / dataset generation
+         │     MLPersonaAdapter → local TF-IDF/NMF + diversity-aware selection
+         │     → existing persona JSON / SYNTHETIC source-model provenance
+         │
         ▼
 bebshax.llm  — LLMService.complete(LLMRequest{TaskType}) is the ONLY LLM entry
    task → pool (7, data table) → candidates → pre-flight (capabilities, script-aware
@@ -20,14 +46,14 @@ bebshax.llm  — LLMService.complete(LLMRequest{TaskType}) is the ONLY LLM entry
         │     OpenRouterAdapter (free models only) · OllamaAdapter (native /api/chat, num_ctx pinned)
         │     FakeAdapter (tests + Judge Lab)
         ▼
-PostgreSQL 16 + pgvector — 33 tables, alembic head e1f2a3b4c5d6
+PostgreSQL 16 + pgvector — existing tables; local continuation head f2a3b4c5d6e7
    personas/attributes/evidence · memory_items(source, content_hash) · conversations/turns(UNIQUE turn)
    llm_requests (provenance) · studies · research/evidence · datasets · behavioral · users
 ```
 
 Custom BebshaX logic: persona engine + `coerce_provenance` (downgrade-only), `persona/conflicts.py`, memory service (source-labelled), interview engine (immutable identity card, untrusted blocks, drift + contradiction detectors, per-conversation lock), evaluation (`cross_route_consistency`, metrics endpoint), Judge Lab, `prompt_safety`.
 
-## Subsystem status
+## Historical subsystem status (2026-09-07/08)
 
 | Area                                 | Status | Verified by                                                                                                                                                                   |
 | ------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -48,7 +74,7 @@ Custom BebshaX logic: persona engine + `coerce_provenance` (downgrade-only), `pe
 | **Frontend**                         | ✅     | 249 tests, tsc build 0, theme drift 0; honesty labels, inspector, evaluation card, memory/consistency disclosures, a11y on 8 dialogs; no seeded questionnaire, AI review card |
 | **Documentation**                    | ✅     | API contract synced (envelope, enums, health, memories, consistency, Judge Lab); drift corrected in 14 docs; new audit/evidence/QA/adversarial docs                           |
 
-## Known limitations (stated, not hidden)
+## Earlier limitations (read with current assessment above)
 
 1. Research evidence is small-n; CIs overlap (direction positive).
 2. Default embeddings are hash-based; semantic recall is weak by design (offline determinism).
@@ -59,7 +85,7 @@ Custom BebshaX logic: persona engine + `coerce_provenance` (downgrade-only), `pe
 7. PBKDF2 at 100k iterations pending a test-pin change.
 8. No browser-level E2E; no human evaluation panel; no cost ledger artifact.
 
-## Final verification (this pass)
+## Historical verification (2026-09-07/08)
 
 | Check                                                                                         | Result                                                                                                                                                                                     |
 | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

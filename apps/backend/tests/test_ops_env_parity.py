@@ -13,11 +13,13 @@ from __future__ import annotations
 import re
 import shlex
 import subprocess
+import tomllib
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 import yaml
+from packaging.requirements import Requirement
 
 from bebshax.config import Settings
 from scripts import setup as setup_script
@@ -28,6 +30,7 @@ COMPOSE = REPO_ROOT / "docker-compose.yml"
 NGINX_CONF = REPO_ROOT / "deploy" / "nginx.conf"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 DOCKERIGNORE = REPO_ROOT / ".dockerignore"
+ML_RUNTIME_CONSTRAINTS = REPO_ROOT / "ml_persona" / "constraints.txt"
 
 _ENV_NAME_RE = re.compile(r"^\s*#?\s*(BEBSHAX_[A-Z0-9_]+)=", re.MULTILINE)
 
@@ -177,10 +180,47 @@ def test_ci_typecheck_keeps_separate_pyright_install() -> None:
     assert ["pip", "install", "pyright"] in _ci_commands("typecheck")
 
 
+def test_ml_runtime_constraints_pin_trained_artifact_versions_exactly() -> None:
+    constraints = [
+        line.strip()
+        for line in ML_RUNTIME_CONSTRAINTS.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    assert sorted(constraints) == [
+        "numpy==2.5.2",
+        "scikit-learn==1.9.0",
+        "scipy==1.18.1",
+    ]
+
+
+@pytest.mark.parametrize("dependency", ["numpy", "scipy", "scikit-learn"])
+def test_ml_runtime_constraint_is_exact_and_within_declared_bounds(dependency: str) -> None:
+    manifest = tomllib.loads(
+        (REPO_ROOT / "ml_persona" / "pyproject.toml").read_text(encoding="utf-8"),
+    )
+    requirements = {
+        requirement.name: requirement
+        for requirement in map(Requirement, manifest["project"]["dependencies"])
+    }
+    constraints = [
+        Requirement(line)
+        for line in ML_RUNTIME_CONSTRAINTS.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    constraint = next(requirement for requirement in constraints if requirement.name == dependency)
+    specifiers = list(constraint.specifier)
+    assert len(specifiers) == 1
+    specifier = specifiers[0]
+    assert specifier.operator == "=="
+    assert "*" not in specifier.version
+    assert specifier.version in requirements[dependency].specifier
+
+
 @pytest.mark.parametrize(
     ("source", "destination"),
     [
         ("ml_persona/pyproject.toml", "./ml_persona/"),
+        ("ml_persona/constraints.txt", "./ml_persona/"),
         ("ml_persona/src", "./ml_persona/src"),
     ],
 )
@@ -193,7 +233,17 @@ def test_backend_image_copies_ml_package_before_install(source: str, destination
 
 def test_backend_image_installs_both_local_packages() -> None:
     dockerfile = (REPO_ROOT / "apps" / "backend" / "Dockerfile").read_text(encoding="utf-8")
-    assert "RUN pip install ./ml_persona ." in dockerfile.splitlines()
+    install_commands = [
+        shlex.split(line)
+        for line in dockerfile.splitlines()
+        if line.startswith("RUN pip install")
+    ]
+    assert install_commands == [
+        [
+            "RUN", "pip", "install", "--constraint", "./ml_persona/constraints.txt",
+            "./ml_persona", ".",
+        ],
+    ]
 
 
 def test_local_setup_installs_editable_ml_package_with_backend() -> None:

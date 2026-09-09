@@ -2,6 +2,27 @@
 
 > Status legend: ✅ VERIFIED (exercised in this repo — test, live run, or config validation) · 🟡 PARTIAL · 🔴 BLOCKED · ⏸️ DEFERRED (deliberate). Nothing is marked complete because code exists; each ✅ names how it was exercised.
 
+## Current ML maintenance assessment (2026-09-09)
+
+**Research prototype, not a production-readiness sign-off.** The numbered
+tables below preserve earlier dated checks, not freshly rerun gates or proof
+that their human security actions were completed. Original phase dates remain.
+
+| Area | Recorded continuation result / remaining requirement |
+| --- | --- |
+| Generation | Four paths share CPU TF-IDF/NMF source selection; synthetic claims, preserved source identity, no LLM fallback; 503 unavailable / 422 unsupported or exhausted |
+| Artifact operations | Ignored ~32.54 MiB bundle must be trained or staged; exact NumPy 2.5.2 / SciPy 1.18.1 / scikit-learn 1.9.0 pins apply locally and in Docker; restart after replacement |
+| Local persistence | Fresh local PostgreSQL at `f2a3b4c5d6e7`, pgvector 0.8.6; five unique profiles read back; two existing integration tests passed; cloud DB untouched |
+| Existing LLM flow | Seven Freellmpool responses covered context, roles, and two interview turns with four 384-dimensional memories; not a success rate or cross-route benchmark |
+| Container | Windows artifact loaded and selected five profiles in Linux with networking disabled; full Compose app/web rehearsal not run in this continuation |
+| Offline baseline | Pre-sync `fca5c0f`: backend 1,279 passed / 3 deselected (81.68%), ML 295 (97%), frontend 269 / 36 files; later packaging slice 26 passed |
+| Quality and coverage | NMF test MRR 0.432654 vs lexical 0.751621; USA-synthetic-only, 72/160 `not_in_workforce`; no validated demand, population, student/Bangladesh fit, or income/OCEAN prediction |
+| Concurrency | Active owner-scoped source exclusions work sequentially; no transactional identity lock for overlapping independent requests |
+| UI and remaining gates | Desktop passed; pre-existing mobile header clipping remains. Cross-conversation retrieval not run; Pyright unavailable; final post-sync tests/push/CI not asserted complete |
+
+Source and full caveats: [ML report](../ml_persona/IMPLEMENTATION_REPORT.md),
+[model card](../ml_persona/MODEL_CARD.md), [setup](SETUP.md#persona-ml-artifact).
+
 ## 1. Configuration & secrets
 
 | Item                                                                            | Status | Evidence                                                           |
@@ -107,4 +128,10 @@
 
 ## Go / no-go
 
-**Go for exhibition** once the two human items are done: rotate the leaked credentials, and rehearse `docker compose --profile full up --build` with `.env.demo` copied first. Everything else marked 🟡/⏸️ is documented as a limitation, not hidden.
+**No unconditional production go.** Before an exhibition, confirm the outstanding
+human security actions, stage a compatible ML artifact, rerun final gates on the
+integrated tree, and rehearse the full Compose app/web workflow. Use an isolated
+demo environment without overwriting personal secrets/settings; review the
+known mobile controls defect before relying on that viewport. Present outputs
+as synthetic research hypotheses with the baseline/bias limits above. Publication
+and actual final gate counts belong in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).

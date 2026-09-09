@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import subprocess
 import sys
@@ -65,6 +66,8 @@ def _parser() -> tuple[_Parser, dict[str, _Parser]]:
             subparser.add_argument("--lexical-weights", type=float, nargs="+")
         if name in ("generate", "smoke"):
             subparser.add_argument("--input", type=Path, help="Strict BusinessContext JSON; required for generate")
+        if name == "smoke":
+            subparser.add_argument("--backend", action="store_true", help="Also validate local backend persona conversions")
         if name == "generate":
             subparser.add_argument("--num-personas", type=int, default=5)
             subparser.add_argument("--output", type=Path, help="Optional structured JSON output file")
@@ -167,11 +170,102 @@ def _generate(arguments: argparse.Namespace, fitted: PersonaModel | None = None)
     return result
 
 
+def _check_backend_conversion(
+    selection: Selection, generated: dict[str, Any], profile: dict[str, Any],
+    draft: dict[str, Any], workflow: dict[str, Any], role_title: str,
+) -> None:
+    from bebshax.persona.schema import CLAIM_GROUPS
+    from bebshax.personas.ml_adapter import _UNAVAILABLE_VALUE
+
+    record = selection.record
+    identity = {"name": record.name or f"Synthetic profile {record.record_id}", "age": record.age,
+                "occupation": record.occupation, "location": record.location or _UNAVAILABLE_VALUE,
+                "education": record.education or _UNAVAILABLE_VALUE, "income_range": _UNAVAILABLE_VALUE,
+                "description": record.description, "personality": None}
+    groups = (("goals", "goal", "Goals"), ("pain_points", "pain_point", "Pain Points"), ("behaviors", "behavior", "Behaviors"))
+    claims = {group: [{"value": value, "provenance": "SYNTHETIC", "evidence_ids": []}
+                      for value in getattr(record, group)] for group, _, _ in groups}
+    provenance = {"source": record.source, "revision": record.revision, "record_id": record.record_id,
+                  "model_version": selection.model_version, "selection_score": selection.score, "topic": selection.topic}
+    generation_model = f"bebshax-persona-ml/{selection.model_version}"
+    for converted in (generated, profile, workflow):
+        pipeline._check({field: converted[field] for field in identity} == identity, "Backend changed source identity")
+    for converted in (generated, profile, draft, workflow):
+        details = converted["detailed_attributes"]
+        pipeline._check(details["ml_provenance"] == provenance and details["source_documents"] == record.documents
+                        and details["claim_provenance"] == claims
+                        and set(selection.warnings).issubset(details["validation_warnings"]), "Backend changed source provenance")
+    pipeline._check({group: generated[group] for group in CLAIM_GROUPS}
+                    == {group: claims.get(group, []) for group in CLAIM_GROUPS}, "Backend fabricated claims or evidence")
+    attributes = [{"key": key, "value": claim["value"], "provenance_class": "SYNTHETIC", "evidence_ids": [],
+                   "confidence": None, "grounding_basis": None} for group, key, _ in groups for claim in claims[group]]
+    pipeline._check(profile["attributes"] == attributes and profile["evidence"] == []
+                    and profile["business_id"] == "ml-smoke" and profile["generation_model"] == generation_model
+                    and set(selection.warnings).issubset(profile["warnings"]), "Backend profile lost synthetic provenance")
+    demographics = {field: identity[field] for field in ("age", "occupation", "location", "education")}
+    demographics["income_or_budget"] = identity["income_range"]
+    for converted in (draft, workflow):
+        pipeline._check(converted["name"] == identity["name"] and converted["bio"] == record.description
+                        and converted["demographics"] == demographics
+                        and all(converted[group] == getattr(record, group) for group, _, _ in groups), "Backend draft changed source identity")
+        pipeline._check(converted["dataset_refs"] == [provenance] and converted["generation_model"] == generation_model
+                        and converted["evidence_citations"] == [] and converted["grounding_score"] == 0.0
+                        and converted["confidence"] == 0.0 and set(selection.warnings).issubset(converted["validation_warnings"]),
+                        "Backend draft fabricated evidence or confidence")
+    workflow_attributes = [{"category": category, "title": claim["value"], "provenance_class": "SYNTHETIC",
+                            "evidence_ids": [], "evidence": None} for group, _, category in groups for claim in claims[group]]
+    workflow_provenance = {"role_id": "ml-smoke", "role_title": role_title, "grounding_ratio": 0.0, "consistency_score": 0.0,
+                           "grounding_basis": "synthetic_training_proxy", "evidence_claim_count": 0}
+    pipeline._check(workflow["is_synthetic"] is True and workflow["attributes"] == workflow_attributes
+                    and {field: workflow[field] for field in workflow_provenance} == workflow_provenance,
+                    "Backend workflow lost synthetic provenance")
+
+
+def _smoke_backend(arguments: argparse.Namespace) -> None:
+    from bebshax.api.errors import APIError
+    from bebshax.persona.schema import GeneratedPersona, PersonaProfile
+    from bebshax.personas import ml_adapter
+    from bebshax.personas.generator import GeneratedPersonaDraft
+
+    options = _GenerationOptions(seed=_seed(arguments), threads=_threads(arguments))
+    context = _context(arguments)
+    _, _, model_path = _locations(arguments)
+    adapter = ml_adapter.MLPersonaAdapter(model_path)
+    try:
+        with threadpool_limits(limits=options.threads), warnings.catch_warnings(record=True):
+            selections = asyncio.run(adapter.generate(context, num_personas=5, seed=options.seed))
+        pipeline._check(len(selections) == 5, "Backend smoke requires five selections")
+        selections = [Selection.model_validate(selection.model_dump(warnings="error"), strict=True) for selection in selections]
+        pipeline._check(len({selection.record.record_id for selection in selections}) == 5, "Backend repeated source identities")
+        identifiers: dict[str, set[str]] = {"profile": set(), "workflow": set()}
+        for selection in selections:
+            generated = GeneratedPersona.model_validate(
+                ml_adapter.to_generated_persona(selection).model_dump(warnings="error"), strict=True,
+            ).model_dump(mode="json")
+            profile = PersonaProfile.model_validate(
+                ml_adapter.to_persona_profile(selection, "ml-smoke").model_dump(warnings="error"), strict=True,
+            ).model_dump(mode="json")
+            draft = GeneratedPersonaDraft.model_validate(
+                ml_adapter.to_persona_draft(selection).model_dump(warnings="error"), strict=True,
+            ).model_dump(mode="json")
+            workflow = ml_adapter.to_workflow_persona(selection, role_id="ml-smoke", role_title=context.role)
+            GeneratedPersonaDraft.model_validate(workflow, strict=True)
+            _check_backend_conversion(selection, generated, profile, draft, workflow, context.role)
+            for name, converted in (("profile", profile), ("workflow", workflow)):
+                identifier = converted["id"]
+                pipeline._check(isinstance(identifier, str) and bool(identifier.strip()) and identifier not in identifiers[name],
+                                "Backend identifiers must be nonempty and unique")
+                identifiers[name].add(identifier)
+    except (APIError, AttributeError, IndexError) as error:
+        raise ValueError("Backend smoke conversion failed") from error
+
+
 def _smoke(arguments: argparse.Namespace) -> dict[str, Any]:
     root, directory, model_path = _locations(arguments)
     stages: list[dict[str, Any]] = []
     fitted = None
-    for name in ("source", "prepared", "model", "generation"):
+    names = ("source", "prepared", "model", "generation") + (("backend",) if arguments.backend else ())
+    for name in names:
         try:
             if name == "source":
                 preparation = pipeline._Preparation.model_validate(pipeline.read_json(pipeline.resolve_path(root, directory / "preparation.json")))
@@ -182,9 +276,11 @@ def _smoke(arguments: argparse.Namespace) -> dict[str, Any]:
                 pipeline.validate(root, directory)
             elif name == "model":
                 fitted = PersonaModel.load(model_path)
-            else:
+            elif name == "generation":
                 result = _generate(arguments, fitted)
                 pipeline._check(len(result["personas"]) == 5, "Smoke requires five structured selections")
+            else:
+                _smoke_backend(arguments)
             stages.append({"name": name, "ok": True})
         except ERRORS as error:
             stages.append({"name": name, "ok": False, "error": _error(error)})

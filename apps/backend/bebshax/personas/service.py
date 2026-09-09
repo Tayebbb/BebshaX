@@ -9,6 +9,7 @@ from typing import Optional
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from bebshax.utils.safe_errors import safe_error_summary
 from bebshax.db.models import (
@@ -46,6 +47,23 @@ def _run_age(run: PersonaGenerationRuns, now: datetime) -> timedelta:
     if started.tzinfo is None:  # sqlite hands back naive UTC
         started = started.replace(tzinfo=timezone.utc)
     return now - started
+
+
+async def active_source_exclusions(
+    session: AsyncSession, *, owner_id: str, scope: ColumnElement[bool],
+) -> tuple[set[str], set[str]]:
+    exclude_ids: set[str] = set()
+    exclude_names: set[str] = set()
+    existing_stmt = select(Personas.detailed_attributes, Personas.name).where(
+        scope, Personas.owner_id == owner_id, Personas.status != "archived",
+    )
+    for detailed, name in (await session.execute(existing_stmt)).all():
+        provenance = (detailed or {}).get("ml_provenance", {})
+        if isinstance(provenance, dict) and provenance.get("record_id"):
+            exclude_ids.add(provenance["record_id"])
+        if name:
+            exclude_names.add(name)
+    return exclude_ids, exclude_names
 
 
 class PersonaGenerationService:
@@ -225,6 +243,13 @@ class PersonaGenerationService:
             run.status = "generating_personas"
             await self.session.commit()
 
+            exclude_ids: set[str] = set()
+            exclude_names: set[str] = set()
+            if self.ml_generator is not None:
+                exclude_ids, exclude_names = await active_source_exclusions(
+                    self.session, owner_id=user_id or "usr_system_holder",
+                    scope=Personas.study_id == study_id,
+                )
             drafts = await generate_personas_for_study(
                 study=study,
                 segments=segments,
@@ -234,6 +259,8 @@ class PersonaGenerationService:
                 evidence_claims=claims,
                 llm_service=self.llm_service,
                 ml_generator=self.ml_generator,
+                exclude_ids=exclude_ids,
+                exclude_names=exclude_names,
             )
 
             run.status = "saving_personas"
@@ -307,7 +334,14 @@ class PersonaGenerationService:
             run.completed_at = _utcnow()
 
             # Update study step & count
-            study.persona_count = len(persisted_personas)
+            await self.session.flush()
+            study.persona_count = await self.session.scalar(
+                select(func.count()).select_from(Personas).where(
+                    Personas.study_id == study_id,
+                    Personas.owner_id == (user_id or "usr_system_holder"),
+                    Personas.status != "archived",
+                )
+            )
             study.step = max(study.step, 3)
 
             await self.session.commit()
@@ -402,17 +436,10 @@ class PersonaGenerationService:
         exclude_ids: set[str] = set()
         exclude_names: set[str] = set()
         if self.ml_generator is not None:
-            existing_stmt = select(Personas.detailed_attributes, Personas.name).where(
-                Personas.study_id == study_id, Personas.status != "archived",
+            exclude_ids, exclude_names = await active_source_exclusions(
+                self.session, owner_id=user_id or "usr_system_holder",
+                scope=Personas.study_id == study_id,
             )
-            if user_id:
-                existing_stmt = existing_stmt.where(Personas.user_id == user_id)
-            for detailed, name in (await self.session.execute(existing_stmt)).all():
-                provenance = (detailed or {}).get("ml_provenance", {})
-                if isinstance(provenance, dict) and provenance.get("record_id"):
-                    exclude_ids.add(provenance["record_id"])
-                if name:
-                    exclude_names.add(name)
         drafts = await generate_personas_for_study(
             study=study,
             segments=[segment],

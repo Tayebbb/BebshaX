@@ -2,6 +2,12 @@
 
 > Companion to [EVALUATION.md](EVALUATION.md) and [COMPETITION_AUDIT.md](COMPETITION_AUDIT.md). Every statement below is classified. A claim is **VERIFIED** only when an artifact in this repository (a stored run, a test that executes the code path, or a schema) backs it; **SUPPORTED** when the code computes it but no stored run exists; **EXPERIMENTAL** when it is a pipeline check on scripted data; **NOT VERIFIED** when the repository contains no evidence. Numbers are quoted with their `n`.
 
+**2026-09-09 maintenance scope:** section 7 records the separate trained ML
+selector and continuation checks. Sections 1–6 retain the historical LLM-routing
+evidence and dates; their persona-location, budget, throughput, and quality
+observations must not be transferred to the new source-selection runtime.
+The original phase acceptance records are unchanged.
+
 ## 1. The research question, decomposed
 
 > _Can intelligent multi-model routing aggregate legitimately available free LLM capacity while preserving synthetic persona quality and user experience?_
@@ -16,7 +22,7 @@ The question bundles five separable claims. They are **not** interchangeable and
 | **Latency** — acceptable interaction time                                                          | measured per request in provenance; local 1–3 s, free pool 0.7–6 s, worst case 26 s on cold Ollama            | **VERIFIED for the runs stored**; no SLO claimed                                    |
 | **User experience** — a researcher can complete the workflow without picking models                | one "Generate" button; routing only in the developer view; failures explicit with request ids                 | **SUPPORTED** (UI + tests); no user study                                           |
 
-## 2. Stored artifacts (all under `data/metadata/`)
+## 2. Historical routing artifacts (under `data/metadata/`)
 
 | Artifact                                                           | Produced by                                                         | What it measures                                                                                                                | Honest scope                                                                                                                                                                                                                                                                                                                                |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -74,7 +80,7 @@ The question bundles five separable claims. They are **not** interchangeable and
 | `avg_tokens_per_sec: 120.5` in eval JSON                             | constant                                | `null` / "not measured"                                                                        |
 | "Local 3B scored 9.65/10"                                            | one run quoted                          | all three runs quoted (9.65 / 9.05 / 9.2 vs 8.25 / 8.05 / 8.2), n = 1 × 5, judge overlap noted |
 | "identity held across 4 providers mid-interview"                     | unstored smoke observation              | labelled as such; replaced by the stored cross-route artifact (§4)                             |
-| "~100 personas/day validated as feasible"                            | asserted                                | "planned target; `measure_capacity.py` exists, no stored artifact"                             |
+| "~100 personas/day validated as feasible"                            | asserted                                | historical LLM-era planning target, not measured throughput or a current ML capacity result |
 | Seeded demo provenance row (pollinations/deepseek-r1, 1180 ms)       | fabricated, rendered as real            | deleted; demo mode seeds **no** `llm_requests` rows                                            |
 
 ## 6. Reproduce
@@ -94,3 +100,40 @@ python scripts/judge_local_interview.py
 ```
 
 Metrics endpoints computed from real provenance rows: `GET /api/evaluation/metrics` (per-pool success/fallback/local-serve/latency, grounding, schema validity) — rendered in the Routing & Provenance view's Evaluation card with `n` and "not yet measured" for nulls.
+
+## 7. Persona ML maintenance evidence (2026-09-09)
+
+The [model card](../ml_persona/MODEL_CARD.md), [experiments](../ml_persona/EXPERIMENTS.md),
+and [implementation report](../ml_persona/IMPLEMENTATION_REPORT.md) record local
+results for model `7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247`.
+Model/split/evaluation outputs under the processed-data root are Git-ignored,
+not distributed artifacts or clean-checkout download links. The sanitized live
+record at `data/metadata/ml_persona_live_20260909_20260908_215004_181812.json`
+is a local record pending publication, not a CI result.
+
+| Claim | Recorded evidence | Honest scope |
+| --- | --- | --- |
+| Genuine non-LLM training | Training-fitted TF-IDF vocabulary/IDF, NMF topics and profile representations; four fits, 43.70 s, two CPU threads | Source-prototype selection with diversity, not new identities or an LLM/learned router |
+| Approved data only | 6,000 pinned CC-BY-4.0 NVIDIA USA-synthetic rows; 4,694 schema-accepted; 3,594 complete/deduplicated; seed-42 splits 2,516/539/539 | R9 synthetic-only exception; no uploads/private studies/conversations or LLM fine-tuning |
+| Retrieval | Validation MRR 0.418117 vs lexical 0.716645; held-out test 0.432654 vs 0.751621 across 539 identities | NMF blend underperforms; cross-view proxy, zero real business-labelled evaluations |
+| Generation structure | 160 selections, no failed batches or within-batch duplicate IDs/names/descriptions; source reuse 100%, diversity 0.877963, age JS 0.030183 | Exact reuse is intentional; 72/160 `not_in_workforce` reveals bias, not population validity |
+| Timing | Warm five-profile p95 34.3 ms | Excludes cold loading, API scheduling, DB, network; no API SLA or throughput result |
+| Persistence and existing LLM flow | Five unique age-bounded profiles saved/read back, 22 synthetic claims, zero LLM generation calls; context, ten role suggestions, two interview turns, four 384-dimensional memories | Fresh local PostgreSQL only; cloud DB untouched; ten scratch rows from two cohorts retained |
+| Provider smoke | Seven successful responses, `llm7/codestral-latest` through `freellmpool/auto` | Not a provider success rate, independent route comparison, or large-sample quality trial |
+| Cross-platform serving | Windows artifact loaded in Linux image and selected five profiles with networking disabled | Exact NumPy/SciPy/scikit-learn pins; not bit-for-bit training portability or full Compose rehearsal |
+| Browser | Desktop 1440×1000 passed; mobile 390×844 clipped persona-header controls | No UI changes in this continuation, no all-green UI verdict |
+
+**Not verified:** customer/demand/purchasing validity, student/Bangladesh fit,
+real population representativeness, concurrent cross-process identity uniqueness,
+full Compose app/web rehearsal, and live cross-conversation memory retrieval.
+The adapter preserves source occupation/location/full narratives, treats role
+and geography as soft hints and ages as hard bounds, and leaves income/OCEAN
+unknown. All profile claims remain `SYNTHETIC`; source attribution is not
+observed evidence. Filtering protected fields/contact text is not a PII-scrub
+or neutrality guarantee.
+
+The prior offline baseline is 1,279 backend passed / 3 deselected (81.68%),
+295 ML passed (97%), and 269 frontend passed / 36 files. Later packaging checks
+passed 26 cases; two existing PostgreSQL tests also passed. These recorded
+pre-sync gates do not claim final post-integration tests, push, or CI completion.
+Main records publication and actual final counts in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).

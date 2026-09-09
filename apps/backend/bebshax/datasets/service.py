@@ -11,7 +11,7 @@ from pathlib import Path
 import uuid
 from typing import Any, Optional
 
-from sqlalchemy import false as sa_false, select
+from sqlalchemy import false as sa_false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -29,6 +29,7 @@ from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.persona.conflicts import contested_slots, shares_content_token
 from bebshax.personas.ml_adapter import MLPersonaAdapter, build_business_context, to_generated_persona, to_persona_draft
+from bebshax.personas.service import active_source_exclusions
 from bebshax.tenancy import PUBLIC_OWNER_IDS
 from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 
@@ -588,6 +589,21 @@ class DatasetService:
         used_names: set[str] = set()
         ml_errors: list[APIError] = []
 
+        if self._ml_generator is not None:
+            scope = Personas.study_id == study_id
+            if study_id is None:
+                scope = scope & Personas.generation_run_id.in_(
+                    select(DatasetPersonaRuns.id).where(
+                        DatasetPersonaRuns.dataset_id == dataset_id,
+                        DatasetPersonaRuns.study_id.is_(None),
+                        DatasetPersonaRuns.user_id == user_id,
+                    )
+                )
+            async with self._sessionmaker() as session:
+                used_source_ids, used_names = await active_source_exclusions(
+                    session, owner_id=user_id or "usr_system_holder", scope=scope,
+                )
+
         # 2. Synthesize personas for each segment quota
         for seg in segments:
             seg_id = seg["id"]
@@ -744,10 +760,10 @@ class DatasetService:
                     "warnings": val["warnings"],
                 })
 
+        if ml_errors:
+            ml_errors[-1].extra["failed"] = failed
+            raise ml_errors[-1]
         if not generated_personas:
-            if ml_errors:
-                ml_errors[-1].extra["failed"] = failed
-                raise ml_errors[-1]
             raise UnusableModelOutput(
                 DATASET_PERSONA_UNPARSEABLE,
                 f"None of the {requested_count} requested personas could be generated from usable model replies.",
@@ -846,6 +862,18 @@ class DatasetService:
                     updated_at=_utcnow(),
                 )
                 session.add(p_entity)
+
+            if study_id is not None:
+                study = await session.get(Studies, study_id)
+                if study is not None:
+                    await session.flush()
+                    study.persona_count = await session.scalar(
+                        select(func.count()).select_from(Personas).where(
+                            Personas.study_id == study_id,
+                            Personas.owner_id == (user_id or "usr_system_holder"),
+                            Personas.status != "archived",
+                        )
+                    )
 
             await session.commit()
 

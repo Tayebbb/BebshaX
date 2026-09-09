@@ -2,6 +2,13 @@
 
 An honest description of `model_registry`: what exists, what is actually used, and what is deliberately deferred.
 
+**Persona ML is separate (2026-09-09).** The CPU selector is not a provider route
+or a new registry row. Its Git-ignored JSON/NPZ artifact carries model version,
+source records, hashes, and numerical-runtime metadata; existing persona JSON
+stores source/model provenance. No registry sync or DB migration is needed for
+ML generation. See [ML architecture](../ml_persona/ARCHITECTURE.md) and
+[artifact setup](SETUP.md#persona-ml-artifact).
+
 ## The table (`db/models.py::ModelRegistry`, migration `cb7c7deda755`)
 
 | Column group | Columns                                                                                   | Status                                              |
@@ -25,4 +32,4 @@ Live discovery, not the registry:
 
 ## Deliberately deferred
 
-Registry sync jobs (probing providers to fill capability/score columns) were assigned to a later phase and never scheduled; the routing layer proved sufficient without them for the ~100 personas/day target (see docs/AI_IMPLEMENTATION_PLAN.md §10). If they are ever built, the schema is ready and the ranker hook is the single integration point — no request-path changes required (R10: no ML routers in the request path).
+Registry sync jobs (probing providers to fill capability/score columns) were assigned to later work and remain unimplemented. The ~100 personas/day figure was an unmeasured LLM-era planning target, not evidence of capacity, and current ML selection does not consume persona-generation LLM quota (see [AI_IMPLEMENTATION_PLAN.md](AI_IMPLEMENTATION_PLAN.md)). If sync jobs are built, the schema and ranker hook already exist; the separate persona selector is not an ML router (R10).

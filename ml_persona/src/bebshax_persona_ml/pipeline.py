@@ -178,8 +178,24 @@ def _verify_source(root: Path) -> _Source:
     hashes = {str(path.relative_to(root)).replace("\\", "/"): _sha256(path) for path in paths.values()}
     _check(hashes[paths["processed"].relative_to(root).as_posix()] == result["processed_sha256"]
            and hashes[paths["raw"].relative_to(root).as_posix()] == result["raw_sha256"],
-           "Source changed after verification")
+           "Source checksum mismatch after verification")
     return source.model_copy(update={"files": hashes})
+
+
+def _source_records(root: Path, source: _Source) -> tuple[list[TrainingRecord], dict[str, Any]]:
+    source_path = _source_paths(root, source)["processed"]
+    _check(source_path.stat().st_size <= 256 * 1024**2, "Source exceeds the size limit")
+    with source_path.open(encoding="utf-8") as stream:
+        rows = [json.loads(line) for line in stream if line.strip()]
+    _check(all(isinstance(row, dict) for row in rows), "Source rows must be JSON objects")
+    rows.sort(key=lambda row: (fingerprint([source.hf_repo_id, normalize_text(row.get("uuid"))]), fingerprint(row)))
+    records, statistics = prepare_records(rows, source=source.hf_repo_id, revision=source.revision)
+    complete = sorted((record for record in records if _complete(record)), key=lambda record: record.record_id)
+    candidates = _candidates(complete)
+    statistics.update(incomplete=len(records) - len(complete), identity_duplicates=len(complete) - len(candidates),
+                      duplicate_names=sum(bool(record.name) for record in complete) - len({normalize_text(record.name).casefold() for record in complete if record.name}),
+                      candidate_count=len(candidates))
+    return candidates, statistics
 
 
 def _partition(records: list[TrainingRecord], payload: bytes) -> dict[str, Any]:
@@ -198,18 +214,7 @@ def prepare(
     destinations = [resolve_path(root, directory / name) for name in [*(f"{split}.jsonl" for split in SPLITS), "preparation.json"]]
     _available(destinations, force)
     source = _verify_source(root)
-    source_path = _source_paths(root, source)["processed"]
-    _check(source_path.stat().st_size <= 256 * 1024**2, "Source exceeds the size limit")
-    with source_path.open(encoding="utf-8") as stream:
-        rows = [json.loads(line) for line in stream if line.strip()]
-    _check(all(isinstance(row, dict) for row in rows), "Source rows must be JSON objects")
-    rows.sort(key=lambda row: (fingerprint([source.hf_repo_id, normalize_text(row.get("uuid"))]), fingerprint(row)))
-    records, statistics = prepare_records(rows, source=source.hf_repo_id, revision=source.revision)
-    complete = sorted((record for record in records if _complete(record)), key=lambda record: record.record_id)
-    candidates = _candidates(complete)
-    statistics.update(incomplete=len(records) - len(complete), identity_duplicates=len(complete) - len(candidates),
-                      duplicate_names=sum(bool(record.name) for record in complete) - len({normalize_text(record.name).casefold() for record in complete if record.name}),
-                      candidate_count=len(candidates))
+    candidates, statistics = _source_records(root, source)
     splits = {name: sorted(values, key=lambda record: record.record_id)
               for name, values in split_records(candidates, **config.model_dump()).items()}
     payloads = {name: b"".join(_json_bytes(record.model_dump(mode="json")) for record in splits[name]) for name in SPLITS}
@@ -231,10 +236,8 @@ def _load_prepared(root: Path, output: Path | None) -> tuple[dict[str, Any], dic
     values = report.model_dump(mode="json")
     _check(report.preparation_sha256 == fingerprint({key: value for key, value in values.items() if key != "preparation_sha256"}),
            "Preparation fingerprint mismatch")
-    paths = _source_paths(root, report.source)
-    _check(set(report.source.files) == {path.relative_to(root).as_posix() for path in paths.values()}, "Unexpected source metadata paths")
-    for path in paths.values():
-        _check(_sha256(path) == report.source.files[path.relative_to(root).as_posix()], "Source checksum mismatch")
+    source = _verify_source(root)
+    _check(report.source == source, "Approved source metadata or checksum mismatch")
     _check(set(report.splits) == set(SPLITS), "All three splits are required")
     partitions, seen, descriptions = {}, set(), {}
     for name in SPLITS:
@@ -255,6 +258,12 @@ def _load_prepared(root: Path, output: Path | None) -> tuple[dict[str, Any], dic
         partitions[name] = records
     records = sorted((record for partition in partitions.values() for record in partition), key=lambda record: record.record_id)
     _check(fingerprint([record.model_dump(mode="json") for record in records]) == report.dataset_sha256, "Dataset fingerprint mismatch")
+    candidates, _statistics = _source_records(root, source)
+    expected = {name: sorted(records, key=lambda record: record.record_id)
+                for name, records in split_records(candidates, seed=report.seed,
+                                                   validation_fraction=report.validation_fraction,
+                                                   test_fraction=report.test_fraction).items()}
+    _check(partitions == expected, "Prepared records or split membership mismatch with approved source")
     return values, partitions
 
 

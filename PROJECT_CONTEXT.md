@@ -5,7 +5,7 @@
 
 ## What we are building
 
-BebshaX is a synthetic-user / persona research system: it generates realistic, **evidence-grounded personas** for a specific business/product and lets those personas participate in **interviews and simulations**. Because the project has essentially **zero API budget**, all intelligence runs on **legitimately accessed free LLM capacity**, aggregated behind intelligent routing, failover, and context-aware model selection — with a local Ollama model as the final reliability fallback.
+BebshaX is a synthetic-user / persona research system: a trained CPU-only model selects coherent **synthetic source personas** for a business/product context and lets those personas participate in **interviews and simulations**. Persona selection is independent of LLMs; conversation/research features use **legitimately accessed free LLM capacity** behind governed routing and failover, with local Ollama available as a fallback. Source profiles are hypotheses, not observed customers or validated demand.
 
 **Research question:** _Can intelligent multi-model routing aggregate free LLM capacity while preserving synthetic persona quality and user experience?_
 
@@ -24,7 +24,11 @@ React + Vite frontend (apps/frontend — Phase 12)
         │ REST
 FastAPI backend (apps/backend, package `bebshax`, Python 3.12, async)
         │
-bebshax.llm — BebshaX policy layer (custom)
+        ├─ Persona generation (business / study / roles / datasets)
+        │    MLPersonaAdapter → CPU TF-IDF/NMF + source selection
+        │    → existing persona schemas / synthetic provenance / storage
+        │
+bebshax.llm — existing LLM policy for copilot, interviews, research, reports
    LLMService ← the ONLY entry point for LLM calls (takes a TaskType)
    task → pool → eligible candidates → ranked → attempt → classified failure → fallback
    pre-flight context budgeting · per-pool concurrency · full provenance per request
@@ -37,6 +41,36 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
    llm_requests (provenance), model_registry
 ```
 
+### Current ML Addendum (2026-09-09)
+
+Persona generation now shares the isolated [Persona ML](ml_persona/README.md)
+CPU TF-IDF/NMF selector across business, study, role, and dataset paths, mapped
+to existing schemas/storage. Local training and evaluation are complete; selected
+source bundles and claims remain `SYNTHETIC`, not observed customer evidence.
+This path needs no LLM, API key, GPU, or PyTorch and never falls back to an LLM;
+chat/interviews still use the router above. The default ignored artifact is
+`data/processed/ml_persona/model`, with `BEBSHAX_ML_PERSONA_ARTIFACT_DIR` override.
+Fresh installs must prepare/train or stage a trusted compatible bundle; numerical
+versions are pinned in [ml_persona/constraints.txt](ml_persona/constraints.txt),
+also used by Docker. Model loading is cached; restart after replacement.
+Unavailable models return 503, unsupported/exhausted selections 422.
+
+The [model card](ml_persona/MODEL_CARD.md) records lower held-out retrieval MRR
+than lexical TF-IDF (0.432654 versus 0.751621), USA-synthetic-only coverage,
+and no validated population/student/Bangladesh fit. Source occupation/location
+is retained; explicit ages in 18–95 are hard constraints, role/location are soft
+hints, and income/OCEAN values stay unknown. Sequential owner-scoped identity
+exclusions do not provide a concurrent transactional uniqueness lock.
+
+Recorded continuation checks passed offline suites, local PostgreSQL
+persistence/pgvector, seven real Freellmpool responses, and Windows-artifact
+loading in the Linux backend image with networking disabled. Desktop passed;
+mobile persona-header clipping remains. These are scoped checks, not a provider
+success rate or production verdict. Full Compose app/web rehearsal,
+cross-conversation memory retrieval, and final post-sync publication gates are
+not claimed complete; see the [ML report](ml_persona/IMPLEMENTATION_REPORT.md).
+This addendum does not change the original phase roadmap or completion dates.
+
 ## Stack (decided — do not relitigate casually)
 
 | Layer          | Choice                                                                                                                        | Why                                                    |
@@ -47,6 +81,7 @@ PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
 | DB             | PG16 + pgvector via `pgvector/pgvector:pg16` on **5433**                                                                      | native PG16 on the dev machine lacks pgvector          |
 | Local fallback | Ollama — `llama3.2:3b` primary / `qwen3:4b` secondary (Phase 4 benchmark)                                                     | 4 GB VRAM ceiling — no 70B fantasies                   |
 | Frontend       | React + Vite, single app                                                                                                      | owner decision                                         |
+| Persona model  | CPU TF-IDF/NMF representations + diversity-aware synthetic source selection | Separate from LLM routing; source identity/provenance retained |
 | Datasets       | Existing profiles: grounding + evaluation only; separate `ml_persona` profile for explicitly reviewed synthetic training data | **no LLM fine-tuning, ever**                           |
 
 ## Phase roadmap and status
@@ -98,5 +133,6 @@ Detailed deliverables/exit criteria: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMEN
 | What's the plan / what changed?          | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) (implementation log at the bottom)            |
 | Why these OSS choices / hardware limits? | [docs/AI_INFRASTRUCTURE_AUDIT.md](docs/AI_INFRASTRUCTURE_AUDIT.md)                                       |
 | How does the LLM actually work here?     | [docs/AI_IMPLEMENTATION_PLAN.md](docs/AI_IMPLEMENTATION_PLAN.md) (routing vs aggregation, plain-English) |
+| How are personas trained and selected now? | [ml_persona/README.md](ml_persona/README.md), [model card](ml_persona/MODEL_CARD.md), [application adapter](docs/PERSONA_ENGINE.md) |
 | How does routing work / provider config? | [docs/ROUTING.md](docs/ROUTING.md)                                                                       |
 | Who fixes which audit finding?           | [docs/AUDIT_ASSIGNMENTS.md](docs/AUDIT_ASSIGNMENTS.md)                                                   |
