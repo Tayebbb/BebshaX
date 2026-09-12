@@ -54,3 +54,31 @@ coverage.xml
 
 # Chromium crashpad logs dropped by the embedded browser tooling next to whatever file was open
 debug.log
+
+# Generated operations verification, dependency wheels, recovery bundles and staged releases
+.tmp/
+deploy/wheelhouse/
+deploy/artifacts/
+deploy/recovery/
+deploy/*.generated.json
+deploy/*.generated.conf
+
+# Agent/test receipts written next to the code they verified (never source)
+.pytest_*.out
+.pytest_*.err
+.pytest_tmp_*/
+.playwright-mcp/
+.test-artifacts/
+testsbuilt.tmp/
+.cache/
+apps/frontend/tests/.modernization-*
+apps/frontend/tests/*.results.json
+apps/frontend/.tsupgrader/
+apps/frontend/.vitest/
+apps/frontend/test-results/
+# dot-prefixed run receipts (json/xml/stdout/sqlite) dropped inside the backend test tree
+apps/backend/tests/**/.[!.]*
+!apps/backend/tests/**/.gitkeep
+apps/backend/tests/**/*.stdout
+apps/backend/tests/**/*.stderr
+.tsupgrader/
