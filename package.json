@@ -7,15 +7,28 @@
   ],
   "scripts": {
     "dev": "node scripts/dev.js",
-    "start": "node scripts/dev.js",
+    "start": "node scripts/start.mjs",
     "backend": "node scripts/run_backend.js",
-    "frontend": "node scripts/dev.js",
-    "dev:frontend": "npm --prefix apps/frontend run dev",
+    "frontend": "npm run dev:frontend",
+    "dev:frontend": "npm run dev --workspace apps/frontend",
     "dev:backend": "node scripts/run_backend.js",
-    "build": "npm --prefix apps/frontend run build"
+    "build": "npm run build --workspace apps/frontend",
+    "typecheck": "npm run typecheck --workspace apps/frontend",
+    "theme:check": "npm run theme:check --workspace apps/frontend",
+    "test": "npm run test:ops && npm run test:backend && npm run test:ml && npm run test:frontend",
+    "test:frontend": "npm run test --workspace apps/frontend -- --maxWorkers=1 --no-file-parallelism",
+    "test:backend": "node scripts/ops/python.mjs -m pytest apps/backend/tests -q",
+    "test:ml": "node scripts/ops/python.mjs -m pytest ml_persona/tests -q",
+    "test:ops": "node --test --test-concurrency=1 scripts/tests/*.test.mjs && npm run test:ops:python",
+    "test:ops:python": "node scripts/ops/python.mjs -m unittest discover -s scripts/tests -p test_ops_*.py -v",
+    "check:npm-graph": "node scripts/ops/npm-graph.mjs",
+    "check:python-lock": "node scripts/ops/python.mjs scripts/ops/dependencies.py check"
   },
   "dependencies": {
     "@neon/config": "^1.1.0",
     "@neon/env": "^1.1.6"
+  },
+  "devDependencies": {
+    "vite": "^8.2.2"
   }
 }
