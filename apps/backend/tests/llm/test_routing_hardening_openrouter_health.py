@@ -14,6 +14,14 @@ from bebshax.llm.openrouter_service import OpenRouterService
 from bebshax.main import app
 
 
+@pytest.fixture(autouse=True)
+async def _shared_routing_adapter(monkeypatch):
+    adapter = OpenRouterAdapter(discover_catalogue=True)
+    monkeypatch.setattr(app.state, "llm_adapters", {"openrouter": adapter}, raising=False)
+    yield
+    await adapter.aclose()
+
+
 @pytest.fixture
 def _no_network(monkeypatch):
     """Any outbound httpx request that is not the in-process ASGI test client
@@ -55,7 +63,7 @@ async def test_get_reports_missing_key_without_network(monkeypatch, _no_network)
     assert resp.status_code == 200
     data = resp.json()
     assert data["configured"] is False
-    assert data["status"] == "not_configured"
+    assert data["status"] == "unknown"
     assert data["error_code"] == "OPENROUTER_NOT_CONFIGURED"
     assert data["models"] == []
 

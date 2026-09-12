@@ -58,40 +58,34 @@ def test_ninety_percent_consumed_demotes_behind_healthy_remote_routes() -> None:
     cap = PROVIDER_QUOTAS["openrouter"].rpd
     _consume(ledger, "openrouter", int(cap * 0.9))
     assert ledger.remaining_fraction("openrouter") < QUOTA_DEMOTE_THRESHOLD
-    assert _providers(rank(entries)) == ["freellmpool", "openrouter", "ollama"]
+    assert _providers(rank(entries)) == ["freellmpool", "ollama", "openrouter"]
 
 
-def test_exhausted_provider_is_demoted() -> None:
+def test_exhausted_provider_is_excluded() -> None:
     ledger = QuotaLedger()
     rank = quota_aware_ranker(ledger)
     entries = _entries("openrouter", "freellmpool", "ollama")
     _consume(ledger, "openrouter", PROVIDER_QUOTAS["openrouter"].rpd)
     assert ledger.remaining_fraction("openrouter") == 0.0
-    assert _providers(rank(entries)) == ["freellmpool", "openrouter", "ollama"]
+    assert _providers(rank(entries)) == ["freellmpool", "ollama"]
 
 
-def test_local_adapter_keeps_its_configured_position_in_every_pool_shape() -> None:
+def test_historical_fake_names_have_no_special_ranking_tier() -> None:
     ledger = QuotaLedger()
     rank = quota_aware_ranker(ledger)
     _consume(ledger, "openrouter", PROVIDER_QUOTAS["openrouter"].rpd)  # exhausted
 
-    # remote-first pool: ollama stays LAST even though openrouter is exhausted
     assert _providers(rank(_entries("openrouter", "freellmpool", "ollama"))) == [
         "freellmpool",
-        "openrouter",
         "ollama",
     ]
-    # local-first pool shape: ollama stays FIRST, remotes re-rank behind it
     assert _providers(rank(_entries("ollama", "openrouter", "freellmpool"))) == [
         "ollama",
         "freellmpool",
-        "openrouter",
     ]
-    # local in the middle: index 1 is preserved exactly
     assert _providers(rank(_entries("openrouter", "ollama", "freellmpool"))) == [
-        "freellmpool",
         "ollama",
-        "openrouter",
+        "freellmpool",
     ]
 
 
@@ -101,10 +95,11 @@ def test_demoted_bucket_orders_most_remaining_first_and_is_stable_otherwise() ->
     entries = _entries("openrouter", "gemini", "freellmpool")
     _consume(ledger, "openrouter", PROVIDER_QUOTAS["openrouter"].rpd)  # 0.0 left
     _consume(ledger, "gemini", int(PROVIDER_QUOTAS["gemini"].rpd * 0.9))  # ~0.1 left
-    assert _providers(rank(entries)) == ["freellmpool", "gemini", "openrouter"]
+    assert _providers(rank(entries)) == ["freellmpool", "gemini"]
     # multiple models of one healthy provider keep their relative order
     many = _entries("freellmpool") + [
         (None, RouteCandidate(provider="openrouter", model="a")),
         (None, RouteCandidate(provider="openrouter", model="b")),
     ]
-    assert [c.model for _, c in rank(many)] == ["freellmpool-m", "a", "b"]
+    healthy_rank = quota_aware_ranker(QuotaLedger())
+    assert [c.model for _, c in healthy_rank(many)] == ["freellmpool-m", "a", "b"]

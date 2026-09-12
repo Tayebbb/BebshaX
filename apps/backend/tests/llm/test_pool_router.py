@@ -25,10 +25,11 @@ def _route(provider: str, model: str, behaviors: list | None = None, **cand) -> 
 
 
 def _router(remote_routes, local_routes, **kwargs):
+    secondary = FakeAdapter(local_routes)
     adapters = {
-        "openrouter": FakeAdapter([]),  # registered but keyless → contributes no routes
+        "openrouter": secondary,
         "freellmpool": FakeAdapter(remote_routes),
-        "ollama": FakeAdapter(local_routes),
+        "ollama": secondary,
     }
     return PoolRouter(adapters, **kwargs), adapters
 
@@ -55,12 +56,12 @@ async def test_tasks_resolve_to_their_configured_pools() -> None:
     assert structured.provenance.pool == "structured"
 
 
-async def test_emergency_pool_prefers_local_and_skips_remote() -> None:
+async def test_emergency_pool_prefers_primary_and_skips_secondary() -> None:
     router, adapters = _router([_route("freellmpool", "auto")], [_route("ollama", "m")])
     result = await router.complete(_request(task=TaskType.EMERGENCY_FALLBACK))
-    assert result.provider == "ollama"
+    assert result.provider == "freellmpool"
     assert result.provenance.pool == "emergency"
-    assert adapters["freellmpool"].calls == []  # local-first: remote never touched
+    assert adapters["openrouter"].calls == []
 
 
 async def test_rate_limited_route_cools_down_then_recovers() -> None:
@@ -193,8 +194,8 @@ async def test_is_cooling_is_public_and_truthful() -> None:
     assert router.is_cooling(warm) is False
 
 
-async def test_preferred_model_is_prioritized_over_pool_order() -> None:
-    """§7 model selection: an explicit preference wins over configured order."""
+async def test_preferred_model_cannot_promote_the_secondary_tier() -> None:
+    """Preferences remain advisory and cannot bypass the primary tier."""
     router, _ = _router(
         [_route("freellmpool", "auto")],
         [_route("ollama", "llama3.2:3b")],
@@ -202,7 +203,7 @@ async def test_preferred_model_is_prioritized_over_pool_order() -> None:
     result = await router.complete(
         _request(preferred_provider="ollama", preferred_model="llama3.2:3b")
     )
-    assert (result.provider, result.model) == ("ollama", "llama3.2:3b")
+    assert (result.provider, result.model) == ("freellmpool", "auto")
     assert any("preference ollama/llama3.2:3b" in step for step in result.provenance.routing_path)
 
 

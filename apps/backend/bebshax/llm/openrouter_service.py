@@ -14,6 +14,11 @@ import os
 from typing import Optional
 
 from bebshax.llm.adapters.openrouter_adapter import DEFAULT_MODELS, OpenRouterAdapter
+from bebshax.llm.failures import LLMError
+from bebshax.llm.json_utils import parse_llm_json
+from bebshax.llm.latency import DeadlineExpired, await_before, resolve_deadline
+from bebshax.llm.service import LLMService
+from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 
 
 class OpenRouterService:
@@ -24,8 +29,7 @@ class OpenRouterService:
 
     @property
     def is_configured(self) -> bool:
-        key = os.environ.get("OPENROUTER_API_KEY")
-        return bool(key and key.strip())
+        return bool(self._adapter.configuration_status()["configured"])
 
     def get_model_for_role(self, role: str) -> str:
         """Resolve the model name configured for a specific role or fallback to default."""
@@ -49,10 +53,57 @@ class OpenRouterService:
         """Key configured? Which models? — answered WITHOUT any network call."""
         return self._adapter.configuration_status(model=self.get_model_for_role("reasoning"))
 
-    async def health_check(self, model: Optional[str] = None) -> dict:
-        """Execute a safe, authenticated diagnostic health check (spends one real call)."""
+    async def health_check(self, model: Optional[str] = None, *, llm_service: LLMService) -> dict:
+        """Run a governed diagnostic; configuration inspection itself never spends tokens."""
+        configuration = self._adapter.configuration_status(model=model)
+        if not configuration["configured"]:
+            return configuration
+        deadline = resolve_deadline(TaskType.EMERGENCY_FALLBACK)
         target_model = model or self.get_model_for_role("reasoning")
-        return await self._adapter.health_check(model=target_model)
+        try:
+            candidates = await await_before(self._adapter.candidates(), deadline)
+            models = [candidate.model for candidate in candidates]
+            if model is None and target_model not in models and models:
+                target_model = models[0]
+            if target_model not in models:
+                return {
+                    "configured": True, "authenticated": False, "model": target_model,
+                    "status": "error", "error_code": "OPENROUTER_MODEL_UNAVAILABLE",
+                    "message": "Diagnostic model lacks current verified free catalogue metadata.",
+                }
+            result = await await_before(llm_service.complete(LLMRequest(
+                task=TaskType.EMERGENCY_FALLBACK,
+                messages=[ChatMessage(role="user", content='Return exactly the JSON object {"ok":true}.')],
+                json_mode=True, max_output_tokens=64, temperature=0.0,
+                preferred_provider="openrouter", preferred_model=target_model,
+            )), deadline)
+            if result.provider != "openrouter" or result.model == "unknown":
+                return {
+                    "configured": True, "authenticated": False, "status": "unverified",
+                    "provider": result.provider, "model": result.model,
+                    "request_id": result.provenance.request_id,
+                    "message": "Governed routing completed without verifying an OpenRouter serving model.",
+                }
+            parsed = parse_llm_json(result.text)
+            if not isinstance(parsed, dict) or parsed.get("ok") is not True:
+                raise ValueError("invalid diagnostic object")
+        except (LLMError, DeadlineExpired, ValueError):
+            return {
+                "configured": True, "authenticated": False, "model": target_model,
+                "status": "error", "error_code": "OPENROUTER_DIAGNOSTIC_FAILED",
+                "message": "Governed diagnostic did not produce a valid verified completion.",
+            }
+        return {
+            "configured": True, "authenticated": True, "model": result.model,
+            "provider": result.provider, "status": "healthy",
+            "request_id": result.provenance.request_id,
+            "latency_ms": result.provenance.total_latency_ms,
+            "verified_response": result.text,
+            "message": "OpenRouter verified through governed routing.",
+        }
+
+    async def aclose(self) -> None:
+        await self._adapter.aclose()
 
 
 # Shared singleton instance

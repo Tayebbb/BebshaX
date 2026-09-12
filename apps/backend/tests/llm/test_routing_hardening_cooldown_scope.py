@@ -8,7 +8,7 @@ route that could actually serve.
 
 import pytest
 
-from bebshax.llm import ChatMessage, FailureKind, LLMRequest, PoolRouter, TaskType
+from bebshax.llm import ChatMessage, FailureKind, LLMRequest, PoolConfig, PoolRouter, TaskType
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.failures import FAILURE_POLICIES
@@ -24,6 +24,15 @@ def _request() -> LLMRequest:
 def _route(provider: str, model: str, behaviors: list | None = None) -> FakeRoute:
     return FakeRoute(
         candidate=RouteCandidate(provider=provider, model=model), behaviors=behaviors or []
+    )
+
+
+def _router(adapters, **kwargs):
+    return PoolRouter(
+        adapters,
+        pools={"test": PoolConfig(name="test", adapters=["openrouter", "ollama"])},
+        task_pool_map={TaskType.PERSONA_GENERATION: "test"},
+        **kwargs,
     )
 
 
@@ -55,7 +64,7 @@ async def test_rate_limited_sibling_models_are_skipped_within_the_same_request()
         ]
     )
     local = FakeAdapter([_route("ollama", "llama3.2:3b")])
-    router = PoolRouter(
+    router = _router(
         {"openrouter": openrouter, "freellmpool": FakeAdapter([]), "ollama": local},
         on_cooldown_change=lambda p, m, s: persisted.append((p, m, s)),
     )
@@ -80,7 +89,7 @@ async def test_provider_wide_cooldown_is_visible_in_the_next_request_and_expires
             _route("openrouter", "model-b"),
         ]
     )
-    router = PoolRouter(
+    router = _router(
         {
             "openrouter": openrouter,
             "freellmpool": FakeAdapter([]),
@@ -107,7 +116,7 @@ async def test_route_scoped_failures_still_cool_only_their_route() -> None:
             _route("openrouter", "model-b"),
         ]
     )
-    router = PoolRouter(
+    router = _router(
         {"openrouter": openrouter, "freellmpool": FakeAdapter([]), "ollama": FakeAdapter([])}
     )
     result = await router.complete(_request())
@@ -119,7 +128,7 @@ async def test_route_scoped_failures_still_cool_only_their_route() -> None:
 async def test_initial_provider_wide_cooldown_from_the_store_is_honoured() -> None:
     """Restart path: a persisted (provider, "*") deadline skips every sibling."""
     openrouter = FakeAdapter([_route("openrouter", "model-a"), _route("openrouter", "model-b")])
-    router = PoolRouter(
+    router = _router(
         {
             "openrouter": openrouter,
             "freellmpool": FakeAdapter([]),

@@ -46,7 +46,7 @@ def _request() -> LLMRequest:
 
 async def test_attempt_exceeding_budget_is_a_timeout_raised_within_budget(monkeypatch) -> None:
     budget = 0.05
-    monkeypatch.setattr(freellmpool_adapter, "attempt_timeout_s", lambda task: budget)
+    monkeypatch.setattr(freellmpool_adapter, "remaining_attempt_timeout_s", lambda task: budget)
     pool = SlowPool(sleep_s=5.0)
     adapter = FreellmpoolAdapter(pool=pool)
     [candidate] = await adapter.candidates()
@@ -66,7 +66,7 @@ async def test_attempt_exceeding_budget_is_a_timeout_raised_within_budget(monkey
 async def test_inner_timeout_and_outer_budget_are_the_same_number(monkeypatch) -> None:
     """The per-target timeout handed to freellmpool equals the attempt budget,
     so a single healthy target still gets the full budget."""
-    monkeypatch.setattr(freellmpool_adapter, "attempt_timeout_s", lambda task: 12.5)
+    monkeypatch.setattr(freellmpool_adapter, "remaining_attempt_timeout_s", lambda task: 12.5)
 
     class RecordingPool:
         def __init__(self) -> None:

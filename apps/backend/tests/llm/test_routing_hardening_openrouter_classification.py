@@ -16,7 +16,6 @@ from bebshax.llm import AttemptFailed, ChatMessage, FailureKind, LLMRequest, Tas
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.openrouter_adapter import (
     DEFAULT_MODELS,
-    RESPONSE_FORMAT_DROPPED_NOTE,
     OpenRouterAdapter,
     _map_http_status,
     _retry_after_hint,
@@ -86,8 +85,8 @@ _CTX_BODY = json.dumps(
         (400, "Prompt is too long for this model", FailureKind.CONTEXT_WINDOW_EXCEEDED),
         (400, "Request exceeds the TOKEN LIMIT", FailureKind.CONTEXT_WINDOW_EXCEEDED),
         (413, "Payload Too Large: maximum tokens exceeded", FailureKind.CONTEXT_WINDOW_EXCEEDED),
-        (400, '{"error":{"message":"response_format is not supported"}}', FailureKind.PROVIDER_UNAVAILABLE),
-        (413, "", FailureKind.PROVIDER_UNAVAILABLE),
+        (400, '{"error":{"message":"response_format is not supported"}}', FailureKind.CAPABILITY_UNSUPPORTED),
+        (413, "", FailureKind.CONTEXT_WINDOW_EXCEEDED),
         (500, "", FailureKind.SERVER_ERROR),
         (503, "", FailureKind.SERVER_ERROR),
         (None, "", FailureKind.PROVIDER_UNAVAILABLE),
@@ -108,7 +107,11 @@ def test_default_models_are_free_only() -> None:
 
 
 def _adapter(handler) -> OpenRouterAdapter:
-    adapter = OpenRouterAdapter(api_key="test-key-not-real")
+    adapter = OpenRouterAdapter(api_key="test-key-not-real", catalogue=[{
+        "id": "some/model:free", "context_length": 8192,
+        "pricing": {"prompt": "0", "completion": "0"},
+        "supported_parameters": ["response_format", "max_tokens"],
+    }])
     adapter._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     return adapter
 
@@ -148,7 +151,7 @@ async def test_402_is_quota_exhausted_end_to_end() -> None:
     assert FAILURE_POLICIES[exc.value.kind].cooldown_scope == "provider"
 
 
-async def test_dropping_response_format_is_recorded_in_completion_notes() -> None:
+async def test_unsupported_response_format_is_not_silently_dropped() -> None:
     calls: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -167,9 +170,10 @@ async def test_dropping_response_format_is_recorded_in_completion_notes() -> Non
             },
         )
 
-    completion = await _adapter(handler).complete(_CAND, _request(json_mode=True))
-    assert len(calls) == 2 and "response_format" not in calls[1]
-    assert RESPONSE_FORMAT_DROPPED_NOTE in completion.notes
+    with pytest.raises(AttemptFailed) as failure:
+        await _adapter(handler).complete(_CAND, _request(json_mode=True))
+    assert failure.value.kind == FailureKind.CAPABILITY_UNSUPPORTED
+    assert len(calls) == 1 and "response_format" in calls[0]
 
 
 async def test_clean_success_has_no_degradation_note() -> None:
@@ -177,11 +181,11 @@ async def test_clean_success_has_no_degradation_note() -> None:
         return httpx.Response(
             200,
             json={
-                "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+                "choices": [{"message": {"content": '{"ok":true}'}, "finish_reason": "stop"}],
                 "usage": {"prompt_tokens": 5, "completion_tokens": 1},
                 "model": "some/model:free",
             },
         )
 
     completion = await _adapter(handler).complete(_CAND, _request(json_mode=True))
-    assert RESPONSE_FORMAT_DROPPED_NOTE not in completion.notes
+    assert not any("response_format dropped" in note for note in completion.notes)

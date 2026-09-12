@@ -1,4 +1,6 @@
-from bebshax.llm import ChatMessage, LLMRequest, SingleAdapterLLMService, TaskType
+import pytest
+
+from bebshax.llm import AllCandidatesFailed, ChatMessage, LLMRequest, SingleAdapterLLMService, TaskType
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 
@@ -7,7 +9,7 @@ async def test_json_mode_skips_models_without_json_support() -> None:
     adapter = FakeAdapter(
         [
             FakeRoute(candidate=RouteCandidate(provider="fake", model="no-json", supports_json=False)),
-            FakeRoute(candidate=RouteCandidate(provider="fake", model="with-json", supports_json=True)),
+            FakeRoute(candidate=RouteCandidate(provider="fake", model="with-json", supports_json=True), reply='{"ok": true}'),
         ]
     )
     request = LLMRequest(
@@ -20,7 +22,7 @@ async def test_json_mode_skips_models_without_json_support() -> None:
     assert adapter.calls == ["fake/with-json"]
 
 
-async def test_tools_required_skips_models_without_tool_support() -> None:
+async def test_tools_required_is_unavailable_without_a_tool_schema_contract() -> None:
     adapter = FakeAdapter(
         [
             FakeRoute(candidate=RouteCandidate(provider="fake", model="no-tools", supports_tools=False)),
@@ -32,9 +34,9 @@ async def test_tools_required_skips_models_without_tool_support() -> None:
         messages=[ChatMessage(role="user", content="call a tool")],
         tools_required=True,
     )
-    result = await SingleAdapterLLMService(adapter).complete(request)
-    assert result.model == "with-tools"
-    assert adapter.calls == ["fake/with-tools"]
+    with pytest.raises(AllCandidatesFailed):
+        await SingleAdapterLLMService(adapter).complete(request)
+    assert adapter.calls == []
 
 
 async def test_provenance_is_complete_and_delivered_to_hook() -> None:

@@ -1,9 +1,8 @@
 """Model pools and the task→pool map — configuration as data, not code branches.
 
 Adapter names refer to the keys handed to PoolRouter (production names come
-from bebshax.llm.adapters.factory). Ordering inside a pool = preference order;
-every pool ends at the local adapter so cross-adapter fallback terminates
-on-machine, except `emergency`, which is local-FIRST.
+from bebshax.llm.adapters.factory). Every production pool uses independent
+remote tiers: Freellmpool primary, OpenRouter secondary.
 """
 
 from __future__ import annotations
@@ -14,7 +13,6 @@ from bebshax.llm.types import TaskType
 
 OPENROUTER = "openrouter"
 FREELLMPOOL = "freellmpool"
-OLLAMA = "ollama"
 
 
 class PoolConfig(BaseModel):
@@ -26,17 +24,12 @@ class PoolConfig(BaseModel):
 POOLS: dict[str, PoolConfig] = {
     p.name: p
     for p in [
-        PoolConfig(name="reasoning", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=2),
-        # OpenRouter-first (owner decision 2026-09-09): local Ollama measured
-        # 14-24 s/turn on this machine under real load, so interactive replies now
-        # prefer OpenRouter's fast free models; Ollama stays last as the on-machine
-        # fallback so cross-adapter failover still terminates locally.
-        PoolConfig(name="conversation", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=5),
-        PoolConfig(name="long_context", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=2),
-        PoolConfig(name="structured", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=3),
-        PoolConfig(name="fast", adapters=[OPENROUTER, FREELLMPOOL, OLLAMA], max_concurrency=5),
-        PoolConfig(name="local", adapters=[OLLAMA], max_concurrency=2),
-        PoolConfig(name="emergency", adapters=[OLLAMA, FREELLMPOOL], max_concurrency=2),
+        PoolConfig(name="reasoning", adapters=[FREELLMPOOL, OPENROUTER], max_concurrency=2),
+        PoolConfig(name="conversation", adapters=[FREELLMPOOL, OPENROUTER], max_concurrency=5),
+        PoolConfig(name="long_context", adapters=[FREELLMPOOL, OPENROUTER], max_concurrency=2),
+        PoolConfig(name="structured", adapters=[FREELLMPOOL, OPENROUTER], max_concurrency=3),
+        PoolConfig(name="fast", adapters=[FREELLMPOOL, OPENROUTER], max_concurrency=5),
+        PoolConfig(name="emergency", adapters=[FREELLMPOOL, OPENROUTER], max_concurrency=2),
     ]
 }
 

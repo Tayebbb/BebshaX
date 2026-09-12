@@ -5,9 +5,11 @@ wait on the same stalled route; the fallback chain stops advancing once the
 task's wall-clock budget is spent and reports the trail so far.
 """
 
+import asyncio
+
 import pytest
 
-from bebshax.llm import AllCandidatesFailed, ChatMessage, FailureKind, LLMRequest, PoolRouter, TaskType
+from bebshax.llm import AllCandidatesFailed, ChatMessage, FailureKind, LLMRequest, PoolConfig, PoolRouter, TaskType
 from bebshax.llm.adapters.base import AdapterCompletion, RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.failures import FAILURE_POLICIES, AttemptFailed
@@ -26,10 +28,11 @@ def _route(provider: str, model: str, behaviors: list | None = None) -> FakeRout
 
 
 def _router(remote_routes, local_routes, **kwargs):
+    secondary = FakeAdapter(local_routes)
     adapters = {
-        "openrouter": FakeAdapter([]),
+        "openrouter": secondary,
         "freellmpool": FakeAdapter(remote_routes),
-        "ollama": FakeAdapter(local_routes),
+        "ollama": secondary,
     }
     return PoolRouter(adapters, **kwargs), adapters
 
@@ -71,34 +74,32 @@ def test_request_deadline_is_a_bounded_multiple_of_the_attempt_budget() -> None:
 
 
 class _SlowFailingAdapter(FakeAdapter):
-    """Every attempt 'takes' the clock forward and fails with SERVER_ERROR."""
+    """Slow failures are cancellable within one absolute deadline."""
 
-    def __init__(self, routes, clock, step: float) -> None:
+    def __init__(self, routes, step: float) -> None:
         super().__init__(routes)
-        self._clock = clock
         self._step = step
+        self.completed_failures = 0
 
     async def complete(self, candidate, request):
         self.calls.append(f"{candidate.provider}/{candidate.model}")
-        self._clock["t"] += self._step
+        await asyncio.sleep(self._step)
+        self.completed_failures += 1
         raise AttemptFailed(FailureKind.SERVER_ERROR, candidate.provider, candidate.model, "slow 5xx")
 
 
-async def test_chain_stops_advancing_once_the_request_budget_is_spent(monkeypatch) -> None:
-    import bebshax.llm.service as service_mod
-
-    clock = {"t": 0.0}
-    monkeypatch.setattr(service_mod.time, "perf_counter", lambda: clock["t"])
+async def test_chain_stops_advancing_once_the_request_budget_is_spent() -> None:
     routes = [_route("p", f"m{i}") for i in range(5)]
-    adapter = _SlowFailingAdapter(routes, clock, step=40.0)
+    adapter = _SlowFailingAdapter(routes, step=0.04)
     provenance = ProvenanceRecord(request_id="r1", task="PERSONA_GENERATION", pool="reasoning")
 
     with pytest.raises(AllCandidatesFailed) as info:
-        await attempt_candidates([(adapter, r.candidate) for r in routes], _request(), provenance, deadline_s=100.0)
-    # 40 s, 80 s, 120 s -> the third failure crosses the 100 s budget; routes 4-5 are never tried.
-    assert len(adapter.calls) == 3
-    assert info.value.provenance.attempts[-1].fallback_reason == "stopping: request budget of 100s spent"
-    assert any(step.startswith("[deadline: 100s request budget spent after 3 attempt(s)]") for step in provenance.routing_path)
+        await attempt_candidates([(adapter, r.candidate) for r in routes], _request(), provenance, deadline_s=0.1)
+    assert adapter.completed_failures <= 2
+    assert len(adapter.calls) == adapter.completed_failures + 1
+    assert info.value.provenance.attempts[-1].failure_kind == FailureKind.TIMEOUT
+    assert info.value.provenance.attempts[-1].fallback_reason == "stopping: absolute request budget spent"
+    assert any("deadline" in step for step in provenance.routing_path)
 
 
 async def test_success_within_budget_is_unaffected() -> None:
@@ -134,7 +135,7 @@ async def test_sole_cooling_route_is_probed_instead_of_failing_in_zero_ms() -> N
     assert second.provenance.attempts[-1].success is True
 
 
-async def test_probe_prefers_the_route_that_recovers_soonest() -> None:
+async def test_restored_cooldowns_wait_for_recovery_instead_of_probing() -> None:
     now = {"t": 0.0}
     router, adapters = _router(
         [_route("freellmpool", "auto")],
@@ -142,9 +143,10 @@ async def test_probe_prefers_the_route_that_recovers_soonest() -> None:
         clock=lambda: now["t"],
         initial_cooldowns={("freellmpool", "auto"): 50.0, ("ollama", "m"): 20.0},
     )
-    result = await router.complete(_request())
-    assert result.provider == "ollama"  # 20 s left beats 50 s left, despite pool order
+    with pytest.raises(AllCandidatesFailed):
+        await router.complete(_request())
     assert adapters["freellmpool"].calls == []
+    assert adapters["openrouter"].calls == []
 
 
 async def test_failed_probe_rearms_the_cooldown_and_stays_honest() -> None:
@@ -181,8 +183,8 @@ async def test_only_one_probe_per_route_is_in_flight() -> None:
     router = PoolRouter(
         {"openrouter": FakeAdapter([]), "freellmpool": slow, "ollama": FakeAdapter([])},
         clock=lambda: 0.0,
-        initial_cooldowns={("freellmpool", "auto"): 30.0},
     )
+    router._start_cooldown(RouteCandidate(provider="freellmpool", model="auto"), FailureKind.TIMEOUT)
     first = asyncio.create_task(router.complete(_request()))
     for _ in range(200):
         if router.pool_utilization()["reasoning"]["active_requests"] == 1:
@@ -233,7 +235,9 @@ async def test_router_cools_a_route_for_the_providers_own_reset_hint() -> None:
     changes: list[tuple[str, str, float]] = []
     quota = _HintingAdapter([_route("openrouter", "m")], FailureKind.QUOTA_EXHAUSTED, retry_after_s=3600.0)
     router = PoolRouter(
-        {"openrouter": quota, "freellmpool": FakeAdapter([]), "ollama": FakeAdapter([_route("ollama", "local")])},
+        {"openrouter": quota, "fallback": FakeAdapter([_route("ollama", "historical-fake")])},
+        pools={"test": PoolConfig(name="test", adapters=["openrouter", "fallback"])},
+        task_pool_map={TaskType.PERSONA_GENERATION: "test"},
         clock=lambda: now["t"],
         on_cooldown_change=lambda p, m, s: changes.append((p, m, s)),
     )
@@ -246,15 +250,17 @@ async def test_router_cools_a_route_for_the_providers_own_reset_hint() -> None:
     assert not router.is_cooling(RouteCandidate(provider="openrouter", model="m"))
 
 
-async def test_hint_is_bounded_and_never_shortens_the_policy_cooldown() -> None:
+async def test_hint_is_never_shortened_to_an_earlier_recovery() -> None:
     changes: list[tuple[str, str, float]] = []
     long_hint = _HintingAdapter([_route("openrouter", "m")], FailureKind.QUOTA_EXHAUSTED, retry_after_s=10 * 86400.0)
     short_hint = _HintingAdapter([_route("freellmpool", "auto")], FailureKind.RATE_LIMITED, retry_after_s=5.0)
     router = PoolRouter(
-        {"openrouter": long_hint, "freellmpool": short_hint, "ollama": FakeAdapter([_route("ollama", "local")])},
+        {"openrouter": long_hint, "freellmpool": short_hint, "fallback": FakeAdapter([_route("ollama", "historical-fake")])},
+        pools={"test": PoolConfig(name="test", adapters=["freellmpool", "openrouter", "fallback"])},
+        task_pool_map={TaskType.PERSONA_GENERATION: "test"},
         cooldown_seconds=60.0,
         clock=lambda: 0.0,
         on_cooldown_change=lambda p, m, s: changes.append((p, m, s)),
     )
     await router.complete(_request())
-    assert changes == [("openrouter", "*", 86400.0), ("freellmpool", "*", 60.0)]
+    assert changes == [("freellmpool", "*", 60.0), ("openrouter", "*", 10 * 86400.0)]

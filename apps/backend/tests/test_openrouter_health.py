@@ -15,7 +15,8 @@ from bebshax.main import app
 async def test_openrouter_health_not_configured(monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     adapter = OpenRouterAdapter(api_key="")
-    result = await adapter.health_check()
+    # Configuration inspection must answer before any governed routing is needed.
+    result = await adapter.health_check(llm_service=None)  # type: ignore[arg-type]
     assert result["configured"] is False
     assert result["authenticated"] is False
     assert result["status"] == "not_configured"
@@ -37,7 +38,11 @@ async def test_openrouter_service_role_models(monkeypatch):
 @pytest.mark.asyncio
 async def test_openrouter_truncated_output_is_malformed_response(monkeypatch):
     """finish_reason=length ⇒ MALFORMED_RESPONSE (retry-once-then-advance)."""
-    adapter = OpenRouterAdapter(api_key="test-key-not-real")
+    adapter = OpenRouterAdapter(api_key="test-key-not-real", catalogue=[{
+        "id": "some/chat-model:free", "context_length": 8192,
+        "pricing": {"prompt": "0", "completion": "0"},
+        "supported_parameters": ["response_format", "max_tokens", "temperature"],
+    }])
 
     def _handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -50,14 +55,14 @@ async def test_openrouter_truncated_output_is_malformed_response(monkeypatch):
                     }
                 ],
                 "usage": {"prompt_tokens": 100, "completion_tokens": 450},
-                "model": "some/reasoning-model:free",
+                "model": "some/chat-model:free",
             },
         )
 
     adapter._client = httpx.AsyncClient(transport=httpx.MockTransport(_handler))
     candidate = RouteCandidate(
         provider="openrouter",
-        model="some/reasoning-model:free",
+        model="some/chat-model:free",
         context_window=8192,
         supports_json=True,
         supports_tools=False,

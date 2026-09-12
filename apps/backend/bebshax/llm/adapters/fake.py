@@ -24,6 +24,8 @@ class FakeRoute:
 
 
 class FakeAdapter(ProviderAdapter):
+    remote_processing = False
+
     def __init__(self, routes: list[FakeRoute]) -> None:
         self._routes = {(r.candidate.provider, r.candidate.model): r for r in routes}
         self._order = [r.candidate for r in routes]

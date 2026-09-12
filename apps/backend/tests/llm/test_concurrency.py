@@ -7,6 +7,8 @@ from bebshax.llm.adapters.base import AdapterCompletion, ProviderAdapter, RouteC
 class CountingAdapter(ProviderAdapter):
     """Tracks peak in-flight complete() calls to verify semaphore behavior."""
 
+    remote_processing = False
+
     def __init__(self) -> None:
         self.inflight = 0
         self.peak = 0

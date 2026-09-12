@@ -1,6 +1,6 @@
 import pytest
 
-from bebshax.llm import ChatMessage, LLMRequest, PoolRouter, TaskType
+from bebshax.llm import ChatMessage, LLMRequest, PoolConfig, PoolRouter, TaskType
 from bebshax.llm.adapters.base import AdapterCompletion, RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.failures import AllCandidatesFailed, AttemptFailed, FailureKind
@@ -90,11 +90,10 @@ async def test_restored_provider_cooldown_is_not_bypassed_when_every_route_is_co
         },
     )
 
-    result = await _run(router, streaming=streaming)
-
-    assert result.provider == "ollama"
+    with pytest.raises(AllCandidatesFailed):
+        await _run(router, streaming=streaming)
     assert remote.calls == []
-    assert local.calls == ["ollama/local-model"]
+    assert local.calls == []
 
 
 @pytest.mark.parametrize("streaming", [False, True], ids=["complete", "stream"])
@@ -106,8 +105,8 @@ async def test_transient_route_cooldown_still_allows_a_half_open_probe(
     router = PoolRouter(
         {"openrouter": adapter, "freellmpool": FakeAdapter([]), "ollama": FakeAdapter([])},
         clock=lambda: 0.0,
-        initial_cooldowns={(candidate.provider, candidate.model): 60.0},
     )
+    router._start_cooldown(candidate, FailureKind.TIMEOUT)
 
     result = await _run(router, streaming=streaming)
 
@@ -135,14 +134,14 @@ async def test_probe_rechecks_new_provider_cooldown_before_trying_sibling_models
     )
     local = FakeAdapter([FakeRoute(RouteCandidate(provider="ollama", model="local-model"))])
     router = PoolRouter(
-        {"openrouter": remote, "freellmpool": FakeAdapter([]), "ollama": local},
+        {"openrouter": remote, "fallback": local},
+        pools={"test": PoolConfig(name="test", adapters=["openrouter", "fallback"])},
+        task_pool_map={TaskType.PERSONA_GENERATION: "test"},
         clock=lambda: 0.0,
-        initial_cooldowns={
-            ("openrouter", "model-a"): 60.0,
-            ("openrouter", "model-b"): 90.0,
-            ("ollama", "local-model"): 120.0,
-        },
     )
+    for adapter in (remote, local):
+        for candidate in await adapter.candidates():
+            router._start_cooldown(candidate, FailureKind.TIMEOUT)
 
     result = await _run(router, streaming=streaming)
 
@@ -153,4 +152,4 @@ async def test_probe_rechecks_new_provider_cooldown_before_trying_sibling_models
         failure_kind,
         None,
     ]
-    assert any("provider-wide" in step for step in result.provenance.routing_path)
+    assert any("provider-wide" in step or "recovery hint" in step for step in result.provenance.routing_path)

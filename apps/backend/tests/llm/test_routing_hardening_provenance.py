@@ -28,7 +28,7 @@ def _marker(path: list[str], prefix: str) -> list[str]:
 
 
 async def test_provenance_carries_estimate_and_params_markers() -> None:
-    adapter = FakeAdapter([_route("fake", "m1")])
+    adapter = FakeAdapter([FakeRoute(candidate=RouteCandidate(provider="fake", model="m1"), reply='{"ok":true}')])
     request = LLMRequest(
         task=TaskType.STRUCTURED_OUTPUT,
         messages=[ChatMessage(role="user", content="hello " * 50)],
@@ -84,24 +84,23 @@ async def test_estimate_is_stamped_even_when_preflight_rejects_everything() -> N
 async def test_ranker_reordering_is_recorded_compactly() -> None:
     adapters = {
         "openrouter": FakeAdapter([_route("openrouter", "a")]),
-        "freellmpool": FakeAdapter([_route("freellmpool", "auto")]),
+        "freellmpool": FakeAdapter([_route("freellmpool", "slow"), _route("freellmpool", "fast")]),
         "ollama": FakeAdapter([_route("ollama", "m")]),
     }
 
-    def demote_openrouter(entries):
-        return [e for e in entries if e[1].provider != "openrouter"] + [
-            e for e in entries if e[1].provider == "openrouter"
-        ]
+    def prefer_fast_within_tier(entries):
+        return sorted(entries, key=lambda entry: entry[1].model != "fast")
 
-    router = PoolRouter(adapters, ranker=demote_openrouter)
+    router = PoolRouter(adapters, ranker=prefer_fast_within_tier)
     request = LLMRequest(
         task=TaskType.PERSONA_GENERATION, messages=[ChatMessage(role="user", content="hi")]
     )
     result = await router.complete(request)
     assert result.provider == "freellmpool"
+    assert result.model == "fast"
     assert _marker(result.provenance.routing_path, "[ranker reordered") == [
-        "[ranker reordered: openrouter/a, freellmpool/auto, ollama/m -> "
-        "freellmpool/auto, ollama/m, openrouter/a]"
+        "[ranker reordered: freellmpool/slow, freellmpool/fast -> "
+        "freellmpool/fast, freellmpool/slow]"
     ]
 
 

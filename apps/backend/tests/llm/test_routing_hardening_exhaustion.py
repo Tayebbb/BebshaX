@@ -44,10 +44,11 @@ def _route(provider: str, model: str, behaviors: list | None = None, **cand) -> 
 
 
 def _router(remote_routes, local_routes, **kwargs) -> tuple[PoolRouter, dict]:
+    secondary = FakeAdapter(local_routes)
     adapters = {
-        "openrouter": FakeAdapter([]),
+        "openrouter": secondary,
         "freellmpool": FakeAdapter(remote_routes),
-        "ollama": FakeAdapter(local_routes),
+        "ollama": secondary,
     }
     return PoolRouter(adapters, **kwargs), adapters
 
@@ -131,7 +132,7 @@ async def test_adapter_bug_is_stamped_internal_error_and_next_candidate_never_ca
     buggy = BuggyAdapter([_route("freellmpool", "auto")])
     healthy = FakeAdapter([_route("ollama", "m")])
     router = PoolRouter(
-        {"openrouter": FakeAdapter([]), "freellmpool": buggy, "ollama": healthy},
+        {"openrouter": healthy, "freellmpool": buggy, "ollama": healthy},
         on_provenance=records.append,
     )
     with pytest.raises(AttemptFailed) as exc:

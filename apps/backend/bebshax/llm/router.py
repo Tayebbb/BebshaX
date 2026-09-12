@@ -2,8 +2,7 @@
 
 task → pool (config) → candidates from the pool's adapters in preference
 order → eligibility (capabilities + context estimate + cooldowns) → attempt
-loop with per-failure-kind policies → cross-adapter fallback (pools end at
-the local adapter; `emergency` starts there).
+loop with per-failure-kind policies -> independent remote fallback tiers.
 
 Ranking is pool order by default; `ranker` is the injection point — production
 wires the §10 quota-aware ranker there. Cooldowns are in-memory
@@ -16,8 +15,9 @@ bebshax.db.capacity_state.
 from __future__ import annotations
 
 import asyncio
+import math
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import aclosing
 
 from bebshax.llm.adapters.base import (
@@ -31,25 +31,34 @@ from bebshax.llm.failures import (
     FAILURE_POLICIES,
     AllCandidatesFailed,
     AttemptFailed,
+    ContextWindowExceeded,
     FailureKind,
     LLMError,
 )
-from bebshax.llm.latency import request_deadline_s
+from bebshax.llm.latency import DeadlineContext, DeadlineExpired, await_before, resolve_deadline
+from bebshax.llm.governance import RemoteProcessingPolicy, governed_operation
 from bebshax.llm.pools import POOLS, TASK_POOL_MAP, PoolConfig
 from bebshax.llm.provenance import AttemptRecord, ProvenanceRecord
 from bebshax.llm.service import (
     Entry,
     LLMService,
+    ProvenanceCallback,
+    _stamp_request_context,
     attempt_candidates,
     capability_skip_reason,
     exhaustion_error,
     filter_eligible,
+    finalize_provenance,
+    next_candidate,
+    processing_skip_reason,
+    request_provenance,
+    stamp_deadline,
     stamp_internal_error,
 )
 from bebshax.llm.types import LLMRequest, LLMResult, TaskType
+from bebshax.llm.validation import validate_text
 
 DEFAULT_COOLDOWN_SECONDS = 60.0
-MAX_HINTED_COOLDOWN_S = 24 * 3600.0  # never trust a provider hint beyond a day
 PROVIDER_WIDE = "*"  # model slot of a provider-scoped cooldown key
 PROBE_NOTE = "cooldown probe: every usable route is cooling down, trying the soonest to recover"
 
@@ -95,14 +104,17 @@ class PoolRouter(LLMService):
         adapters: dict[str, ProviderAdapter],
         pools: dict[str, PoolConfig] | None = None,
         task_pool_map: dict[TaskType, str] | None = None,
-        on_provenance: Callable[[ProvenanceRecord], None] | None = None,
+        on_provenance: ProvenanceCallback | None = None,
         ranker: Callable[[list[Entry]], list[Entry]] | None = None,
         cooldown_seconds: float = DEFAULT_COOLDOWN_SECONDS,
         clock: Callable[[], float] = time.monotonic,
         initial_cooldowns: dict[tuple[str, str], float] | None = None,
         on_cooldown_change: Callable[[str, str, float], None] | None = None,
+        processing_policy: RemoteProcessingPolicy | None = None,
     ) -> None:
+        super().__init__()
         self._adapters = adapters
+        self._processing_policy = processing_policy or RemoteProcessingPolicy()
         self._pools = pools if pools is not None else POOLS
         self._task_pool_map = task_pool_map if task_pool_map is not None else TASK_POOL_MAP
         self._on_provenance = on_provenance
@@ -112,6 +124,7 @@ class PoolRouter(LLMService):
         # absolute deadlines in `clock` time — CooldownStore.load_active() converts
         # wall→deadline; on_cooldown_change receives a DURATION in seconds
         self._cooldown_until: dict[tuple[str, str], float] = dict(initial_cooldowns or {})
+        self._hinted_until: dict[tuple[str, str], float] = dict(initial_cooldowns or {})
         self._on_cooldown_change = on_cooldown_change
         # Routes currently being probed while cooling (half-open breaker): at
         # most one in-flight request per route, so a struggling free provider
@@ -164,6 +177,12 @@ class PoolRouter(LLMService):
             for key in ((cand.provider, cand.model), (cand.provider, PROVIDER_WIDE))
         )
 
+    def _probe_block_reason(self, cand: RouteCandidate) -> str | None:
+        for key in ((cand.provider, cand.model), (cand.provider, PROVIDER_WIDE)):
+            if self._hinted_until.get(key, 0.0) > self._clock():
+                return "provider recovery hint or restored cooldown has not expired"
+        return self._provider_cooling_reason(cand)
+
     def _cooldown_probe(
         self, entries: list[Entry], request: LLMRequest, provenance: ProvenanceRecord
     ) -> list[Entry]:
@@ -181,12 +200,16 @@ class PoolRouter(LLMService):
             (adapter, cand)
             for adapter, cand in entries
             if self._cooling_reason(cand) is not None
-            and self._provider_cooling_reason(cand) is None
+            and self._probe_block_reason(cand) is None
+            and processing_skip_reason(adapter, cand, request, provenance) is None
             and capability_skip_reason(cand, request) is None
             and cand.context_window >= needed
             and (cand.provider, cand.model) not in self._probing
         ]
-        probe.sort(key=lambda entry: self._cooldown_remaining(entry[1]))
+        tier_order: dict[int, int] = {}
+        for index, (adapter, _) in enumerate(entries):
+            tier_order.setdefault(id(adapter), index)
+        probe.sort(key=lambda entry: (tier_order[id(entry[0])], self._cooldown_remaining(entry[1])))
         if probe:
             provenance.routing_path.append(f"[{PROBE_NOTE}: {_compact_routes(probe)}]")
         return probe
@@ -195,35 +218,54 @@ class PoolRouter(LLMService):
         self, cand: RouteCandidate, kind: FailureKind, retry_after_s: float | None = None
     ) -> None:
         provider, model = cooldown_key(cand, kind)
+        key = (provider, model)
+        now = self._clock()
         seconds = FAILURE_POLICIES[kind].cooldown_seconds or self._cooldown_seconds
-        if retry_after_s is not None and retry_after_s > seconds:
-            # The provider said when it will serve again (Retry-After / quota
-            # reset): believe it, within a day, instead of re-probing every minute.
-            seconds = min(float(retry_after_s), MAX_HINTED_COOLDOWN_S)
-        self._cooldown_until[(provider, model)] = self._clock() + seconds
+        if retry_after_s is not None and math.isfinite(retry_after_s) and retry_after_s > 0:
+            seconds = max(seconds, retry_after_s)
+            self._hinted_until[key] = max(self._hinted_until.get(key, now), now + seconds)
+        until = max(self._cooldown_until.get(key, now), now + seconds)
+        self._cooldown_until[key] = until
         if self._on_cooldown_change is not None:
             # fire-and-forget persistence — cooldown state must survive restarts;
             # provider-scoped cooldowns persist with model "*" and load back as-is
-            self._on_cooldown_change(provider, model, seconds)
+            self._on_cooldown_change(provider, model, until - now)
 
     async def _pool_entries(
-        self, pool: PoolConfig, request: LLMRequest, provenance: ProvenanceRecord
+        self, pool: PoolConfig, request: LLMRequest, provenance: ProvenanceRecord,
+        *, adapter_names: list[str] | None = None,
     ) -> list[Entry]:
         entries: list[Entry] = []
-        for adapter_name in pool.adapters:
+        for adapter_name in adapter_names if adapter_names is not None else pool.adapters:
             adapter = self._adapters.get(adapter_name)
             if adapter is None:
                 continue
-            for cand in await adapter.candidates():
-                entries.append((adapter, cand))
-        if self._ranker is not None:
-            ranked = self._ranker(entries)
-            if [c for _, c in ranked] != [c for _, c in entries]:
-                provenance.routing_path.append(
-                    f"[ranker reordered: {_compact_routes(entries)} -> {_compact_routes(ranked)}]"
+            try:
+                candidates = await governed_operation(
+                    adapter.candidates_for(request), provenance.processing_provider_allowlist,
+                    provenance.processing_openrouter_upstreams,
                 )
-            entries = ranked
-        return _apply_preference(entries, request, provenance)
+                tier = [(adapter, cand) for cand in candidates]
+                if not tier:
+                    approved = ", ".join(provenance.processing_provider_allowlist) or "none"
+                    provenance.routing_path.append(
+                        f"[{adapter_name}: no eligible candidates (policy {provenance.processing_policy_id} "
+                        f"approves: {approved}; classification={provenance.data_classification}; json_mode={request.json_mode})]"
+                    )
+            except AttemptFailed as exc:
+                if exc.kind == FailureKind.INTERNAL_ERROR:
+                    raise
+                provenance.routing_path.append(f"[{adapter_name} discovery unavailable: {exc.kind}]")
+                continue
+            if self._ranker is not None:
+                ranked = self._ranker(tier)
+                if [candidate for _, candidate in ranked] != [candidate for _, candidate in tier]:
+                    provenance.routing_path.append(
+                        f"[ranker reordered: {_compact_routes(tier)} -> {_compact_routes(ranked)}]"
+                    )
+                tier = ranked
+            entries.extend(_apply_preference(tier, request, provenance))
+        return entries
 
     async def _eligible_entries(
         self, pool: PoolConfig, request: LLMRequest, provenance: ProvenanceRecord
@@ -249,45 +291,91 @@ class PoolRouter(LLMService):
         self._probing |= keys
         return keys
 
-    async def complete(self, request: LLMRequest) -> LLMResult:
+    async def _candidate_entries(
+        self, pool: PoolConfig, request: LLMRequest, provenance: ProvenanceRecord,
+        probing: set[tuple[str, str]],
+    ) -> AsyncGenerator[Entry, None]:
+        considered: list[Entry] = []
+        had_eligible = False
+        context_excluded = False
+        largest_window: int | None = None
+        for adapter_name in pool.adapters:
+            entries = await self._pool_entries(pool, request, provenance, adapter_names=[adapter_name])
+            considered.extend(entries)
+            try:
+                eligible = filter_eligible(entries, request, provenance, extra_skip_reason=self._cooling_reason)
+            except ContextWindowExceeded as exc:
+                context_excluded = True
+                largest_window = max(largest_window or 0, exc.largest_window or 0)
+                continue
+            except AllCandidatesFailed:
+                continue
+            had_eligible = True
+            for entry in eligible:
+                yield entry
+        if not had_eligible:
+            probe = self._cooldown_probe(considered, request, provenance)
+            if probe:
+                probing.update(self._mark_probing(probe))
+                for entry in probe:
+                    yield entry
+            elif context_excluded:
+                raise ContextWindowExceeded(estimate_request_tokens(request), largest_window)
+            else:
+                raise AllCandidatesFailed(provenance)
+
+    def _dispatch_skip_reason(self, candidate: RouteCandidate, probing: set[tuple[str, str]]) -> str | None:
+        if (candidate.provider, candidate.model) in probing:
+            return self._probe_block_reason(candidate)
+        return self._cooling_reason(candidate)
+
+    async def complete(self, request: LLMRequest, *, deadline_at: float | None = None) -> LLMResult:
         pool_name = self._task_pool_map.get(request.task)
         if pool_name is None or pool_name not in self._pools:
             raise LLMError(f"no pool mapped for task {request.task}")
         pool = self._pools[pool_name]
 
-        provenance = ProvenanceRecord(
-            request_id=request.request_id,
-            task=request.task.value,
-            pool=pool_name,
-            persona_id=request.persona_id,
-            conversation_id=request.conversation_id,
-        )
+        provenance = request_provenance(request, self._processing_policy, pool=pool_name)
         started = time.perf_counter()
+        deadline = resolve_deadline(request.task, deadline_at=deadline_at)
+        task_owner = self._begin_request(request.request_id)
         probing: set[tuple[str, str]] = set()
-        try:
-            async with self._semaphores[pool_name]:
-                self._active_requests[pool_name] += 1
-                try:
-                    eligible, skip_reason = await self._eligible_entries(pool, request, provenance)
-                    if skip_reason is None:
-                        probing = self._mark_probing(eligible)
-                        skip_reason = self._provider_cooling_reason
-                    return await attempt_candidates(
-                        eligible,
-                        request,
-                        provenance,
-                        on_cooldown=self._start_cooldown,
-                        skip_reason=skip_reason,
-                    )
-                finally:
-                    self._active_requests[pool_name] -= 1
-                    self._probing -= probing
-        finally:
-            provenance.total_latency_ms = (time.perf_counter() - started) * 1000
-            if self._on_provenance is not None:
-                self._on_provenance(provenance)
+        admitted = False
+        eligible: AsyncGenerator[Entry, None] | None = None
 
-    async def stream(self, request: LLMRequest) -> AsyncIterator[StreamDelta | LLMResult]:
+        async def admit() -> None:
+            nonlocal admitted
+            await self._semaphores[pool_name].acquire()
+            admitted = True
+            self._active_requests[pool_name] += 1
+
+        def release() -> None:
+            self._probing.difference_update(probing)
+            if admitted:
+                self._active_requests[pool_name] -= 1
+                self._semaphores[pool_name].release()
+
+        try:
+            _stamp_request_context(request, provenance, estimate_request_tokens(request))
+            await await_before(admit(), deadline, task_owner=task_owner)
+            eligible = self._candidate_entries(pool, request, provenance, probing)
+            return await attempt_candidates(
+                eligible, request, provenance, on_cooldown=self._start_cooldown,
+                skip_reason=lambda candidate: self._dispatch_skip_reason(candidate, probing),
+                deadline_at=deadline, task_owner=task_owner,
+            )
+        except DeadlineExpired:
+            stamp_deadline(provenance)
+            raise AllCandidatesFailed(provenance)
+        finally:
+            try:
+                await finalize_provenance(provenance, self._on_provenance, started, deadline, task_owner=task_owner)
+            finally:
+                await self._retire_request(task_owner, release, eligible.aclose if eligible is not None else None)
+
+    async def stream(
+        self, request: LLMRequest, *, deadline_at: float | None = None
+    ) -> AsyncIterator[StreamDelta | LLMResult]:
         """Streaming complete(): yields StreamDelta chunks, then the final
         LLMResult (canonical text + full provenance).
 
@@ -301,28 +389,37 @@ class PoolRouter(LLMService):
             raise LLMError(f"no pool mapped for task {request.task}")
         pool = self._pools[pool_name]
 
-        provenance = ProvenanceRecord(
-            request_id=request.request_id,
-            task=request.task.value,
-            pool=pool_name,
-            persona_id=request.persona_id,
-            conversation_id=request.conversation_id,
-        )
+        provenance = request_provenance(request, self._processing_policy, pool=pool_name)
         started = time.perf_counter()
+        deadline = resolve_deadline(request.task, deadline_at=deadline_at)
+        task_owner = self._begin_request(request.request_id)
         probing: set[tuple[str, str]] = set()
-        try:
-            async with self._semaphores[pool_name]:
-                self._active_requests[pool_name] += 1
-                try:
-                    eligible, skip_reason = await self._eligible_entries(pool, request, provenance)
-                    if skip_reason is None:
-                        probing = self._mark_probing(eligible)
-                        skip_reason = self._provider_cooling_reason
+        admitted = False
+        finalized = False
+        eligible: AsyncGenerator[Entry, None] | None = None
 
-                    budget = request_deadline_s(request.task)
+        async def admit() -> None:
+            nonlocal admitted
+            await self._semaphores[pool_name].acquire()
+            admitted = True
+            self._active_requests[pool_name] += 1
+
+        def release() -> None:
+            self._probing.difference_update(probing)
+            if admitted:
+                self._active_requests[pool_name] -= 1
+                self._semaphores[pool_name].release()
+
+        try:
+            _stamp_request_context(request, provenance, estimate_request_tokens(request))
+            await await_before(admit(), deadline, task_owner=task_owner)
+            if admitted:
+                try:
+                    eligible = self._candidate_entries(pool, request, provenance, probing)
                     attempt_no = 0
-                    for adapter, cand in eligible:
-                        cooling = skip_reason(cand) if skip_reason is not None else None
+                    while (entry := await next_candidate(eligible, deadline, task_owner=task_owner)) is not None:
+                        adapter, cand = entry
+                        cooling = self._dispatch_skip_reason(cand, probing)
                         if cooling is not None:
                             provenance.routing_path.append(
                                 f"{cand.provider}/{cand.model} [skipped: {cooling}]"
@@ -337,14 +434,34 @@ class PoolRouter(LLMService):
                             provenance.attempts.append(record)
                             t0 = time.perf_counter()
                             committed = False
+                            visible_text: list[str] = []
                             try:
-                                async with aclosing(adapter.stream(cand, request)) as adapter_stream:
-                                    async for event in adapter_stream:
+                                stream_context = DeadlineContext(aclosing(adapter.stream(cand, request)), deadline, task_owner=task_owner)
+                                async with stream_context as adapter_stream:
+                                    pending_text = ""
+                                    while True:
+                                        try:
+                                            event = await await_before(governed_operation(
+                                                anext(adapter_stream), provenance.processing_provider_allowlist,
+                                                provenance.processing_openrouter_upstreams,
+                                            ), deadline, task_owner=task_owner)
+                                        except StopAsyncIteration:
+                                            break
                                         if isinstance(event, StreamDelta):
-                                            committed = True
-                                            yield event
+                                            if request.json_mode:
+                                                continue
+                                            pending_text += event.text
+                                            if committed or pending_text.strip():
+                                                committed = True
+                                                visible_text.append(pending_text)
+                                                yield StreamDelta(text=pending_text)
+                                                pending_text = ""
                                         elif isinstance(event, StreamDone):
                                             completion = event.completion
+                                            await stream_context.aclose()
+                                            validate_text(completion.text, request, completion.provider, completion.model, finish_reason=completion.finish_reason)
+                                            if committed and "".join(visible_text) != completion.text:
+                                                raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, completion.provider, completion.model, "canonical completion differs from visible text")
                                             record.latency_ms = (time.perf_counter() - t0) * 1000
                                             record.success = True
                                             if (completion.provider, completion.model) != (
@@ -355,11 +472,21 @@ class PoolRouter(LLMService):
                                             record.provider = completion.provider
                                             record.model = completion.model
                                             record.notes = list(completion.notes)
+                                            record.observations = list(completion.observations)
+                                            record.cached = completion.cached
+                                            record.elapsed_ms = record.latency_ms
+                                            if completion.latency_ms is not None:
+                                                record.latency_ms = completion.latency_ms
                                             provenance.success = True
                                             provenance.served_by_provider = completion.provider
                                             provenance.served_by_model = completion.model
                                             provenance.input_tokens = completion.usage.input_tokens
                                             provenance.output_tokens = completion.usage.output_tokens
+                                            finalized = True
+                                            await finalize_provenance(provenance, self._on_provenance, started, deadline, task_owner=task_owner)
+                                            if request.json_mode:
+                                                committed = True
+                                                yield StreamDelta(text=completion.text)
                                             yield LLMResult(
                                                 text=completion.text,
                                                 provider=completion.provider,
@@ -375,45 +502,65 @@ class PoolRouter(LLMService):
                                     cand.model,
                                     "stream ended without a terminal completion",
                                 )
-                            except (GeneratorExit, asyncio.CancelledError):
+                            except DeadlineExpired as exc:
+                                record.latency_ms = (time.perf_counter() - t0) * 1000
+                                record.observations = list(getattr(exc, "observations", []))
+                                stamp_deadline(provenance, record)
+                                if committed:
+                                    failure = AttemptFailed(
+                                        FailureKind.TIMEOUT, record.provider, record.model,
+                                        "absolute request deadline exceeded after stream commitment",
+                                    )
+                                    failure.provenance = provenance
+                                    raise failure from exc
+                                raise AllCandidatesFailed(provenance) from exc
+                            except (GeneratorExit, asyncio.CancelledError) as exc:
                                 # Consumer abort — but closing AFTER StreamDone was
                                 # consumed lands here too (GeneratorExit at the final
                                 # yield), so never overwrite a successful record.
                                 if not record.success:
-                                    record.latency_ms = (time.perf_counter() - t0) * 1000
+                                    record.elapsed_ms = (time.perf_counter() - t0) * 1000
+                                    record.latency_ms = None
                                     record.failure_detail = "aborted by consumer"
+                                    record.observations = list(getattr(exc, "observations", []))
                                 raise
                             except AttemptFailed as failure:
                                 record.latency_ms = (time.perf_counter() - t0) * 1000
                                 record.failure_kind = failure.kind
                                 record.failure_detail = failure.detail
+                                record.observations = list(failure.observations)
                                 policy = FAILURE_POLICIES[failure.kind]
-                                if policy.cooldown_route:
+                                if policy.cooldown_route and failure.provider_fault and not adapter.manages_cooldowns:
                                     self._start_cooldown(cand, failure.kind, failure.retry_after_s)
                                 # Deliberate order difference from attempt_candidates:
                                 # a committed route must never retry or advance — the
                                 # user already saw its words (R2).
                                 if committed or not policy.try_next_candidate:
+                                    failure.provenance = provenance
                                     raise
-                                if time.perf_counter() - started >= budget:
-                                    record.fallback_reason = f"stopping: request budget of {budget:.0f}s spent"
-                                    provenance.routing_path.append(
-                                        f"[deadline: {budget:.0f}s request budget spent after {attempt_no} attempt(s)]"
-                                    )
-                                    raise exhaustion_error(provenance, request)
+                                if asyncio.get_running_loop().time() >= deadline:
+                                    stamp_deadline(provenance, record)
+                                    raise AllCandidatesFailed(provenance)
                                 if policy.retry_same_once and same_route_retries == 0:
                                     same_route_retries += 1
                                     record.fallback_reason = "retrying same route once"
                                     continue
                                 record.fallback_reason = f"advancing after {failure.kind}"
                                 break
+                            except AllCandidatesFailed:
+                                raise
                             except Exception as exc:  # adapter bug — surface, never advance
                                 raise stamp_internal_error(record, exc, t0) from exc
                     raise exhaustion_error(provenance, request)
                 finally:
-                    self._active_requests[pool_name] -= 1
-                    self._probing -= probing
+                    if eligible is not None and not task_owner.pending_count:
+                        await eligible.aclose()
+        except DeadlineExpired:
+            stamp_deadline(provenance)
+            raise AllCandidatesFailed(provenance)
         finally:
-            provenance.total_latency_ms = (time.perf_counter() - started) * 1000
-            if self._on_provenance is not None:
-                self._on_provenance(provenance)
+            try:
+                if not finalized:
+                    await finalize_provenance(provenance, self._on_provenance, started, deadline, task_owner=task_owner)
+            finally:
+                await self._retire_request(task_owner, release, eligible.aclose if eligible is not None else None)

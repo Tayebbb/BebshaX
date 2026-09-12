@@ -5,30 +5,34 @@ from the SAME embedding space. Every backend declares a `space` tag stored
 next to each vector; retrieval filters candidates to the query's space.
 
 Default backend is the deterministic local hash embedding: zero network, zero
-cost, stable across restarts and machines — the right reliability trade-off
-for a free-tier project (semantics are lexical-strength; upgrade paths are
-the pinned freellmpool backend, the local Ollama backend, or "auto" — all
-per-deployment via BEBSHAX_EMBEDDING_*).
+cost, stable across restarts and machines. Remote embeddings require an
+explicitly pinned Freellmpool model and a separate embedding space.
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
-import logging
 import math
 import os
+import threading
+import time
 from abc import ABC, abstractmethod
 from collections import Counter
+from dataclasses import replace
+from pathlib import Path
 
 import httpx
+from freellmpool.client import HTTPResult
 
-logger = logging.getLogger(__name__)
-
-CANONICAL_DIM = 384
-
-DEFAULT_OLLAMA_EMBED_MODEL = "nomic-embed-text"
-DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
+from bebshax.llm.adapters.provider_policy import approved_primary_providers
+from bebshax.llm.adapters.freellmpool_transport import AttemptQuota
+from bebshax.llm.adapters.openrouter_adapter import _map_http_status
+from bebshax.llm.embedding_space import CANONICAL_DIM
+from bebshax.llm.estimator import SAFETY_MARGIN, estimate_text_tokens
+from bebshax.llm.failures import FAILURE_POLICIES
+from bebshax.llm.governance import RemoteProcessingPolicy, get_llm_request_context
+from bebshax.llm.retry import retry_after_hint
 
 
 def fit_dim(vector: list[float], dim: int = CANONICAL_DIM) -> list[float]:
@@ -68,155 +72,201 @@ class HashEmbedding(EmbeddingBackend):
 
 
 class FreellmpoolEmbedding(EmbeddingBackend):
-    """Remote embeddings with freellmpool's provider failover, PINNED to one
-    model so all vectors share a space. Sync Pool.embed is bridged via a
-    thread + lock (freellmpool has no async embed; its sync client is not
-    thread-safe, so calls are serialized)."""
+    """One approved native embedding space, with worker-owned sync transport."""
 
-    def __init__(self, model: str, pool=None) -> None:
+    def __init__(
+        self, model: str, pool=None, *, provider_config: Path | None = None,
+        transport: httpx.BaseTransport | None = None, timeout_s: float = 30.0,
+        processing_policy: RemoteProcessingPolicy | None = None,
+    ) -> None:
         if not model:
             raise ValueError("FreellmpoolEmbedding requires a pinned model name")
+        if pool is not None:
+            raise ValueError("Unmanaged embedding pools bypass policy; inject an HTTP transport instead")
+        if processing_policy is None:
+            raise ValueError("Remote embeddings require an explicit processing policy")
+        if not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise ValueError("Embedding timeout must be finite and positive")
         self._model = model
-        self._pool = pool
+        self._provider_id: str | None = None
+        self._quota: AttemptQuota | None = None
+        self._rpd = 0
+        self._cooldown_until = 0.0
+        self._processing_policy = processing_policy
+        self._timeout_s = timeout_s
+        self._deadline = 0.0
+        self._context_window = 0
+        self._pool = None
+        self._provider_config = provider_config or Path(__file__).resolve().parents[5] / "providers.toml"
+        self._transport = transport
+        self._client: httpx.Client | None = None
+        self._space: str | None = None
+        self._url: str | None = None
         self._lock = asyncio.Lock()
-        self.space = f"freellmpool:{model}"
+        self._pending: set[asyncio.Task[list[list[float]]]] = set()
+        self._closing: asyncio.Task[None] | None = None
+        self._closed = False
+        self._cancelled = threading.Event()
+        self._inputs: list[str] = []
+
+    @property
+    def space(self) -> str:
+        self._get_pool()
+        assert self._space is not None
+        return self._space
 
     def _get_pool(self):
         if self._pool is None:
             from freellmpool import Pool
+            from freellmpool import config as fl_config
+            from freellmpool.quota import QuotaStore
 
-            self._pool = Pool.from_default_config()
+            try:
+                catalog = fl_config.load_catalog(self._provider_config)
+            except (OSError, ValueError, TypeError, AttributeError) as exc:
+                raise ValueError("Embedding provider policy catalog is unavailable or invalid") from exc
+            approved = approved_primary_providers(catalog)
+            names = {name for provider in approved for name in (provider.key_env, *provider.extra_env) if name}
+            env = {name: os.environ[name] for name in names if name in os.environ}
+            configured = [
+                replace(provider, models=tuple(model for model in provider.models if model.name == self._model))
+                for provider in approved
+                if provider.adapter in {"openai", "cloudflare"}
+                and provider.is_configured(env)
+                and any(model.name == self._model for model in provider.models)
+            ]
+            if len(configured) != 1:
+                raise ValueError("Embedding provider policy must pin exactly one approved configured destination and model")
+            [provider] = configured
+            self._provider_id = provider.id
+            context_window = provider.models[0].context
+            if type(context_window) is not int or context_window <= 0:
+                raise ValueError("Embedding policy requires a verified positive context window")
+            self._context_window = context_window
+            self._rpd = provider.models[0].rpd
+            self._space = f"freellmpool:{provider.id}:{self._model}:native-{self.dim}"
+            self._url = provider.base_url.replace("{account_id}", env.get("CLOUDFLARE_ACCOUNT_ID", "")) + "/embeddings"
+            self._quota = AttemptQuota(
+                QuotaStore(path=self._provider_config.parent / ".cache" / "embedding-quota.json"), account_on_success=False,
+            )
+            self._pool = Pool(
+                configured, embedders=configured, env=env, cache=None,
+                post=self._post, quota=self._quota,
+            )
         return self._pool
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        pool = self._get_pool()
-        async with self._lock:
-            reply = await asyncio.to_thread(pool.embed, texts, model=self._model)
-        return [fit_dim(list(vec), self.dim) for vec in reply.vectors]
-
-
-class OllamaEmbedding(EmbeddingBackend):
-    """Semantic embeddings from a local Ollama model via the native
-    ``/api/embed`` endpoint — plain httpx, no SDK (R8).
-
-    Vectors are fitted to CANONICAL_DIM and re-normalized (same contract as
-    FreellmpoolEmbedding) so they fit the Vector(384) columns; the space tag
-    pins model + stored dim so spaces never mix (":tag" suffixes are dropped —
-    ``nomic-embed-text`` and ``nomic-embed-text:latest`` are the same weights).
-    """
-
-    def __init__(
-        self,
-        model: str = DEFAULT_OLLAMA_EMBED_MODEL,
-        base_url: str | None = None,
-        client: httpx.AsyncClient | None = None,
-        request_timeout: float = 30.0,
-    ) -> None:
-        self._model = model
-        self._base_url = base_url or os.environ.get("OLLAMA_API_BASE", DEFAULT_OLLAMA_BASE_URL)
-        self._client = client
-        self._request_timeout = request_timeout
-        self.space = f"ollama-{model.split(':', 1)[0]}-{CANONICAL_DIM}"
-
-    def _get_client(self) -> httpx.AsyncClient:
+    def _post(self, url: str, headers: dict, body: dict, timeout: float) -> HTTPResult:
+        if self._cancelled.is_set():
+            raise asyncio.CancelledError()
+        remaining = min(timeout, self._deadline - time.monotonic())
+        if remaining <= 0:
+            raise TimeoutError("Embedding deadline expired before dispatch")
+        if url != self._url or body.get("model") != self._model or body.get("input") != self._inputs:
+            raise ValueError("Embedding dispatch does not match the approved model and destination policy")
+        if time.monotonic() < self._cooldown_until:
+            raise ValueError("Embedding provider is cooling until its recovery deadline")
+        if self._quota is None or self._provider_id is None:
+            raise RuntimeError("Embedding quota policy is not initialized")
+        if not self._quota.reserve(self._provider_id, self._model, self._rpd):
+            raise ValueError("Embedding daily model allowance is exhausted")
         if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self._base_url)
-        return self._client
-
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        resp = await self._get_client().post(
-            "/api/embed",
-            json={"model": self._model, "input": texts},
-            timeout=self._request_timeout,
-        )
-        resp.raise_for_status()
-        vectors = resp.json().get("embeddings") or []
-        if len(vectors) != len(texts):
-            raise RuntimeError(
-                f"ollama /api/embed returned {len(vectors)} vectors for {len(texts)} inputs"
-            )
-        return [fit_dim([float(x) for x in vec], self.dim) for vec in vectors]
-
-
-class AutoEmbedding(EmbeddingBackend):
-    """Resolves to OllamaEmbedding or HashEmbedding on first use.
-
-    Probes ``GET /api/tags`` lazily (short timeout, once, cached) — Ollama up
-    AND the embed model pulled → semantic Ollama embeddings; anything else →
-    deterministic hash embeddings with ONE warning naming the space in use.
-    ``space`` is only readable after the first ``embed()`` call, which is safe:
-    every persisted row obtains its vector from ``embed()`` before its space
-    tag is read.
-    """
-
-    def __init__(
-        self,
-        model: str = DEFAULT_OLLAMA_EMBED_MODEL,
-        base_url: str | None = None,
-        probe_timeout: float = 2.0,
-        client: httpx.AsyncClient | None = None,
-    ) -> None:
-        self._model = model
-        self._base_url = base_url or os.environ.get("OLLAMA_API_BASE", DEFAULT_OLLAMA_BASE_URL)
-        self._probe_timeout = probe_timeout
-        self._client = client  # injectable for tests; reused by the Ollama delegate
-        self._delegate: EmbeddingBackend | None = None
-        self._lock = asyncio.Lock()
-
-    @property
-    def space(self) -> str:  # type: ignore[override]
-        if self._delegate is None:
-            raise RuntimeError(
-                "auto embedding backend unresolved — call embed() before reading .space"
-            )
-        return self._delegate.space
-
-    async def _resolve(self) -> EmbeddingBackend:
-        if self._delegate is not None:
-            return self._delegate
-        async with self._lock:
-            if self._delegate is not None:
-                return self._delegate
-            self._delegate = await self._probe()
-            return self._delegate
-
-    async def _probe(self) -> EmbeddingBackend:
-        wanted = self._model.split(":", 1)[0]
+            self._client = httpx.Client(transport=self._transport, follow_redirects=False, trust_env=False)
+        response = self._client.post(url, headers=headers, json=body, timeout=remaining)
         try:
-            client = self._client or httpx.AsyncClient(base_url=self._base_url)
-            owns_client = self._client is None
-            try:
-                resp = await client.get("/api/tags", timeout=self._probe_timeout)
-                resp.raise_for_status()
-                available = {
-                    (m.get("name") or "").split(":", 1)[0]
-                    for m in resp.json().get("models", [])
-                }
-            finally:
-                if owns_client:
-                    await client.aclose()
-            if wanted in available:
-                delegate = OllamaEmbedding(
-                    self._model, base_url=self._base_url, client=self._client
-                )
-                logger.info("embedding backend auto-resolved to Ollama (space=%s)", delegate.space)
-                return delegate
-            fallback = HashEmbedding()
-            logger.warning(
-                "Ollama is up but embed model %r is not pulled — using deterministic "
-                "hash embeddings (space=%s)",
-                self._model,
-                fallback.space,
-            )
-            return fallback
-        except Exception:
-            fallback = HashEmbedding()
-            logger.warning(
-                "Ollama unreachable — using deterministic hash embeddings (space=%s)",
-                fallback.space,
-            )
-            return fallback
+            payload = response.json()
+        except ValueError:
+            payload = {}
+        if response.status_code != 200:
+            policy = FAILURE_POLICIES[_map_http_status(response.status_code, response.text)]
+            hint = retry_after_hint(response.headers, payload)
+            if policy.cooldown_route or hint is not None:
+                seconds = max(policy.cooldown_seconds or 60.0, hint or 0.0)
+                self._cooldown_until = max(self._cooldown_until, time.monotonic() + seconds)
+        if self._cancelled.is_set():
+            raise asyncio.CancelledError()
+        if time.monotonic() >= self._deadline:
+            raise TimeoutError("Embedding deadline expired while receiving the response")
+        if response.status_code == 200:
+            if not isinstance(payload, dict) or payload.get("model", self._model) != self._model:
+                raise ValueError("Embedding response changed the pinned model space")
+            rows = payload.get("data")
+            if not isinstance(rows, list) or len(rows) != len(self._inputs):
+                raise ValueError("Embedding response vector count does not match input count")
+            indices = [row.get("index") for row in rows if isinstance(row, dict)]
+            if len(indices) != len(rows) or any(type(index) is not int for index in indices) or sorted(indices) != list(range(len(rows))):
+                raise ValueError("Embedding response vector indices are invalid")
+            payload["data"] = sorted(rows, key=lambda row: row["index"])
+        return HTTPResult(response.status_code, payload, response.text, dict(response.headers))
+
+    async def _embed_owned(
+        self, texts: list[str], cancelled: threading.Event, deadline: float,
+    ) -> list[list[float]]:
+        async with self._lock:
+            if cancelled.is_set():
+                raise asyncio.CancelledError()
+            pool = self._get_pool()
+            context = get_llm_request_context()
+            if context is None or self._processing_policy is None:
+                raise ValueError("Remote embedding processing requires trusted server request context")
+            allowed = self._processing_policy.allowed_providers(context.data_classification)
+            if "freellmpool" not in allowed or self._provider_id not in allowed:
+                raise ValueError("Embedding processing destination is not approved by server policy")
+            if any(math.ceil(estimate_text_tokens(text) * (1 + SAFETY_MARGIN)) > self._context_window for text in texts):
+                raise ValueError("Embedding input exceeds the verified context window; truncation is forbidden")
+            self._cancelled = cancelled
+            self._deadline = deadline
+            self._inputs = texts
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Embedding deadline expired during admission")
+            reply = await asyncio.to_thread(pool.embed, texts, model=self._model, timeout=remaining)
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Embedding deadline expired")
+            if reply.model != self._model or len(reply.vectors) != len(texts):
+                raise ValueError("Embedding response model or vector count does not match the pinned space")
+            vectors = []
+            for vector in reply.vectors:
+                if len(vector) != self.dim:
+                    raise ValueError(f"Embedding vector dimension must be {self.dim}; resizing is forbidden")
+                if any(type(value) not in {int, float} or not math.isfinite(value) for value in vector):
+                    raise ValueError("Embedding vector values must be finite numbers")
+                norm = math.hypot(*vector)
+                if not math.isfinite(norm) or norm == 0:
+                    raise ValueError("Embedding vector must have a finite nonzero norm")
+                vectors.append([value / norm for value in vector])
+            return vectors
+
+    def _worker_done(self, task: asyncio.Task[list[list[float]]]) -> None:
+        self._pending.discard(task)
+        if not task.cancelled():
+            task.exception()
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        delegate = await self._resolve()
-        return await delegate.embed(texts)
+        if self._closed:
+            raise RuntimeError("Embedding backend is closed")
+        if not isinstance(texts, list) or any(not isinstance(text, str) for text in texts):
+            raise ValueError("Embedding inputs must be a list of complete texts")
+        if not texts:
+            return []
+        cancelled = threading.Event()
+        deadline = asyncio.get_running_loop().time() + self._timeout_s
+        task = asyncio.create_task(self._embed_owned(list(texts), cancelled, deadline))
+        self._pending.add(task)
+        task.add_done_callback(self._worker_done)
+        try:
+            async with asyncio.timeout_at(deadline):
+                return await asyncio.shield(task)
+        except (asyncio.CancelledError, TimeoutError):
+            cancelled.set()
+            raise
+
+    async def _finish_close(self) -> None:
+        await asyncio.gather(*self._pending, return_exceptions=True)
+        if self._client is not None:
+            await asyncio.to_thread(self._client.close)
+
+    async def aclose(self) -> None:
+        self._closed = True
+        if self._closing is None:
+            self._closing = asyncio.create_task(self._finish_close())
+        await asyncio.shield(self._closing)

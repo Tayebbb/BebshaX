@@ -75,6 +75,8 @@ def test_neon_auth_url_has_no_baked_in_tenant(monkeypatch):
 
 def test_db_pool_settings_default_and_override(monkeypatch):
     monkeypatch.setenv("BEBSHAX_JWT_SECRET", _JWT)
+    monkeypatch.delenv("BEBSHAX_DB_POOL_SIZE", raising=False)
+    monkeypatch.delenv("BEBSHAX_DB_MAX_OVERFLOW", raising=False)
     s = Settings(_env_file=None)
     assert (s.db_pool_size, s.db_max_overflow) == (5, 5)
     s2 = Settings(_env_file=None, db_pool_size=11, db_max_overflow=3)
@@ -98,9 +100,25 @@ def test_data_dir_defaults_match_previous_literals(monkeypatch):
 
 def test_data_dir_env_derives_both_subdirs(monkeypatch):
     monkeypatch.setenv("BEBSHAX_JWT_SECRET", _JWT)
-    s = Settings(_env_file=None, data_dir="/srv/bebshax-data")
+    for var in ("BEBSHAX_DATA_DIR", "BEBSHAX_UPLOAD_DIR", "BEBSHAX_PROCESSED_DIR"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("BEBSHAX_DATA_DIR", "/srv/bebshax-data")
+    s = Settings(_env_file=None)
     assert s.upload_dir_path == Path("/srv/bebshax-data") / "uploads"
     assert s.processed_dir_path == Path("/srv/bebshax-data") / "processed"
+
+
+def test_directory_environment_overrides_survive_disabled_env_file(monkeypatch, tmp_path):
+    upload_path = tmp_path / "explicit-uploads"
+    processed_path = tmp_path / "explicit-processed"
+    monkeypatch.setenv("BEBSHAX_JWT_SECRET", _JWT)
+    monkeypatch.setenv("BEBSHAX_UPLOAD_DIR", str(upload_path))
+    monkeypatch.setenv("BEBSHAX_PROCESSED_DIR", str(processed_path))
+
+    settings = Settings(_env_file=None, data_dir=str(tmp_path / "fallback"))
+
+    assert settings.upload_dir_path == upload_path
+    assert settings.processed_dir_path == processed_path
 
 
 def test_explicit_upload_and_processed_dirs_win(monkeypatch):
@@ -131,6 +149,9 @@ def test_upload_dir_resolved_from_settings_at_call_time(monkeypatch, tmp_path):
         for mod in consumers:
             mod.get_settings.cache_clear()
 
+    for var in ("BEBSHAX_DATA_DIR", "BEBSHAX_UPLOAD_DIR", "BEBSHAX_PROCESSED_DIR"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(config, "_PROJECT_ROOT", tmp_path)
     root = tmp_path / "container-data"
     monkeypatch.setenv("BEBSHAX_DATA_DIR", str(root))
     _clear_all_setting_caches()
@@ -176,10 +197,11 @@ async def test_openrouter_models_env_override(monkeypatch):
     adapter = OpenRouterAdapter(api_key="test-key-not-real")
 
     monkeypatch.setenv("BEBSHAX_OPENROUTER_MODELS", " a/x:free , b/y:free ,")
-    assert [c.model for c in await adapter.candidates()] == ["a/x:free", "b/y:free"]
+    assert adapter.configured_models() == ["a/x:free", "b/y:free"]
+    assert await adapter.candidates() == []
 
     monkeypatch.delenv("BEBSHAX_OPENROUTER_MODELS", raising=False)
-    assert [c.model for c in await adapter.candidates()] == DEFAULT_MODELS
+    assert adapter.configured_models() == DEFAULT_MODELS
 
 
 # ---------------------------------------------------------------------------

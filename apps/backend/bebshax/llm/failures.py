@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from bebshax.llm.provenance import ProvenanceRecord, ProviderObservation
 
 
 class FailureKind(StrEnum):
@@ -84,12 +87,18 @@ class AttemptFailed(LLMError):
         detail: str = "",
         *,
         retry_after_s: float | None = None,
+        observations: list[ProviderObservation] | None = None,
+        provider_fault: bool = True,
+        provenance: ProvenanceRecord | None = None,
     ) -> None:
         self.kind = kind
         self.provider = provider
         self.model = model
         self.detail = detail
         self.retry_after_s = retry_after_s
+        self.observations = list(observations or [])
+        self.provider_fault = provider_fault
+        self.provenance = provenance
         super().__init__(f"{kind}: {provider}/{model}: {detail}")
 
 

@@ -13,22 +13,14 @@ def test_pools_have_adapters_and_positive_concurrency() -> None:
         assert pool.max_concurrency >= 1
 
 
-def test_emergency_pool_is_local_first() -> None:
-    assert POOLS["emergency"].adapters[0] == "ollama"
+def test_emergency_pool_uses_independent_remote_fallback() -> None:
+    assert POOLS["emergency"].adapters == ["freellmpool", "openrouter"]
 
 
-def test_interactive_pools_prefer_openrouter() -> None:
-    # Owner decision 2026-09-09: local Ollama measured 14-24 s/turn on the dev
-    # machine under real load, so interactive replies prefer OpenRouter's fast
-    # free models. Ollama stays LAST as the on-machine fallback (asserted by
-    # test_every_pool_reaches_the_local_adapter).
-    assert POOLS["conversation"].adapters[0] == "openrouter"
-    assert POOLS["fast"].adapters[0] == "openrouter"
-    assert POOLS["conversation"].adapters[-1] == "ollama"
-    assert POOLS["fast"].adapters[-1] == "ollama"
-
-
-def test_every_pool_reaches_the_local_adapter() -> None:
-    # Cross-adapter fallback must terminate on-machine (brief §41/spec).
+def test_all_pools_prefer_freellmpool_with_openrouter_secondary() -> None:
     for pool in POOLS.values():
-        assert "ollama" in pool.adapters, f"pool {pool.name} never reaches local"
+        assert pool.adapters == ["freellmpool", "openrouter"]
+
+
+def test_local_pool_is_removed() -> None:
+    assert "local" not in POOLS

@@ -50,10 +50,13 @@ class LLMRequest(BaseModel):
     messages: list[ChatMessage]
     json_mode: bool = False
     tools_required: bool = False
-    max_output_tokens: int | None = None
-    temperature: float | None = None
+    max_output_tokens: int | None = Field(default=None, gt=0, strict=True)
+    temperature: float | None = Field(default=None, ge=0, le=2, allow_inf_nan=False)
     persona_id: str | None = None
     conversation_id: str | None = None
+    owner_user_id: str | None = None
+    study_id: str | None = None
+    data_classification: Literal["synthetic", "private"] | None = None
     # §7 model selection: None = Auto (router decides). A preference PRIORITIZES
     # matching routes — eligibility, policies and fallback still apply, so an
     # unavailable preferred model degrades to Auto instead of failing.

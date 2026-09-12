@@ -8,21 +8,35 @@ is discovered live (public /models endpoint) because a hard-coded list of
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
 import time
-from typing import Optional
+from decimal import Decimal, InvalidOperation
+from collections.abc import AsyncGenerator, Callable
+from typing import TYPE_CHECKING, Optional
 import httpx
 
-from bebshax.llm.adapters.base import AdapterCompletion, ProviderAdapter, RouteCandidate
+from bebshax.llm.adapters.base import AdapterCompletion, ProviderAdapter, RouteCandidate, StreamDelta, StreamDone, StreamEvent
 from bebshax.llm.failures import AttemptFailed, FailureKind
-from bebshax.llm.latency import attempt_timeout_s
+from bebshax.llm.governance import get_dispatch_approval
+from bebshax.llm.estimator import estimate_request_tokens
+from bebshax.llm.latency import DeadlineContext, DeadlineExpired, await_before, remaining_attempt_timeout_s
+from bebshax.llm.retry import retry_after_hint
+from bebshax.llm.provenance import ProviderObservation
 from bebshax.llm.types import LLMRequest, TokenUsage
+from bebshax.llm.validation import validate_text, validated_usage
+
+if TYPE_CHECKING:
+    from bebshax.llm.service import LLMService
 
 logger = logging.getLogger(__name__)
 
 PROVIDER = "openrouter"
+# Policy sentinel: any upstream OpenRouter routes to under data_collection=deny,
+# instead of an explicit host allowlist (`provider.only`).
+ANY_DATA_DENYING_UPSTREAM = "*"
 # Seed list ONLY — used when the live catalogue cannot be fetched (offline) and
 # no BEBSHAX_OPENROUTER_MODELS pin is set. OpenRouter's free catalogue drifts
 # (the previous three seeds all 404'd within weeks), so production discovers
@@ -38,7 +52,7 @@ DEFAULT_MODELS = [
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models"
 CATALOGUE_TTL_S = 30 * 60
-CATALOGUE_MAX_MODELS = 4
+CATALOGUE_MAX_MODELS = None
 # Free routes that are the wrong tool for persona work: safety classifiers,
 # code-only models and chain-of-thought "reasoning" variants (slow, verbose).
 _CATALOGUE_EXCLUDE_RE = re.compile(r"safety|guard|code|reasoning|thinking|-r1", re.IGNORECASE)
@@ -78,23 +92,43 @@ def _pinned_models() -> list[str]:
     return [m.strip() for m in raw.split(",") if m.strip()]
 
 
-def rank_free_catalogue(catalogue: list[dict], *, limit: int = CATALOGUE_MAX_MODELS) -> list[dict]:
-    """Pick the free chat models worth routing to, from a /models payload.
-
-    Pure function over the catalogue rows (``id``, ``context_length``,
-    ``supported_parameters``): keeps ``:free`` ids, drops the excluded
-    families, prefers routes that accept ``response_format`` (structured
-    output is most of this product's traffic) and then larger context windows.
-    """
+def rank_free_catalogue(
+    catalogue: list[dict], *, limit: int | None = None, request: LLMRequest | None = None
+) -> list[dict]:
+    """Retain all verified free text models; order only after request context is known."""
     rows: list[tuple[int, int, str, dict]] = []
+    seen: set[str] = set()
     for row in catalogue:
-        model_id = str(row.get("id") or "")
-        if not model_id.endswith(":free") or _CATALOGUE_EXCLUDE_RE.search(model_id):
+        if not isinstance(row, dict):
             continue
-        params = set(row.get("supported_parameters") or [])
-        context = int(row.get("context_length") or 0)
-        rows.append((0 if "response_format" in params else 1, -context, model_id, row))
-    rows.sort()
+        model_id = row.get("id")
+        if not isinstance(model_id, str) or not model_id.endswith(":free") or model_id in seen:
+            continue
+        if _CATALOGUE_EXCLUDE_RE.search(model_id):
+            continue
+        try:
+            context = row.get("context_length")
+            if type(context) is not int or context <= 0:
+                continue
+            pricing = row.get("pricing")
+            if not isinstance(pricing, dict):
+                continue
+            prices = [Decimal(str(pricing.get(key))) for key in ("prompt", "completion")]
+            if any(not price.is_finite() or price != 0 for price in prices):
+                continue
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+        parameters = row.get("supported_parameters")
+        if not isinstance(parameters, list) or not all(isinstance(value, str) for value in parameters):
+            continue
+        architecture = row.get("architecture") or {}
+        if not isinstance(architecture, dict) or "text" not in architecture.get("output_modalities", ["text"]):
+            continue
+        seen.add(model_id)
+        structured = request is None or request.json_mode
+        priority = 0 if not structured or "response_format" in parameters else 1
+        rows.append((priority, -context, model_id, row))
+    rows.sort(key=lambda item: item[:3])
     return [row for _, _, _, row in rows[:limit]]
 
 
@@ -119,37 +153,24 @@ def _map_http_status(status: int | None, body: str | None = None) -> FailureKind
         return FailureKind.MODEL_UNAVAILABLE
     if status in (400, 413) and _is_context_overflow_body(body):
         return FailureKind.CONTEXT_WINDOW_EXCEEDED  # advance to a roomier route, no cooldown
+    if status == 413:
+        return FailureKind.CONTEXT_WINDOW_EXCEEDED
+    if status in (400, 422):
+        return FailureKind.CAPABILITY_UNSUPPORTED
     if status is not None and status >= 500:
         return FailureKind.SERVER_ERROR
     return FailureKind.PROVIDER_UNAVAILABLE
 
 
 def _retry_after_hint(headers, body: str | None, *, now: float | None = None) -> float | None:
-    """Seconds until the provider says it will serve again, from a Retry-After
-    header or the ``X-RateLimit-Reset`` epoch-ms OpenRouter embeds in quota
-    errors. None when the provider gave no usable hint."""
-    raw = None
-    try:
-        raw = headers.get("Retry-After") if headers is not None else None
-    except Exception:  # noqa: BLE001 — header containers vary between transports
-        raw = None
-    if raw:
-        try:
-            return max(0.0, float(raw))
-        except ValueError:
-            pass
-    match = _RESET_MS_RE.search(body or "")
-    if match:
-        reset_ms = int(match.group(1))
-        current = time.time() if now is None else now
-        reset_s = reset_ms / 1000.0 if reset_ms > 10**11 else float(reset_ms)
-        remaining = reset_s - current
-        return max(0.0, remaining) if remaining > 0 else None
-    return None
+    return retry_after_hint(headers, body, now=now)
 
 
 class OpenRouterAdapter(ProviderAdapter):
     """Adapter for OpenRouter chat completions."""
+
+    streaming_mode = "native"
+    remote_processing = True
 
     def __init__(
         self,
@@ -159,11 +180,15 @@ class OpenRouterAdapter(ProviderAdapter):
         *,
         discover_catalogue: bool = False,
         catalogue_ttl_s: float = CATALOGUE_TTL_S,
+        catalogue: list[dict] | None = None,
+        client: httpx.AsyncClient | None = None,
+        reserve_attempt: Callable[[str], str | None] | None = None,
     ) -> None:
         self._api_key = api_key
         self._default_model = default_model
         self._timeout = timeout
-        self._client: Optional[httpx.AsyncClient] = None
+        self._reserve_attempt = reserve_attempt
+        self._client: Optional[httpx.AsyncClient] = client
         # Live catalogue discovery is opt-in (production wiring turns it on) so
         # unit tests and offline tools never touch the network by accident.
         self._discover = discover_catalogue
@@ -172,11 +197,37 @@ class OpenRouterAdapter(ProviderAdapter):
         self._catalogue_fetched_at: float = 0.0
         self._catalogue_error: str | None = None
         self._catalogue_lock = asyncio.Lock()
+        self._catalogue_rows: list[dict] = []
+        self._last_failed_fetch: float | None = None
         # Models whose catalogue entry exposes the `reasoning` toggle. Free
         # reasoning models spend the whole output budget thinking and return
         # an EMPTY message (observed live: 254 reasoning tokens, content ""),
         # so those routes are asked for a plain answer explicitly.
         self._reasoning_toggle_models: set[str] = set()
+        if catalogue is not None:
+            self._set_catalogue(catalogue)
+
+    def _set_catalogue(self, rows: list[dict]) -> None:
+        self._catalogue_rows = rank_free_catalogue(rows)
+        self._catalogue = []
+        for row in self._catalogue_rows:
+            top = row.get("top_provider") or {}
+            top = top if isinstance(top, dict) else {}
+            context = row["context_length"]
+            top_context = top.get("context_length")
+            if type(top_context) is int and top_context > 0:
+                context = min(context, top_context)
+            output_cap = top.get("max_completion_tokens")
+            self._catalogue.append(RouteCandidate(
+                provider=PROVIDER, model=row["id"], context_window=context,
+                supports_json="response_format" in row["supported_parameters"],
+                supports_tools=False,
+                supported_parameters=list(row["supported_parameters"]),
+                max_output_tokens=output_cap if type(output_cap) is int and output_cap > 0 else None,
+            ))
+        self._catalogue_fetched_at = time.monotonic()
+        self._catalogue_error = None
+        self._last_failed_fetch = None
 
     def _get_api_key(self) -> str | None:
         if self._api_key is not None:
@@ -185,7 +236,7 @@ class OpenRouterAdapter(ProviderAdapter):
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=self._timeout)
+            self._client = httpx.AsyncClient(timeout=self._timeout, trust_env=False, follow_redirects=False)
         return self._client
 
     async def aclose(self) -> None:
@@ -219,38 +270,26 @@ class OpenRouterAdapter(ProviderAdapter):
             ) < self._catalogue_ttl
             if fresh:
                 return list(self._catalogue or [])
+            if self._last_failed_fetch is not None and time.monotonic() - self._last_failed_fetch < 5:
+                return []
             try:
                 client = await self._get_client()
                 resp = await client.get(OPENROUTER_MODELS_ENDPOINT)
                 resp.raise_for_status()
-                rows = resp.json().get("data") or []
-                ranked = rank_free_catalogue(rows)
-                self._catalogue = [
-                    RouteCandidate(
-                        provider=PROVIDER,
-                        model=str(row["id"]),
-                        context_window=int(row.get("context_length") or 128_000),
-                        supports_json="response_format" in set(row.get("supported_parameters") or []),
-                        supports_tools="tools" in set(row.get("supported_parameters") or []),
-                    )
-                    for row in ranked
-                ]
-                self._reasoning_toggle_models = {
-                    str(row["id"]) for row in ranked if "reasoning" in set(row.get("supported_parameters") or [])
-                }
-                self._catalogue_fetched_at = time.monotonic()
-                self._catalogue_error = None
+                payload = resp.json()
+                if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+                    raise ValueError("catalogue must contain a data array")
+                self._set_catalogue(payload["data"])
                 logger.info(
                     "openrouter catalogue: %d free route(s) discovered: %s",
-                    len(self._catalogue),
-                    ", ".join(c.model for c in self._catalogue),
+                    len(self._catalogue or []),
+                    ", ".join(candidate.model for candidate in self._catalogue or []),
                 )
-            except Exception as exc:  # noqa: BLE001 — discovery must degrade, never crash routing
-                self._catalogue_error = f"{type(exc).__name__}: {exc}"[:200]
-                self._catalogue_fetched_at = time.monotonic()  # do not hammer a failing endpoint
-                if self._catalogue is None:
-                    self._catalogue = []
+            except (httpx.HTTPError, ValueError, TypeError) as exc:
+                self._catalogue_error = type(exc).__name__
+                self._last_failed_fetch = time.monotonic()
                 logger.warning("openrouter catalogue discovery failed: %s", self._catalogue_error)
+                return []
             return list(self._catalogue or [])
 
     def configuration_status(self, model: Optional[str] = None) -> dict:
@@ -283,32 +322,73 @@ class OpenRouterAdapter(ProviderAdapter):
         }
 
     async def candidates(self) -> list[RouteCandidate]:
+        approval = get_dispatch_approval()
+        if approval is not None and not approval.openrouter_upstreams:
+            return []
         key = self._get_api_key()
         if not key or not key.strip():
             return []  # No key configured; cleanly skip to next adapter in pool
 
-        def _static(models: list[str]) -> list[RouteCandidate]:
-            return [
-                RouteCandidate(
-                    provider=PROVIDER,
-                    model=m,
-                    context_window=128_000,
-                    supports_json=True,
-                    supports_tools=False,
-                )
-                for m in models
-            ]
-
-        pinned = _pinned_models()
-        if pinned:
-            return _static(pinned)  # operator pin always wins
         if self._discover:
             discovered = await self.discover_free_models()
-            if discovered:
-                return discovered
-        return _static(list(DEFAULT_MODELS))
+        elif self._catalogue is not None and time.monotonic() - self._catalogue_fetched_at < self._catalogue_ttl:
+            discovered = list(self._catalogue)
+        else:
+            discovered = []
+        pinned = _pinned_models()
+        if pinned:
+            return [candidate for model in pinned for candidate in discovered if candidate.model == model]
+        return discovered
+
+    async def candidates_for(self, request: LLMRequest) -> list[RouteCandidate]:
+        candidates = await self.candidates()
+        if not request.json_mode and not _pinned_models():
+            candidates.sort(key=lambda candidate: -candidate.context_window)
+        return candidates
+
+    async def _validate_candidate(self, candidate: RouteCandidate, request: LLMRequest) -> RouteCandidate:
+        if request.tools_required:
+            raise AttemptFailed(FailureKind.CAPABILITY_UNSUPPORTED, PROVIDER, candidate.model, "tool execution contract is unavailable")
+        verified = next((route for route in await self.candidates() if route.model == candidate.model), None)
+        if candidate.provider != PROVIDER or verified is None:
+            raise AttemptFailed(FailureKind.MODEL_UNAVAILABLE, PROVIDER, candidate.model, "model lacks current verified free catalogue metadata")
+        if estimate_request_tokens(request) > verified.context_window:
+            raise AttemptFailed(FailureKind.CONTEXT_WINDOW_EXCEEDED, PROVIDER, candidate.model, "full request exceeds verified context")
+        parameters = verified.supported_parameters or []
+        required = {"response_format"} if request.json_mode else set()
+        if request.max_output_tokens is not None:
+            required.add("max_tokens")
+        if request.temperature is not None:
+            required.add("temperature")
+        if not required.issubset(parameters):
+            raise AttemptFailed(FailureKind.CAPABILITY_UNSUPPORTED, PROVIDER, candidate.model, "requested parameters are unsupported")
+        if verified.max_output_tokens is not None and request.max_output_tokens is not None and request.max_output_tokens > verified.max_output_tokens:
+            raise AttemptFailed(FailureKind.CAPABILITY_UNSUPPORTED, PROVIDER, candidate.model, "requested output budget exceeds verified model limit")
+        return verified
+
+    def _provider_preferences(self) -> dict:
+        preferences = {"data_collection": "deny", "require_parameters": True}
+        approval = get_dispatch_approval()
+        if approval is not None:
+            preferences["max_price"] = {"prompt": 0, "completion": 0}
+            if ANY_DATA_DENYING_UPSTREAM not in approval.openrouter_upstreams:
+                preferences.update({"only": list(approval.openrouter_upstreams), "allow_fallbacks": False})
+        return preferences
+
+    def _reserve_observation(self, observation: ProviderObservation) -> None:
+        if self._reserve_attempt is None:
+            return
+        reservation = self._reserve_attempt(PROVIDER)
+        if reservation is None:
+            observation.outcome, observation.consumption = "skipped", "none"
+            raise AttemptFailed(
+                FailureKind.QUOTA_EXHAUSTED, PROVIDER, observation.requested_model,
+                "account allowance is reserved or exhausted", provider_fault=False, observations=[observation],
+            )
+        observation.account_reservation_id = reservation
 
     async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
+        candidate = await self._validate_candidate(candidate, request)
         key = self._get_api_key()
         if not key:
             raise AttemptFailed(
@@ -324,17 +404,14 @@ class OpenRouterAdapter(ProviderAdapter):
         payload: dict = {
             "model": candidate.model,
             "messages": messages,
-            "temperature": request.temperature if request.temperature is not None else 0.7,
+            "provider": self._provider_preferences(),
         }
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
         if request.max_output_tokens is not None:
             payload["max_tokens"] = request.max_output_tokens
         if request.json_mode:
             payload["response_format"] = {"type": "json_object"}
-        if candidate.model in self._reasoning_toggle_models:
-            # Persona/structured work wants the answer, not the chain of thought;
-            # verified live: with the toggle off the same model returns content
-            # with 0 reasoning tokens instead of an empty, budget-exhausted reply.
-            payload["reasoning"] = {"enabled": False}
 
         headers = {
             "Authorization": f"Bearer {key.strip()}",
@@ -344,62 +421,91 @@ class OpenRouterAdapter(ProviderAdapter):
         }
 
         # Per-attempt budget by task class overrides the client-wide default.
-        budget = attempt_timeout_s(request.task)
+        budget = remaining_attempt_timeout_s(request.task)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + budget
         req_timeout = httpx.Timeout(budget, connect=min(10.0, budget))
-        degradation_notes: list[str] = []
+        started = time.perf_counter()
+        observation = ProviderObservation(provider=PROVIDER, requested_model=candidate.model)
+        self._reserve_observation(observation)
         try:
-            async with asyncio.timeout_at(deadline):
-                resp = await client.post(
-                    OPENROUTER_ENDPOINT, json=payload, headers=headers, timeout=req_timeout
-                )
-                if (
-                    resp.status_code == 400
-                    and "response_format" in payload
-                    and not _is_context_overflow_body(resp.text)
-                ):
-                    # Some models reject response_format; retry without it (the prompt
-                    # already demands JSON). A context-overflow 400 is NOT retried — the
-                    # same prompt would overflow again. Provenance records the drop.
-                    remaining = deadline - loop.time()
-                    if remaining <= 0:
-                        raise TimeoutError("attempt budget exceeded")
-                    retry_timeout = httpx.Timeout(remaining, connect=min(10.0, remaining))
-                    retry_payload = {k: v for k, v in payload.items() if k != "response_format"}
-                    resp = await client.post(
-                        OPENROUTER_ENDPOINT, json=retry_payload, headers=headers, timeout=retry_timeout
-                    )
-                    degradation_notes.append(RESPONSE_FORMAT_DROPPED_NOTE)
+            resp = await await_before(client.post(
+                OPENROUTER_ENDPOINT, json=payload, headers=headers, timeout=req_timeout
+            ), deadline)
+        except asyncio.CancelledError as exc:
+            observation.outcome = "aborted"
+            setattr(exc, "observations", [observation])
+            raise
         except TimeoutError as exc:
+            observation.outcome = "aborted"
             raise AttemptFailed(
-                FailureKind.TIMEOUT, PROVIDER, candidate.model, "attempt budget exceeded"
+                FailureKind.TIMEOUT, PROVIDER, candidate.model, "attempt budget exceeded", observations=[observation], provider_fault=False
             ) from exc
         except httpx.TimeoutException as exc:
-            raise AttemptFailed(FailureKind.TIMEOUT, PROVIDER, candidate.model, str(exc)) from exc
+            observation.outcome, observation.failure_kind = "failed", FailureKind.TIMEOUT
+            raise AttemptFailed(FailureKind.TIMEOUT, PROVIDER, candidate.model, "transport timed out", observations=[observation]) from exc
         except httpx.TransportError as exc:
-            raise AttemptFailed(FailureKind.CONNECTION, PROVIDER, candidate.model, str(exc)) from exc
+            observation.outcome, observation.failure_kind = "failed", FailureKind.CONNECTION
+            raise AttemptFailed(FailureKind.CONNECTION, PROVIDER, candidate.model, "transport connection failed", observations=[observation]) from exc
 
         if resp.status_code != 200:
             kind = _map_http_status(resp.status_code, resp.text)
+            observation.status_code = resp.status_code
+            observation.outcome = "failed"
+            observation.failure_kind = kind
+            observation.retry_after_s = _retry_after_hint(resp.headers, resp.text)
+            observation.latency_ms = (time.perf_counter() - started) * 1000
             raise AttemptFailed(
                 kind,
                 PROVIDER,
                 candidate.model,
-                f"OpenRouter HTTP {resp.status_code}: {resp.text[:300]}",
-                retry_after_s=_retry_after_hint(resp.headers, resp.text) if resp.status_code in (429, 402) else None,
+                f"OpenRouter HTTP {resp.status_code}",
+                retry_after_s=observation.retry_after_s,
+                observations=[observation],
             )
 
         try:
             data = resp.json()
         except ValueError as exc:
+            observation.status_code = 200
+            observation.outcome, observation.consumption = "failed", "known"
+            observation.failure_kind = FailureKind.MALFORMED_RESPONSE
             raise AttemptFailed(
                 FailureKind.MALFORMED_RESPONSE,
                 PROVIDER,
                 candidate.model,
-                f"Failed to parse JSON response: {exc}",
+                "Failed to parse JSON response",
+                observations=[observation],
             ) from exc
 
+        return self._observed_completion(data, candidate, request, started, observation.account_reservation_id)
+
+    def _observed_completion(
+        self, data, candidate: RouteCandidate, request: LLMRequest, started: float, account_reservation_id: str | None = None,
+    ) -> AdapterCompletion:
+        observation = ProviderObservation(provider=PROVIDER, requested_model=candidate.model, status_code=200, consumption="known", account_reservation_id=account_reservation_id)
+        if isinstance(data, dict):
+            reported = data.get("model")
+            observation.reported_model = reported if isinstance(reported, str) else None
+            usage = data.get("usage")
+            if isinstance(usage, dict):
+                observation.input_tokens = usage.get("prompt_tokens") if type(usage.get("prompt_tokens")) is int else None
+                observation.output_tokens = usage.get("completion_tokens") if type(usage.get("completion_tokens")) is int else None
+        observation.latency_ms = (time.perf_counter() - started) * 1000
+        try:
+            completion = self._completion_from_data(data, candidate, request)
+        except AttemptFailed as exc:
+            observation.outcome = "failed"
+            observation.failure_kind = exc.kind
+            exc.observations = [observation]
+            raise
+        observation.outcome = "succeeded"
+        observation.finish_reason = completion.finish_reason
+        completion.observations = [observation]
+        completion.latency_ms = observation.latency_ms
+        return completion
+
+    def _completion_from_data(self, data, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
         if not isinstance(data, dict):
             raise AttemptFailed(
                 FailureKind.MALFORMED_RESPONSE,
@@ -458,13 +564,17 @@ class OpenRouterAdapter(ProviderAdapter):
                 "Output truncated at max_tokens (finish_reason=length)",
             )
 
-        usage = TokenUsage(
-            input_tokens=usage_data.get("prompt_tokens", 0),
-            output_tokens=usage_data.get("completion_tokens", 0),
-        )
-
-        serving_model = data.get("model", candidate.model)
-        notes = [f"served via OpenRouter: {serving_model}", *degradation_notes]
+        usage = validated_usage(usage_data, PROVIDER, candidate.model)
+        validate_text(content, request, PROVIDER, candidate.model, finish_reason=choices[0].get("finish_reason"))
+        if request.max_output_tokens is not None and usage.output_tokens is not None and usage.output_tokens > request.max_output_tokens:
+            raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "output exceeded requested token limit")
+        reported = data.get("model")
+        serving_model = reported if isinstance(reported, str) and reported.strip() else "unknown"
+        notes = [
+            f"requested OpenRouter route: {candidate.model}",
+            f"reported serving model: {serving_model}",
+            f"finish_reason: {choices[0].get('finish_reason') or 'unknown'}",
+        ]
 
         return AdapterCompletion(
             text=content,
@@ -472,131 +582,149 @@ class OpenRouterAdapter(ProviderAdapter):
             provider=PROVIDER,
             model=serving_model,
             notes=notes,
+            finish_reason=choices[0].get("finish_reason"),
         )
 
-    async def health_check(self, model: Optional[str] = None) -> dict:
-        """Perform a safe, authenticated health check against OpenRouter API.
-
-        Never returns or logs the actual API key.
-        """
+    async def stream(self, candidate: RouteCandidate, request: LLMRequest) -> AsyncGenerator[StreamEvent, None]:
+        budget = remaining_attempt_timeout_s(request.task)
+        deadline = asyncio.get_running_loop().time() + budget
+        started = time.perf_counter()
+        candidate = await await_before(self._validate_candidate(candidate, request), deadline)
         key = self._get_api_key()
-        if not key or not key.strip():
-            return {
-                "configured": False,
-                "authenticated": False,
-                "model": model or self._default_model,
-                "status": "not_configured",
-                "error_code": "OPENROUTER_NOT_CONFIGURED",
-                "message": "OPENROUTER_API_KEY is not set in environment or .env.",
-            }
-
-        target_model = model or os.environ.get("OPENROUTER_MODEL") or self._default_model
-        client = await self._get_client()
-
+        if not key:
+            raise AttemptFailed(FailureKind.AUTH_INVALID, PROVIDER, candidate.model, "OPENROUTER_API_KEY is not set")
         payload = {
-            "model": target_model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Return exactly: BebshaX OpenRouter connection successful.",
-                }
-            ],
-            "max_tokens": 30,
-            "temperature": 0.0,
+            "model": candidate.model,
+            "messages": [{"role": message.role, "content": message.content} for message in request.messages],
+            "provider": self._provider_preferences(),
+            "stream": True, "stream_options": {"include_usage": True},
         }
-        headers = {
-            "Authorization": f"Bearer {key.strip()}",
-            "HTTP-Referer": "https://bebshax.ai",
-            "X-Title": "BebshaX Health Diagnostic",
-            "Content-Type": "application/json",
-        }
-
-        t0 = time.perf_counter()
+        if request.max_output_tokens is not None:
+            payload["max_tokens"] = request.max_output_tokens
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        headers = {"Authorization": f"Bearer {key.strip()}", "Content-Type": "application/json", "X-Title": "BebshaX"}
+        client = await self._get_client()
+        fragments: list[str] = []
+        leading = ""
+        visible = False
+        usage: dict = {}
+        reported_model = None
+        finish_reason = None
+        terminal = False
+        observation = ProviderObservation(provider=PROVIDER, requested_model=candidate.model)
+        self._reserve_observation(observation)
         try:
-            resp = await client.post(OPENROUTER_ENDPOINT, json=payload, headers=headers)
-            latency_ms = round((time.perf_counter() - t0) * 1000, 1)
-        except httpx.TimeoutException:
-            return {
-                "configured": True,
-                "authenticated": False,
-                "model": target_model,
-                "status": "error",
-                "error_code": "OPENROUTER_TIMEOUT",
-                "message": "OpenRouter connection timed out after 30 seconds.",
-            }
+            async with DeadlineContext(client.stream("POST", OPENROUTER_ENDPOINT, json=payload, headers=headers, timeout=httpx.Timeout(budget, connect=min(10.0, budget))), deadline) as response:
+                observation.status_code = response.status_code
+                if response.status_code != 200:
+                    await await_before(response.aread(), deadline)
+                    raise AttemptFailed(
+                        _map_http_status(response.status_code, response.text), PROVIDER, candidate.model,
+                        f"OpenRouter HTTP {response.status_code}", retry_after_s=_retry_after_hint(response.headers, response.text),
+                    )
+                lines = response.aiter_lines()
+                event_lines: list[str] = []
+                received = 0
+                while True:
+                    try:
+                        line = await await_before(anext(lines), deadline)
+                    except StopAsyncIteration:
+                        break
+                    received += len(line)
+                    if received > 32 * 1024 * 1024:
+                        raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "stream exceeds response byte limit")
+                    if line.startswith("data:"):
+                        event_lines.append(line[5:].lstrip())
+                        continue
+                    if line or not event_lines:
+                        continue
+                    data = "\n".join(event_lines)
+                    event_lines = []
+                    if data == "[DONE]":
+                        terminal = True
+                        break
+                    try:
+                        event = json.loads(data)
+                    except ValueError as exc:
+                        raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "invalid stream event JSON") from exc
+                    if not isinstance(event, dict):
+                        raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "stream event must be an object")
+                    if isinstance(event.get("error"), dict):
+                        code = event["error"].get("code")
+                        kind = _map_http_status(code, json.dumps(event)) if type(code) is int else FailureKind.SERVER_ERROR
+                        raise AttemptFailed(kind, PROVIDER, candidate.model, "provider stream error", retry_after_s=_retry_after_hint(response.headers, json.dumps(event)))
+                    model = event.get("model")
+                    if model is not None:
+                        if not isinstance(model, str) or (reported_model is not None and model != reported_model):
+                            raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "serving model changed within stream")
+                        reported_model = model
+                    if "usage" in event and event["usage"] is not None:
+                        if not isinstance(event["usage"], dict):
+                            raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "invalid stream usage")
+                        usage = event["usage"]
+                    choices = event.get("choices", [])
+                    if not isinstance(choices, list) or len(choices) > 1:
+                        raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "invalid stream choices")
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    if not isinstance(choice, dict) or not isinstance(choice.get("delta", {}), dict):
+                        raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "invalid stream delta")
+                    delta = choice.get("delta", {})
+                    text = delta.get("content")
+                    if text is None:
+                        text = ""
+                    if not isinstance(text, str):
+                        raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "non-text stream delta")
+                    if delta.get("tool_calls"):
+                        raise AttemptFailed(FailureKind.CAPABILITY_UNSUPPORTED, PROVIDER, candidate.model, "tool execution contract is unavailable")
+                    if finish_reason is not None and text:
+                        raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "text arrived after finish reason")
+                    if choice.get("finish_reason") is not None:
+                        finish_reason = choice["finish_reason"]
+                    fragments.append(text)
+                    if not request.json_mode:
+                        leading += text
+                        if visible or leading.strip():
+                            visible = True
+                            if leading:
+                                yield StreamDelta(text=leading)
+                            leading = ""
+            if not terminal or finish_reason is None:
+                raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, PROVIDER, candidate.model, "stream ended without a terminal completion")
+            completion = self._observed_completion({
+                "model": reported_model, "usage": usage,
+                "choices": [{"message": {"content": "".join(fragments)}, "finish_reason": finish_reason}],
+            }, candidate, request, started, observation.account_reservation_id)
+            if request.json_mode:
+                yield StreamDelta(text=completion.text)
+            yield StreamDone(completion=completion)
+        except (asyncio.CancelledError, GeneratorExit) as exc:
+            observation.outcome = "aborted"
+            observation.reported_model = reported_model
+            setattr(exc, "observations", [observation])
+            raise
+        except (DeadlineExpired, httpx.TimeoutException) as exc:
+            observation.outcome = "aborted"
+            raise AttemptFailed(FailureKind.TIMEOUT, PROVIDER, candidate.model, "stream budget exceeded", observations=[observation], provider_fault=False) from exc
         except httpx.TransportError as exc:
-            return {
-                "configured": True,
-                "authenticated": False,
-                "model": target_model,
-                "status": "error",
-                "error_code": "OPENROUTER_CONNECTION_ERROR",
-                "message": f"Network transport error connecting to OpenRouter: {exc}",
-            }
+            observation.outcome = "failed"
+            observation.failure_kind = FailureKind.CONNECTION
+            raise AttemptFailed(FailureKind.CONNECTION, PROVIDER, candidate.model, "stream transport failed", observations=[observation]) from exc
+        except AttemptFailed as exc:
+            observation.outcome = "failed"
+            observation.failure_kind = exc.kind
+            observation.retry_after_s = exc.retry_after_s
+            observation.reported_model = reported_model
+            if not exc.observations:
+                exc.observations = [observation]
+            raise
 
-        if resp.status_code == 401 or resp.status_code == 403:
-            return {
-                "configured": True,
-                "authenticated": False,
-                "model": target_model,
-                "status": "error",
-                "error_code": "OPENROUTER_AUTH_FAILED",
-                "message": "OpenRouter authentication failed. Please verify OPENROUTER_API_KEY.",
-            }
+    async def health_check(self, model: Optional[str] = None, *, llm_service: LLMService) -> dict:
+        from bebshax.llm.openrouter_service import OpenRouterService
 
-        if resp.status_code == 429:
-            return {
-                "configured": True,
-                "authenticated": True,
-                "model": target_model,
-                "status": "rate_limited",
-                "error_code": "OPENROUTER_RATE_LIMITED",
-                "message": "OpenRouter rate limit reached or free credit exhausted.",
-            }
-
-        if resp.status_code == 404:
-            return {
-                "configured": True,
-                "authenticated": True,
-                "model": target_model,
-                "status": "error",
-                "error_code": "OPENROUTER_MODEL_UNAVAILABLE",
-                "message": f"Requested model '{target_model}' is not available on OpenRouter.",
-            }
-
-        if resp.status_code != 200:
-            return {
-                "configured": True,
-                "authenticated": False,
-                "model": target_model,
-                "status": "error",
-                "error_code": "OPENROUTER_API_ERROR",
-                "message": f"OpenRouter returned HTTP {resp.status_code}: {resp.text[:200]}",
-            }
-
-        try:
-            data = resp.json()
-            serving_model = data.get("model", target_model)
-            choices = data.get("choices", [])
-            reply_text = (
-                choices[0].get("message", {}).get("content", "").strip() if choices else ""
-            )
-            return {
-                "configured": True,
-                "authenticated": True,
-                "model": serving_model,
-                "latency_ms": latency_ms,
-                "status": "healthy",
-                "verified_response": reply_text[:100],
-                "message": "OpenRouter connected and verified successfully.",
-            }
-        except Exception as exc:
-            return {
-                "configured": True,
-                "authenticated": True,
-                "model": target_model,
-                "status": "error",
-                "error_code": "OPENROUTER_MALFORMED_RESPONSE",
-                "message": f"Failed to parse OpenRouter JSON response: {exc}",
-            }
+        return await OpenRouterService(self).health_check(model=model, llm_service=llm_service)
 

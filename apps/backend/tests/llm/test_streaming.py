@@ -1,15 +1,9 @@
-"""Streaming contract: adapter default fallback, Ollama NDJSON, and router
-commit-on-first-delta semantics."""
-
-import json
-
-import httpx
+"""Buffered adapter fallback and generic router stream commitment contracts."""
 import pytest
 
 from bebshax.llm import LLMResult
 from bebshax.llm.adapters.base import RouteCandidate, StreamDelta, StreamDone
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
-from bebshax.llm.adapters.ollama_adapter import OllamaAdapter
 from bebshax.llm.failures import AttemptFailed, FailureKind
 from bebshax.llm.router import PoolRouter
 from bebshax.llm.pools import PoolConfig
@@ -44,60 +38,6 @@ async def test_default_stream_yields_full_text_once() -> None:
     assert [type(e) for e in events] == [StreamDelta, StreamDone]
     assert events[0].text == "hello world"
     assert events[1].completion.text == "hello world"
-
-
-# ---------------------------------------------------------------------------
-# Ollama native NDJSON streaming
-# ---------------------------------------------------------------------------
-
-def _ndjson_transport(lines: list[dict], status: int = 200) -> httpx.MockTransport:
-    body = "\n".join(json.dumps(line) for line in lines)
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(status, content=body.encode())
-
-    return httpx.MockTransport(handler)
-
-
-def _ollama(transport: httpx.MockTransport) -> OllamaAdapter:
-    client = httpx.AsyncClient(base_url="http://test", transport=transport)
-    return OllamaAdapter(client=client)
-
-
-_CAND = RouteCandidate(provider="ollama", model="llama3.2:3b", context_window=8192)
-
-
-async def test_ollama_stream_accumulates_deltas_and_usage() -> None:
-    adapter = _ollama(
-        _ndjson_transport(
-            [
-                {"message": {"content": "Hel"}, "done": False},
-                {"message": {"content": "lo"}, "done": False},
-                {
-                    "message": {"content": ""},
-                    "done": True,
-                    "model": "llama3.2:3b",
-                    "prompt_eval_count": 12,
-                    "eval_count": 2,
-                },
-            ]
-        )
-    )
-    events = await _collect(adapter.stream(_CAND, _request()))
-    deltas = [e.text for e in events if isinstance(e, StreamDelta)]
-    done = events[-1]
-    assert deltas == ["Hel", "lo"]
-    assert isinstance(done, StreamDone)
-    assert done.completion.text == "Hello"
-    assert done.completion.usage.output_tokens == 2
-    assert "streamed" in done.completion.notes
-
-
-async def test_ollama_stream_empty_is_malformed() -> None:
-    adapter = _ollama(_ndjson_transport([{"message": {"content": ""}, "done": True}]))
-    with pytest.raises(AttemptFailed) as exc:
-        await _collect(adapter.stream(_CAND, _request()))
-    assert exc.value.kind == FailureKind.MALFORMED_RESPONSE
 
 
 # ---------------------------------------------------------------------------

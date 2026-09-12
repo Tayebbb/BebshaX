@@ -13,7 +13,6 @@ import httpx
 import pytest
 
 from bebshax.llm.adapters.openrouter_adapter import (
-    CATALOGUE_MAX_MODELS,
     DEFAULT_MODELS,
     OPENROUTER_MODELS_ENDPOINT,
     OpenRouterAdapter,
@@ -31,19 +30,20 @@ _CATALOGUE = [
     {"id": "acme/chat-mid:free", "context_length": 128_000, "supported_parameters": ["response_format"]},
     {"id": "acme/chat-extra:free", "context_length": 8_000, "supported_parameters": ["response_format"]},
 ]
+_CATALOGUE = [{**row, "pricing": {"prompt": "0", "completion": "0"}} for row in _CATALOGUE]
 
 
 def test_ranking_keeps_free_chat_models_and_prefers_structured_output() -> None:
     ranked = [row["id"] for row in rank_free_catalogue(_CATALOGUE)]
-    assert len(ranked) == CATALOGUE_MAX_MODELS
+    assert len(ranked) == 5
     # response_format-capable first, larger context first; JSON-less route last.
-    assert ranked == ["acme/chat-large:free", "acme/chat-mid:free", "acme/chat-small:free", "acme/chat-extra:free"]
+    assert ranked == ["acme/chat-large:free", "acme/chat-mid:free", "acme/chat-small:free", "acme/chat-extra:free", "acme/chat-plain:free"]
     for excluded in ("acme/paid-model", "acme/safety-classifier:free", "acme/deep-reasoning-r1:free", "acme/coder-7b:free"):
         assert excluded not in ranked
 
 
 def test_ranking_falls_back_to_plain_routes_when_nothing_supports_json() -> None:
-    rows = [{"id": "x/plain:free", "context_length": 1000, "supported_parameters": []}]
+    rows = [{"id": "x/plain:free", "context_length": 1000, "supported_parameters": [], "pricing": {"prompt": "0", "completion": "0"}}]
     assert [r["id"] for r in rank_free_catalogue(rows)] == ["x/plain:free"]
 
 
@@ -65,38 +65,40 @@ async def test_candidates_come_from_the_live_catalogue(monkeypatch) -> None:
 
     adapter = _adapter(handler)
     cands = await adapter.candidates()
-    assert [c.model for c in cands] == ["acme/chat-large:free", "acme/chat-mid:free", "acme/chat-small:free", "acme/chat-extra:free"]
+    assert [c.model for c in cands] == ["acme/chat-large:free", "acme/chat-mid:free", "acme/chat-small:free", "acme/chat-extra:free", "acme/chat-plain:free"]
     large = cands[0]
     assert large.context_window == 262_144 and large.supports_json is True and large.supports_tools is False
-    assert cands[2].supports_tools is True
+    assert cands[2].supports_tools is False
     # Cached: a second call does not refetch inside the TTL.
     await adapter.candidates()
     assert len(calls) == 1
     status = adapter.catalogue_status()
-    assert status["discovery_enabled"] and status["error"] is None and len(status["discovered"]) == 4
+    assert status["discovery_enabled"] and status["error"] is None and len(status["discovered"]) == 5
 
 
 @pytest.mark.asyncio
-async def test_catalogue_failure_degrades_to_the_seed_list_and_is_reported(monkeypatch) -> None:
+async def test_catalogue_failure_is_reported_without_unverified_seed_dispatch(monkeypatch) -> None:
     monkeypatch.delenv("BEBSHAX_OPENROUTER_MODELS", raising=False)
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, text="upstream down")
 
     adapter = _adapter(handler)
-    assert [c.model for c in await adapter.candidates()] == DEFAULT_MODELS
+    assert await adapter.candidates() == []
     assert "HTTPStatusError" in (adapter.catalogue_status()["error"] or "")
 
 
 @pytest.mark.asyncio
-async def test_operator_pin_beats_discovery(monkeypatch) -> None:
+async def test_operator_pin_is_verified_by_discovery(monkeypatch) -> None:
     monkeypatch.setenv("BEBSHAX_OPENROUTER_MODELS", "pinned/one:free")
 
-    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - must not be called
-        raise AssertionError("catalogue must not be fetched when models are pinned")
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == OPENROUTER_MODELS_ENDPOINT
+        return httpx.Response(200, json={"data": [{"id": "pinned/one:free", "context_length": 9876, "supported_parameters": [], "pricing": {"prompt": "0", "completion": "0"}}]})
 
     adapter = _adapter(handler)
-    assert [c.model for c in await adapter.candidates()] == ["pinned/one:free"]
+    [candidate] = await adapter.candidates()
+    assert candidate.model == "pinned/one:free" and candidate.context_window == 9876
 
 
 @pytest.mark.asyncio
@@ -108,11 +110,11 @@ async def test_discovery_is_off_by_default_so_tests_stay_offline(monkeypatch) ->
 
     adapter = OpenRouterAdapter(api_key="test-key-not-real")
     adapter._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    assert [c.model for c in await adapter.candidates()] == DEFAULT_MODELS
+    assert await adapter.candidates() == []
 
 
 @pytest.mark.asyncio
-async def test_expired_cache_refreshes_and_keeps_last_good_on_failure(monkeypatch) -> None:
+async def test_expired_cache_refresh_failure_does_not_authorize_stale_routes(monkeypatch) -> None:
     monkeypatch.delenv("BEBSHAX_OPENROUTER_MODELS", raising=False)
     responses = [httpx.Response(200, json={"data": _CATALOGUE[:6]}), httpx.Response(500, text="boom")]
 
@@ -122,8 +124,8 @@ async def test_expired_cache_refreshes_and_keeps_last_good_on_failure(monkeypatc
     adapter = _adapter(handler, catalogue_ttl_s=0.0)  # every call is a refresh
     first = [c.model for c in await adapter.candidates()]
     assert first == ["acme/chat-large:free", "acme/chat-small:free"]
-    second = [c.model for c in await adapter.candidates()]  # refresh fails → last good catalogue
-    assert second == first
+    second = [c.model for c in await adapter.candidates()]
+    assert second == []
     assert adapter.catalogue_status()["error"]
     assert json.dumps(adapter.catalogue_status())  # serialisable for /api/health
 
@@ -140,6 +142,7 @@ _REASONING_CATALOGUE = [
     {"id": "acme/thinker-chat:free", "context_length": 100_000, "supported_parameters": ["response_format", "reasoning", "include_reasoning"]},
     {"id": "acme/plain-chat:free", "context_length": 50_000, "supported_parameters": ["response_format"]},
 ]
+_REASONING_CATALOGUE = [{**row, "pricing": {"prompt": "0", "completion": "0"}, "supported_parameters": [*row["supported_parameters"], "max_tokens"]} for row in _REASONING_CATALOGUE]
 
 
 def _request(json_mode: bool = True):
@@ -158,7 +161,7 @@ def _ok_body(content: str = '{"ok": true}') -> dict:
 
 
 @pytest.mark.asyncio
-async def test_reasoning_is_disabled_only_for_routes_that_expose_the_toggle(monkeypatch) -> None:
+async def test_reasoning_is_not_silently_changed_by_the_adapter(monkeypatch) -> None:
     monkeypatch.delenv("BEBSHAX_OPENROUTER_MODELS", raising=False)
     sent: list[dict] = []
 
@@ -172,7 +175,7 @@ async def test_reasoning_is_disabled_only_for_routes_that_expose_the_toggle(monk
     thinker, plain = await adapter.candidates()
     await adapter.complete(thinker, _request())
     await adapter.complete(plain, _request())
-    assert sent[0]["reasoning"] == {"enabled": False}
+    assert "reasoning" not in sent[0]
     assert "reasoning" not in sent[1]
 
 
@@ -190,7 +193,7 @@ async def test_empty_reply_after_reasoning_is_explained_in_the_failure() -> None
             },
         )
 
-    adapter = OpenRouterAdapter(api_key="test-key-not-real")
+    adapter = OpenRouterAdapter(api_key="test-key-not-real", catalogue=[{"id": "acme/thinker:free", "context_length": 100000, "pricing": {"prompt": "0", "completion": "0"}, "supported_parameters": ["response_format", "max_tokens"]}])
     adapter._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     with pytest.raises(AttemptFailed) as info:
         await adapter.complete(RouteCandidate(provider="openrouter", model="acme/thinker:free"), _request())

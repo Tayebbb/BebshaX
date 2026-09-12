@@ -7,6 +7,7 @@ from freellmpool import errors as fl_errors
 
 from bebshax.llm import AttemptFailed, ChatMessage, FailureKind, LLMRequest, TaskType
 from bebshax.llm.adapters.freellmpool_adapter import FreellmpoolAdapter
+from bebshax.llm.governance import LLMRequestContext, RemoteProcessingPolicy, llm_request_context
 
 
 class StubPool:
@@ -29,7 +30,7 @@ def _reply(text="hello", provider_id="groq", model="llama-3.3-70b", **kw) -> Rep
         text=text,
         provider_id=provider_id,
         model=model,
-        raw={},
+        raw=kw.get("raw", {}),
         prompt_tokens=kw.get("prompt_tokens", 10),
         completion_tokens=kw.get("completion_tokens", 5),
         attempts=kw.get("attempts", 2),
@@ -144,14 +145,16 @@ async def test_cached_note_reaches_provenance() -> None:
     from bebshax.llm import SingleAdapterLLMService
 
     adapter = FreellmpoolAdapter(pool=StubPool(_reply(cached=True)))
-    result = await SingleAdapterLLMService(adapter).complete(_request())
+    policy = RemoteProcessingPolicy(policy_id="synthetic-cache-fixture", synthetic_providers=frozenset({"freellmpool"}))
+    with llm_request_context(LLMRequestContext(data_classification="synthetic")):
+        result = await SingleAdapterLLMService(adapter, processing_policy=policy).complete(_request())
     last = result.provenance.attempts[-1]
     assert any("served from freellmpool response cache" in n for n in last.notes)
 
 
 async def test_truncated_reply_is_malformed_response() -> None:
-    """completion_tokens >= max_output_tokens ⇒ output was cut mid-thought."""
-    adapter = FreellmpoolAdapter(pool=StubPool(_reply(completion_tokens=64)))
+    """Only an actual length finish reason establishes truncation."""
+    adapter = FreellmpoolAdapter(pool=StubPool(_reply(completion_tokens=64, raw={"choices": [{"finish_reason": "length"}]})))
     [candidate] = await adapter.candidates()
     with pytest.raises(AttemptFailed) as exc:
         await adapter.complete(candidate, _request(max_output_tokens=64))

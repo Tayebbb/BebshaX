@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from bebshax.db.capacity_state import load_recent_route_observations
@@ -37,6 +38,12 @@ def _attempt(provider: str, model: str, latency_ms, success=True) -> dict:
         "model": model,
         "latency_ms": latency_ms,
         "success": success,
+        "observations": [{
+            "provider": provider, "requested_model": model, "latency_ms": latency_ms,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "outcome": "succeeded" if success else "failed",
+            "consumption": "known" if success else "unknown",
+        }],
     }
 
 
@@ -99,21 +106,20 @@ async def seeded_db(tmp_path):
 @pytest.mark.asyncio
 async def test_loader_returns_concrete_targets_chronologically(seeded_db):
     obs = await load_recent_route_observations(seeded_db, days=3)
-    # only concrete, successful, latency-bearing, in-window observations —
-    # ollama and the virtual "freellmpool" name are excluded
     assert obs == [
         ("llm7", "gpt-4o-mini", 1200.0),
-        ("openrouter", "meta-llama/llama-3.3-70b-instruct:free", 2100.0),
     ]
 
 
 @pytest.mark.asyncio
-async def test_loader_failure_degrades_to_cold_start(tmp_path):
-    # a sessionmaker over a missing table must yield [] — never break startup
+async def test_loader_failure_requires_schema_repair_instead_of_cold_start(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'empty.db'}")
     maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    assert await load_recent_route_observations(maker) == []
-    await engine.dispose()
+    try:
+        with pytest.raises(OperationalError):
+            await load_recent_route_observations(maker)
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -152,7 +158,7 @@ async def test_adapter_seeds_pool_metrics_with_target_keys():
     n = await adapter.seed_metrics(
         [
             ("llm7", "gpt-4o-mini", 1200.0),
-            ("openrouter", "meta-llama/llama-3.3-70b-instruct:free", 2100.0),
+            ("groq", "llama-3.1-8b-instant", 2100.0),
             ("llm7", "gpt-4o-mini", 950.0),  # newer measurement of the same target
         ]
     )
@@ -161,7 +167,7 @@ async def test_adapter_seeds_pool_metrics_with_target_keys():
     # replayed in order so EWMA weights the newest measurement most
     assert pool.metrics.successes == [
         ("llm7/gpt-4o-mini", 1200.0),
-        ("openrouter/meta-llama/llama-3.3-70b-instruct:free", 2100.0),
+        ("groq/llama-3.1-8b-instant", 2100.0),
         ("llm7/gpt-4o-mini", 950.0),
     ]
 

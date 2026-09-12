@@ -1,5 +1,134 @@
-# Custom provider overrides for freellmpool (loaded via FREELLMPOOL_CONFIG,
-# set by bebshax.main at startup). Same-id entries REPLACE the packaged ones.
+# Application-owned overrides; the guarded adapter loads this explicit path.
+# Legacy FREELLMPOOL_CONFIG, plugins and home-directory settings are not merged.
+# Unknown context windows remain ineligible until verified limits are supplied.
+#
+# Providers redefined here REPLACE the packaged entry of the same id (models
+# included). Context values are conservative floors of the published limits
+# (2026-09): they gate pre-flight eligibility only and never truncate anything.
+# supports_json marks endpoints verified to honor response_format=json_object.
+
+# Pollinations — keyless OpenAI-compatible gateway (published 128k contexts).
+[[provider]]
+id = "pollinations"
+label = "Pollinations (keyless)"
+adapter = "openai"
+base_url = "https://text.pollinations.ai/openai"
+auth = "none"
+
+[[provider.models]]
+name = "openai"
+context = 65536
+supports_json = true
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "openai-fast"
+context = 65536
+supports_json = true
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "mistral"
+context = 32768
+rpd = 0
+enabled = true
+
+# OVHcloud AI Endpoints — keyless vLLM-backed OpenAI-compatible API.
+[[provider]]
+id = "ovh"
+label = "OVHcloud AI Endpoints (keyless)"
+adapter = "openai"
+base_url = "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1"
+auth = "none"
+
+[[provider.models]]
+name = "Meta-Llama-3_3-70B-Instruct"
+context = 131072
+supports_json = true
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "Llama-3.1-8B-Instruct"
+context = 131072
+supports_json = true
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "Mistral-Small-3.2-24B-Instruct-2506"
+context = 131072
+supports_json = true
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "Mistral-Nemo-Instruct-2407"
+context = 131072
+supports_json = true
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "Mistral-7B-Instruct-v0.3"
+context = 32768
+supports_json = true
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "gpt-oss-120b"
+context = 131072
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "gpt-oss-20b"
+context = 131072
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "Qwen3-32B"
+context = 32768
+rpd = 0
+enabled = true
+
+# LLM7 — key optional; keyless tier is rate-limited but functional.
+[[provider]]
+id = "llm7"
+label = "LLM7 (key optional)"
+adapter = "openai"
+base_url = "https://api.llm7.io/v1"
+key_env = "LLM7_API_KEY"
+auth = "bearer"
+key_optional = true
+
+[[provider.models]]
+name = "mistral-small-3.2"
+context = 65536
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "codestral-latest"
+context = 32768
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "qwen3-235b"
+context = 32768
+rpd = 0
+enabled = true
+
+[[provider.models]]
+name = "devstral-small-2:24b"
+context = 65536
+rpd = 0
+enabled = true
 
 # Kilo override: the packaged catalog routes through "openrouter/free" and
 # "kilo-auto/free" — aggregator-on-aggregator (two queues stacked), and carries
@@ -14,16 +143,17 @@ auth = "none"
 
 [[provider.models]]
 name = "stepfun/step-3.7-flash:free"
+context = 262144
+supports_json = false
 rpd = 0
 enabled = true
 
 [[provider.models]]
 name = "poolside/laguna-xs.2:free"
 rpd = 0
-enabled = true
+enabled = false
 
-# OpenRouter (through freellmpool): measured-fast models only. deepseek-r1 and
-# nemotron burn 100s+ on hidden chain-of-thought for interactive turns.
+# Independent OpenRouter dispatch belongs exclusively to OpenRouterAdapter.
 [[provider]]
 id = "openrouter"
 label = "OpenRouter"
@@ -35,9 +165,17 @@ auth = "bearer"
 [[provider.models]]
 name = "google/gemini-2.0-flash-exp:free"
 rpd = 1000
-enabled = true
+enabled = false
 
 [[provider.models]]
 name = "meta-llama/llama-3.3-70b-instruct:free"
 rpd = 1000
-enabled = true
+enabled = false
+
+[[provider]]
+id = "ollama"
+label = "Retired Ollama Cloud"
+adapter = "openai"
+base_url = "https://ollama.com/v1"
+auth = "none"
+models = []
