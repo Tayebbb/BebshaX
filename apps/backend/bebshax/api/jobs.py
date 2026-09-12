@@ -1,150 +1,237 @@
-"""In-memory async job registry (dev-scale) — the interview batch-run
-pattern generalized: a POST starts a background task and returns 202 with a
-job id; the UI polls the matching GET. A server restart loses job STATUS,
-never data — runners persist their real output (rows, reports) as they
-complete, exactly like batch interviews persist conversations.
-
-Not a queue on purpose (R10): no broker, no workers, no persistence layer —
-`asyncio.create_task` with GC-safe strong refs on `app.state`.
-"""
+"""Job API adapters. SQL admission must be awaited before returning an accepted response."""
 
 from __future__ import annotations
 
-import asyncio
-import logging
-import uuid
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
+import copy
+from typing import Any, Optional
+
+from sqlalchemy import select
 
 from bebshax.api.errors import APIError
-from bebshax.utils.explicit_failures import ExplicitFailure
-
-logger = logging.getLogger(__name__)
-
-_MAX_JOBS = 50  # evict oldest beyond this — polling clients read fast
-# Each running job is minutes of free-tier LLM spend; one caller may not queue
-# up more than this many at once.
-MAX_RUNNING_JOBS_PER_USER = 3
+from bebshax.jobs.memory import MemoryJobStore
+from bebshax.jobs.orm import DurableJobs
+from bebshax.jobs.runtime import JobContext, JobRuntime, Prepare, Runner, RuntimeClosing
+from bebshax.jobs.store import (
+    MAX_RUNNING_JOBS_PER_USER, Admission, AdmissionLimit, IdempotencyConflict, SQLJobStore,
+)
 
 
-def _registry(app) -> dict[str, dict[str, Any]]:
-    reg = getattr(app.state, "async_jobs", None)
-    if reg is None:
-        reg = {}
-        app.state.async_jobs = reg
-        app.state.async_job_tasks = set()
-    return reg
+def _state_get(app: Any, name: str, default: Any = None) -> Any:
+    return app.state.get(name, default) if isinstance(app.state, dict) else getattr(app.state, name, default)
 
 
-def running_jobs_for_user(app, user_id: Optional[str]) -> int:
-    if user_id is None:
-        return 0
-    return sum(
-        1
-        for job in _registry(app).values()
-        if job["status"] == "running" and job.get("user_id") == user_id
+def _state_set(app: Any, name: str, value: Any) -> None:
+    if isinstance(app.state, dict):
+        app.state[name] = value
+    else:
+        setattr(app.state, name, value)
+
+
+def job_runtime(app: Any) -> JobRuntime:
+    runtime = _state_get(app, "job_runtime")
+    maker = _state_get(app, "db_sessionmaker")
+    if runtime is not None:
+        # A cached SQL store bound to a replaced sessionmaker would write to a
+        # disposed engine; rebuild against the app's current database binding.
+        store = runtime.store
+        if not (isinstance(store, SQLJobStore) and maker is not None and store.sessionmaker is not maker):
+            return runtime
+        # Stop the stale runtime's recovery/heartbeat tasks so nothing keeps
+        # polling the replaced (possibly disposed) engine.
+        runtime._closing = True
+        for task in (*runtime.tasks, runtime._recovery_task):
+            if task is not None and not task.done():
+                task.cancel()
+        _state_set(app, "job_store", None)
+        _state_set(app, "job_runtime", None)
+    store = _state_get(app, "job_store")
+    if store is None:
+        if maker is None:
+            raise APIError(503, "Durable job storage is not configured.", error_code="job_store_unavailable")
+        store = SQLJobStore(maker)
+    if not isinstance(store, (SQLJobStore, MemoryJobStore)):
+        raise APIError(503, "Invalid job store configuration.", error_code="job_store_unavailable")
+    runtime = JobRuntime(store, register_task=_state_get(app, "register_runtime_task"))
+    _state_set(app, "job_store", store)
+    _state_set(app, "job_runtime", runtime)
+    _state_set(app, "async_job_tasks", runtime.tasks)
+    register_resource = _state_get(app, "register_runtime_resource")
+    if callable(register_resource):
+        register_resource(runtime)
+    return runtime
+
+
+def _admission_error(exc: Exception) -> APIError:
+    if isinstance(exc, RuntimeClosing):
+        return APIError(503, "Job runtime is shutting down.", error_code="job_runtime_closing")
+    if isinstance(exc, AdmissionLimit):
+        return APIError(429, str(exc), error_code="too_many_jobs", extra={"max_running_jobs": MAX_RUNNING_JOBS_PER_USER})
+    return APIError(409, str(exc), error_code="job_idempotency_conflict")
+
+
+async def replay_job_input(
+    app: Any, *, kind: str, scope_id: str, user_id: str, idempotency_key: str | None,
+    input_data: dict[str, Any], snapshot_fields: frozenset[str],
+) -> dict[str, Any]:
+    if idempotency_key is None:
+        return input_data
+    store = job_runtime(app).store
+    if isinstance(store, SQLJobStore):
+        async with store.sessionmaker() as session:
+            existing = await session.scalar(select(DurableJobs).where(
+                DurableJobs.owner_id == user_id, DurableJobs.idempotency_key == idempotency_key,
+            ))
+    else:
+        existing = next((row for row in store.rows.values() if (
+            row.owner_id == user_id and row.idempotency_key == idempotency_key
+        )), None)
+    if existing is None:
+        return input_data
+    if (existing.kind, existing.scope_id) != (kind, scope_id):
+        raise _admission_error(IdempotencyConflict("This idempotency key belongs to a different command."))
+    if existing.payload_expired_at is not None or existing.input_data is None:
+        raise APIError(409, "The saved command payload has expired.", error_code="job_payload_expired", extra={"job_id": existing.id})
+    command = {name: value for name, value in input_data.items() if name not in snapshot_fields}
+    original = {name: value for name, value in existing.input_data.items() if name not in snapshot_fields}
+    if command != original:
+        raise _admission_error(IdempotencyConflict("This idempotency key was already used with different input."))
+    return copy.deepcopy(existing.input_data)
+
+
+async def prepare_job(
+    app: Any, *, kind: str, scope_id: str, user_id: str, input_data: dict[str, Any],
+    idempotency_key: str | None = None, timeout_s: float | None = None,
+    input_revision: str | None = None,
+    job_id_prefix: str = "job", prepare: Prepare | None = None,
+) -> Admission:
+    try:
+        return await job_runtime(app).prepare(
+            kind=kind, scope_id=scope_id, owner_id=user_id, input_data=input_data,
+            idempotency_key=idempotency_key, timeout_s=timeout_s,
+            input_revision=input_revision,
+            job_id_prefix=job_id_prefix, prepare=prepare,
+        )
+    except (AdmissionLimit, IdempotencyConflict, RuntimeClosing) as exc:
+        raise _admission_error(exc) from exc
+
+
+async def start_job_async(
+    app: Any, *, kind: str, scope_id: str, runner: Runner, user_id: str,
+    input_data: dict[str, Any], idempotency_key: str | None = None,
+    input_revision: str | None = None,
+    user_safe_exceptions: tuple[type[BaseException], ...] = (),
+    timeout_s: float | None = None, job_id_prefix: str = "job", prepare: Prepare | None = None,
+) -> dict[str, Any]:
+    try:
+        return await job_runtime(app).start(
+            kind=kind, scope_id=scope_id, owner_id=user_id, runner=runner, input_data=input_data,
+            idempotency_key=idempotency_key, user_safe_exceptions=user_safe_exceptions,
+            input_revision=input_revision,
+            timeout_s=timeout_s, job_id_prefix=job_id_prefix, prepare=prepare,
+        )
+    except (AdmissionLimit, IdempotencyConflict, RuntimeClosing) as exc:
+        raise _admission_error(exc) from exc
+
+
+async def run_job_inline(
+    app: Any, *, kind: str, scope_id: str, user_id: str, input_data: dict[str, Any],
+    operation: Callable[[JobContext], Awaitable[dict[str, Any]]],
+    idempotency_key: str | None = None, input_revision: str | None = None,
+    timeout_s: float | None = None,
+) -> dict[str, Any]:
+    failures: list[Exception] = []
+
+    async def runner(job: JobContext) -> None:
+        try:
+            result = await operation(job)
+            job["result"] = {**result, "job_id": job["job_id"]}
+        except Exception as exc:
+            failures.append(exc)
+            raise
+
+    accepted = await start_job_async(
+        app, kind=kind, scope_id=scope_id, user_id=user_id, input_data=input_data,
+        runner=runner, idempotency_key=idempotency_key, input_revision=input_revision, timeout_s=timeout_s,
+    )
+    await job_runtime(app).wait(accepted["job_id"])
+    saved = await get_job_async(app, accepted["job_id"], kind=kind, scope_id=scope_id, user_id=user_id)
+    if failures and (saved is None or saved["state"] == "failed"):
+        raise failures[0]
+    if saved is not None and saved["state"] == "completed" and isinstance(saved["result"], dict):
+        return saved["result"]
+    state = saved["state"] if saved is not None else "unavailable"
+    raise APIError(
+        409 if state in {"queued", "running", "cancelled", "interrupted"} else 503,
+        "Inspect the saved job status before explicitly retrying this command.",
+        error_code=f"job_{state}", extra={"job_id": accepted["job_id"], "state": state},
     )
 
 
 def start_job(
-    app,
-    *,
-    kind: str,
-    scope_id: str,
-    runner: Callable[[dict[str, Any]], Awaitable[None]],
-    user_id: Optional[str] = None,
-    user_safe_exceptions: tuple[type[BaseException], ...] = (),
-    timeout_s: float | None = None,
-    job_id_prefix: str = "job",
+    app: Any, *, kind: str, scope_id: str, runner: Runner, user_id: Optional[str] = None,
+    user_safe_exceptions: tuple[type[BaseException], ...] = (), timeout_s: float | None = None,
+    job_id_prefix: str = "job", admission: Admission | None = None,
 ) -> dict[str, Any]:
-    """Register a job and run `runner(job)` in the background.
-
-    The runner mutates the job dict (typically setting `job["result"]`).
-    Runner returns → status "completed"; runner raises → status "failed".
-    `ValueError` and any type in `user_safe_exceptions` (the caller's honest
-    domain failures, e.g. ContextWindowExceeded — R2/R6) pass their message
-    through to `job["error"]`; anything else is redacted to the class name
-    (full traceback goes to the log, never to the client).
-
-    Raises ``APIError(429, error_code="too_many_jobs")`` when ``user_id``
-    already has ``MAX_RUNNING_JOBS_PER_USER`` jobs running.
-    ``timeout_s`` optionally bounds the entire runner, including retries.
-    """
-    registry = _registry(app)
-    if running_jobs_for_user(app, user_id) >= MAX_RUNNING_JOBS_PER_USER:
-        raise APIError(
-            429,
-            f"You already have {MAX_RUNNING_JOBS_PER_USER} background jobs running — "
-            "wait for one to finish before starting another.",
-            error_code="too_many_jobs",
-            extra={"max_running_jobs": MAX_RUNNING_JOBS_PER_USER},
+    runtime = job_runtime(app)
+    if user_id is None:
+        raise APIError(401, "Sign in to start a background job.", error_code="unauthorized")
+    if admission is not None:
+        job = admission.job
+        if (job["kind"], job["scope_id"], job["user_id"]) != (kind, scope_id, user_id):
+            raise ValueError("Prepared admission does not match the caller's scope.")
+        return runtime.launch(admission, runner=runner, user_safe_exceptions=user_safe_exceptions)
+    if not isinstance(runtime.store, MemoryJobStore):
+        raise APIError(503, "This caller must await start_job_async or prepare_job before accepting work.", error_code="async_job_admission_required")
+    try:
+        admitted = runtime.store.admit_sync(
+            kind=kind, scope_id=scope_id, owner_id=user_id, input_data={},
+            timeout_s=timeout_s, job_id_prefix=job_id_prefix,
         )
-    job: dict[str, Any] = {
-        "job_id": f"{job_id_prefix}_{uuid.uuid4().hex[:12]}",
-        "kind": kind,
-        "scope_id": scope_id,
-        "user_id": user_id,
-        "status": "running",
-        "result": None,
-        "error": None,
-        "error_code": None,
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "finished_at": None,
-    }
-    registry[job["job_id"]] = job
-    # Running jobs must remain pollable and counted toward admission limits.
-    while len(registry) > _MAX_JOBS:
-        evictable = next(
-            (jid for jid, j in registry.items() if j["status"] != "running"),
-            None,
-        )
-        if evictable is None:
-            break
-        registry.pop(evictable)
-
-    async def _run() -> None:
-        try:
-            async with asyncio.timeout(timeout_s):
-                await runner(job)
-            job["status"] = "completed"
-        except TimeoutError:
-            job["status"] = "failed"
-            job["error"] = "The background job exceeded its time limit."
-            job["error_code"] = "job_timeout"
-            logger.warning("%s job %s exceeded its deadline", kind, job["job_id"])
-        except asyncio.CancelledError:
-            # Shutdown/cancellation — never leave a job claiming "running".
-            job["status"] = "failed"
-            job["error"] = "cancelled (server shutting down)"
-            raise
-        except ExplicitFailure as exc:
-            # "The AI could not do this" (R2) — always user-facing, with its code.
-            job["status"] = "failed"
-            job["error"] = exc.detail
-            job["error_code"] = exc.error_code
-            logger.warning("%s job %s refused: %s", kind, job["job_id"], exc.error_code)
-        except (ValueError, *user_safe_exceptions) as exc:
-            # Input/state/domain problems are user-actionable — surface them.
-            job["status"] = "failed"
-            job["error"] = str(exc)
-            logger.warning("%s job %s failed: %s", kind, job["job_id"], exc)
-        except Exception as exc:
-            job["status"] = "failed"
-            job["error"] = f"{exc.__class__.__name__}: {kind} failed"
-            logger.warning("%s job %s crashed", kind, job["job_id"], exc_info=True)
-        finally:
-            job["finished_at"] = datetime.now(timezone.utc).isoformat()
-
-    task = asyncio.create_task(_run())
-    app.state.async_job_tasks.add(task)
-    task.add_done_callback(app.state.async_job_tasks.discard)
-    return job
+    except (AdmissionLimit, IdempotencyConflict) as exc:
+        raise _admission_error(exc) from exc
+    return runtime.launch(admitted, runner=runner, user_safe_exceptions=user_safe_exceptions)
 
 
-def get_job(app, job_id: str, *, kind: str, scope_id: str) -> Optional[dict[str, Any]]:
-    """Look up a job, bound to its kind AND scope so a job id can never be
-    read through another study's (or another feature's) poll endpoint."""
-    job = _registry(app).get(job_id)
-    if not job or job["kind"] != kind or job["scope_id"] != scope_id:
-        return None
-    return job
+async def get_job_async(app: Any, job_id: str, *, kind: str, scope_id: str, user_id: str) -> dict[str, Any] | None:
+    store = job_runtime(app).store
+    await store.recover(owner_id=user_id)
+    return await store.get(job_id, kind=kind, scope_id=scope_id, owner_id=user_id)
+
+
+def get_job(app: Any, job_id: str, *, kind: str, scope_id: str) -> Optional[dict[str, Any]]:
+    store = job_runtime(app).store
+    if not isinstance(store, MemoryJobStore):
+        raise APIError(503, "This caller must await get_job_async with the verified owner.", error_code="async_job_admission_required")
+    return store.get_sync(job_id, kind=kind, scope_id=scope_id)
+
+
+async def running_jobs_for_user_async(app: Any, user_id: str) -> int:
+    return await job_runtime(app).store.running_count(user_id)
+
+
+def running_jobs_for_user(app: Any, user_id: Optional[str]) -> int:
+    store = job_runtime(app).store
+    if not isinstance(store, MemoryJobStore):
+        raise APIError(503, "This caller must await durable job admission.", error_code="async_job_admission_required")
+    return store.running_count_sync(user_id) if user_id else 0
+
+
+async def startup_jobs(app: Any) -> list[dict[str, Any]]:
+    return await job_runtime(app).startup()
+
+
+async def initialize_jobs(app: Any) -> JobRuntime:
+    runtime = job_runtime(app)
+    await runtime.startup()
+    return runtime
+
+
+async def cancel_job_async(app: Any, job_id: str, *, kind: str, scope_id: str, user_id: str) -> dict[str, Any] | None:
+    return await job_runtime(app).cancel(job_id, kind=kind, scope_id=scope_id, owner_id=user_id)
+
+
+async def shutdown_jobs(app: Any) -> None:
+    runtime = _state_get(app, "job_runtime")
+    if runtime is not None:
+        await runtime.shutdown()

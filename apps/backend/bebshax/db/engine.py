@@ -2,41 +2,101 @@
 
 import logging
 import os
+from collections.abc import Callable
+from importlib import import_module
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import CheckConstraint, MetaData, inspect
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from bebshax.config import Settings
 
 logger = logging.getLogger(__name__)
 
 
-def _alembic_script_head() -> Optional[str]:
-    """Resolve the migration head from the checked-in scripts (no DB access)."""
-    try:
-        from alembic.config import Config
-        from alembic.script import ScriptDirectory
+def get_metadata() -> MetaData:
+    """Register every owning feature's mappings without importing the application."""
+    from bebshax.db.models import Base
 
-        ini = Path(__file__).resolve().parents[2] / "alembic.ini"
-        cfg = Config(str(ini))
-        cfg.set_main_option("script_location", str(ini.parent / "alembic"))
-        return ScriptDirectory.from_config(cfg).get_current_head()
-    except Exception:
-        logger.warning("could not resolve alembic script head for stamping", exc_info=True)
-        return None
+    for module_name in (
+        "bebshax.auth.models",
+        "bebshax.behavioral.orm",
+        "bebshax.datasets.orm",
+        "bebshax.interview.orm",
+        "bebshax.jobs.orm",
+        "bebshax.memory.orm",
+        "bebshax.persona.orm",
+        "bebshax.personas.orm",
+    ):
+        import_module(module_name)
+    return Base.metadata
+
+
+def _alembic_script_head() -> str:
+    """Resolve the migration head from the checked-in scripts (no DB access)."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    ini = Path(__file__).resolve().parents[2] / "alembic.ini"
+    cfg = Config(str(ini))
+    cfg.set_main_option("script_location", str(ini.parent / "alembic"))
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    if not head:
+        raise RuntimeError("Alembic migration scripts have no head; schema cannot be validated.")
+    return head
+
+
+def _validate_schema(connection: Connection, metadata: MetaData) -> None:
+    from alembic.autogenerate import compare_metadata
+    from alembic.runtime.migration import MigrationContext
+    from pgvector.sqlalchemy import Vector
+
+    if connection.dialect.name == "postgresql":
+        connection.dialect.ischema_names = {**connection.dialect.ischema_names, "vector": Vector}
+    context = MigrationContext.configure(connection, opts={"compare_type": True})
+    message = "Database schema differs from the Alembic-managed metadata; reconcile before startup."
+    if compare_metadata(context, metadata):
+        raise RuntimeError(message)
+    inspector = inspect(connection)
+    for table in metadata.tables.values():
+        expected_checks = {
+            constraint.name for constraint in table.constraints
+            if isinstance(constraint, CheckConstraint) and constraint.name is not None
+        }
+        if expected_checks and not expected_checks <= {
+            constraint["name"] for constraint in inspector.get_check_constraints(table.name, schema=table.schema)
+        }:
+            raise RuntimeError(message)
+        vector_indexes = [
+            index for index in table.indexes
+            if index.dialect_options["postgresql"].get("using") == "hnsw"
+        ]
+        if connection.dialect.name == "postgresql" and vector_indexes:
+            actual_indexes = {
+                index["name"]: index for index in inspector.get_indexes(table.name, schema=table.schema)
+            }
+            for index in vector_indexes:
+                actual = actual_indexes.get(index.name, {}).get("dialect_options", {})
+                if (
+                    actual.get("postgresql_using") != "hnsw"
+                    or actual.get("postgresql_ops") != index.dialect_options["postgresql"]["ops"]
+                ):
+                    raise RuntimeError(message)
 
 
 def normalize_async_database_url(url: str) -> str:
-    """Ensure database URLs use the appropriate async dialect and compatible SSL query params.
+    """Use async dialects without weakening PostgreSQL SSL verification.
     
     Supports:
     - PostgreSQL (asyncpg): postgresql://, postgres://, postgresql+asyncpg://
     - SQLite (aiosqlite): sqlite://, sqlite+aiosqlite://
     - MySQL (aiomysql): mysql://, mysql+aiomysql://
+
+    asyncpg accepts libpq SSL modes as ``ssl``, not ``sslmode`` keyword arguments.
+    Channel binding is deliberately omitted because asyncpg does not implement it.
     """
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
@@ -49,18 +109,27 @@ def normalize_async_database_url(url: str) -> str:
 
     parsed = urlparse(url)
     if "asyncpg" in parsed.scheme and parsed.query:
-        query_params = parse_qs(parsed.query)
+        query_params = parse_qs(parsed.query, keep_blank_values=True)
+        ssl_values = [
+            value
+            for key, values in query_params.items()
+            if key.lower() in ("ssl", "sslmode")
+            for value in values
+        ]
+        if len(ssl_values) > 1:
+            raise ValueError("Specify only one PostgreSQL SSL mode")
         new_query = {}
-        for k, v in query_params.items():
-            k_lower = k.lower()
-            if k_lower == "sslmode":
-                val = v[0].lower()
-                if val in ("require", "verify-ca", "verify-full"):
-                    new_query["ssl"] = "require"
-            elif k_lower in ("channel_binding", "target_session_attrs"):
-                continue  # asyncpg doesn't support libpq-specific channel_binding in URL
+        for key, values in query_params.items():
+            key_lower = key.lower()
+            if key_lower in ("ssl", "sslmode"):
+                mode = values[0].lower()
+                if mode not in ("disable", "allow", "prefer", "require", "verify-ca", "verify-full"):
+                    raise ValueError("Invalid PostgreSQL SSL mode")
+                new_query["ssl"] = mode
+            elif key_lower == "channel_binding":
+                continue
             else:
-                new_query[k] = v[0]
+                new_query[key] = values[0]
         new_query_str = urlencode(new_query)
         url = urlunparse(parsed._replace(query=new_query_str))
 
@@ -82,6 +151,7 @@ def create_engine(settings: Settings, url_override: Optional[str] = None) -> Asy
         return create_async_engine(
             db_url,
             echo=False,
+            hide_parameters=True,
             connect_args={"check_same_thread": False},
         )
 
@@ -89,6 +159,7 @@ def create_engine(settings: Settings, url_override: Optional[str] = None) -> Asy
     return create_async_engine(
         db_url,
         echo=False,
+        hide_parameters=True,
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
         pool_pre_ping=True,
@@ -96,112 +167,46 @@ def create_engine(settings: Settings, url_override: Optional[str] = None) -> Asy
     )
 
 
-def create_async_sessionmaker(engine: AsyncEngine) -> sessionmaker[AsyncSession]:
+def create_async_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     """Create an async session maker.
 
     expire_on_commit=False: prevent lazy-refresh on post-commit attribute
     access, which would raise MissingGreenlet in async contexts.
     """
-    return sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
-    )
+    return async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
 
 
 async def init_database(
     engine: AsyncEngine,
-    sessionmaker_: Optional[sessionmaker[AsyncSession]] = None,
+    sessionmaker_: Optional[Callable[[], AsyncSession]] = None,
     seed: bool = True,
 ) -> list[str]:
-    """Automatically create all tables, extensions, and seed data for the configured database.
+    """Validate Alembic ownership before seeding; bootstrap only isolated SQLite schemas.
     
-    Returns the list of table names created.
+    PostgreSQL schema changes must be applied with Alembic before startup.
+    Returns the registered table names, not a claim that migrations ran here.
     """
-    # Import all ORM models so they are registered on Base.metadata
-    from bebshax.auth.models import Users  # noqa: F401
-    from bebshax.db.models import (  # noqa: F401
-        Base,
-        Businesses,
-        DatasetCandidates,
-        DatasetPersonaRuns,
-        DatasetSources,
-        EvidenceChunks,
-        EvidenceClaims,
-        EvidenceSources,
-        LLMRequests,
-        MarketSegments,
-        ModelRegistry,
-        PersonaGenerationRuns,
-        Personas,
-        ResearchPlans,
-        ResearchRuns,
-        SavedAudiences,
-        SegmentationRuns,
-        Studies,
-        StudyReports,
-    )
-    from bebshax.behavioral.orm import (  # noqa: F401
-        BehavioralInsights,
-        BehavioralTestResults,
-        BehavioralTestRuns,
-        BehavioralTestScenarios,
-        BehavioralTests,
-    )
-    from bebshax.interview.orm import (  # noqa: F401
-        Conversations,
-        ConversationTurns,
-        InterviewInsights,
-        Interviews,
-        InterviewTurns,
-    )
-    from bebshax.memory.orm import MemoryItems  # noqa: F401
-    from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence  # noqa: F401
+    metadata = get_metadata()
 
-    # 1. Enable extensions if on PostgreSQL
-    async with engine.connect() as conn:
-        if conn.dialect.name == "postgresql":
-            try:
-                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-                await conn.commit()
-            except Exception as exc:
-                logger.info("Notice: PostgreSQL vector extension: %s", exc)
-
-    # 2. Schema: alembic is the single source of truth (docs/DATABASE_MIGRATION.md).
-    #    create_all is a BOOTSTRAP for empty databases only — and is stamped so
-    #    later `alembic upgrade head` runs cleanly instead of fighting create_all.
-    def _inspect_state(sync_conn):
-        from sqlalchemy import inspect as sa_inspect
-        insp = sa_inspect(sync_conn)
-        return insp.has_table("alembic_version"), insp.has_table("businesses")
-
-    async with engine.connect() as conn:
-        alembic_managed, has_app_schema = await conn.run_sync(_inspect_state)
-
-    if alembic_managed:
-        logger.info("alembic_version present — schema owned by alembic; skipping create_all")
-    else:
+    if engine.dialect.name == "sqlite":
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-            head = _alembic_script_head()
-            if not has_app_schema and head:
-                # Fresh database: record the head so alembic and create_all agree.
-                await conn.execute(
-                    text(
-                        "CREATE TABLE IF NOT EXISTS alembic_version ("
-                        "version_num VARCHAR(32) NOT NULL, "
-                        "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
-                    )
+            await conn.run_sync(metadata.create_all)
+    else:
+        from alembic.runtime.migration import MigrationContext
+
+        head = _alembic_script_head()
+        async with engine.connect() as conn:
+            current_heads = await conn.run_sync(
+                lambda sync_conn: MigrationContext.configure(sync_conn).get_current_heads()
+            )
+            if tuple(current_heads) != (head,):
+                raise RuntimeError(
+                    "Database schema is not at the Alembic head. Run `alembic upgrade head` "
+                    "before starting the application; unversioned legacy schemas require "
+                    "reconciliation first."
                 )
-                await conn.execute(text("DELETE FROM alembic_version"))
-                await conn.execute(
-                    text("INSERT INTO alembic_version (version_num) VALUES (:v)"), {"v": head}
-                )
-                logger.info("fresh database bootstrapped via create_all and stamped at %s", head)
-            elif has_app_schema:
-                logger.warning(
-                    "legacy create_all schema without alembic_version detected — "
-                    "missing tables were created but the revision was NOT stamped; "
-                    "reconcile manually with `alembic stamp <revision>`"
-                )
+            await conn.run_sync(lambda sync_conn: _validate_schema(sync_conn, metadata))
+        logger.info("Database revision and schema match the checked-in Alembic metadata")
 
     # 3. Shared-tenant users rows (usr_default & co.) must exist before any
     #    owner_id-stamped insert — independent of demo seeding.
@@ -210,23 +215,23 @@ async def init_database(
             from bebshax.db.seed import ensure_shared_tenant_users
             await ensure_shared_tenant_users(sessionmaker_)
         except Exception:
-            logger.warning("shared-tenant user bootstrap failed", exc_info=True)
+            logger.warning("Shared-tenant user bootstrap failed")
 
     # 4. Seed demo data if requested and sessionmaker is provided
     if seed and sessionmaker_:
         try:
             from bebshax.db.seed import seed_demo_data
             await seed_demo_data(sessionmaker_)
-        except Exception as exc:
-            logger.warning("Notice: Seed demo data skipped or already seeded: %s", exc)
+        except Exception:
+            logger.warning("Demo data seeding failed")
 
-    table_names = list(Base.metadata.tables.keys())
+    table_names = list(metadata.tables.keys())
     logger.info("Database schema initialized with %d tables: %s", len(table_names), table_names)
     return table_names
 
 
 async def get_session(
-    sessionmaker_: sessionmaker[AsyncSession],
+    sessionmaker_: Callable[[], AsyncSession],
 ) -> AsyncGenerator[AsyncSession, None]:
     """Dependency for FastAPI endpoints."""
     async with sessionmaker_() as session:

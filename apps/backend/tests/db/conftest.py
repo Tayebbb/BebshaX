@@ -1,10 +1,16 @@
 """Database test fixtures."""
 
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from bebshax.db.models import Base
+from bebshax.db.engine import get_metadata
+
+
+def pytest_addoption(parser) -> None:
+    parser.addoption(
+        "--db-docker", action="store_true", default=False,
+        help="Run DB integration tests in uniquely named disposable local Docker PostgreSQL containers only.",
+    )
 
 
 @pytest_asyncio.fixture
@@ -16,7 +22,7 @@ async def async_engine():
     )
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(get_metadata().create_all)
 
     yield engine
 
@@ -26,9 +32,7 @@ async def async_engine():
 @pytest_asyncio.fixture
 async def async_session(async_engine):
     """Create an async session for tests."""
-    async_sessionmaker = sessionmaker(
-        async_engine, class_=AsyncSession, expire_on_commit=False
-    )
+    factory = async_sessionmaker(async_engine, expire_on_commit=False)
 
-    async with async_sessionmaker() as session:
+    async with factory() as session:
         yield session

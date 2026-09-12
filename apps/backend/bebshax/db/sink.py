@@ -1,40 +1,34 @@
-"""Asynchronous provenance sink: writes LLM request records to the database
-without letting DB latency/failure surface as LLM failures (RULES.md R2).
+"""Awaited durable provenance with a legacy best-effort queue API.
 
-Rationale: The failure taxonomy is closed and load-bearing. A synchronous DB
-write would introduce a 14th failure mode (DB latency/down) that doesn't belong
-in the taxonomy. Provenance is observability; observability must never be able
-to fail a request. We prefer provenance loss under backpressure over request
-failure—document the trade-off explicitly.
+Persistence failure is a finalization error, never a provider fallback signal.
+Failed or ambiguously committed records remain available for reconciliation.
 """
 
 import asyncio
 import logging
+from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import sessionmaker
 
 from bebshax.db.models import LLMRequests
 from bebshax.llm.provenance import ProvenanceRecord
+from bebshax.tenancy_context import capture_provenance_owner
 
 logger = logging.getLogger(__name__)
 
 
 class ProvenanceSink:
-    """Synchronous sink (queue.put_nowait) + async writer task.
-
-    The LLM path calls sink(record) synchronously and synchronously;
-    the writer task runs in the background, draining and inserting.
-    """
+    """Use await persist(record) for commit acknowledgment; __call__ only submits."""
 
     def __init__(
         self,
-        sessionmaker_: sessionmaker[AsyncSession],
+        sessionmaker_: Callable[[], AsyncSession],
         batch_size: int = 100,
         batch_timeout_ms: int = 5000,
         log_interval: int = 100,
-    ):
+    ) -> None:
         """Initialize the sink.
 
         Args:
@@ -60,21 +54,80 @@ class ProvenanceSink:
         self.total_dropped = 0
         self.total_db_errors = 0
         self.queue_full_count = 0
+        self.failed_records: dict[str, ProvenanceRecord] = {}
+        self._owners: dict[str, str | None] = {}
+        self._closed = False
+
+    def _capture_owner(self, record: ProvenanceRecord) -> None:
+        owner = capture_provenance_owner(record)
+        if record.owner_user_id is not None:
+            declared_owner = capture_provenance_owner(
+                SimpleNamespace(owner_id=record.owner_user_id)
+            )
+            if owner is not None and owner != declared_owner:
+                raise ValueError("Provenance owner conflicts with submission identity")
+            owner = declared_owner
+        if record.request_id in self._owners:
+            if owner is not None and owner != self._owners[record.request_id]:
+                raise ValueError("Provenance owner conflicts with submission identity")
+        else:
+            self._owners[record.request_id] = owner
+
+    async def persist(self, record: ProvenanceRecord) -> None:
+        """Return only after commit; retain the complete record on every failure."""
+        if self._closed:
+            record.persistence_status = "failed"
+            self.failed_records[record.request_id] = record
+            raise RuntimeError("Provenance persistence failed: sink is closed")
+        record.persistence_status = "submitted"
+        try:
+            self._capture_owner(record)
+            await self._write_batch([record])
+        except asyncio.CancelledError:
+            record.persistence_status = "unknown"
+            self.failed_records[record.request_id] = record
+            raise
+        except Exception:
+            self._record_failure([record])
+            raise RuntimeError("Provenance persistence failed") from None
+
+    def _record_failure(self, records: list[ProvenanceRecord]) -> None:
+        self.total_db_errors += 1
+        for record in records:
+            record.persistence_status = "failed"
+            self.failed_records[record.request_id] = record
+        if self.total_db_errors == 1 or self.total_db_errors % max(1, self.log_interval) == 0:
+            logger.error("ProvenanceSink: database commit failed (%d failures)", self.total_db_errors)
 
     def __call__(self, record: ProvenanceRecord) -> None:
         """Synchronous sink: enqueue a provenance record.
 
         Never raises. On queue full, increments counter + log warning, returns.
         """
+        if self._closed:
+            record.persistence_status = "failed"
+            self.failed_records[record.request_id] = record
+            self.total_dropped += 1
+            return
         try:
+            self._capture_owner(record)
+            record.persistence_status = "submitted"
             self.queue.put_nowait(record)
             self.total_enqueued += 1
         except asyncio.QueueFull:
+            record.persistence_status = "failed"
+            self.failed_records[record.request_id] = record
+            self.total_dropped += 1
             self.queue_full_count += 1
             if self.queue_full_count % 10 == 0:
                 logger.warning(
                     f"ProvenanceSink: queue full; dropped {self.queue_full_count} records"
                 )
+        except ValueError:
+            record.persistence_status = "failed"
+            self.failed_records[record.request_id] = record
+            self.total_dropped += 1
+            logger.error("ProvenanceSink: invalid submission ownership")
 
     async def _writer(self) -> None:
         """Background writer task: drain queue and insert to DB.
@@ -135,55 +188,71 @@ class ProvenanceSink:
                     batch = []
                     last_flush = loop.time()
 
-            except Exception as e:
-                logger.exception(f"ProvenanceSink writer: unexpected error: {e}")
+            except asyncio.CancelledError:
+                for record in batch:
+                    record.persistence_status = "unknown"
+                    self.failed_records[record.request_id] = record
+                    self.queue.task_done()
+                raise
+            except Exception:
+                logger.error("ProvenanceSink writer failed")
 
     async def _insert_batch(self, batch: list[ProvenanceRecord]) -> None:
-        """Insert a batch of records to the database.
-
-        On failure, log (rate-limited) and drop the batch. Never re-raises.
-        """
+        """Legacy queued delivery: retain failures without raising to producers."""
         if not batch:
             return
-
         try:
-            async with self.sessionmaker() as session:
-                records = [
-                    LLMRequests(
-                        request_id=r.request_id,
-                        task=str(r.task),  # ProvenanceRecord.task is already a str
-                        pool=r.pool,
-                        persona_id=r.persona_id,
-                        conversation_id=r.conversation_id,
-                        created_at=r.created_at,
-                        routing_path=r.routing_path,
-                        # mode="json" → datetimes become ISO strings (JSON column)
-                        attempts=[a.model_dump(mode="json") for a in r.attempts],
-                        served_by_provider=r.served_by_provider,
-                        request_model=r.served_by_model,  # OTel naming
-                        response_model=r.served_by_model,
-                        input_tokens=r.input_tokens,
-                        output_tokens=r.output_tokens,
-                        total_latency_ms=r.total_latency_ms,
-                        success=r.success,
-                    )
-                    for r in batch
-                ]
-                session.add_all(records)
-                await session.commit()
-                self.total_written += len(batch)
-        except Exception as e:
-            self.total_db_errors += 1
-            # Always log the FIRST error; rate-limit the rest (audit finding B1).
-            if self.total_db_errors == 1 or self.total_db_errors % self.log_interval == 0:
-                logger.error(
-                    f"ProvenanceSink: DB error #{self.total_db_errors} "
-                    f"(logging 1 per {self.log_interval} after the first): {e}"
-                )
+            await self._write_batch(batch)
+        except Exception:
+            self._record_failure(batch)
             self.total_dropped += len(batch)
+
+    async def _write_batch(self, batch: list[ProvenanceRecord]) -> None:
+        for record in batch:
+            if record.request_id not in self._owners:
+                self._capture_owner(record)
+        async with self.sessionmaker() as session:
+            rows = [
+                LLMRequests(
+                    request_id=record.request_id,
+                    owner_id=self._owners[record.request_id],
+                    study_id=record.study_id,
+                    data_classification=record.data_classification,
+                    processing_policy_id=record.processing_policy_id,
+                    processing_provider_allowlist=list(record.processing_provider_allowlist),
+                    processing_openrouter_upstreams=list(record.processing_openrouter_upstreams),
+                    estimated_tokens=record.estimated_tokens,
+                    task=str(record.task),
+                    pool=record.pool,
+                    persona_id=record.persona_id,
+                    conversation_id=record.conversation_id,
+                    created_at=record.created_at,
+                    routing_path=list(record.routing_path),
+                    attempts=[attempt.model_dump(mode="json") for attempt in record.attempts],
+                    served_by_provider=record.served_by_provider,
+                    request_model=record.served_by_model,
+                    response_model=record.served_by_model,
+                    input_tokens=record.input_tokens,
+                    output_tokens=record.output_tokens,
+                    total_latency_ms=record.total_latency_ms,
+                    success=record.success,
+                )
+                for record in batch
+            ]
+            session.add_all(rows)
+            await session.commit()
+        self.total_written += len(batch)
+        for record in batch:
+            record.persistence_status = "acknowledged"
+            self.failed_records.pop(record.request_id, None)
+            self._owners.pop(record.request_id, None)
 
     async def start(self) -> None:
         """Start the writer task."""
+        if self._closed:
+            raise RuntimeError("Provenance sink is closed")
+        if self.writer_task is not None and not self.writer_task.done():
+            return
         self.writer_running = True
         self.writer_task = asyncio.create_task(self._writer())
 
@@ -197,17 +266,27 @@ class ProvenanceSink:
         Args:
             timeout_s: max time to wait for writer to finish
         """
+        if self._closed:
+            return
+        self._closed = True
         self.writer_running = False
-        await self.queue.put(None)
-
-        if self.writer_task:
+        if self.writer_task and not self.writer_task.done():
             try:
-                await asyncio.wait_for(self.writer_task, timeout=timeout_s)
+                async with asyncio.timeout(timeout_s):
+                    await self.queue.put(None)
+                    await self.writer_task
             except asyncio.TimeoutError:
-                logger.warning(
-                    f"ProvenanceSink: writer did not finish within {timeout_s}s; cancelling"
-                )
+                logger.warning("ProvenanceSink: writer shutdown timed out")
                 self.writer_task.cancel()
+                await asyncio.gather(self.writer_task, return_exceptions=True)
+
+        while not self.queue.empty():
+            record = self.queue.get_nowait()
+            if record is not None:
+                record.persistence_status = "failed"
+                self.failed_records[record.request_id] = record
+                self.total_dropped += 1
+            self.queue.task_done()
 
         logger.info(
             f"ProvenanceSink stopped: {self.total_enqueued} enqueued, "

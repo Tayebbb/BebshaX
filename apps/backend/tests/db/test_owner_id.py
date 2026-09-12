@@ -27,6 +27,7 @@ def test_businesses_owner_id_fk():
 
 
 def test_personas_owner_id_fk():
-    c = Personas.__table__.c.get("owner_id")
-    fks = list(c.foreign_keys)
-    assert len(fks) == 1 and "users.id" in str(fks[0].target_fullname)
+    column = Personas.__table__.c.get("owner_id")
+    assert {foreign_key.target_fullname for foreign_key in column.foreign_keys} == {
+        "users.id", "dataset_persona_runs.user_id",
+    }

@@ -8,11 +8,12 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, CheckConstraint, DateTime, Enum, Float, ForeignKey, ForeignKeyConstraint, Index, String, Text, UniqueConstraint, event, inspect
+from sqlalchemy.engine import Connection
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, Mapper, mapped_column, relationship
 
-from bebshax.llm.adapters.embeddings import CANONICAL_DIM
+from bebshax.llm.embedding_space import CANONICAL_DIM
 from bebshax.llm.types import TaskType
 
 
@@ -45,6 +46,22 @@ class Base(DeclarativeBase):
     }
 
 
+@event.listens_for(Base, "after_mapper_constructed", propagate=True)
+def _register_vector_index(mapper: Mapper, model: type[Base]) -> None:
+    """Register shared indexes independently of feature-owned table constraints."""
+    index_name = {
+        "evidence_chunks": "ix_evidence_chunks_embedding_hnsw",
+        "memory_items": "ix_memory_items_embedding_hnsw",
+    }.get(getattr(model, "__tablename__", ""))
+    if index_name is not None:
+        Index(
+            index_name,
+            mapper.local_table.c.embedding,
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ).ddl_if(dialect="postgresql")
+
+
 class LLMRequests(Base):
     """Per-request LLM provenance: provider, model, routing path, attempts,
     latency, tokens, failure/fallback reasons, final serving model.
@@ -63,6 +80,18 @@ class LLMRequests(Base):
     __tablename__ = "llm_requests"
 
     request_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, comment="Immutable request-time owner; NULL means private unknown owner; no FK"
+    )
+    study_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    data_classification: Mapped[str] = mapped_column(String(16), default="unknown", server_default="unknown")
+    processing_policy_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    processing_provider_allowlist: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list, server_default="[]"
+    )
+    processing_openrouter_upstreams: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=list, server_default="[]"
+    )
     task: Mapped[str] = mapped_column(Enum(TaskType, native_enum=False))
     pool: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     persona_id: Mapped[Optional[str]] = mapped_column(
@@ -87,6 +116,7 @@ class LLMRequests(Base):
     response_model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
 
     # Tokens + latency (OTel naming)
+    estimated_tokens: Mapped[Optional[int]] = mapped_column(nullable=True)
     input_tokens: Mapped[Optional[int]] = mapped_column(nullable=True)
     output_tokens: Mapped[Optional[int]] = mapped_column(nullable=True)
     total_latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -99,9 +129,20 @@ class LLMRequests(Base):
     completion_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
+        CheckConstraint(
+            "data_classification IN ('synthetic', 'private', 'unknown')",
+            name="ck_llm_requests_data_classification",
+        ),
         Index("ix_llm_requests_created_at_desc", created_at.desc()),
         Index("ix_llm_requests_provider_model", "served_by_provider", "request_model"),
+        Index("ix_llm_requests_owner_created_at", "owner_id", created_at.desc()),
     )
+
+
+@event.listens_for(LLMRequests, "before_update")
+def _protect_provenance_owner(mapper: Mapper, connection: Connection, target: LLMRequests) -> None:
+    if inspect(target).attrs.owner_id.history.has_changes():
+        raise ValueError("Provenance owner is immutable after insertion.")
 
 
 class ModelRegistry(Base):
@@ -151,6 +192,7 @@ class Businesses(Base):
     """
 
     __tablename__ = "businesses"
+    __table_args__ = (UniqueConstraint("id", "owner_id", name="uq_businesses_id_owner"),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(256), index=True)
@@ -176,6 +218,19 @@ class Personas(Base):
     """Synthetic customer persona grounded in study segments, dataset distributions, and research evidence."""
 
     __tablename__ = "personas"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["dataset_persona_run_id", "owner_id"], ["dataset_persona_runs.id", "dataset_persona_runs.user_id"],
+            name="fk_personas_dataset_run_owner", ondelete="RESTRICT",
+        ),
+        CheckConstraint("dataset_persona_run_id IS NULL OR generation_run_id IS NULL", name="ck_personas_generation_origin"),
+        CheckConstraint("dataset_segment_key IS NULL OR segment_id IS NULL", name="ck_personas_segment_origin"),
+        CheckConstraint("dataset_version_id IS NULL OR dataset_persona_run_id IS NOT NULL", name="ck_personas_dataset_version_run"),
+        CheckConstraint(
+            "dataset_segment_key IS NULL OR (dataset_version_id IS NOT NULL AND length(trim(dataset_segment_key)) > 0)",
+            name="ck_personas_dataset_segment_version",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     business_id: Mapped[Optional[str]] = mapped_column(
@@ -194,6 +249,12 @@ class Personas(Base):
 
     segment_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     generation_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    dataset_persona_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    dataset_version_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("dataset_versions.id", name="fk_personas_dataset_version", ondelete="RESTRICT"),
+        nullable=True, index=True,
+    )
+    dataset_segment_key: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     name: Mapped[str] = mapped_column(String(256), index=True)
     status: Mapped[str] = mapped_column(
         String(64), default="ready"
@@ -273,6 +334,7 @@ class Studies(Base):
     """Research study workflow state, questions, goal, and results."""
 
     __tablename__ = "studies"
+    __table_args__ = (UniqueConstraint("id", "user_id", name="uq_studies_id_owner"),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
@@ -284,6 +346,8 @@ class Studies(Base):
     pricing_hypothesis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(64), default="draft")  # draft, in_progress, completed, archived
     step: Mapped[int] = mapped_column(default=1)
+    revision: Mapped[int] = mapped_column(default=1, server_default="1", nullable=False)
+    __mapper_args__ = {"version_id_col": revision}
     persona_count: Mapped[int] = mapped_column(default=0)
     persona_ids: Mapped[list[str]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=list
@@ -347,6 +411,7 @@ class DatasetSources(Base):
     """Dataset source metadata, profiled schema, statistics, and derived segments."""
 
     __tablename__ = "dataset_sources"
+    __table_args__ = (UniqueConstraint("id", "user_id", name="uq_dataset_sources_id_owner"),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
@@ -386,6 +451,7 @@ class DatasetPersonaRuns(Base):
     """Audit record for persona generation runs grounded in dataset distributions."""
 
     __tablename__ = "dataset_persona_runs"
+    __table_args__ = (UniqueConstraint("id", "user_id", name="uq_dataset_persona_runs_id_owner"),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     dataset_id: Mapped[str] = mapped_column(String(64), index=True)
@@ -559,7 +625,7 @@ class EvidenceChunks(Base):
     chunk_index: Mapped[int] = mapped_column(default=0)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(
-        JSON().with_variant(Vector(CANONICAL_DIM), "postgresql")
+        Vector(CANONICAL_DIM).with_variant(JSON(), "sqlite")
     )
     embedding_space: Mapped[str] = mapped_column(String(64), index=True)
     metadata_payload: Mapped[dict] = mapped_column(
@@ -700,6 +766,10 @@ class StudyReports(Base):
     """Final comprehensive research report synthesized from evidence, datasets, personas, interviews, and simulations."""
 
     __tablename__ = "study_reports"
+    __table_args__ = (
+        UniqueConstraint("study_id", "version", name="uq_study_reports_study_version"),
+        CheckConstraint("version >= 1", name="ck_study_reports_positive_version"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(String(64), index=True)

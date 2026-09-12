@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config, create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
 from pgvector.sqlalchemy import Vector
@@ -14,13 +14,7 @@ from pgvector.sqlalchemy import Vector
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from bebshax.config import get_settings
-from bebshax.db.engine import normalize_async_database_url
-from bebshax.db.models import Base
-import bebshax.persona.orm  # noqa: F401 — registers Phase-8 persona tables on Base.metadata
-import bebshax.memory.orm  # noqa: F401 — registers Phase-9 memory_items on Base.metadata
-import bebshax.interview.orm  # noqa: F401 — registers Phase-10 conversation tables on Base.metadata
-import bebshax.behavioral.orm  # noqa: F401 — registers behavioral testing tables on Base.metadata
-import bebshax.auth.models  # noqa: F401 — registers Users table on Base.metadata
+from bebshax.db.engine import get_metadata, normalize_async_database_url
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -31,7 +25,16 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Target metadata for autogenerate
-target_metadata = Base.metadata
+target_metadata = get_metadata()
+
+
+def migration_url() -> str:
+    explicit_url = config.attributes.get("database_url")
+    if explicit_url is not None:
+        if not isinstance(explicit_url, str) or not explicit_url:
+            raise ValueError("An explicit migration database_url must be a nonempty string")
+        return normalize_async_database_url(explicit_url)
+    return normalize_async_database_url(get_settings().database_url)
 
 
 def run_migrations_offline() -> None:
@@ -46,23 +49,23 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    settings = get_settings()
-    url = settings.database_url
-
     context.configure(
-        url=url,
+        url=migration_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
 
     with context.begin_transaction():
+        if context.get_context().dialect.name == "postgresql":
+            context.execute("CREATE EXTENSION IF NOT EXISTS vector")
         context.run_migrations()
 
 
 def do_run_migrations(connection: Connection) -> None:
     # Register pgvector type for Alembic (UPPERCASE as per pgvector-python current API)
-    connection.dialect.ischema_names["vector"] = Vector
+    if connection.dialect.name == "postgresql":
+        connection.dialect.ischema_names["vector"] = Vector
 
     context.configure(
         connection=connection,
@@ -72,6 +75,8 @@ def do_run_migrations(connection: Connection) -> None:
     )
 
     with context.begin_transaction():
+        if connection.dialect.name == "postgresql":
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         context.run_migrations()
 
 
@@ -80,29 +85,29 @@ async def run_async_migrations() -> None:
     and associate a connection with the context.
 
     """
-    settings = get_settings()
-    db_url = normalize_async_database_url(settings.database_url)
-
     connectable = create_async_engine(
-        db_url,
+        migration_url(),
         poolclass=pool.NullPool,
+        hide_parameters=True,
     )
 
-    async with connectable.connect() as connection:
-        # Register pgvector extension if on Postgres
-        if connection.dialect.name == "postgresql":
-            await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            await connection.commit()
-
-        await connection.run_sync(do_run_migrations)
-
-    await connectable.dispose()
+    try:
+        async with connectable.connect() as connection:
+            await connection.run_sync(do_run_migrations)
+    finally:
+        await connectable.dispose()
 
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
 
-    asyncio.run(run_async_migrations())
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        if not isinstance(connection, Connection):
+            raise TypeError("The migration connection must be a SQLAlchemy Connection")
+        do_run_migrations(connection)
+    else:
+        asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():
