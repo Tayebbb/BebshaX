@@ -36,14 +36,14 @@ async def test_user_a_cannot_access_user_b_interviews(tmp_path, monkeypatch):
 
     async with maker() as session:
         # User A setup
-        user_a = Users(id="usr_a", email="usera@example.com", hashed_password="hashed_pw_a", full_name="User A")
+        user_a = Users(id="usr_a", email="usera@example.com", hashed_password="hashed_pw_a", full_name="User A", is_verified=True)
         study_a = Studies(id="std_a", user_id="usr_a", title="Study A", status="in_progress")
         persona_a = Personas(id="per_a", study_id="std_a", user_id="usr_a", owner_id="usr_a", name="Persona A", version=1)
         conv_a = Conversations(id="conv_a", study_id="std_a", user_id="usr_a", persona_id="per_a", objective="Obj A", status="active")
         ins_a = InterviewInsights(id="ins_a", interview_id="conv_a", study_id="std_a", user_id="usr_a", persona_id="per_a", type="pain_point", title="Insight A", description="Desc A")
 
         # User B setup
-        user_b = Users(id="usr_b", email="userb@example.com", hashed_password="hashed_pw_b", full_name="User B")
+        user_b = Users(id="usr_b", email="userb@example.com", hashed_password="hashed_pw_b", full_name="User B", is_verified=True)
         study_b = Studies(id="std_b", user_id="usr_b", title="Study B", status="in_progress")
         persona_b = Personas(id="per_b", study_id="std_b", user_id="usr_b", owner_id="usr_b", name="Persona B", version=1)
         conv_b = Conversations(id="conv_b", study_id="std_b", user_id="usr_b", persona_id="per_b", objective="Obj B", status="active")
@@ -137,7 +137,7 @@ async def test_interview_metrics_aggregation_matches_counting(tmp_path, monkeypa
     maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with maker() as session:
-        user = Users(id="usr_m", email="metrics@example.com", hashed_password="pw", full_name="Metrics")
+        user = Users(id="usr_m", email="metrics@example.com", hashed_password="pw", full_name="Metrics", is_verified=True)
         study = Studies(id="std_m", user_id="usr_m", title="Metrics Study", status="in_progress")
         persona = Personas(id="per_m", study_id="std_m", user_id="usr_m", owner_id="usr_m", name="P", version=1)
         # 2 active, 3 completed, 1 other
@@ -188,7 +188,7 @@ async def test_parentless_rows_are_rejected_not_silently_accepted(tmp_path, monk
 
     async with maker() as session:
         session.add_all([
-            Users(id="usr_np", email="np@example.com", hashed_password="pw", full_name="NP"),
+            Users(id="usr_np", email="np@example.com", hashed_password="pw", full_name="NP", is_verified=True),
             Studies(id="std_np", user_id="usr_np", title="Own Study", status="in_progress"),
             # Both children are parentless: study_id is NULL.
             Personas(id="per_np", study_id=None, user_id="usr_np", owner_id="usr_np",

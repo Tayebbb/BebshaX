@@ -9,8 +9,13 @@ from bebshax.auth.security import create_access_token
 from bebshax.interview.orm import ConversationTurns
 
 _SSE_OWNER_ID = "usr_sse_owner"
-# Posting an interview message writes turns, so it needs the owner's token.
-_SSE_HEADERS = {"Authorization": f"Bearer {create_access_token({'sub': _SSE_OWNER_ID})}"}
+
+
+def _sse_headers() -> dict[str, str]:
+    # Posting an interview message writes turns, so it needs the owner's token.
+    # Minted per call: jti-less tokens expire after ACCESS_LIFETIME (15 min), so
+    # an import-time token dies partway through a full-suite run.
+    return {"Authorization": f"Bearer {create_access_token({'sub': _SSE_OWNER_ID})}"}
 
 
 async def _seed_owner(session) -> None:
@@ -40,7 +45,7 @@ async def test_ask_stream_persists_same_shape_as_ask(
 
     llm, _ = llm_factory(["I buy lunch near campus most days."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "spend check")
+    conversation = await engine.start(stored_persona.id, "spend check", user_id="test-interview-owner")
 
     events = await _collect(engine.ask_stream(conversation.id, "Where do you eat lunch?"))
     assert events[0]["type"] == "delta"
@@ -84,7 +89,7 @@ async def test_ask_stream_over_pool_router_releases_slot_and_fires_provenance(
         on_provenance=records.append,
     )
     engine = InterviewEngine(router, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "router stream check")
+    conversation = await engine.start(stored_persona.id, "router stream check", user_id="test-interview-owner")
 
     events = await _collect(engine.ask_stream(conversation.id, "Say something."))
     assert events[-1]["type"] == "done"
@@ -152,7 +157,7 @@ async def test_sse_endpoint_emits_error_event_with_kind(
                 "POST",
                 f"/api/studies/std_sse_err/interviews/{conversation.id}/messages/stream",
                 json={"content": "Anyone there?"},
-                headers=_SSE_HEADERS,
+                headers=_sse_headers(),
             ) as resp:
                 raw = (await resp.aread()).decode()
 
@@ -211,7 +216,7 @@ async def test_sse_endpoint_emits_delta_then_done(
                 "POST",
                 f"/api/studies/std_sse/interviews/{conversation.id}/messages/stream",
                 json={"content": "Say something."},
-                headers=_SSE_HEADERS,
+                headers=_sse_headers(),
             ) as resp:
                 assert resp.status_code == 200
                 assert resp.headers["content-type"].startswith("text/event-stream")

@@ -29,14 +29,6 @@ from bebshax.persona.evidence import EvidenceStore
 from bebshax.persona.generation import PersonaEngine
 
 
-@pytest.fixture(autouse=True)
-def _hermetic_local_tier(monkeypatch):
-    """Point OllamaAdapter at an unroutable port so no unit test ever touches a
-    real daemon (connection refused is instant → adapter contributes no routes).
-    Adapter-level tests inject their own mock clients and are unaffected."""
-    monkeypatch.setenv("OLLAMA_API_BASE", "http://127.0.0.1:9")
-
-
 @pytest.fixture
 def ml_training_records() -> list["TrainingRecord"]:
     from bebshax_persona_ml.data import TrainingRecord
@@ -110,6 +102,7 @@ async def api_test_app(tmp_path, monkeypatch, ml_artifact):
     monkeypatch.setenv("BEBSHAX_UPLOAD_DIR", str(tmp_path / "uploads"))
     monkeypatch.setenv("BEBSHAX_EMBEDDING_BACKEND", "local")
     monkeypatch.setenv("BEBSHAX_DEMO_MODE", "false")
+    monkeypatch.setenv("BEBSHAX_ENVIRONMENT", "development")
     get_settings.cache_clear()
 
     engine = create_async_engine(db_url)
@@ -142,23 +135,14 @@ async def api_test_app(tmp_path, monkeypatch, ml_artifact):
 
     monkeypatch.setattr(adapter, "complete", reject_persona_llm)
     adapters = {
-        "openrouter": adapter,
+        "openrouter": FakeAdapter([]),
         "freellmpool": adapter,
-        "ollama": adapter,
         "pollinations": adapter,
     }
 
-    monkeypatch.setattr("bebshax.main.build_default_adapters", lambda: adapters)
+    monkeypatch.setattr("bebshax.main.build_default_adapters", lambda **kwargs: adapters)
     app = create_app()
-    with TestClient(app) as client:
-        llm_router = PoolRouter(adapters, on_provenance=app.state.provenance_sink)
-        app.state.llm_adapters = adapters
-        app.state.llm_router = llm_router
-        app.state.llm_service = llm_router
-        app.state.persona_engine = PersonaEngine(llm_router, EvidenceStore(), ml_generator=app.state.persona_ml)
-        app.state.interview_engine = InterviewEngine(
-            llm_router, app.state.db_sessionmaker, memory=app.state.memory_service
-        )
+    with TestClient(app, client=("127.0.0.1", 50000)) as client:
         yield client
     get_settings.cache_clear()
 
@@ -190,6 +174,34 @@ async def auth_headers(api_test_app):
     """Return auth headers for a seeded test user — use on write endpoints."""
     headers = await seed_test_user(api_test_app.app.state.db_sessionmaker)
     return headers
+
+
+async def seed_developer_user(db_sessionmaker) -> dict[str, str]:
+    """Insert a verified developer and return auth headers for diagnostics routes."""
+    from bebshax.auth.models import Users
+    from bebshax.auth.security import create_access_token
+
+    user_id = "usr_test_developer"
+    async with db_sessionmaker() as session:
+        if await session.get(Users, user_id) is None:
+            session.add(Users(
+                id=user_id,
+                email="developer@test.local",
+                full_name="Test Developer",
+                auth_provider="email",
+                role="developer",
+                is_active=True,
+                is_verified=True,
+            ))
+            await session.commit()
+    return {"Authorization": f"Bearer {create_access_token(user_id)}"}
+
+
+@pytest.fixture
+async def developer_headers(api_test_app):
+    """Developer-role headers: routes/status, routing/capacity and evaluation metrics
+    are development-only, loopback-only and role-gated."""
+    return await seed_developer_user(api_test_app.app.state.db_sessionmaker)
 
 
 @pytest.fixture
@@ -229,8 +241,8 @@ async def ml_api_app(tmp_path: Path, ml_artifact: Path, monkeypatch, request):
         return await original_complete(candidate, llm_request)
 
     monkeypatch.setattr(adapter, "complete", reject_persona_llm)
-    adapters = {name: adapter for name in ("openrouter", "freellmpool", "ollama", "pollinations")}
-    monkeypatch.setattr("bebshax.main.build_default_adapters", lambda: adapters)
+    adapters = {"freellmpool": adapter, "openrouter": FakeAdapter([]), "pollinations": adapter}
+    monkeypatch.setattr("bebshax.main.build_default_adapters", lambda **kwargs: adapters)
     app = create_app()
     app.state.ml_test_llm = adapter
     try:
@@ -368,7 +380,7 @@ class TaskAwareFakeAdapter(FakeAdapter):
             chunk_ids = [t for t in tokens if t.startswith("chk_")]
             src_ids = [t for t in tokens if t.startswith("src_")]
             text = _json.dumps(
-                [
+                {"claims": [
                     {"claim_text": "Students miss deadlines while juggling several apps.", "status": "supported",
                      "category": "problem", "supporting_source_ids": src_ids[:1],
                      "supporting_chunk_ids": chunk_ids[:1], "rationale": "stated in chunk"},
@@ -378,12 +390,13 @@ class TaskAwareFakeAdapter(FakeAdapter):
                     {"claim_text": "Students will pay any price for planners.", "status": "unsupported",
                      "category": "pricing", "supporting_source_ids": [], "supporting_chunk_ids": [],
                      "rationale": "contradicted by pricing chunk"},
-                ]
+                ]}
             )
         elif "research plan" in prompt.lower():
             text = _json.dumps(self.plan_reply)
         else:
-            text = _json.dumps(self.queries_reply)
+            # json_mode requires a complete JSON object; the generator unwraps "queries".
+            text = _json.dumps({"queries": self.queries_reply})
         self.calls.append(f"{candidate.provider}/{candidate.model}")
         self.requests.append(request)
         return AdapterCompletion(text=text, usage=TokenUsage(), provider=candidate.provider, model=candidate.model)
@@ -396,9 +409,9 @@ def research_llm():
     def _build(app=None, **kwargs):
         cand = RouteCandidate(provider="pollinations", model="deepseek-r1")
         adapter = TaskAwareFakeAdapter(routes=[FakeRoute(candidate=cand)], **kwargs)
-        adapters = {name: adapter for name in ("openrouter", "freellmpool", "ollama", "pollinations")}
+        adapters = {"freellmpool": adapter, "openrouter": FakeAdapter([]), "pollinations": adapter}
         sink = getattr(app.state, "provenance_sink", None) if app is not None else None
-        return PoolRouter(adapters, on_provenance=sink), adapter
+        return PoolRouter(adapters, on_provenance=sink.persist if sink is not None else None), adapter
 
     return _build
 

@@ -55,9 +55,9 @@ async def test_store_20_memories_and_retrieve_expected_topk(pg_env) -> None:
     maker, persona_id = pg_env
     service = MemoryService(maker, HashEmbedding())
     for text in NOISE + RELEVANT:
-        await service.remember(persona_id, text)
+        await service.remember(persona_id, text, owner_id="test-memory-owner")
 
-    results = await service.retrieve(persona_id, "refund policy for late delivery", k=5)
+    results = await service.retrieve(persona_id, "refund policy for late delivery", k=5, owner_id="test-memory-owner")
     assert len(results) == 5
     assert all(r.text in RELEVANT for r in results[:3]), [r.text for r in results]
 
@@ -74,9 +74,9 @@ async def test_reflection_produces_stored_summary_on_pg(pg_env) -> None:
     )
     service = MemoryService(maker, HashEmbedding(), llm=SingleAdapterLLMService(adapter))
     for text in RELEVANT + NOISE[:5]:
-        await service.remember(persona_id, text)
+        await service.remember(persona_id, text, owner_id="test-memory-owner")
 
-    stored = await service.reflect(persona_id)
+    stored = await service.reflect(persona_id, owner_id="test-memory-owner")
     assert len(stored) == 1 and stored[0].kind == "reflection"
-    results = await service.retrieve(persona_id, "biggest frustration with deliveries", k=3)
+    results = await service.retrieve(persona_id, "biggest frustration with deliveries", k=3, owner_id="test-memory-owner")
     assert any(r.kind == "reflection" for r in results)

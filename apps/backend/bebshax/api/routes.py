@@ -5,27 +5,27 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import select, func, desc, or_
+from sqlalchemy import select, func, desc
 
-from bebshax.api.auth import get_optional_current_user
+from bebshax.api.deps import get_tenant_user as get_current_user, require_development_diagnostics
+from bebshax.api.health import provider_status_snapshot
 from bebshax.auth.models import Users
-from bebshax.db.models import LLMRequests, Personas
+from bebshax.auth.transport import AuthRoute
+from bebshax.db.models import LLMRequests
 from bebshax.llm.pools import POOLS
-from bebshax.tenancy import PUBLIC_OWNER_IDS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["routing"])
+router = APIRouter(tags=["routing"], route_class=AuthRoute)
 
 # M2: adapter kind is registry data, not substring guessing. Unknown → "unknown".
 _ADAPTER_KIND = {
     "freellmpool": "aggregator",  # one adapter fronting many providers
-    "ollama": "local",
     "openrouter": "remote_api",
 }
 
 
-@router.get("/routes/status")
+@router.get("/routes/status", dependencies=[Depends(require_development_diagnostics)])
 async def get_routes_status(request: Request) -> dict[str, Any]:
     """Snapshot of provider health and concurrency pool utilization.
 
@@ -37,31 +37,43 @@ async def get_routes_status(request: Request) -> dict[str, Any]:
 
     providers_status: list[dict[str, Any]] = []
     pools_status: list[dict[str, Any]] = []
+    observations = {row["name"]: row for row in provider_status_snapshot(request.app)}
 
     adapter_candidates_map: dict[str, list] = {}
     for name, adapter in adapters.items():
+        discovery_failed = False
         try:
             candidates = await adapter.candidates()
         except Exception:
-            logger.warning(
-                "adapter %r candidates() failed — reporting it as degraded with 0 models",
-                name,
-                exc_info=True,
-            )
+            logger.warning("adapter %r discovery failed; reporting unavailable", name)
             candidates = []
+            discovery_failed = True
         adapter_candidates_map[name] = candidates
 
         # None = router not wired — same honest-absence convention as active_requests
         active_cooldowns = None
+        non_cooling = None
         if router_instance is not None and hasattr(router_instance, "is_cooling"):
-            active_cooldowns = sum(1 for c in candidates if router_instance.is_cooling(c))
+            non_cooling = [candidate for candidate in candidates if not router_instance.is_cooling(candidate)]
+            active_cooldowns = len(candidates) - len(non_cooling)
+
+        available_models = None
+        if not candidates or non_cooling == []:
+            available_models = 0
+        elif non_cooling is not None and not any(candidate.model in {"auto", "unknown", "*"} for candidate in non_cooling):
+            available_models = sum(candidate.context_window > 0 for candidate in non_cooling)
+        observation = observations[name]
+        status = observation["status"]
+        if discovery_failed or (available_models == 0 and (candidates or observation["configured"])):
+            status = "unavailable"
 
         providers_status.append(
             {
-                "name": name,
+                **observation,
                 "type": _ADAPTER_KIND.get(name, "unknown"),
-                "status": "healthy" if len(candidates) > 0 else "degraded",
-                "available_models": len(candidates),
+                "status": status,
+                "available_models": available_models,
+                "candidate_count": len(candidates),
                 "active_cooldowns": active_cooldowns,
             }
         )
@@ -90,7 +102,7 @@ async def get_routes_status(request: Request) -> dict[str, Any]:
     }
 
 
-@router.get("/routing/capacity")
+@router.get("/routing/capacity", dependencies=[Depends(require_development_diagnostics)])
 async def get_routing_capacity(request: Request) -> dict[str, Any]:
     """AI plan §10: per-provider free-tier consumption vs published caps."""
     ledger = getattr(request.app.state, "quota_ledger", None)
@@ -123,37 +135,19 @@ def redact_attempts(attempts: list[Any]) -> list[Any]:
 async def get_provenance(
     request: Request,
     limit: int = Query(default=50, ge=1, le=200),
-    task: Optional[str] = Query(default=None),
-    pool: Optional[str] = Query(default=None),
-    persona_id: Optional[str] = Query(default=None),
+    task: Optional[str] = Query(default=None, min_length=1, max_length=64),
+    pool: Optional[str] = Query(default=None, min_length=1, max_length=64),
+    persona_id: Optional[str] = Query(default=None, min_length=1, max_length=64),
     success: Optional[bool] = Query(default=None),
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Query recent LLM provenance records from persistence sink.
-
-    Tenant-scoped (B6 stage 3): rows tied to a persona are only visible to
-    that persona's owner; infra rows (no persona, or orphaned persona id)
-    and shared/system personas are visible to everyone. ``failure_detail`` is
-    only served on rows the caller owns — everyone else sees ``failure_kind``.
-    """
+    """Read only request-time ownership; unknown historical owners are never public."""
     sessionmaker_ = getattr(request.app.state, "db_sessionmaker", None)
     if not sessionmaker_:
         return {"items": [], "total": 0}
 
     async with sessionmaker_() as session:
-        query = select(LLMRequests, Personas.owner_id).order_by(desc(LLMRequests.created_at))
-
-        # Same shared-owner set as every row-scoping rule (bebshax.tenancy).
-        scope_terms = [
-            LLMRequests.persona_id.is_(None),  # infra calls (health, eval)
-            Personas.id.is_(None),  # orphaned persona ids (deleted rows)
-            Personas.owner_id.in_(PUBLIC_OWNER_IDS),
-        ]
-        if current_user:
-            scope_terms.append(Personas.owner_id == current_user.id)
-        query = query.outerjoin(Personas, LLMRequests.persona_id == Personas.id).where(
-            or_(*scope_terms)
-        )
+        query = select(LLMRequests).where(LLMRequests.owner_id == current_user.id)
 
         if task:
             query = query.where(LLMRequests.task == task)
@@ -167,11 +161,10 @@ async def get_provenance(
         total_stmt = select(func.count()).select_from(query.subquery())
         total = (await session.execute(total_stmt)).scalar_one_or_none() or 0
 
-        rows = (await session.execute(query.limit(limit))).all()
+        rows = (await session.scalars(query.order_by(desc(LLMRequests.created_at), LLMRequests.request_id).limit(limit))).all()
 
         items = []
-        for r, owner_id in rows:
-            owned = current_user is not None and owner_id == current_user.id
+        for r in rows:
             items.append(
                 {
                     "request_id": r.request_id,
@@ -181,9 +174,10 @@ async def get_provenance(
                     "conversation_id": r.conversation_id,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
                     "routing_path": r.routing_path or [],
-                    "attempts": (r.attempts or []) if owned else redact_attempts(r.attempts or []),
+                    "attempts": redact_attempts(r.attempts or []),
                     "served_by_provider": r.served_by_provider,
-                    "served_by_model": r.response_model or r.request_model,
+                    "served_by_model": r.response_model or "unknown",
+                    "requested_model": r.request_model,
                     "input_tokens": r.input_tokens,
                     "output_tokens": r.output_tokens,
                     "total_latency_ms": r.total_latency_ms,

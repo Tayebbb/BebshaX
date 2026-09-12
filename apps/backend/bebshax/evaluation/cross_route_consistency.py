@@ -38,7 +38,7 @@ from bebshax.llm.adapters.base import AdapterCompletion, RouteCandidate
 from bebshax.llm.adapters.embeddings import EmbeddingBackend, HashEmbedding
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.failures import LLMError
-from bebshax.llm.pools import FREELLMPOOL, OLLAMA, OPENROUTER
+from bebshax.llm.pools import FREELLMPOOL, OPENROUTER
 from bebshax.llm.provenance import ProvenanceRecord
 from bebshax.llm.router import PoolRouter
 from bebshax.llm.service import LLMService
@@ -611,7 +611,6 @@ def scripted_router(
     adapters = {
         OPENROUTER: FakeAdapter([]),
         FREELLMPOOL: ScriptedRouteAdapter(fake_routes),
-        OLLAMA: FakeAdapter([]),
     }
     return PoolRouter(adapters, on_provenance=on_provenance)
 

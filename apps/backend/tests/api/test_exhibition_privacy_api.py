@@ -19,13 +19,13 @@ async def exhibition_privacy_case(api_test_app, monkeypatch):
         id="exhibition_privacy_owner",
         email="privacy-owner@example.test",
         full_name="Privacy Owner",
-        is_active=True,
+        is_active=True, is_verified=True,
     )
     visitor = Users(
         id="exhibition_privacy_visitor",
         email="privacy-visitor@example.test",
         full_name="Privacy Visitor",
-        is_active=True,
+        is_active=True, is_verified=True,
     )
     async with api_test_app.app.state.db_sessionmaker() as session:
         session.add_all([owner, visitor])
@@ -229,14 +229,35 @@ async def test_legacy_no_study_creation_requires_a_private_owner(
 
 
 @pytest.mark.parametrize("caller", ["anonymous", "visitor", "owner"])
-def test_legacy_no_study_shared_transcript_stays_readable(exhibition_privacy_case, caller):
+def test_legacy_no_study_ownerless_transcript_is_quarantined(exhibition_privacy_case, caller):
+    """An ownerless legacy conversation outside any demo study has no publisher and no
+    owner: it is readable by nobody rather than by everybody (tenant-private default)."""
     client, users = exhibition_privacy_case
     client.app.dependency_overrides[get_optional_current_user] = lambda: users[caller]
 
     response = client.get("/api/conversations/exhibition_privacy_legacy_conversation")
 
-    assert response.status_code == 200, response.text
-    assert response.json()["objective"] == "Public legacy example"
+    assert response.status_code == 404, response.text
+    assert "Public legacy example" not in response.text
+
+
+@pytest.mark.parametrize("caller", ["anonymous", "visitor", "owner"])
+def test_demo_study_example_interview_detail_is_readable(exhibition_privacy_case, caller):
+    """A demo study's published example child stays browsable read-only for everyone."""
+    client, users = exhibition_privacy_case
+    client.app.dependency_overrides[get_optional_current_user] = lambda: users[caller]
+
+    detail = client.get(
+        "/api/studies/exhibition_privacy_study/interviews/exhibition_privacy_public_conversation"
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["objective"] == "Public example"
+
+    mutation = client.post(
+        "/api/studies/exhibition_privacy_study/interviews/exhibition_privacy_public_conversation/messages",
+        json={"content": "Attempted edit of a public example"},
+    )
+    assert mutation.status_code == 403, mutation.text
 
 
 @pytest.mark.parametrize("caller", ["anonymous", "visitor"])

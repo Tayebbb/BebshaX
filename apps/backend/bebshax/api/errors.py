@@ -6,10 +6,9 @@ Every non-2xx JSON body has the same skeleton::
 
 ``request_id`` is the value of the ``X-Request-ID`` response header (echoed
 from the client when it is well-formed, generated otherwise), so a user can
-quote one id and an operator can find the single access-log line and any
-traceback for it. Internals (provider error bodies, stack traces, ``str(exc)``
-of unexpected exceptions) never reach a response body — they go to logs and
-provenance records (security rules).
+quote one id and an operator can find the access-log line and safe stack
+locations for it. Exception values, request data and provider error bodies
+never reach the public error envelope or this module's logs.
 """
 
 from __future__ import annotations
@@ -17,21 +16,25 @@ from __future__ import annotations
 import logging
 import re
 import time
+import traceback
 import uuid
-from collections import deque
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any, Optional, get_args
 
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
+from pydantic_core import ErrorType
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import DBAPIError, IntegrityError, InterfaceError, OperationalError
+from sqlalchemy.orm.exc import StaleDataError
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from bebshax.datasets.parser import DatasetParseError
 from bebshax.llm.failures import AllCandidatesFailed, ContextWindowExceeded, LLMError
 from bebshax.utils.explicit_failures import ExplicitFailure
 
@@ -40,11 +43,37 @@ access_logger = logging.getLogger("bebshax.access")
 
 REQUEST_ID_HEADER = "X-Request-ID"
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_LOG_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT"})
 
-# Requests bigger than this are refused before any handler runs. Dataset uploads
-# enforce their own 25 MB ceiling in api/datasets.py and are exempt by path.
+_VALIDATION_TYPES = frozenset(get_args(ErrorType))
+_VALIDATION_MESSAGES = {
+    "missing": "Field required",
+    "extra_forbidden": "Extra inputs are not permitted",
+    "int_parsing": "Input should be a valid integer",
+    "int_type": "Input should be a valid integer",
+    "float_parsing": "Input should be a valid number",
+    "float_type": "Input should be a valid number",
+    "finite_number": "Input should be a finite number",
+    "bool_parsing": "Input should be a valid boolean",
+    "bool_type": "Input should be a valid boolean",
+    "string_type": "Input should be a valid string",
+    "string_too_short": "String is shorter than the allowed minimum",
+    "string_too_long": "String exceeds the allowed maximum length",
+    "string_pattern_mismatch": "String does not match the required pattern",
+    "too_short": "Input contains fewer items than permitted",
+    "too_long": "Input contains more items than permitted",
+    "list_type": "Input should be a valid list",
+    "dict_type": "Input should be a valid dictionary",
+    "json_invalid": "Invalid JSON",
+    "greater_than": "Input must be greater than the allowed minimum",
+    "greater_than_equal": "Input must be at least the allowed minimum",
+    "less_than": "Input must be less than the allowed maximum",
+    "less_than_equal": "Input must not exceed the allowed maximum",
+}
+
 MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024
-BODY_CAP_EXEMPT_SUFFIXES = ("/datasets/upload",)
+BODY_CAP_EXEMPT_SUFFIXES: tuple[str, ...] = ()
+_RECEIVE_CHUNK_BYTES = 64 * 1024
 
 _DEFAULT_ERROR_CODES: dict[int, str] = {
     400: "bad_request",
@@ -58,6 +87,21 @@ _DEFAULT_ERROR_CODES: dict[int, str] = {
     429: "rate_limited",
     503: "service_unavailable",
 }
+
+_PUBLIC_SERVER_ERRORS = {
+    "internal_error": "Internal server error",
+    "service_unavailable": "Service unavailable",
+    "database_unavailable": "Database unavailable",
+    "billing_disabled": "Billing is disabled.",
+    "runtime_not_ready": "Application startup validation is incomplete.",
+    "ml_persona_unavailable": "Required persona capability is unavailable.",
+    "job_store_unavailable": "Durable job storage is unavailable.",
+    "job_runtime_closing": "Job runtime is shutting down.",
+    "async_job_admission_required": "Processing admission is unavailable.",
+}
+
+# 5xx envelopes drop every extra except these fixed operational literals.
+_SAFE_SERVER_ERROR_EXTRAS = frozenset({"db"})
 
 
 def default_error_code(status_code: int) -> str:
@@ -98,6 +142,16 @@ def request_id_of(request: Request) -> str:
     return rid
 
 
+def _log_path(scope: Scope) -> str:
+    path = getattr(scope.get("route"), "path", None)
+    return path if isinstance(path, str) else "[unmatched]"
+
+
+def _log_method(scope: Scope) -> str:
+    method = scope.get("method", "")
+    return method if method in _LOG_METHODS else "OTHER"
+
+
 # Re-exported for API-layer callers; domain engines import it from bebshax.utils.
 from bebshax.utils.safe_errors import safe_error_summary  # noqa: E402,F401
 
@@ -134,6 +188,28 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     if exc.status_code in (204, 304):
         # Starlette parity: these statuses carry no body.
         return Response(status_code=exc.status_code, headers=exc.headers)
+    if exc.status_code >= 500:
+        error_code = getattr(exc, "error_code", None)
+        if not isinstance(error_code, str) or error_code not in _PUBLIC_SERVER_ERRORS:
+            error_code = default_error_code(exc.status_code)
+        # Only fixed-literal operational states survive into a 5xx envelope.
+        raw_extra = getattr(exc, "extra", None) or {}
+        safe_extra = {
+            key: value for key, value in raw_extra.items()
+            if key in _SAFE_SERVER_ERROR_EXTRAS and isinstance(value, str) and len(value) <= 32
+        }
+        return _envelope(
+            request, exc.status_code, _PUBLIC_SERVER_ERRORS[error_code], error_code,
+            safe_extra or None, exc.headers,
+        )
+    if exc.status_code in (400, 422):
+        cause: BaseException | None = exc.__cause__ or exc.__context__
+        seen: set[int] = set()
+        while cause is not None and id(cause) not in seen and len(seen) < 16:
+            if isinstance(cause, DatasetParseError):
+                return await dataset_parse_error_handler(request, cause)
+            seen.add(id(cause))
+            cause = cause.__cause__ or (None if cause.__suppress_context__ else cause.__context__)
     detail = exc.detail
     extra: dict[str, Any] = dict(getattr(exc, "extra", None) or {})
     if not isinstance(detail, str):
@@ -147,6 +223,10 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     return _envelope(request, exc.status_code, detail, error_code, extra, exc.headers)
 
 
+async def dataset_parse_error_handler(request: Request, exc: DatasetParseError) -> Response:
+    return _envelope(request, exc.status_code, exc.detail, exc.error_code)
+
+
 def _first_validation_message(errors: list[Any]) -> str:
     if not errors:
         return "Request validation failed."
@@ -156,8 +236,70 @@ def _first_validation_message(errors: list[Any]) -> str:
     return f"{loc} → {msg}" if loc else msg
 
 
+def _validation_locations(request: Request) -> set[str]:
+    names = {"body", "query", "path", "header", "cookie"}
+    pending = [getattr(request.scope.get("route"), "dependant", None)]
+    annotations: list[Any] = []
+    seen: set[int] = set()
+    while pending:
+        dependant = pending.pop()
+        if dependant is None or id(dependant) in seen:
+            continue
+        seen.add(id(dependant))
+        pending.extend(getattr(dependant, "dependencies", ()))
+        for group in ("body_params", "query_params", "path_params", "header_params", "cookie_params"):
+            for field in getattr(dependant, group, ()):
+                if isinstance(field.alias, str):
+                    names.add(field.alias)
+                annotations.append(field.field_info.annotation)
+    seen.clear()
+    while annotations:
+        annotation = annotations.pop()
+        if id(annotation) in seen:
+            continue
+        seen.add(id(annotation))
+        annotations.extend(get_args(annotation))
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            for name, field in annotation.model_fields.items():
+                names.add(name)
+                for alias in (field.alias, field.validation_alias):
+                    if isinstance(alias, str):
+                        names.add(alias)
+                annotations.append(field.annotation)
+    return names
+
+
+def _safe_validation_errors(request: Request, exc: RequestValidationError) -> list[dict[str, Any]]:
+    allowed_locations = _validation_locations(request)
+    errors = []
+    for error in exc.errors():
+        error_type = error.get("type")
+        if type(error_type) is not str or error_type not in _VALIDATION_TYPES:
+            error_type = "value_error"
+        location = [
+            part if (
+                (type(part) is str and part in allowed_locations)
+                or (type(part) is int and 0 <= part <= 2**31 - 1)
+            ) else "[field]"
+            for part in error.get("loc", ())
+        ]
+        errors.append({
+            "type": error_type,
+            "loc": location,
+            "msg": _VALIDATION_MESSAGES.get(error_type, "Invalid value"),
+        })
+    return errors
+
+
+def _exception_stack(exc: BaseException) -> str:
+    return " > ".join(
+        f"{frame.f_code.co_name}:{line_number}"
+        for frame, line_number in traceback.walk_tb(exc.__traceback__)
+    )
+
+
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> Response:
-    errors = jsonable_encoder(exc.errors())
+    errors = _safe_validation_errors(request, exc)
     return _envelope(
         request,
         422,
@@ -172,8 +314,8 @@ async def integrity_error_handler(request: Request, exc: IntegrityError) -> Resp
     # error and the request id only.
     logger.warning(
         "integrity error on %s %s request_id=%s: %s",
-        request.method,
-        request.url.path,
+        _log_method(request.scope),
+        _log_path(request.scope),
         request_id_of(request),
         type(exc.orig).__name__ if exc.orig is not None else "IntegrityError",
     )
@@ -190,14 +332,28 @@ async def database_unavailable_handler(request: Request, exc: DBAPIError) -> Res
     unreachable (connection refused, dropped, pool exhausted). An honest 503,
     never a 500 traceback; the statement/params never reach the body."""
     logger.error(
-        "database unavailable on %s %s request_id=%s: %s",
-        request.method,
-        request.url.path,
+        "database unavailable on %s %s request_id=%s: %s stack=%s",
+        _log_method(request.scope),
+        _log_path(request.scope),
         request_id_of(request),
         type(exc.orig).__name__ if exc.orig is not None else type(exc).__name__,
-        exc_info=exc,
+        _exception_stack(exc),
     )
     return _envelope(request, 503, "Database unavailable", "database_unavailable")
+
+
+async def stale_data_handler(request: Request, exc: StaleDataError) -> Response:
+    """An optimistic-revision write lost the race with a concurrent save of the
+    same row. Nothing was persisted; the caller reloads and retries."""
+    logger.warning(
+        "concurrent write conflict on %s %s request_id=%s",
+        _log_method(request.scope), _log_path(request.scope), request_id_of(request),
+    )
+    return _envelope(
+        request, 409,
+        "This record was changed by another request while saving. Reload and try again; nothing was lost.",
+        "write_conflict",
+    )
 
 
 def _attempts_payload(exc: AllCandidatesFailed) -> list[dict[str, Any]]:
@@ -206,21 +362,28 @@ def _attempts_payload(exc: AllCandidatesFailed) -> list[dict[str, Any]]:
             "provider": attempt.provider,
             "model": attempt.model,
             "failure_kind": str(attempt.failure_kind) if attempt.failure_kind else None,
-            "fallback_reason": attempt.fallback_reason,
+            "fallback_reason": str(attempt.failure_kind) if attempt.failure_kind else None,
         }
         for attempt in exc.provenance.attempts
     ]
 
 
 async def all_candidates_failed_handler(request: Request, exc: AllCandidatesFailed) -> Response:
+    attempts = _attempts_payload(exc)
+    detail = (
+        "No AI route could serve this request — all candidates failed."
+        if attempts else
+        "No AI provider was eligible for this request (remote-processing policy or provider "
+        "configuration) — nothing was attempted and nothing was fabricated."
+    )
     return _envelope(
         request,
         503,
-        "No AI route could serve this request — all candidates failed.",
+        detail,
         "all_candidates_failed",
         {
             "llm_request_id": exc.provenance.request_id,
-            "attempts": _attempts_payload(exc),
+            "attempts": attempts,
             "routing_path": list(exc.provenance.routing_path),
         },
     )
@@ -239,11 +402,12 @@ async def context_window_exceeded_handler(request: Request, exc: ContextWindowEx
 
 async def llm_error_handler(request: Request, exc: LLMError) -> Response:
     logger.warning(
-        "LLM layer error on %s %s request_id=%s",
-        request.method,
-        request.url.path,
+        "LLM layer error on %s %s request_id=%s: %s stack=%s",
+        _log_method(request.scope),
+        _log_path(request.scope),
         request_id_of(request),
-        exc_info=exc,
+        type(exc).__name__,
+        _exception_stack(exc),
     )
     return _envelope(
         request,
@@ -260,8 +424,8 @@ async def explicit_failure_handler(request: Request, exc: ExplicitFailure) -> Re
     logger.info(
         "explicit failure %s on %s %s request_id=%s",
         exc.error_code,
-        request.method,
-        request.url.path,
+        _log_method(request.scope),
+        _log_path(request.scope),
         request_id_of(request),
     )
     return _envelope(request, exc.status_code, exc.detail, exc.error_code, exc.extra)
@@ -283,16 +447,19 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> Respo
     rid = request_id_of(request)
     # ServerErrorMiddleware sends this response itself, bypassing the
     # middleware's send wrapper — so the header is set here too.
-    logger.exception(
-        "unhandled exception on %s %s request_id=%s", request.method, request.url.path, rid
+    logger.error(
+        "unhandled exception on %s %s request_id=%s: %s stack=%s",
+        _log_method(request.scope), _log_path(request.scope), rid, type(exc).__name__, _exception_stack(exc),
     )
     return _envelope(request, 500, "Internal server error", "internal_error")
 
 
-def register_exception_handlers(app) -> None:
+def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(DatasetParseError, dataset_parse_error_handler)
     app.add_exception_handler(IntegrityError, integrity_error_handler)
+    app.add_exception_handler(StaleDataError, stale_data_handler)
     app.add_exception_handler(OperationalError, database_unavailable_handler)
     app.add_exception_handler(InterfaceError, database_unavailable_handler)
     # Most specific LLM failures first; LLMError is the base-class fallback.
@@ -345,14 +512,14 @@ class RequestContextMiddleware:
             duration_ms = (time.perf_counter() - started) * 1000
             access_logger.info(
                 "method=%s path=%s status=%s duration_ms=%.1f request_id=%s",
-                scope.get("method", "-"),
-                scope.get("path", "-"),
+                _log_method(scope),
+                _log_path(scope),
                 status_code if status_code is not None else "-",
                 duration_ms,
                 request_id,
                 extra={
-                    "method": scope.get("method"),
-                    "path": scope.get("path"),
+                    "method": _log_method(scope),
+                    "path": _log_path(scope),
                     "status": status_code,
                     "duration_ms": round(duration_ms, 1),
                     "request_id": request_id,
@@ -388,25 +555,27 @@ class UnhandledExceptionEnvelopeMiddleware:
 
         try:
             await self.app(scope, receive, send_wrapper)
-        except Exception:
+        except Exception as exc:
             if response_started:
                 raise  # mid-stream: nothing sane to send, let the server close it
             request = Request(scope)
-            logger.exception(
-                "unhandled exception on %s %s request_id=%s",
-                request.method,
-                request.url.path,
+            logger.error(
+                "unhandled exception on %s %s request_id=%s: %s stack=%s",
+                _log_method(request.scope),
+                _log_path(request.scope),
                 request_id_of(request),
+                type(exc).__name__,
+                _exception_stack(exc),
             )
             response = _envelope(request, 500, "Internal server error", "internal_error")
             await response(scope, receive, send)
 
 
 class BodySizeLimitMiddleware:
-    """Bounds declared and received bodies before any non-upload handler runs.
+    """Count received bytes without prefetching or retaining a request-sized copy.
 
-    Buffered chunks total at most ``max_bytes``; an overflowing chunk is never
-    retained. Empty intermediate frames are discarded to bound frame overhead.
+    Uploads use their existing file-byte ceiling for the entire multipart body,
+    with verified admission before the first receive and bounded parser chunks.
     """
 
     def __init__(
@@ -415,51 +584,102 @@ class BodySizeLimitMiddleware:
         max_bytes: int = MAX_REQUEST_BODY_BYTES,
         exempt_suffixes: tuple[str, ...] = BODY_CAP_EXEMPT_SUFFIXES,
     ) -> None:
+        from bebshax.api.upload_admission import UploadAdmission
+        from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
+
+        if exempt_suffixes:
+            raise ValueError("Request body-size exemptions are not supported.")
         self.app = app
         self.max_bytes = max_bytes
-        self.exempt_suffixes = exempt_suffixes
+        self.upload_max_bytes = MAX_DATASET_FILE_SIZE_BYTES
+        self.upload_admission = UploadAdmission()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope.get("path", "").endswith(self.exempt_suffixes):
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
-        declared = Headers(scope=scope).get("content-length", "")
-        if declared.isdigit() and int(declared) > self.max_bytes:
-            await self._reject(scope, receive, send)
-            return
+        from bebshax.api.upload_admission import MultipartGuard, is_dataset_upload
 
-        buffered: deque[Message] = deque()
+        upload = scope.get("method") == "POST" and is_dataset_upload(
+            scope.get("path", ""), scope.get("root_path", "")
+        )
+        max_bytes = self.upload_max_bytes if upload else self.max_bytes
+        headers = Headers(scope=scope)
+        for declared in headers.getlist("content-length"):
+            if declared.isascii() and declared.isdigit():
+                normalized = declared.lstrip("0") or "0"
+                limit = str(max_bytes)
+                if len(normalized) > len(limit) or (len(normalized) == len(limit) and normalized > limit):
+                    await self._reject(scope, receive, send, max_bytes)
+                    return
+
+        guard: MultipartGuard | None = None
         received_bytes = 0
-        while True:
-            message = await receive()
-            if message["type"] == "http.disconnect":
-                return
-            chunk = message.get("body", b"")
-            received_bytes += len(chunk)
-            if received_bytes > self.max_bytes:
-                await self._reject(scope, receive, send)
-                return
-            more_body = message.get("more_body", False)
-            if chunk or not more_body:
-                buffered.append(message)
-            if not more_body:
-                break
+        pending = memoryview(b"")
+        pending_more = False
+        response_started = False
 
-        async def replay_receive() -> Message:
-            if buffered:
-                return buffered.popleft()
-            return await receive()
+        async def limited_receive() -> Message:
+            nonlocal received_bytes, pending, pending_more
+            if not pending:
+                message = await receive()
+                if message["type"] != "http.request":
+                    return message
+                body = message.get("body", b"")
+                received_bytes += len(body)
+                if received_bytes > max_bytes:
+                    raise APIError(
+                        413,
+                        f"Request body exceeds the {max_bytes // (1024 * 1024)} MiB limit.",
+                        error_code="payload_too_large",
+                        extra={"max_bytes": max_bytes},
+                    )
+                pending = memoryview(body)
+                pending_more = message.get("more_body", False)
+            chunk = bytes(pending[:_RECEIVE_CHUNK_BYTES])
+            pending = pending[_RECEIVE_CHUNK_BYTES:]
+            more_body = bool(pending) or pending_more
+            if guard is not None:
+                guard.feed(chunk, final=not more_body)
+            return {"type": "http.request", "body": chunk, "more_body": more_body}
 
-        await self.app(scope, replay_receive, send)
+        async def send_wrapper(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
 
-    async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            if upload:
+                async with self.upload_admission.admit(Request(scope)):
+                    guard = MultipartGuard(headers)
+                    await self.app(scope, limited_receive, send_wrapper)
+            else:
+                await self.app(scope, limited_receive, send_wrapper)
+        except StarletteHTTPException as exc:
+            if response_started:
+                raise
+            response = await http_exception_handler(Request(scope), exc)
+            await response(scope, receive, send)
+        except (OperationalError, InterfaceError) as exc:
+            if response_started:
+                raise
+            response = await database_unavailable_handler(Request(scope), exc)
+            await response(scope, receive, send)
+        except Exception as exc:
+            if response_started:
+                raise
+            response = await unhandled_exception_handler(Request(scope), exc)
+            await response(scope, receive, send)
+
+    async def _reject(self, scope: Scope, receive: Receive, send: Send, max_bytes: int) -> None:
         response = _envelope(
             Request(scope),
             413,
-            f"Request body exceeds the {self.max_bytes // (1024 * 1024)} MiB limit.",
+            f"Request body exceeds the {max_bytes // (1024 * 1024)} MiB limit.",
             "payload_too_large",
-            {"max_bytes": self.max_bytes},
+            {"max_bytes": max_bytes},
         )
         await response(scope, receive, send)
 

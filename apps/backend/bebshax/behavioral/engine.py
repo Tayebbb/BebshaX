@@ -16,15 +16,16 @@ Principles (R2, R3, R6, Part 7):
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
 from collections import Counter, defaultdict
+from collections.abc import Coroutine, Sequence
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import sessionmaker
 
 from bebshax.behavioral.orm import (
     BehavioralInsights,
@@ -41,6 +42,8 @@ from bebshax.llm import ChatMessage, LLMRequest, LLMService, TaskType
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.memory.service import MemoryService
+from bebshax.jobs.runtime import JobContext
+from bebshax.jobs.store import LeaseLost
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +53,23 @@ _SIMULATION_MAX_ATTEMPTS = 2
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+async def _gather_simulations(coroutines: Sequence[Coroutine[Any, Any, dict[str, Any]]]) -> list[dict[str, Any]]:
+    tasks = [asyncio.create_task(coroutine) for coroutine in coroutines]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        drained = asyncio.gather(*tasks, return_exceptions=True)
+        while not drained.done():
+            try:
+                await asyncio.shield(drained)
+            except asyncio.CancelledError:
+                continue
+        raise
 
 
 # Keys a model uses for the text of a list item it returned as an object.
@@ -250,7 +270,7 @@ class BehavioralSimulationEngine:
     def __init__(
         self,
         llm: LLMService,
-        sessionmaker_: sessionmaker[AsyncSession],
+        sessionmaker_: Callable[[], AsyncSession],
         memory: Optional[MemoryService] = None,
         max_concurrency: int = 4,
     ) -> None:
@@ -271,6 +291,8 @@ class BehavioralSimulationEngine:
     ) -> tuple[str, dict[str, bool], list[str]]:
         """Compose deep grounded simulation context: persona, segment, interview insights, and evidence."""
         context_blocks: list[str] = []
+        owner_id = study.user_id if study is not None else persona.owner_id
+        study_id = study.id if study is not None else persona.study_id
         context_sources = {
             "persona_profile": True,
             "segment_characteristics": False,
@@ -287,7 +309,10 @@ class BehavioralSimulationEngine:
         # 2. Segment Characteristics
         if persona.segment_id:
             res = await session.execute(
-                select(MarketSegments).where(MarketSegments.id == persona.segment_id)
+                select(MarketSegments).where(
+                    MarketSegments.id == persona.segment_id, MarketSegments.study_id == study_id,
+                    MarketSegments.user_id == owner_id,
+                )
             )
             segment = res.scalar_one_or_none()
             if segment:
@@ -296,15 +321,17 @@ class BehavioralSimulationEngine:
                 context_blocks.append(
                     f"MARKET SEGMENT: {segment.name} ({segment.population_percentage:.1f}% of market)\n"
                     f"Segment Description: {segment.description}\n"
-                    f"Key Segment Habits: {', '.join(f'{k}: {v}' for k, v in list(chars.items())[:4])}"
+                    f"Key Segment Habits: {', '.join(f'{key}: {value}' for key, value in chars.items())}"
                 )
 
         # 3. Part 6 Interview Insights (Traceable signals from past interviews)
         res_insights = await session.execute(
             select(InterviewInsights)
-            .where(InterviewInsights.persona_id == persona.id)
+            .where(
+                InterviewInsights.persona_id == persona.id, InterviewInsights.study_id == study_id,
+                InterviewInsights.user_id == owner_id,
+            )
             .order_by(InterviewInsights.created_at.desc())
-            .limit(6)
         )
         insights = res_insights.scalars().all()
         if insights:
@@ -323,9 +350,8 @@ class BehavioralSimulationEngine:
         if study:
             res_claims = await session.execute(
                 select(EvidenceClaims)
-                .where(EvidenceClaims.study_id == study.id)
+                .where(EvidenceClaims.study_id == study.id, EvidenceClaims.user_id == owner_id)
                 .order_by(EvidenceClaims.confidence.desc())
-                .limit(4)
             )
             claims = res_claims.scalars().all()
             if claims:
@@ -339,7 +365,7 @@ class BehavioralSimulationEngine:
         # 5. Dataset References
         if persona.dataset_refs:
             context_sources["dataset_characteristics"] = True
-            ref_lines = [f"- {d.get('name', 'Dataset')}: {d.get('variable_distributions', {})}" for d in persona.dataset_refs[:2]]
+            ref_lines = [f"- {json.dumps(reference, ensure_ascii=False)}" for reference in persona.dataset_refs]
             context_blocks.append("DATASET-DERIVED DISTRIBUTIONS:\n" + "\n".join(ref_lines))
 
         return "\n\n".join(context_blocks), context_sources, interview_signals
@@ -357,12 +383,21 @@ class BehavioralSimulationEngine:
         scenario_text: str,
         parameters: dict,
         session: AsyncSession,
+        *, owner_id: str | None = None,
     ) -> dict[str, Any]:
         """Execute simulation for a single persona using LLMService governed call with TaskType.BEHAVIORAL_SIMULATION."""
         async with self.semaphore:
             context_text, context_sources, interview_signals = await self._gather_simulation_context(
                 session, persona, study
             )
+            await session.close()
+            if self.memory is not None:
+                if owner_id is None:
+                    raise ValueError("Behavioral memory requires a verified owner.")
+                memories = await self.memory.retrieve(persona.id, scenario_text, owner_id=owner_id)
+                if memories:
+                    context_text += "\n\nPERSONA MEMORIES:\n" + "\n".join(record.text for record in memories)
+                    context_sources["persona_memory"] = True
 
             simulator = _get_simulator(test_type)
             test_directive = simulator.build_test_prompt_directive(
@@ -707,6 +742,7 @@ class BehavioralSimulationEngine:
         self,
         run_id: str,
         user_id: Optional[str] = None,
+        *, job: JobContext | None = None,
     ) -> BehavioralTestRuns:
         """Run full batch simulation for a test run across target personas."""
         async with self.sessionmaker() as session:
@@ -728,6 +764,20 @@ class BehavioralSimulationEngine:
                 select(Studies).where(Studies.id == run.study_id)
             )
             study = res_study.scalar_one_or_none()
+            if user_id is not None and (
+                run.user_id != user_id or test.owner_id != user_id or study is None or study.user_id != user_id
+            ):
+                raise ValueError("Behavioral run owner does not match the verified caller.")
+            if job is not None and (job.lease.owner_id != run.user_id or job["scope_id"] != run.study_id):
+                raise ValueError("Behavioral run owner does not match its job.")
+            execution_token = uuid.uuid4().hex
+            if job is not None:
+                await job.fence(session)
+            claimed = await session.execute(update(BehavioralTestRuns).where(
+                BehavioralTestRuns.id == run_id, BehavioralTestRuns.status == "pending",
+            ).values(execution_token=execution_token, status="running").returning(BehavioralTestRuns.id))
+            if claimed.scalar_one_or_none() is None:
+                raise ValueError("Behavioral run is already running or terminal; use explicit retry.")
 
             # Mark run as running
             run.status = "running"
@@ -735,8 +785,8 @@ class BehavioralSimulationEngine:
             await session.commit()
 
             try:
-                return await self._execute_marked_run(session, run, test, study)
-            except Exception as exc:
+                return await self._execute_marked_run(session, run, test, study, job=job)
+            except (Exception, asyncio.CancelledError) as exc:
                 # Without this boundary a crash left the run "running" forever
                 # (the UI polled it indefinitely). The persisted message is the
                 # class name + a correlation code, never the raw text.
@@ -744,17 +794,19 @@ class BehavioralSimulationEngine:
                 logger.error(
                     "behavioral run %s failed: %s", run_id, summary, exc_info=True
                 )
-                await self._mark_run_failed(run_id, summary)
+                await session.rollback()
+                await self._mark_run_failed(run_id, summary, execution_token=execution_token)
                 raise
 
-    async def _mark_run_failed(self, run_id: str, error_message: str) -> None:
+    async def _mark_run_failed(self, run_id: str, error_message: str, *, execution_token: str | None = None) -> None:
         """Own session: the run's session may be unusable after the failure."""
         try:
             async with self.sessionmaker() as session:
+                statement = update(BehavioralTestRuns).where(BehavioralTestRuns.id == run_id)
+                if execution_token is not None:
+                    statement = statement.where(BehavioralTestRuns.execution_token == execution_token)
                 await session.execute(
-                    update(BehavioralTestRuns)
-                    .where(BehavioralTestRuns.id == run_id)
-                    .values(status="failed", error_message=error_message, completed_at=_utcnow())
+                    statement.values(status="failed", error_message=error_message, completed_at=_utcnow())
                 )
                 await session.commit()
         except Exception:
@@ -766,12 +818,23 @@ class BehavioralSimulationEngine:
         run: BehavioralTestRuns,
         test: BehavioralTests,
         study: Optional[Studies],
+        *, job: JobContext | None = None,
     ) -> BehavioralTestRuns:
         """Everything after the run is marked ``running`` — failures here are
         caught by ``execute_test_run`` and persisted on the run."""
+        execution_token = run.execution_token
+        if execution_token is None:
+            raise LeaseLost("Behavioral run has no active execution token.")
         # Identify target personas
         target_ids = run.target_persona_ids or []
-        if run.target_population_type == "segment" and run.target_segment_id:
+        if target_ids:
+            res_p = await session.execute(select(Personas).where(
+                Personas.id.in_(target_ids), Personas.study_id == run.study_id,
+            ))
+            personas = res_p.scalars().all()
+            if len(personas) != len(set(target_ids)):
+                raise ValueError("The run's captured persona population changed; create a new run.")
+        elif run.target_population_type == "segment" and run.target_segment_id:
             res_p = await session.execute(
                 select(Personas).where(
                     Personas.study_id == run.study_id,
@@ -792,18 +855,21 @@ class BehavioralSimulationEngine:
             personas = res_p.scalars().all()
 
         if not personas:
-            # A run needs a population; nothing is created to fill the gap.
-            res_all = await session.execute(
-                select(Personas).where(Personas.study_id == run.study_id)
-            )
-            personas = res_all.scalars().all()
-        if not personas:
             raise InsufficientInput(
                 "behavioral_requires_personas",
                 "This study has no personas to simulate. Generate personas first; BebshaX does not simulate invented respondents.",
             )
 
+        if run.user_id is not None and any(persona.owner_id != run.user_id for persona in personas):
+            raise ValueError("Target persona owner does not match the behavioral run.")
+        captured_versions = {item["id"]: item["version"] for item in (run.input_manifest or {}).get("personas", [])}
+        if captured_versions and captured_versions != {persona.id: persona.version for persona in personas}:
+            raise ValueError("The admitted persona population or version changed; create a new run.")
         run.persona_count = len(personas)
+        run.input_manifest = {
+            "personas": [{"id": persona.id, "version": persona.version} for persona in personas],
+            "test_type": test.test_type,
+        }
         await session.commit()
 
         # Get segment mapping
@@ -817,10 +883,11 @@ class BehavioralSimulationEngine:
         scenario_title = scenario_snapshot.get("title", test.name)
         scenario_text = scenario_snapshot.get("scenario_text") or test.description or ""
         parameters = scenario_snapshot.get("structured_parameters", test.configuration or {})
+        await session.commit()
 
         # Execute simulation for each persona concurrently
         tasks = [
-            self._safe_simulate_single(
+            self._simulate_checkpointed(
                 persona=p,
                 study=study,
                 test=test,
@@ -829,16 +896,19 @@ class BehavioralSimulationEngine:
                 scenario_text=scenario_text,
                 parameters=parameters,
                 segments_map=segments_map,
+                execution_token=execution_token,
+                job=job,
             )
             for p in personas
         ]
 
-        results_data = await asyncio.gather(*tasks, return_exceptions=False)
+        results_data = await _gather_simulations(tasks)
 
         # Persist results
         completed_count = 0
         failed_count = 0
         valid_results: list[dict[str, Any]] = []
+        await self._fence_run(session, run.id, execution_token, job)
 
         for r_data in results_data:
             if r_data.get("status") == "failed":
@@ -902,6 +972,7 @@ class BehavioralSimulationEngine:
             opportunities,
             insights_to_create,
         ) = self.compute_aggregate_synthesis(valid_results, segments_map, test.test_type)
+        await self._fence_run(session, run.id, execution_token, job)
 
         run.completed_count = completed_count
         run.failed_count = failed_count
@@ -920,6 +991,9 @@ class BehavioralSimulationEngine:
             run.status = "completed"
 
         # Create BehavioralInsights records
+        await session.execute(delete(BehavioralInsights).where(
+            BehavioralInsights.test_run_id == run.id, BehavioralInsights.study_id == run.study_id,
+        ))
         for ins in insights_to_create:
             db_ins = BehavioralInsights(
                 id=f"bi_{uuid.uuid4().hex[:16]}",
@@ -940,6 +1014,55 @@ class BehavioralSimulationEngine:
         test.status = "completed"
         await session.commit()
         return run
+
+    async def _fence_run(self, session: AsyncSession, run_id: str, execution_token: str, job: JobContext | None) -> None:
+        if job is not None:
+            await job.fence(session)
+        changed = await session.execute(update(BehavioralTestRuns).where(
+            BehavioralTestRuns.id == run_id, BehavioralTestRuns.execution_token == execution_token,
+            BehavioralTestRuns.status == "running",
+        ).values(execution_token=execution_token).returning(BehavioralTestRuns.id))
+        if changed.scalar_one_or_none() is None:
+            raise LeaseLost("Behavioral run execution was superseded or cancelled.")
+
+    async def _simulate_checkpointed(
+        self, *, persona: Personas, study: Optional[Studies], test: BehavioralTests, run_id: str,
+        scenario_title: str, scenario_text: str, parameters: dict, segments_map: dict[str, str],
+        execution_token: str, job: JobContext | None,
+    ) -> dict[str, Any]:
+        if job is not None:
+            checkpoint = await job.begin_item(persona.id, input_data={
+                "persona_id": persona.id, "persona_version": persona.version,
+                "run_id": run_id, "scenario_text": scenario_text, "parameters": parameters,
+            })
+            if checkpoint["status"] == "completed":
+                raise ValueError("The persona already has a persisted checkpoint; automatic replay is forbidden.")
+        result = await self._safe_simulate_single(
+            persona=persona, study=study, test=test, run_id=run_id,
+            scenario_title=scenario_title, scenario_text=scenario_text,
+            parameters=parameters, segments_map=segments_map,
+        )
+        async with self.sessionmaker() as session, session.begin():
+            await self._fence_run(session, run_id, execution_token, job)
+            existing = await session.scalar(select(BehavioralTestResults).where(
+                BehavioralTestResults.test_run_id == run_id, BehavioralTestResults.persona_id == persona.id,
+            ))
+            if existing is None:
+                values = {column.name: result[column.name] for column in BehavioralTestResults.__table__.columns
+                          if column.name in result and column.name not in {"id", "test_run_id", "study_id", "behavioral_test_id"}}
+                existing = BehavioralTestResults(id=f"bres_{uuid.uuid4().hex[:16]}", test_run_id=run_id,
+                                                study_id=test.study_id, behavioral_test_id=test.id, **values)
+                session.add(existing)
+                await session.flush()
+            counts = {result_status: count for result_status, count in (await session.execute(select(BehavioralTestResults.status, func.count()).where(
+                BehavioralTestResults.test_run_id == run_id,
+            ).group_by(BehavioralTestResults.status))).all()}
+            await session.execute(update(BehavioralTestRuns).where(BehavioralTestRuns.id == run_id).values(
+                completed_count=counts.get("completed", 0), failed_count=counts.get("failed", 0),
+            ))
+            if job is not None:
+                await job.complete_item(persona.id, result_refs={"result_id": existing.id, "run_id": run_id, "status": existing.status}, session=session)
+        return result
 
     async def _safe_simulate_single(
         self,
@@ -964,6 +1087,7 @@ class BehavioralSimulationEngine:
                     scenario_text=scenario_text,
                     parameters=parameters,
                     session=session,
+                    owner_id=test.owner_id,
                 )
                 res["status"] = "completed"
                 res["segment_name"] = segment_name
@@ -1003,7 +1127,21 @@ class BehavioralSimulationEngine:
     # -----------------------------------------------------------------------
 
     async def retry_failed_simulations(
-        self, run_id: str, study_id: Optional[str] = None
+        self, run_id: str, study_id: Optional[str] = None, *, user_id: str | None = None,
+        job: JobContext | None = None,
+    ) -> BehavioralTestRuns:
+        execution_token = uuid.uuid4().hex
+        try:
+            return await self._retry_failed_simulations(
+                run_id, study_id, user_id=user_id, job=job, execution_token=execution_token,
+            )
+        except (Exception, asyncio.CancelledError) as exc:
+            await self._mark_run_failed(run_id, safe_error_summary(exc), execution_token=execution_token)
+            raise
+
+    async def _retry_failed_simulations(
+        self, run_id: str, study_id: Optional[str] = None, *, user_id: str | None = None,
+        job: JobContext | None = None, execution_token: str,
     ) -> BehavioralTestRuns:
         """Retry only failed persona simulations in a run without restarting successful ones.
 
@@ -1018,6 +1156,8 @@ class BehavioralSimulationEngine:
             run = res_run.scalar_one_or_none()
             if not run:
                 raise BehavioralRunNotFound(f"Run {run_id} not found")
+            if user_id is not None and run.user_id != user_id:
+                raise ValueError("Behavioral retry owner does not match the verified caller.")
 
             res_failed = await session.execute(
                 select(BehavioralTestResults).where(
@@ -1026,12 +1166,16 @@ class BehavioralSimulationEngine:
                 )
             )
             failed_results = res_failed.scalars().all()
-            if not failed_results:
-                return run
-
             failed_persona_ids = [f.persona_id for f in failed_results]
+            existing_ids = set(await session.scalars(select(BehavioralTestResults.persona_id).where(BehavioralTestResults.test_run_id == run.id)))
+            failed_persona_ids.extend(persona_id for persona_id in (run.target_persona_ids or []) if persona_id not in existing_ids)
+            if not failed_persona_ids:
+                if run.status == "retry_pending":
+                    run.status = "completed"
+                    await session.commit()
+                return run
             res_personas = await session.execute(
-                select(Personas).where(Personas.id.in_(failed_persona_ids))
+                select(Personas).where(Personas.id.in_(failed_persona_ids), Personas.study_id == run.study_id)
             )
             personas = res_personas.scalars().all()
 
@@ -1044,6 +1188,25 @@ class BehavioralSimulationEngine:
                 select(Studies).where(Studies.id == run.study_id)
             )
             study = res_study.scalar_one_or_none()
+            if test is None or study is None:
+                raise BehavioralTestNotFound("Behavioral retry parent is missing.")
+            if user_id is not None and (test.owner_id != user_id or study.user_id != user_id):
+                raise ValueError("Behavioral retry owner does not match its parents.")
+            if len(personas) != len(set(failed_persona_ids)) or (run.user_id is not None and any(persona.owner_id != run.user_id for persona in personas)):
+                raise ValueError("The captured retry population changed or has another owner.")
+            captured_versions = {item["id"]: item["version"] for item in (run.input_manifest or {}).get("personas", [])}
+            if captured_versions and any(captured_versions.get(persona.id) != persona.version for persona in personas):
+                raise ValueError("The admitted persona population or version changed; create a new run.")
+            if job is not None:
+                if job.lease.owner_id != run.user_id or job["scope_id"] != run.study_id:
+                    raise ValueError("Behavioral retry job owner mismatch.")
+                await job.fence(session)
+            claimed = await session.execute(update(BehavioralTestRuns).where(
+                BehavioralTestRuns.id == run.id,
+                BehavioralTestRuns.status.in_(("completed", "completed_with_warnings", "failed", "cancelled", "retry_pending")),
+            ).values(status="running", execution_token=execution_token).returning(BehavioralTestRuns.id))
+            if claimed.scalar_one_or_none() is None:
+                raise ValueError("Behavioral run is already executing.")
 
             res_segs = await session.execute(
                 select(MarketSegments).where(MarketSegments.study_id == run.study_id)
@@ -1055,9 +1218,16 @@ class BehavioralSimulationEngine:
             scenario_text = scenario_snapshot.get("scenario_text", "")
             parameters = scenario_snapshot.get("structured_parameters", {})
 
-            for p in personas:
-                sim_res = await self._safe_simulate_single(
-                    persona=p,
+            await session.commit()
+            if job is not None:
+                for persona in personas:
+                    await job.begin_item(persona.id, input_data={
+                        "run_id": run_id, "persona_id": persona.id, "version": persona.version,
+                        "scenario_text": scenario_text, "parameters": parameters, "explicit_retry": True,
+                    })
+            simulations = await _gather_simulations([
+                self._safe_simulate_single(
+                    persona=persona,
                     study=study,
                     test=test,
                     run_id=run.id,
@@ -1066,11 +1236,14 @@ class BehavioralSimulationEngine:
                     parameters=parameters,
                     segments_map=segments_map,
                 )
-
+                for persona in personas
+            ])
+            await self._fence_run(session, run_id, execution_token, job)
+            for sim_res in simulations:
                 res_db = await session.execute(
                     select(BehavioralTestResults).where(
                         BehavioralTestResults.test_run_id == run.id,
-                        BehavioralTestResults.persona_id == p.id,
+                        BehavioralTestResults.persona_id == sim_res["persona_id"],
                     )
                 )
                 db_row = res_db.scalar_one_or_none()
@@ -1078,8 +1251,15 @@ class BehavioralSimulationEngine:
                     for k, v in sim_res.items():
                         if hasattr(db_row, k) and k != "id":
                             setattr(db_row, k, v)
-
-            await session.commit()
+                else:
+                    values = {column.name: sim_res[column.name] for column in BehavioralTestResults.__table__.columns
+                              if column.name in sim_res and column.name not in {"id", "test_run_id", "study_id", "behavioral_test_id"}}
+                    db_row = BehavioralTestResults(id=f"bres_{uuid.uuid4().hex[:16]}", test_run_id=run_id,
+                                                  behavioral_test_id=test.id, study_id=run.study_id, **values)
+                    session.add(db_row)
+                if job is not None:
+                    await session.flush()
+                    await job.complete_item(sim_res["persona_id"], result_refs={"result_id": db_row.id, "run_id": run_id, "status": db_row.status}, session=session)
 
             # Recompute aggregate metrics from all results
             res_all_results = await session.execute(
@@ -1108,7 +1288,7 @@ class BehavioralSimulationEngine:
                 cross_persona_patterns,
                 risks,
                 opportunities,
-                _,
+                insights_to_create,
             ) = self.compute_aggregate_synthesis(valid_dicts, segments_map, test.test_type if test else "pricing_test")
 
             completed_count = sum(1 for r in all_rows if r.status == "completed")
@@ -1121,7 +1301,23 @@ class BehavioralSimulationEngine:
             run.cross_persona_patterns = cross_persona_patterns
             run.risks = risks
             run.opportunities = opportunities
-            run.status = "completed" if failed_count == 0 else "completed_with_warnings"
+            run.status = "completed" if failed_count == 0 else "completed_with_warnings" if completed_count else "failed"
+            run.completed_at = _utcnow()
+            run.error_message = None
+            await session.execute(delete(BehavioralInsights).where(
+                BehavioralInsights.test_run_id == run.id,
+                BehavioralInsights.study_id == run.study_id,
+            ))
+            for insight in insights_to_create:
+                session.add(BehavioralInsights(
+                    id=f"bi_{uuid.uuid4().hex[:16]}", study_id=run.study_id,
+                    test_run_id=run.id, behavioral_test_id=run.behavioral_test_id,
+                    user_id=run.user_id, type=insight["type"], title=insight["title"],
+                    description=insight["description"], confidence=insight["confidence"],
+                    supporting_persona_ids=[result["persona_id"] for result in valid_dicts], is_synthetic=True,
+                ))
+            if test is not None:
+                test.status = "completed"
 
             await session.commit()
             return run

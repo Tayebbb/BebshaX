@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import hashlib
 import json
 import logging
 import math
 import os
-from collections.abc import Mapping
+import re
+from collections.abc import Callable, Mapping
+from datetime import timedelta
 from pathlib import Path
 import uuid
 from typing import Any, Optional, cast
 
-from sqlalchemy import false as sa_false, func, select
+from sqlalchemy import delete, false as sa_false, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -21,6 +25,7 @@ from bebshax.config import get_settings
 from bebshax.api.errors import APIError
 from bebshax.db.models import DatasetPersonaRuns, DatasetSources, EvidenceClaims, Personas, Studies, _utcnow
 from bebshax.datasets.parser import parse_dataset_bytes
+from bebshax.datasets.orm import DatasetVersions
 from bebshax.datasets.profiler import profile_dataset
 from bebshax.datasets.security import safe_fetch_dataset_bytes
 from bebshax.datasets.segmenter import calculate_segment_persona_distribution, discover_segments
@@ -29,9 +34,16 @@ from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.llm.service import LLMService
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+from bebshax.jobs.orm import JobFileCleanup
+from bebshax.jobs.runtime import JobContext
 from bebshax.persona.conflicts import contested_slots, shares_content_token
 from bebshax.personas.ml_adapter import MLPersonaAdapter, build_business_context, to_generated_persona, to_persona_draft
-from bebshax.personas.service import active_source_exclusions, lock_persona_parent
+from bebshax.personas.service import (
+    active_source_exclusions,
+    lock_persona_parent,
+    record_persona_version,
+    refresh_study_persona_state,
+)
 from bebshax.tenancy import PUBLIC_OWNER_IDS
 from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 
@@ -65,9 +77,9 @@ def _owned_dataset_file(dataset: DatasetSources) -> Path | None:
     if Path(filename).name != filename:
         return None
     root = _upload_dir().absolute()
-    expected = root / filename
     candidate = Path(dataset.file_path).absolute()
-    if candidate != expected:
+    version_pattern = re.escape(dataset.id) + r"\.v_[0-9a-f]{16}\.[0-9a-f]{64}\.json"
+    if candidate.parent != root or not (candidate.name == filename or re.fullmatch(version_pattern, candidate.name)):
         return None
     try:
         if candidate.is_symlink() or candidate.resolve().parent != root.resolve():
@@ -75,6 +87,82 @@ def _owned_dataset_file(dataset: DatasetSources) -> Path | None:
     except (OSError, RuntimeError):
         return None
     return candidate
+
+
+def _records_publication(dataset_id: str, records: bytes, version_key: str) -> tuple[str, str, str]:
+    if Path(dataset_id).name != dataset_id or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", dataset_id):
+        raise ValueError("Invalid dataset identity for version publication.")
+    if not re.fullmatch(r"[0-9a-f]{16}", version_key):
+        raise ValueError("Invalid dataset version identity.")
+    root = _upload_dir().absolute()
+    digest = hashlib.sha256(records).hexdigest()
+    destination = root / f"{dataset_id}.v_{version_key}.{digest}.json"
+    return f"dsv_{version_key}", str(destination), digest
+
+
+def _publish_records(dataset_id: str, records: bytes, *, version_key: str | None = None) -> tuple[str, str, str]:
+    publication = _records_publication(dataset_id, records, version_key or uuid.uuid4().hex[:16])
+    with Path(publication[1]).open("xb") as output:
+        output.write(records)
+        output.flush()
+        os.fsync(output.fileno())
+    return publication
+
+
+def _version_record(dataset: DatasetSources, published: tuple[str, str, str], version: int,
+                    original_file_path: str | None = None) -> DatasetVersions:
+    version_id, path, digest = published
+    return DatasetVersions(
+        id=version_id, dataset_id=dataset.id, owner_id=dataset.user_id, version=version,
+        content_hash=dataset.content_hash, records_hash=digest, file_path=path,
+        original_file_path=original_file_path, file_type=dataset.file_type,
+        row_count=dataset.row_count or 0, column_count=dataset.column_count or 0,
+        schema_metadata=copy.deepcopy(dataset.schema_metadata or {}),
+        statistics=copy.deepcopy(dataset.statistics or {}), segments=copy.deepcopy(dataset.segments or []),
+    )
+
+
+async def enqueue_dataset_cleanup(session: AsyncSession, dataset: DatasetSources) -> list[str]:
+    versions = (await session.scalars(select(DatasetVersions).where(DatasetVersions.dataset_id == dataset.id))).all()
+    files = {version.file_path: version.records_hash for version in versions}
+    for version in versions:
+        if version.original_file_path:
+            files.setdefault(version.original_file_path, None)
+    if dataset.file_path:
+        files.setdefault(dataset.file_path, None)
+    identifiers = []
+    for path, digest in files.items():
+        cleanup_id = f"cleanup_{uuid.uuid4().hex[:24]}"
+        session.add(JobFileCleanup(
+            id=cleanup_id, dataset_id=dataset.id, owner_id=dataset.user_id,
+            file_path=path, content_hash=digest, status="pending", attempts=0, created_at=_utcnow(),
+        ))
+        identifiers.append(cleanup_id)
+    return identifiers
+
+
+def dataset_refresh_input(dataset: DatasetSources, version_id: str | None) -> dict[str, Any]:
+    return {
+        "dataset_id": dataset.id, "dataset_version_id": version_id,
+        "study_id": dataset.study_id, "source_type": dataset.source_type, "source_url": dataset.source_url,
+        "file_type": dataset.file_type, "content_hash": dataset.content_hash,
+        "file_path": dataset.file_path,
+    }
+
+
+def _unlink_journaled_file(dataset_id: str, file_path: str, digest: str | None) -> tuple[str, str | None]:
+    owned = _owned_dataset_file(DatasetSources(id=dataset_id, file_path=file_path))
+    if owned is None:
+        return "blocked", "file_not_owned"
+    try:
+        if digest is not None and owned.exists():
+            with owned.open("rb") as source:
+                if hashlib.file_digest(source, "sha256").hexdigest() != digest:
+                    return "blocked", "file_content_changed"
+        owned.unlink(missing_ok=True)
+        return "completed", None
+    except OSError:
+        return "failed", "file_unlink_failed"
 
 
 def _parse_json_object(text: str) -> dict:
@@ -163,19 +251,126 @@ def coerce_claim_provenance(
 class DatasetService:
     def __init__(
         self,
-        sessionmaker_: sessionmaker[AsyncSession],
+        sessionmaker_: Callable[[], AsyncSession],
         llm: LLMService | None = None,
         *, ml_generator: MLPersonaAdapter | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker_
         self._llm = llm
         self._ml_generator = ml_generator
+        self._cpu_slots = asyncio.Semaphore(2)
         if self._ml_generator is None and llm is None:
             self._ml_generator = MLPersonaAdapter.from_settings()
         _upload_dir().mkdir(parents=True, exist_ok=True)
 
+    async def _cpu(self, function, *args, **kwargs):
+        async with self._cpu_slots:
+            task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+            cancelled = False
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    cancelled = True
+                except Exception:
+                    if cancelled:
+                        raise asyncio.CancelledError from None
+                    raise
+            if cancelled:
+                if not task.cancelled():
+                    task.exception()
+                raise asyncio.CancelledError
+            return task.result()
+
+    async def _parse_profile(self, content: bytes, **kwargs):
+        def process():
+            columns, rows = parse_dataset_bytes(content, **kwargs)
+            metadata, statistics = profile_dataset(columns, rows)
+            segments = discover_segments(columns, rows, metadata, statistics)
+            records = json.dumps(rows, ensure_ascii=True, allow_nan=False).encode("utf-8")
+            return columns, rows, metadata, statistics, segments, records
+
+        return await self._cpu(process)
+
+    async def _persist_new_dataset(self, dataset: DatasetSources, records: bytes, *, job: JobContext | None = None) -> DatasetSources:
+        version = await self._publish_version(dataset, records, 1)
+        dataset.file_path = version.file_path
+        try:
+            async with self._sessionmaker() as session, session.begin():
+                if job is not None:
+                    await job.fence(session)
+                await self.retain_publication(session, version)
+                session.add(dataset)
+                await session.flush()
+                session.add(version)
+                await session.flush()
+                if job is not None:
+                    refs = {"dataset_id": dataset.id, "version_id": version.id}
+                    await job.complete_item("dataset", result_refs=refs, session=session)
+                    job["result_refs"] = refs
+                session.expunge(dataset)
+            return dataset
+        except BaseException:
+            await self._cleanup_uncommitted_versions([version])
+            raise
+
+    async def _publish_version(
+        self, dataset: DatasetSources, records: bytes, version: int,
+        original_file_path: str | None = None,
+    ) -> DatasetVersions:
+        version_key = uuid.uuid4().hex[:16]
+        publication = await self._cpu(_records_publication, dataset.id, records, version_key)
+        record = _version_record(dataset, publication, version, original_file_path)
+        async with self._sessionmaker() as session, session.begin():
+            session.add(JobFileCleanup(
+                id=f"cleanup_{record.id}", dataset_id=record.dataset_id, owner_id=record.owner_id,
+                file_path=record.file_path, content_hash=None, status="running", attempts=0,
+                lease_token=record.id, lease_expires_at=_utcnow() + timedelta(seconds=60), created_at=_utcnow(),
+            ))
+        try:
+            await self._cpu(_publish_records, dataset.id, records, version_key=version_key)
+            async with self._sessionmaker() as session, session.begin():
+                changed = await session.execute(update(JobFileCleanup).where(
+                    JobFileCleanup.id == f"cleanup_{record.id}", JobFileCleanup.status == "running",
+                    JobFileCleanup.lease_token == record.id, JobFileCleanup.lease_expires_at > _utcnow(),
+                ).values(content_hash=record.records_hash))
+                if changed.rowcount != 1:
+                    raise APIError(409, "Dataset publication expired before it was saved.", error_code="dataset_publication_expired")
+            return record
+        except BaseException:
+            await self._cleanup_uncommitted_versions([record])
+            raise
+
+    async def retain_publication(self, session: AsyncSession, version: DatasetVersions) -> None:
+        retained = await session.execute(delete(JobFileCleanup).where(
+            JobFileCleanup.id == f"cleanup_{version.id}", JobFileCleanup.status == "running",
+            JobFileCleanup.lease_token == version.id, JobFileCleanup.lease_expires_at > _utcnow(),
+        ))
+        if retained.rowcount != 1:
+            raise APIError(409, "Dataset publication expired before it was saved.", error_code="dataset_publication_expired")
+
+    async def prepare_discovered_dataset(
+        self, *, content: bytes, name: str, description: str, source_url: str | None,
+        fetched_from: str, file_type: str, content_type: str,
+        user_id: str, study_id: str,
+    ) -> tuple[DatasetSources, DatasetVersions]:
+        columns, rows, metadata, statistics, segments, records = await self._parse_profile(
+            content, file_type=file_type, filename=fetched_from, content_type=content_type,
+        )
+        dataset = DatasetSources(
+            id=f"ds_{uuid.uuid4().hex[:16]}", user_id=user_id, study_id=study_id, name=name,
+            source_type="url", source_url=source_url, file_type=file_type, description=description,
+            status="ready", row_count=len(rows), column_count=len(columns),
+            schema_metadata={**metadata, "is_sample": False, "fetched_from": fetched_from},
+            statistics=statistics, segments=segments, content_hash=hashlib.sha256(content).hexdigest(),
+            persona_count_generated=0, last_processed_at=_utcnow(),
+        )
+        version = await self._publish_version(dataset, records, 1)
+        dataset.file_path = version.file_path
+        return dataset, version
+
     @property
-    def sessionmaker(self) -> sessionmaker[AsyncSession]:
+    def sessionmaker(self) -> Callable[[], AsyncSession]:
         """Session factory this service was built with (falls back to a
         freshly created engine when the app has none wired)."""
         return self._sessionmaker
@@ -188,19 +383,14 @@ class DatasetService:
         user_id: Optional[str] = None,
         study_id: Optional[str] = None,
         file_type: Optional[str] = None,
+        *, job: JobContext | None = None,
     ) -> DatasetSources:
         """Fetch external dataset URL with SSRF protection, parse, profile, and store metadata."""
         content, ctype = await safe_fetch_dataset_bytes(url)
         content_hash = hashlib.sha256(content).hexdigest()
-        columns, rows = parse_dataset_bytes(content, file_type=file_type, content_type=ctype)
-        schema_metadata, stats = profile_dataset(columns, rows)
-        segments = discover_segments(columns, rows, schema_metadata, stats)
+        columns, rows, schema_metadata, stats, segments, records = await self._parse_profile(content, file_type=file_type, content_type=ctype)
 
         ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-        # Store structured records on disk for fast querying and preview
-        file_path = str(_upload_dir() / f"{ds_id}.json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(rows, f)
 
         dataset = DatasetSources(
             id=ds_id,
@@ -209,7 +399,6 @@ class DatasetService:
             name=name,
             source_type="url",
             source_url=url,
-            file_path=file_path,
             file_type=file_type or "csv",
             description=description,
             status="ready",
@@ -223,12 +412,7 @@ class DatasetService:
             last_processed_at=_utcnow(),
         )
 
-        async with self._sessionmaker() as session:
-            session.add(dataset)
-            await session.commit()
-            await session.refresh(dataset)
-
-        return dataset
+        return await self._persist_new_dataset(dataset, records, job=job)
 
     async def ingest_from_upload(
         self,
@@ -239,17 +423,13 @@ class DatasetService:
         user_id: Optional[str] = None,
         study_id: Optional[str] = None,
         file_type: Optional[str] = None,
+        *, job: JobContext | None = None,
     ) -> DatasetSources:
         """Parse uploaded dataset file, profile deterministically, discover segments, and store."""
         content_hash = hashlib.sha256(content).hexdigest()
-        columns, rows = parse_dataset_bytes(content, file_type=file_type, filename=original_filename)
-        schema_metadata, stats = profile_dataset(columns, rows)
-        segments = discover_segments(columns, rows, schema_metadata, stats)
+        columns, rows, schema_metadata, stats, segments, records = await self._parse_profile(content, file_type=file_type, filename=original_filename)
 
         ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-        file_path = str(_upload_dir() / f"{ds_id}.json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(rows, f)
 
         dataset = DatasetSources(
             id=ds_id,
@@ -258,7 +438,6 @@ class DatasetService:
             name=name,
             source_type="upload",
             original_file_name=original_filename,
-            file_path=file_path,
             file_type=file_type or original_filename.split(".")[-1].lower(),
             description=description,
             status="ready",
@@ -272,12 +451,7 @@ class DatasetService:
             last_processed_at=_utcnow(),
         )
 
-        async with self._sessionmaker() as session:
-            session.add(dataset)
-            await session.commit()
-            await session.refresh(dataset)
-
-        return dataset
+        return await self._persist_new_dataset(dataset, records, job=job)
 
     async def ingest_candidate_dataset(
         self,
@@ -291,14 +465,9 @@ class DatasetService:
     ) -> DatasetSources:
         """Parse discovered candidate bytes, profile deterministically, discover segments, and store."""
         content_hash = hashlib.sha256(content).hexdigest()
-        columns, rows = parse_dataset_bytes(content, file_type=file_type or "csv")
-        schema_metadata, stats = profile_dataset(columns, rows)
-        segments = discover_segments(columns, rows, schema_metadata, stats)
+        columns, rows, schema_metadata, stats, segments, records = await self._parse_profile(content, file_type=file_type or "csv")
 
         ds_id = f"ds_{uuid.uuid4().hex[:16]}"
-        file_path = str(_upload_dir() / f"{ds_id}.json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(rows, f)
 
         dataset = DatasetSources(
             id=ds_id,
@@ -307,7 +476,6 @@ class DatasetService:
             name=name,
             source_type="url",
             source_url=source_url,
-            file_path=file_path,
             file_type=file_type or "csv",
             description=description,
             status="ready",
@@ -321,12 +489,7 @@ class DatasetService:
             last_processed_at=_utcnow(),
         )
 
-        async with self._sessionmaker() as session:
-            session.add(dataset)
-            await session.commit()
-            await session.refresh(dataset)
-
-        return dataset
+        return await self._persist_new_dataset(dataset, records)
 
     @staticmethod
     def _tenant_filter(user_id: Optional[str]):
@@ -383,8 +546,9 @@ class DatasetService:
             if not ds:
                 return False
 
-            owned_file = _owned_dataset_file(ds)
             try:
+                cleanup_ids = await enqueue_dataset_cleanup(session, ds)
+                await session.execute(delete(DatasetVersions).where(DatasetVersions.dataset_id == dataset_id))
                 await session.delete(ds)
                 await session.commit()
             except IntegrityError as exc:
@@ -394,19 +558,56 @@ class DatasetService:
                 await session.rollback()
                 raise
 
-        if owned_file is not None:
-            try:
-                os.remove(owned_file)
-            except FileNotFoundError:
-                pass
-            except OSError as exc:
-                logger.warning(
-                    "Dataset %s was deleted; its owned upload needs cleanup (%s).",
-                    dataset_id, type(exc).__name__,
-                )
+        await self.cleanup_pending_files(cleanup_ids=cleanup_ids)
         return True
 
-    async def refresh_dataset(self, dataset_id: str, user_id: Optional[str] = None) -> tuple[Optional[DatasetSources], bool]:
+    async def cleanup_pending_files(self, *, cleanup_ids: list[str] | None = None, limit: int = 100) -> int:
+        if limit < 1 or limit > 100:
+            raise ValueError("Cleanup batch must contain 1 to 100 items.")
+        now = _utcnow()
+        eligible = or_(
+            JobFileCleanup.status.in_(("pending", "failed")),
+            (JobFileCleanup.status == "blocked") & (JobFileCleanup.error_code == "file_still_referenced"),
+            (JobFileCleanup.status == "running") & (JobFileCleanup.lease_expires_at <= now),
+        )
+        async with self._sessionmaker() as session:
+            statement = select(JobFileCleanup.id).where(eligible).order_by(JobFileCleanup.created_at).limit(limit)
+            if cleanup_ids is not None:
+                statement = statement.where(JobFileCleanup.id.in_(cleanup_ids))
+            identifiers = list(await session.scalars(statement))
+        completed = 0
+        for cleanup_id in identifiers:
+            token = uuid.uuid4().hex
+            async with self._sessionmaker() as session, session.begin():
+                claimed = await session.execute(update(JobFileCleanup).where(
+                    JobFileCleanup.id == cleanup_id, eligible,
+                ).values(status="running", lease_token=token, lease_expires_at=_utcnow() + timedelta(seconds=60), attempts=JobFileCleanup.attempts + 1))
+                if claimed.rowcount != 1:
+                    continue
+                entry = await session.get(JobFileCleanup, cleanup_id)
+                current_ref = await session.scalar(select(DatasetSources.id).where(DatasetSources.file_path == entry.file_path).limit(1))
+                version_ref = await session.scalar(select(DatasetVersions.id).where(
+                    or_(DatasetVersions.file_path == entry.file_path, DatasetVersions.original_file_path == entry.file_path),
+                ).limit(1))
+                if current_ref is not None or version_ref is not None:
+                    entry.status, entry.error_code, entry.lease_expires_at = "blocked", "file_still_referenced", None
+                    continue
+                dataset_id, path, digest = entry.dataset_id, entry.file_path, entry.content_hash
+            cleanup_status, error_code = await self._cpu(_unlink_journaled_file, dataset_id, path, digest)
+            async with self._sessionmaker() as session, session.begin():
+                changed = await session.execute(update(JobFileCleanup).where(
+                    JobFileCleanup.id == cleanup_id, JobFileCleanup.lease_token == token,
+                    JobFileCleanup.status == "running",
+                ).values(status=cleanup_status, error_code=error_code, lease_expires_at=None,
+                         completed_at=_utcnow() if cleanup_status == "completed" else None))
+                if cleanup_status == "completed" and changed.rowcount == 1:
+                    completed += 1
+        return completed
+
+    async def refresh_dataset(
+        self, dataset_id: str, user_id: Optional[str] = None, *, job: JobContext | None = None,
+        expected_input: dict[str, Any] | None = None,
+    ) -> tuple[Optional[DatasetSources], bool]:
         """Re-fetch a URL-based dataset, check content-hash, and re-calculate statistics only if changed.
 
         Returns:
@@ -419,38 +620,97 @@ class DatasetService:
             ds = res.scalar_one_or_none()
             if not ds or ds.source_type != "url" or not ds.source_url:
                 return None, False
+            if expected_input is not None:
+                version_id = await session.scalar(select(DatasetVersions.id).where(
+                    DatasetVersions.dataset_id == ds.id, DatasetVersions.owner_id == ds.user_id,
+                    DatasetVersions.file_path == ds.file_path, DatasetVersions.content_hash == ds.content_hash,
+                ).order_by(DatasetVersions.version.desc()).limit(1))
+                if dataset_refresh_input(ds, version_id) != expected_input:
+                    raise APIError(409, "The dataset changed after admission.", error_code="dataset_input_changed")
+            has_version = bool(await session.scalar(select(func.count()).select_from(DatasetVersions).where(DatasetVersions.dataset_id == dataset_id)))
+            session.expunge(ds)
 
-            content, ctype = await safe_fetch_dataset_bytes(ds.source_url)
-            new_hash = hashlib.sha256(content).hexdigest()
+        content, ctype = await safe_fetch_dataset_bytes(ds.source_url)
+        new_hash = hashlib.sha256(content).hexdigest()
+        if ds.content_hash == new_hash:
+            async with self._sessionmaker() as session, session.begin():
+                if job is not None:
+                    await job.fence(session)
+                current = await session.scalar(select(DatasetSources).where(
+                    DatasetSources.id == dataset_id, self._tenant_write_filter(user_id),
+                ).with_for_update())
+                if current is None or dataset_refresh_input(current, None) != dataset_refresh_input(ds, None):
+                    raise APIError(409, "The dataset changed during refresh.", error_code="dataset_refresh_conflict")
+                current.last_processed_at = _utcnow()
+                await session.flush()
+                if job is not None:
+                    refs = {"dataset_id": current.id, "content_hash": current.content_hash}
+                    await job.complete_item("dataset", result_refs=refs, session=session)
+                    job["result_refs"] = refs
+                session.expunge(current)
+            return current, False
 
-            # If content is completely identical, skip reprocessing
-            if ds.content_hash and ds.content_hash == new_hash:
-                ds.last_processed_at = _utcnow()
-                await session.commit()
-                await session.refresh(ds)
-                return ds, False
+        columns, rows, metadata, statistics, segments, records = await self._parse_profile(content, file_type=ds.file_type, content_type=ctype)
+        published_versions = []
+        try:
+            if not has_version and ds.file_path:
+                owned = _owned_dataset_file(ds)
+                if owned is None:
+                    raise APIError(409, "The existing dataset file is not server-owned; refresh cannot replace it.", error_code="dataset_unmanaged_file")
+                previous = await self._cpu(owned.read_bytes)
+                published_versions.append(await self._publish_version(ds, previous, 1, original_file_path=ds.file_path))
+            next_version = await self._publish_version(ds, records, 0)
+            next_version.content_hash = new_hash
+            next_version.row_count, next_version.column_count = len(rows), len(columns)
+            next_version.schema_metadata, next_version.statistics, next_version.segments = metadata, statistics, segments
+            published_versions.append(next_version)
+            async with self._sessionmaker() as session, session.begin():
+                if job is not None:
+                    await job.fence(session)
+                current = await session.scalar(select(DatasetSources).where(
+                    DatasetSources.id == dataset_id, self._tenant_write_filter(user_id),
+                ).with_for_update())
+                if current is None or dataset_refresh_input(current, None) != dataset_refresh_input(ds, None):
+                    raise APIError(409, "The dataset changed during refresh.", error_code="dataset_refresh_conflict")
+                maximum = await session.scalar(select(func.max(DatasetVersions.version)).where(DatasetVersions.dataset_id == dataset_id)) or 0
+                for version in published_versions:
+                    await self.retain_publication(session, version)
+                    maximum += 1
+                    version.version = maximum
+                    session.add(version)
+                current.file_path = next_version.file_path
+                current.content_hash = new_hash
+                current.row_count, current.column_count = len(rows), len(columns)
+                current.schema_metadata, current.statistics, current.segments = metadata, statistics, segments
+                current.last_processed_at = _utcnow()
+                current.status, current.processing_error = "ready", None
+                await session.flush()
+                if job is not None:
+                    refs = {"dataset_id": current.id, "version_id": next_version.id}
+                    await job.complete_item("dataset", result_refs=refs, session=session)
+                    job["result_refs"] = refs
+                session.expunge(current)
+            return current, True
+        except BaseException:
+            await self._cleanup_uncommitted_versions(published_versions)
+            raise
 
-            columns, rows = parse_dataset_bytes(content, file_type=ds.file_type, content_type=ctype)
-            schema_metadata, stats = profile_dataset(columns, rows)
-            segments = discover_segments(columns, rows, schema_metadata, stats)
-
-            if ds.file_path:
-                with open(ds.file_path, "w", encoding="utf-8") as f:
-                    json.dump(rows, f)
-
-            ds.row_count = len(rows)
-            ds.column_count = len(columns)
-            ds.schema_metadata = schema_metadata
-            ds.statistics = stats
-            ds.segments = segments
-            ds.content_hash = new_hash
-            ds.last_processed_at = _utcnow()
-            ds.status = "ready"
-            ds.processing_error = None
-
-            await session.commit()
-            await session.refresh(ds)
-            return ds, True
+    async def _cleanup_uncommitted_versions(self, versions: list[DatasetVersions]) -> None:
+        try:
+            async with self._sessionmaker() as session, session.begin():
+                for version in versions:
+                    entry = await session.get(JobFileCleanup, f"cleanup_{version.id}")
+                    if entry is None:
+                        session.add(JobFileCleanup(
+                            id=f"cleanup_{version.id}", dataset_id=version.dataset_id,
+                            owner_id=version.owner_id, file_path=version.file_path, content_hash=version.records_hash,
+                            status="pending", attempts=0, created_at=_utcnow(),
+                        ))
+                    else:
+                        entry.status = "pending"
+                        entry.lease_token = entry.lease_expires_at = None
+        except Exception as exc:
+            logger.error("Could not journal unpublished dataset cleanup (%s)", type(exc).__name__)
 
     async def get_dataset_preview(
         self, dataset_id: str, offset: int = 0, limit: int = 20, user_id: Optional[str] = None
@@ -578,13 +838,16 @@ class DatasetService:
         study_id: Optional[str] = None,
         business_name: str = "",
         business_description: str = "",
+        *, job: JobContext | None = None, expected_dataset_version_id: str | None = None,
     ) -> dict[str, Any]:
         """Select and persist a dataset cohort atomically under its parent locks."""
+        if job is not None and job.lease.owner_id != user_id:
+            raise ValueError("Dataset persona job owner does not match the caller.")
         async with self._sessionmaker() as session:
             try:
                 return await self._generate_personas_from_dataset(
                     session, dataset_id, requested_count, user_id, study_id,
-                    business_name, business_description,
+                    business_name, business_description, job=job, expected_dataset_version_id=expected_dataset_version_id,
                 )
             except IntegrityError as exc:
                 await session.rollback()
@@ -615,6 +878,7 @@ class DatasetService:
     async def _generate_personas_from_dataset(
         self, session: AsyncSession, dataset_id: str, requested_count: int,
         user_id: Optional[str], study_id: Optional[str], business_name: str, business_description: str,
+        *, job: JobContext | None = None, expected_dataset_version_id: str | None = None,
     ) -> dict[str, Any]:
         if self._ml_generator is not None:
             ds = await self._lock_dataset_persona_parent(session, dataset_id, user_id, study_id)
@@ -625,11 +889,35 @@ class DatasetService:
         if not ds:
             raise ValueError(f"Dataset '{dataset_id}' not found.")
 
+        if ds.study_id is not None and ds.study_id != study_id:
+            raise APIError(
+                409, "The dataset belongs to a different study scope.", error_code="dataset_study_mismatch",
+            )
         segments = ds.segments or []
         if not segments:
             raise ValueError(f"Dataset '{dataset_id}' has no discovered segments.")
         if self._llm is None and self._ml_generator is None:
             raise LLMUnavailable("Dataset persona generation")
+
+        dataset_version_id = await session.scalar(select(DatasetVersions.id).where(
+            DatasetVersions.dataset_id == ds.id,
+            DatasetVersions.owner_id == ds.user_id,
+            DatasetVersions.file_path == ds.file_path,
+            DatasetVersions.content_hash == ds.content_hash,
+        ).order_by(DatasetVersions.version.desc()).limit(1))
+        if dataset_version_id is None:
+            raise APIError(
+                409, "The dataset has no matching immutable version. Refresh or upload it again.",
+                error_code="dataset_version_required",
+            )
+        if expected_dataset_version_id is not None and expected_dataset_version_id != dataset_version_id:
+            raise APIError(
+                409, "The dataset changed after persona generation was admitted.", error_code="dataset_input_changed",
+            )
+        dataset_input = {field: copy.deepcopy(getattr(ds, field)) for field in (
+            "user_id", "study_id", "file_path", "content_hash", "name", "description",
+            "segments", "schema_metadata", "statistics",
+        )}
 
         study_context: dict[str, Any] = {}
         claims: list[dict[str, Any]] = []
@@ -660,18 +948,23 @@ class DatasetService:
         if self._ml_generator is not None:
             scope = Personas.study_id == study_id
             if study_id is None:
-                scope = scope & Personas.generation_run_id.in_(
-                    select(DatasetPersonaRuns.id).where(
-                        DatasetPersonaRuns.dataset_id == dataset_id,
-                        DatasetPersonaRuns.study_id.is_(None),
-                        DatasetPersonaRuns.user_id == user_id,
-                    )
+                dataset_run_ids = select(DatasetPersonaRuns.id).where(
+                    DatasetPersonaRuns.dataset_id == dataset_id,
+                    DatasetPersonaRuns.study_id.is_(None),
+                    DatasetPersonaRuns.user_id == user_id,
+                )
+                scope = scope & or_(
+                    Personas.dataset_persona_run_id.in_(dataset_run_ids),
+                    Personas.dataset_persona_run_id.is_(None) & Personas.generation_run_id.in_(dataset_run_ids),
                 )
             used_source_ids, used_names = await active_source_exclusions(
                 session, owner_id=user_id or "usr_system_holder", scope=scope,
+                study_id=study_id, dataset_id=dataset_id if study_id is None else None,
             )
-        else:
-            await session.commit()
+        # Selection runs outside any row lock or transaction; the parent is re-locked
+        # and inputs/source exclusions re-checked before anything is persisted.
+        session.expunge(ds)
+        await session.rollback()
 
         # 2. Synthesize personas for each segment quota
         for seg in segments:
@@ -719,7 +1012,7 @@ class DatasetService:
             sample_records = seg.get("sample_records", [])
             # Only rows the model is actually SHOWN can ground a claim; they get
             # stable content-derived ids so citations are verifiable.
-            shown_records = [r for r in sample_records[:2] if isinstance(r, dict)]
+            shown_records = [record for record in sample_records if isinstance(record, dict)]
             shown_ids = {record_evidence_id(r): r for r in shown_records}
             evidence_lines = "\n".join(
                 f"[{rid}] {json.dumps(record, ensure_ascii=False, default=str)}"
@@ -859,8 +1152,36 @@ class DatasetService:
             validation_results=validation_results + [{"failed": f} for f in failed],
         )
 
-        if self._ml_generator is None:
-            ds = await self._lock_dataset_persona_parent(session, dataset_id, user_id, study_id)
+        if job is not None:
+            await job.fence(session)
+        ds = await self._lock_dataset_persona_parent(session, dataset_id, user_id, study_id)
+        if any(getattr(ds, field) != value for field, value in dataset_input.items()):
+            raise APIError(
+                409, "The dataset changed while personas were being generated.", error_code="dataset_input_changed",
+            )
+        if self._ml_generator is not None:
+            if study_id is not None:
+                current_study = await session.get(Studies, study_id)
+                if current_study is None or any(
+                    getattr(current_study, field) != value for field, value in study_context.items()
+                ):
+                    raise APIError(
+                        409, "The study changed while personas were being generated.", error_code="dataset_input_changed",
+                    )
+            current_ids, current_names = await active_source_exclusions(
+                session, owner_id=user_id or "usr_system_holder", scope=scope,
+                study_id=study_id, dataset_id=dataset_id if study_id is None else None,
+            )
+            normalized_names = {" ".join(name.casefold().split()) for name in current_names}
+            if any(
+                persona["detailed_attributes"]["ml_provenance"]["record_id"] in current_ids
+                or " ".join(persona["name"].casefold().split()) in normalized_names
+                for persona in generated_personas
+            ):
+                raise APIError(
+                    409, "A selected persona source was used by another request. Retry generation.",
+                    error_code="persona_source_conflict",
+                )
         session.add(run_record)
         ds.persona_count_generated = (ds.persona_count_generated or 0) + len(generated_personas)
         await session.flush()
@@ -869,6 +1190,9 @@ class DatasetService:
             p_id = f"per_{uuid.uuid4().hex[:12]}"
             p_data["id"] = p_id
             p_data["study_id"] = study_id
+            p_data["dataset_persona_run_id"] = run_id
+            p_data["dataset_version_id"] = dataset_version_id
+            p_data["dataset_segment_key"] = p_data.get("segment_id") if dataset_version_id is not None else None
             prefs = p_data.get("preferences") or []
             if isinstance(prefs, str):
                 prefs = [prefs]
@@ -878,8 +1202,9 @@ class DatasetService:
                 study_id=study_id,
                 user_id=user_id,
                 owner_id=user_id or "usr_system_holder",
-                segment_id=p_data.get("segment_id"),
-                generation_run_id=run_id,
+                dataset_persona_run_id=run_id,
+                dataset_version_id=dataset_version_id,
+                dataset_segment_key=p_data["dataset_segment_key"],
                 name=p_data.get("name", "Synthetic Persona"),
                 status="ready" if p_data.get("validation", {}).get("status") == "VALID" else "needs_review",
                 version=1,
@@ -926,24 +1251,28 @@ class DatasetService:
                 updated_at=_utcnow(),
             )
             session.add(p_entity)
+            await record_persona_version(session, p_entity)
 
         if study_id is not None:
             study = await session.get(Studies, study_id)
             if study is not None:
-                await session.flush()
-                study.persona_count = await session.scalar(
-                    select(func.count()).select_from(Personas).where(
-                        Personas.study_id == study_id,
-                        Personas.owner_id == (user_id or "usr_system_holder"),
-                        Personas.status != "archived",
-                    )
+                await refresh_study_persona_state(
+                    session, study=study, owner_id=user_id or "usr_system_holder", removed_ids=set(),
                 )
 
+        if job is not None:
+            refs = {
+                "dataset_id": ds.id, "version_id": dataset_version_id, "run_id": run_id,
+                "persona_ids": [persona["id"] for persona in generated_personas],
+            }
+            await job.complete_item("dataset", result_refs=refs, session=session)
+            job["result_refs"] = refs
         await session.commit()
 
         return {
             "run_id": run_id,
             "dataset_id": ds.id,
+            "dataset_version_id": dataset_version_id,
             "dataset_name": ds.name,
             "model_used": ", ".join(served_by),
             "served_by": served_by,

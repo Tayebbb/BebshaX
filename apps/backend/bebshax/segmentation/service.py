@@ -6,14 +6,19 @@ deterministic clustering, LLM interpretation, evidence linking, and database per
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from bebshax.api.errors import APIError
+from bebshax.datasets.orm import DatasetVersions
 from bebshax.db.models import (
     DatasetSources,
     EvidenceClaims,
@@ -22,6 +27,7 @@ from bebshax.db.models import (
     Studies,
 )
 from bebshax.llm.service import LLMService
+from bebshax.jobs.runtime import FencedSession
 from bebshax.segmentation.clusterer import SEGMENTATION_REQUIRES_DATA, cluster_dataset_populations
 from bebshax.segmentation.interpreter import interpret_market_segments
 from bebshax.segmentation.pre_check import check_segmentation_readiness
@@ -33,6 +39,43 @@ logger = logging.getLogger(__name__)
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+async def capture_segmentation_input_versions(
+    session: AsyncSession, study_id: str, user_id: str | None,
+) -> dict[str, Any]:
+    study = await session.get(Studies, study_id, populate_existing=True)
+    if study is None or (user_id is not None and study.user_id != user_id):
+        raise APIError(404, "Study not found.", error_code="not_found")
+    statement = select(DatasetSources).where(DatasetSources.study_id == study_id)
+    if user_id is not None:
+        statement = statement.where(DatasetSources.user_id == user_id)
+    datasets = list(await session.scalars(statement.execution_options(populate_existing=True)))
+    if not datasets and user_id is not None:
+        datasets = list(await session.scalars(select(DatasetSources).where(
+            DatasetSources.user_id == user_id, DatasetSources.status.in_(("ready", "processed")),
+        ).execution_options(populate_existing=True)))
+    claim_statement = select(EvidenceClaims).where(EvidenceClaims.study_id == study_id)
+    if user_id is not None:
+        claim_statement = claim_statement.where(EvidenceClaims.user_id == user_id)
+    claims = list(await session.scalars(claim_statement.execution_options(populate_existing=True)))
+
+    def fingerprint(row: Any) -> str:
+        values = {attribute.key: getattr(row, attribute.key) for attribute in row.__mapper__.column_attrs}
+        return hashlib.sha256(json.dumps(values, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    versions = list(await session.scalars(select(DatasetVersions).where(
+        DatasetVersions.dataset_id.in_([dataset.id for dataset in datasets]),
+    ).order_by(DatasetVersions.version))) if datasets else []
+    published = {(version.dataset_id, version.owner_id, version.file_path, version.content_hash): version for version in versions}
+    dataset_inputs = []
+    for dataset in sorted(datasets, key=lambda row: row.id):
+        version = published.get((dataset.id, dataset.user_id, dataset.file_path, dataset.content_hash))
+        dataset_inputs.append({"id": dataset.id, "hash": fingerprint(dataset), "version_id": version.id if version else None})
+    return {
+        "study_revision": study.revision, "study_hash": fingerprint(study), "datasets": dataset_inputs,
+        "claims": [{"id": claim.id, "hash": fingerprint(claim)} for claim in sorted(claims, key=lambda row: row.id)],
+    }
 
 
 class SegmentationEngineService:
@@ -48,6 +91,7 @@ class SegmentationEngineService:
         user_id: Optional[str] = None,
         desired_clusters: Optional[int] = None,
         configuration: Optional[dict[str, Any]] = None,
+        *, expected_input_versions: dict[str, Any] | None = None,
     ) -> tuple[SegmentationRuns, list[MarketSegments]]:
         """Execute full market segmentation for a study."""
         # 1. Fetch study context
@@ -76,6 +120,9 @@ class SegmentationEngineService:
             claims_query = claims_query.where(EvidenceClaims.user_id == user_id)
         claims_res = await self.session.execute(claims_query)
         claims = list(claims_res.scalars().all())
+        input_versions = await capture_segmentation_input_versions(self.session, study_id, user_id)
+        if expected_input_versions is not None and input_versions != expected_input_versions:
+            raise APIError(409, "Segmentation inputs changed after admission.", error_code="segmentation_input_changed")
 
         # 4. Check readiness
         study_ctx = {
@@ -93,6 +140,7 @@ class SegmentationEngineService:
         dataset_versions_payload = [
             {
                 "dataset_id": ds.id,
+                "version_id": next(item["version_id"] for item in input_versions["datasets"] if item["id"] == ds.id),
                 "name": ds.name,
                 "content_hash": ds.content_hash or "unversioned",
                 "row_count": ds.row_count,
@@ -109,7 +157,10 @@ class SegmentationEngineService:
             ],
         }
 
-        config_payload = configuration or {}
+        config_payload = dict(configuration or {})
+        config_payload["input_versions"] = input_versions
+        if isinstance(self.session, FencedSession):
+            config_payload["job_id"] = self.session.job["job_id"]
         if desired_clusters:
             config_payload["desired_clusters"] = desired_clusters
 
@@ -189,20 +240,26 @@ class SegmentationEngineService:
 
             return seg_run, created_segments
 
-        except Exception as err:
-            seg_run.status = "failed"
-            # Explicit failures carry a user-facing message; anything else is
-            # reduced to its class name (details go to the server log).
+        except (Exception, asyncio.CancelledError) as err:
+            await self.session.rollback()
             if isinstance(err, ExplicitFailure):
-                seg_run.error_message = err.detail
-                seg_run.configuration = {**(seg_run.configuration or {}), "error_code": err.error_code}
+                message, error_code = err.detail, err.error_code
             else:
-                logger.warning("segmentation run %s failed", run_id, exc_info=True)
-                seg_run.error_message = f"Segmentation stopped on an internal error ({type(err).__name__})."
-                seg_run.configuration = {**(seg_run.configuration or {}), "error_code": "run_failed"}
-            seg_run.completed_at = _utcnow()
-            await self.session.commit()
-            raise err
+                logger.warning("segmentation run %s failed (%s)", run_id, type(err).__name__)
+                message = f"Segmentation stopped on an internal error ({type(err).__name__})."
+                error_code = "run_cancelled" if isinstance(err, asyncio.CancelledError) else "run_failed"
+            maker = async_sessionmaker(self.session.bind, expire_on_commit=False)
+            async with maker() as failure_session, failure_session.begin():
+                if isinstance(self.session, FencedSession):
+                    await self.session.job.fence(failure_session)
+                await failure_session.execute(update(SegmentationRuns).where(
+                    SegmentationRuns.id == run_id, SegmentationRuns.study_id == study_id,
+                    SegmentationRuns.status.notin_(("completed", "failed", "cancelled", "interrupted", "timed_out")),
+                ).values(
+                    status="failed", error_message=message,
+                    configuration={**config_payload, "error_code": error_code}, completed_at=_utcnow(),
+                ))
+            raise
 
     async def get_segment_comparison(
         self,

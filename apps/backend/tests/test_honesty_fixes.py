@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -224,13 +224,17 @@ async def test_simulation_retries_once_then_fails_explicitly():
 
     engine._gather_simulation_context = _ctx  # type: ignore[method-assign]
     persona = SimpleNamespace(id="per_1", name="Rafi", commercial_profile={}, demographics={}, segment_id=None, version=1)
+    # The engine releases its DB session before the provider call; an awaitable close is required.
+    session = MagicMock()
+    session.close = AsyncMock()
     with pytest.raises(UnusableModelOutput) as info:
         await engine.simulate_persona_response(
             persona=persona, study=None, test_type="pricing_test", scenario_title="Price",
-            scenario_text="A monthly plan.", parameters={"price": "9 EUR"}, session=MagicMock(),
+            scenario_text="A monthly plan.", parameters={"price": "9 EUR"}, session=session,
         )
     assert llm.calls == 2
     assert info.value.error_code == SIMULATION_UNPARSEABLE
+    session.close.assert_awaited_once()
 
 
 def test_scenario_directives_only_carry_supplied_parameters():

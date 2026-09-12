@@ -3,20 +3,24 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bebshax.api.auth import get_current_user, get_optional_current_user
-from bebshax.api.jobs import get_job, start_job
-from bebshax.api.deps import get_session, owner_accessible, require_study_access
+from bebshax.api.jobs import cancel_job_async, get_job_async, replay_job_input, run_job_inline, start_job_async
+from bebshax.api.deps import (
+    get_tenant_user as get_current_user,
+    get_optional_tenant_user as get_optional_current_user,
+    get_session, owner_accessible, require_study_access,
+)
 from bebshax.api.errors import APIError
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
-from bebshax.db.models import MarketSegments, PersonaGenerationRuns, Personas, Studies
-from bebshax.db.models import DATA_SOURCE_LIVE
+from bebshax.db.models import Businesses, MarketSegments, PersonaGenerationRuns, Personas, Studies
+from bebshax.db.models import DATA_SOURCE_LIVE, _utcnow
+from bebshax.jobs.runtime import JobContext
 from bebshax.interview.orm import Conversations
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
 from bebshax.memory.orm import MemoryItems
@@ -29,9 +33,14 @@ from bebshax.persona.store import (
     load_persona,
     save_persona,
 )
-from bebshax.personas.service import PersonaGenerationService, active_source_exclusions
+from bebshax.personas.service import (
+    PersonaGenerationService, active_source_exclusions, lock_persona_parent, serialize_persona,
+    capture_persona_input_versions,
+)
 from bebshax.personas.ml_adapter import get_persona_ml
 from bebshax.tenancy import allowed_owner_ids
+from bebshax.tenancy_context import tenant_scope
+from bebshax.utils.explicit_failures import ExplicitFailure
 
 logger = logging.getLogger(__name__)
 
@@ -69,52 +78,7 @@ class StudyGeneratePersonasRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _serialize_persona(p: Personas, segment_name: Optional[str] = None) -> dict[str, Any]:
-    detailed = getattr(p, "detailed_attributes", {}) or {}
-    commercial = p.commercial_profile or {}
-    domain_attrs = detailed.get("domain_attributes", {})
-    constraints = detailed.get("constraints") or commercial.get("constraints", {})
-
-    return {
-        "id": p.id,
-        "study_id": p.study_id,
-        "user_id": p.user_id,
-        "segment_id": p.segment_id,
-        "segment_name": segment_name,
-        "generation_run_id": p.generation_run_id,
-        "name": p.name,
-        "status": p.status,
-        "version": p.version,
-        "generation_model": p.generation_model,
-        # H3 piece 2 — "live" | "cached", see docs/DEMO.md §4.
-        "data_source": getattr(p, "data_source", DATA_SOURCE_LIVE) or DATA_SOURCE_LIVE,
-        "archetype": p.archetype,
-        "tagline": getattr(p, "tagline", None),
-        "country_code": getattr(p, "country_code", None) or None,
-        "personality": getattr(p, "personality", {}) or {},
-        "detailed_attributes": detailed,
-        "domain_attributes": domain_attrs,
-        "constraints": constraints,
-        "demographics": p.demographics or {},
-        "bio": p.bio,
-        "quote": p.quote,
-        "goals": p.goals or [],
-        "needs": p.needs or [],
-        "pain_points": p.pain_points or [],
-        "behaviors": p.behaviors or [],
-        "preferences": p.preferences or [],
-        "motivations": p.motivations or [],
-        "objections": p.objections or [],
-        "commercial_profile": commercial,
-        "technology_profile": p.technology_profile or {},
-        "evidence_citations": p.evidence_citations or [],
-        "dataset_refs": p.dataset_refs or [],
-        "grounding_score": p.grounding_score,
-        "confidence": p.confidence,
-        "validation_warnings": p.validation_warnings or [],
-        "is_synthetic": p.is_synthetic,
-        "created_at": p.created_at.isoformat() if p.created_at else None,
-        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-    }
+    return serialize_persona(p, segment_name)
 
 
 
@@ -218,16 +182,31 @@ async def generate_study_personas_endpoint(
     await _verify_study_access(study_id, current_user, session, write=True)
 
     llm_service = getattr(request.app.state, "llm_service", None)
-    service = PersonaGenerationService(session, llm_service=llm_service, ml_generator=get_persona_ml(request.app))
+    ml_generator = get_persona_ml(request.app)
+    owner_id = current_user.id
+    command = {**body.model_dump(mode="json"), "input_versions": await capture_persona_input_versions(session, study_id)}
+    command = await replay_job_input(
+        request.app, kind="persona_generation", scope_id=study_id, user_id=owner_id,
+        idempotency_key=request.headers.get("Idempotency-Key"), input_data=command,
+        snapshot_fields=frozenset({"input_versions"}),
+    )
+    await session.rollback()
+
+    async def operation(job: JobContext) -> dict[str, Any]:
+        with tenant_scope(owner_id):
+            async with request.app.state.db_sessionmaker() as job_session:
+                service = PersonaGenerationService(job_session, llm_service=llm_service, ml_generator=ml_generator)
+                run, personas = await service.create_generation_run(
+                    study_id=study_id, user_id=owner_id, **body.model_dump(),
+                    job=job, expected_input_versions=command["input_versions"],
+                )
+                segment_map = dict((await job_session.execute(select(MarketSegments.id, MarketSegments.name).where(MarketSegments.study_id == study_id))).all())
+                return {"run": _serialize_persona_run(run), "personas": [_serialize_persona(persona, segment_map.get(persona.segment_id or "")) for persona in personas]}
 
     try:
-        run, personas = await service.create_generation_run(
-            study_id=study_id,
-            user_id=current_user.id,
-            segmentation_run_id=body.segmentation_run_id,
-            personas_per_segment=body.personas_per_segment,
-            target_count=body.target_count,
-            distribution_strategy=body.distribution_strategy,
+        return await run_job_inline(
+            request.app, kind="persona_generation", scope_id=study_id, user_id=owner_id,
+            input_data=command, operation=operation, idempotency_key=request.headers.get("Idempotency-Key"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -242,22 +221,11 @@ async def generate_study_personas_endpoint(
             detail="Persona generation failed. Please try again.",
         ) from exc
 
-    # Segment map
-    seg_stmt = select(MarketSegments.id, MarketSegments.name).where(MarketSegments.study_id == study_id)
-    seg_results = (await session.execute(seg_stmt)).all()
-    seg_map = {sid: sname for sid, sname in seg_results}
-
-    return {
-        "run": _serialize_persona_run(run),
-        "personas": [_serialize_persona(p, seg_map.get(p.segment_id or "")) for p in personas],
-    }
-
-
 # ---------------------------------------------------------------------------
 # Async persona-generation jobs: a run generates N personas across segments
 # at real free-tier LLM latency (minutes) — beyond any sane HTTP timeout.
 # POST starts a background job (202), the UI polls. Personas/run rows are
-# persisted by the service as it completes; only job STATUS is in-memory.
+# persisted by the service as it completes; admission and status are durable.
 # ---------------------------------------------------------------------------
 
 @router.post("/studies/{study_id}/personas/generate/jobs", status_code=202)
@@ -280,8 +248,19 @@ async def start_persona_generation_job(
         raise HTTPException(status_code=500, detail="Database not configured")
     user_id = current_user.id
     cfg = body  # detach before request scope ends
+    command = {**cfg.model_dump(mode="json"), "input_versions": await capture_persona_input_versions(session, study_id)}
+    command = await replay_job_input(
+        app, kind="persona_generation", scope_id=study_id, user_id=user_id,
+        idempotency_key=request.headers.get("Idempotency-Key"), input_data=command,
+        snapshot_fields=frozenset({"input_versions"}),
+    )
+    await session.rollback()
 
-    async def _runner(job: dict[str, Any]) -> None:
+    async def _runner(job: JobContext) -> None:
+        with tenant_scope(user_id):
+            await _generate(job)
+
+    async def _generate(job: JobContext) -> None:
         # The request session is gone by now — the job owns its own session.
         async with sessionmaker_() as job_session:
             service = PersonaGenerationService(
@@ -295,10 +274,12 @@ async def start_persona_generation_job(
                     personas_per_segment=cfg.personas_per_segment,
                     target_count=cfg.target_count,
                     distribution_strategy=cfg.distribution_strategy,
+                    job=job, expected_input_versions=command["input_versions"],
                 )
             except APIError as exc:
-                job["error_code"] = exc.error_code
-                raise
+                raise ExplicitFailure(
+                    exc.detail, status_code=exc.status_code, error_code=exc.error_code,
+                ) from exc
             seg_stmt = select(MarketSegments.id, MarketSegments.name).where(
                 MarketSegments.study_id == study_id
             )
@@ -310,16 +291,44 @@ async def start_persona_generation_job(
                 ],
             }
 
-    job = start_job(
+    job = await start_job_async(
         app,
         kind="persona_generation",
         scope_id=study_id,
         runner=_runner,
         user_id=user_id,
+        input_data=command,
+        idempotency_key=request.headers.get("Idempotency-Key"),
         # Honest domain failures (R2/R6) pass their message through.
         user_safe_exceptions=(APIError, PersonaGenerationFailed, ContextWindowExceeded, AllCandidatesFailed),
     )
     return {"job_id": job["job_id"], "study_id": study_id, "status": job["status"]}
+
+
+async def _reconcile_persona_job(app: Any, job: dict[str, Any]) -> None:
+    run_id = (job.get("result_refs") or {}).get("run_id")
+    if run_id and job["state"] in {"cancelled", "interrupted", "timed_out", "failed"}:
+        async with app.state.db_sessionmaker() as session, session.begin():
+            await session.execute(update(PersonaGenerationRuns).where(
+                PersonaGenerationRuns.id == run_id, PersonaGenerationRuns.study_id == job["scope_id"],
+                PersonaGenerationRuns.user_id == job["user_id"],
+                PersonaGenerationRuns.status.notin_(("completed", "failed", "cancelled", "interrupted", "timed_out")),
+            ).values(status=job["state"], error_message=job["error"], completed_at=_utcnow()))
+
+
+@router.post("/studies/{study_id}/personas/generate/jobs/{job_id}/cancel")
+async def cancel_persona_generation_job(
+    study_id: str, job_id: str, request: Request, current_user: Users = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    await _verify_study_access(study_id, current_user, session, write=True)
+    owner_id = current_user.id
+    await session.rollback()
+    job = await cancel_job_async(request.app, job_id, kind="persona_generation", scope_id=study_id, user_id=owner_id)
+    if job is None:
+        raise APIError(404, "Persona job not found.", error_code="not_found")
+    await _reconcile_persona_job(request.app, job)
+    return job
 
 
 @router.get("/studies/{study_id}/personas/generate/jobs/{job_id}")
@@ -332,12 +341,18 @@ async def get_persona_generation_job(
 ) -> dict[str, Any]:
     """Poll a persona-generation job. 404 for unknown/lost jobs (e.g. restart)."""
     await _verify_study_access(study_id, current_user, session)
-    job = get_job(request.app, job_id, kind="persona_generation", scope_id=study_id)
+    if current_user is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    job = await get_job_async(
+        request.app, job_id, kind="persona_generation", scope_id=study_id, user_id=current_user.id,
+    )
     if not job:
         raise HTTPException(
             status_code=404,
             detail="job not found (it may have been lost in a server restart)",
         )
+    await session.rollback()
+    await _reconcile_persona_job(request.app, job)
     return job
 
 
@@ -541,20 +556,6 @@ async def generate_persona_endpoint(
     current_user: Users = Depends(get_current_user),
 ) -> dict:
     owner_id = current_user.id
-    async with request.app.state.db_sessionmaker() as session:
-        business = await get_business(session, business_id)
-        if business is None:
-            raise HTTPException(status_code=404, detail="business not found")
-        # Owner gate (strict auth upstream): callers may only generate under
-        # their own or shared/system businesses — never another tenant's
-        # (B6 stage 3; owner_accessible also covers anon-tenant stamps).
-        if not owner_accessible(business.owner_id, current_user):
-            raise HTTPException(status_code=404, detail="business not found")
-        exclude_ids, exclude_names = await active_source_exclusions(
-            session, owner_id=owner_id, scope=Personas.business_id == business_id,
-        )
-
-    engine = request.app.state.persona_engine
 
     hints_list = []
     if body.audience_segment:
@@ -568,28 +569,71 @@ async def generate_persona_endpoint(
 
     composed_hints = "\n".join(hints_list) if hints_list else None
 
-    try:
-        profile = await engine.generate(
-            business_id=business.id,
-            business_name=business.name,
-            business_description=business.description or "",
-            hints=composed_hints,
-            industry=business.industry,
-            target_market=business.target_market,
-            min_age=body.min_age,
-            max_age=body.max_age,
-            exclude_ids=exclude_ids,
-            exclude_names=exclude_names,
-        )
-    except PersonaGenerationFailed as exc:
-        raise HTTPException(
-            status_code=422,
-            detail={"reason": exc.reason, "violations": [v.message for v in exc.violations]},
-        ) from exc
-    # ContextWindowExceeded / AllCandidatesFailed: global handlers (413 / 503).
-
     async with request.app.state.db_sessionmaker() as session:
-        await save_persona(session, profile, owner_id=owner_id)
+        try:
+            # Owner gate first: a caller who cannot see the business learns nothing
+            # about engine availability, and a missing engine is a 503, not a crash.
+            try:
+                business = cast(Businesses, await lock_persona_parent(
+                    session, owner_id=owner_id, business_id=business_id, allow_shared_business=True,
+                ))
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail="business not found") from exc
+            engine = getattr(request.app.state, "persona_engine", None)
+            if engine is None:
+                raise HTTPException(status_code=503, detail="Persona generation is not available.")
+            # Only a remote LLM generation releases the parent lock across the await;
+            # in-process CPU selection keeps it so source exclusions stay authoritative.
+            releases_lock = (
+                getattr(engine, "_ml_generator", None) is None and getattr(engine, "_llm", None) is not None
+            )
+            uses_ml = not releases_lock
+            business_snapshot = {
+                field: getattr(business, field)
+                for field in ("name", "description", "industry", "target_market", "owner_id", "created_at")
+            }
+            if uses_ml:
+                exclude_ids, exclude_names = await active_source_exclusions(
+                    session, owner_id=owner_id, scope=Personas.business_id == business_id, business_id=business_id,
+                )
+            else:
+                exclude_ids, exclude_names = set(), set()
+                await session.rollback()
+            profile = await engine.generate(
+                business_id=business_id,
+                business_name=business_snapshot["name"],
+                business_description=business_snapshot["description"] or "",
+                hints=composed_hints,
+                industry=business_snapshot["industry"],
+                target_market=business_snapshot["target_market"],
+                min_age=body.min_age,
+                max_age=body.max_age,
+                exclude_ids=exclude_ids,
+                exclude_names=exclude_names,
+            )
+            if not uses_ml:
+                try:
+                    business = cast(Businesses, await lock_persona_parent(
+                        session, owner_id=owner_id, business_id=business_id, allow_shared_business=True,
+                    ))
+                except ValueError as exc:
+                    raise HTTPException(status_code=404, detail="business not found") from exc
+                if any(getattr(business, field) != value for field, value in business_snapshot.items()):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="business changed during persona generation; retry with current inputs",
+                    )
+            await save_persona(session, profile, owner_id=owner_id, commit=False)
+            await session.commit()
+        except PersonaGenerationFailed as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail={"reason": exc.reason, "violations": [violation.message for violation in exc.violations]},
+            ) from exc
+        except BaseException:
+            await session.rollback()
+            raise
 
     memory_service = getattr(request.app.state, "memory_service", None)
     if memory_service:
@@ -599,6 +643,7 @@ async def generate_persona_endpoint(
                 text=f"Identity: {profile.name}, {profile.age}yo {profile.occupation} based in {profile.location}. {profile.description}",
                 kind="semantic",
                 importance=0.95,
+                owner_id=owner_id,
             )
         except Exception:
             # best-effort enrichment — but never silent (M8)
@@ -640,7 +685,7 @@ async def get_persona_memories_endpoint(
     include_interviewer: bool = Query(
         default=False, description="Also list researcher questions (source=interviewer)"
     ),
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
 ) -> list[dict]:
     # M9: a missing service and a missing persona must be distinguishable from
     # "persona exists and has no memories yet" — never a blanket `200 []`.
@@ -657,27 +702,10 @@ async def get_persona_memories_endpoint(
         if not owner_accessible(p_row.owner_id, current_user):
             raise HTTPException(status_code=404, detail="persona not found")
 
-        readable_conversations = select(Conversations.id).where(
-            Conversations.persona_id == persona_id,
-            or_(
-                Conversations.user_id.is_(None),
-                Conversations.user_id.in_(allowed_owner_ids(current_user.id if current_user else None)),
-            ),
-        )
-        query = select(MemoryItems).where(
-            MemoryItems.persona_id == persona_id,
-            or_(
-                MemoryItems.conversation_id.is_(None),
-                MemoryItems.conversation_id.in_(readable_conversations),
-            ),
-        )
-        if kind:
-            query = query.where(MemoryItems.kind == kind)
-        if not include_interviewer:
-            query = query.where(MemoryItems.source == "persona")
-        memories = list((await session.execute(
-            query.order_by(MemoryItems.created_at.desc()).limit(limit)
-        )).scalars())
+    memories = await memory_service.list_for_persona(
+        persona_id, kind=kind, limit=limit, owner_id=current_user.id,
+        sources=None if include_interviewer else ("persona",),
+    )
     return [
         {
             "id": m.id,

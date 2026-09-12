@@ -161,39 +161,54 @@ def test_safe_error_summary_is_stable_and_redacting():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_tracked_run_task_is_held_until_done_and_failure_is_logged(caplog):
-    from bebshax.api import behavioral as behavioral_api
+async def test_tracked_run_task_is_held_until_done_and_failure_is_persisted(session_maker):
+    from bebshax.jobs.runtime import JobRuntime
+    from bebshax.jobs.store import SQLJobStore
 
+    registered = []
+    store = SQLJobStore(session_maker)
+    runtime = JobRuntime(store, register_task=registered.append)
     gate = asyncio.Event()
+    entered = asyncio.Event()
 
-    async def run():
+    async def run(job):
+        entered.set()
         await gate.wait()
         raise RuntimeError("boom")
 
-    task = asyncio.create_task(run())
-    behavioral_api._track_run_task(task, "btr_track")
-    assert task in behavioral_api._RUN_TASKS
-
-    with caplog.at_level(logging.ERROR):
+    try:
+        admitted = await runtime.start(kind="behavioral_simulation", scope_id="study", owner_id="owner", input_data={}, runner=run)
+        await asyncio.wait_for(entered.wait(), 2)
+        assert len(registered) == 1 and registered[0] in runtime.tasks
         gate.set()
-        with pytest.raises(RuntimeError):
-            await task
-        await asyncio.sleep(0)  # let the done-callback run
-    assert task not in behavioral_api._RUN_TASKS
-    assert any("btr_track" in r.getMessage() and "RuntimeError" in r.getMessage() for r in caplog.records)
+        await runtime.drain()
+        assert not runtime.tasks and registered[0].done()
+        saved = await store.get(admitted["job_id"], kind="behavioral_simulation", scope_id="study", owner_id="owner")
+        assert saved["state"] == "failed"
+        assert "RuntimeError" in saved["error"] and "boom" not in saved["error"]
+    finally:
+        gate.set()
+        await runtime.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_tracked_task_success_is_discarded_silently(caplog):
-    from bebshax.api import behavioral as behavioral_api
+async def test_tracked_task_success_is_discarded_silently(session_maker, caplog):
+    from bebshax.jobs.runtime import JobRuntime
+    from bebshax.jobs.store import SQLJobStore
 
-    async def ok():
-        return 1
+    store = SQLJobStore(session_maker)
+    runtime = JobRuntime(store)
 
-    task = asyncio.create_task(ok())
-    behavioral_api._track_run_task(task, "btr_ok")
-    with caplog.at_level(logging.WARNING):
-        await task
-        await asyncio.sleep(0)
-    assert task not in behavioral_api._RUN_TASKS
-    assert not [r for r in caplog.records if "btr_ok" in r.getMessage()]
+    async def ok(job):
+        job["result"] = {"saved": True}
+
+    try:
+        with caplog.at_level(logging.WARNING):
+            admitted = await runtime.start(kind="behavioral_simulation", scope_id="study", owner_id="owner", input_data={}, runner=ok)
+            await runtime.drain()
+        assert not runtime.tasks
+        saved = await store.get(admitted["job_id"], kind="behavioral_simulation", scope_id="study", owner_id="owner")
+        assert saved["state"] == "completed" and saved["result"] == {"saved": True}
+        assert not [record for record in caplog.records if admitted["job_id"] in record.getMessage()]
+    finally:
+        await runtime.shutdown()

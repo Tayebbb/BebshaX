@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.db.models import Businesses, Personas
 from bebshax.db.models import DATA_SOURCE_LIVE
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
 from bebshax.persona.schema import EvidenceItem, PersonaAttribute, PersonaProfile, ProvenanceClass
+from bebshax.personas.orm import PersonaVersions
 from bebshax.tenancy import allowed_owner_ids
 
 
@@ -56,6 +57,8 @@ async def save_persona(
     profile: PersonaProfile,
     owner_id: str,
     data_source: str = DATA_SOURCE_LIVE,
+    *,
+    commit: bool = True,
 ) -> None:
     """Persist a persona.
 
@@ -86,11 +89,28 @@ async def save_persona(
         )
         if value not in (None, "")
     }
-    session.add(
-        Personas(
+    from bebshax.personas.service import record_persona_version
+
+    persona = (await session.scalars(
+        select(Personas).where(Personas.id == profile.id).with_for_update()
+        .execution_options(populate_existing=True)
+    )).one_or_none()
+    if persona is not None:
+        if persona.owner_id != owner_id or persona.business_id != profile.business_id:
+            raise ValueError("Persona not found for this owner and business.")
+        if profile.version != persona.version + 1:
+            raise ValueError("A persona replacement must advance its version by exactly one.")
+        old_profile = await load_persona(session, profile.id)
+        await record_persona_version(
+            session, persona, capture_kind="observed_current",
+            legacy_profile=old_profile.model_dump(mode="json") if old_profile else None,
+        )
+        for model in (PersonaAttributes, PersonaEvidence, PersonaDetails):
+            await session.execute(delete(model).where(model.persona_id == profile.id))
+    values = dict(
             id=profile.id,
             business_id=profile.business_id,
-            owner_id=getattr(profile, "owner_id", None) or owner_id,
+            owner_id=owner_id,
             name=profile.name,
             status=profile.status,
             version=profile.version,
@@ -118,8 +138,14 @@ async def save_persona(
                 if isinstance(profile.detailed_attributes.get("ml_provenance"), dict)
                 else []
             ),
-        )
     )
+    if persona is None:
+        persona = Personas(**values)
+        session.add(persona)
+    else:
+        for field, value in values.items():
+            setattr(persona, field, value)
+    await session.flush()
 
     session.add(
         PersonaDetails(
@@ -157,13 +183,25 @@ async def save_persona(
                 confidence=item.confidence,
             )
         )
-    await session.commit()
+    await record_persona_version(session, persona, legacy_profile=profile.model_dump(mode="json"))
+    if commit:
+        await session.commit()
 
 
 async def load_persona(session: AsyncSession, persona_id: str) -> PersonaProfile | None:
     persona = await session.get(Personas, persona_id)
+    if persona is None:
+        return None
+    version = await session.get(PersonaVersions, (persona.id, persona.version))
+    if version is not None and version.legacy_profile is not None:
+        if version.owner_id != persona.owner_id:
+            raise ValueError("Persona snapshot ownership does not match its parent.")
+        profile = PersonaProfile.model_validate(version.legacy_profile)
+        if profile.id != persona.id or profile.version != persona.version or profile.business_id != persona.business_id:
+            raise ValueError("Persona snapshot identity does not match its parent version.")
+        return profile.model_copy(update={"status": persona.status})
     details = await session.get(PersonaDetails, persona_id)
-    if persona is None or details is None:
+    if details is None:
         return None
     attrs = list(
         (

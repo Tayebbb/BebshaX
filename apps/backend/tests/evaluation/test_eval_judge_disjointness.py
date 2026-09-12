@@ -45,6 +45,14 @@ async def test_exclude_arm_routes_filters_candidates_but_keeps_virtual_auto():
     assert [f"{c.provider}/{c.model}" for c in remaining] == ["groq/llama-3.1-8b-instant", "freellmpool/auto"]
 
 
+@pytest.mark.parametrize("remote_processing", [False, True])
+def test_exclude_arm_routes_preserves_remote_processing(remote_processing: bool) -> None:
+    inner = FakeAdapter([])
+    inner.remote_processing = remote_processing
+
+    assert ExcludeArmRoutes(inner, ARM_ROUTES).remote_processing is remote_processing
+
+
 async def test_judge_disjoint_discards_a_verdict_served_by_an_arm_route():
     class ServedByArm(FakeAdapter):
         """Virtual 'auto' passes the candidate filter; the concrete serving
@@ -63,6 +71,8 @@ async def test_judge_disjoint_discards_a_verdict_served_by_an_arm_route():
     assert verdict["judge_route"] == "groq/llama-3.1-8b-instant"
     assert verdict["scores"]["A"]["naturalness"] == 8
     assert any("llm7/codestral-latest" in r for r in verdict["rejected_judges"])
+    assert colliding.calls == ["freellmpool/auto"]
+    assert disjoint.calls == ["groq/llama-3.1-8b-instant"]
 
 
 async def test_judge_disjoint_fails_loudly_when_no_disjoint_judge_exists():
@@ -75,3 +85,5 @@ async def test_judge_disjoint_fails_loudly_when_no_disjoint_judge_exists():
         )
     message = str(excinfo.value)
     assert "disjoint" in message and "only_arm" in message and "down" in message
+    assert only_arm.calls == []
+    assert down.calls

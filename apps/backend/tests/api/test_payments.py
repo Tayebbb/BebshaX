@@ -1,6 +1,7 @@
 """Unit and regression tests for Stripe payments API & service."""
 
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -33,11 +34,18 @@ def _setup_app_db():
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def payment_settings(monkeypatch):
+    settings = SimpleNamespace(**{**get_settings().model_dump(), "payments_enabled": True})
+    monkeypatch.setattr("bebshax.payments.service.get_settings", lambda: settings)
+    return settings
+
+
 @pytest.fixture
-def stripe_configured(monkeypatch):
+def stripe_configured(monkeypatch, payment_settings):
     """The service refuses to run without a key by design; the success-path tests
     need the configured branch, so inject a dummy key that never leaves the process."""
-    monkeypatch.setattr(get_settings(), "stripe_secret_key", "sk_test_unit_tests_only")
+    monkeypatch.setattr(payment_settings, "stripe_secret_key", "sk_test_unit_tests_only")
 
 
 @pytest.fixture(scope="module")
@@ -159,10 +167,10 @@ def test_create_portal_session_success(mock_portal_create, mock_customer_create,
 
 
 @pytest.fixture
-def signed_webhook(monkeypatch):
+def signed_webhook(monkeypatch, payment_settings):
     """Stripe webhooks are only processed when the signature verifies, so tests
     must go through construct_event rather than posting raw JSON."""
-    monkeypatch.setattr(get_settings(), "stripe_webhook_secret", "whsec_unit_tests_only")
+    monkeypatch.setattr(payment_settings, "stripe_webhook_secret", "whsec_unit_tests_only")
 
     def _post(event: dict):
         with patch("stripe.Webhook.construct_event", return_value=event):

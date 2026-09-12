@@ -42,8 +42,8 @@ async def scoped_app(tmp_path):
     async with maker() as session:
         session.add_all(
             [
-                Users(id="usr_owner", email="owner@example.com", hashed_password="x", full_name="Owner"),
-                Users(id="usr_other", email="other@example.com", hashed_password="x", full_name="Other"),
+                Users(id="usr_owner", email="owner@example.com", hashed_password="x", full_name="Owner", is_verified=True),
+                Users(id="usr_other", email="other@example.com", hashed_password="x", full_name="Other", is_verified=True),
                 Studies(id="std_owned", user_id="usr_owner", title="Owned Study", status="in_progress"),
                 Personas(
                     id="per_owned", study_id="std_owned", user_id="usr_owner",
@@ -66,7 +66,7 @@ async def scoped_app(tmp_path):
                 ),
                 SavedAudiences(id="aud_owned", user_id="usr_owner", name="Owned Audience"),
                 SavedAudiences(id="aud_shared", user_id=None, name="Shared Audience"),
-                LLMRequests(request_id="req_owned", task=TaskType.PERSONA_RESPONSE, persona_id="per_owned", success=True),
+                LLMRequests(request_id="req_owned", owner_id="usr_owner", task=TaskType.PERSONA_RESPONSE, persona_id="per_owned", success=True),
                 LLMRequests(request_id="req_infra", task=TaskType.EMERGENCY_FALLBACK, persona_id=None, success=True),
             ]
         )
@@ -103,8 +103,10 @@ async def test_anonymous_cannot_see_or_delete_owned_dataset(scoped_app):
 
         assert (await client.get("/api/datasets/ds_owned")).status_code == 404
         assert (await client.delete("/api/datasets/ds_owned")).status_code == 404
-        # refresh must respect the same tenant filter (read+mutate bypass)
-        assert (await client.post("/api/datasets/ds_owned_url/refresh")).status_code == 404
+        # refresh authenticates before looking up the row: anonymous callers get the
+        # same 401 for an owned id and a nonexistent id, so existence never leaks.
+        assert (await client.post("/api/datasets/ds_owned_url/refresh")).status_code == 401
+        assert (await client.post("/api/datasets/ds_does_not_exist/refresh")).status_code == 401
 
         # owner still sees and can delete their row
         assert (await client.get("/api/datasets/ds_owned", headers=_owner_headers())).status_code == 200
@@ -137,13 +139,11 @@ async def test_anonymous_cannot_see_or_delete_owned_audience(scoped_app):
 async def test_study_identity_comes_from_token_not_payload(scoped_app):
     app, _ = scoped_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # anonymous create with a spoofed user_id lands in the anonymous tenant
         res = await client.post(
             "/api/studies",
             json={"prompt": "spoof attempt", "user_id": "usr_owner"},
         )
-        assert res.status_code == 201
-        assert res.json()["user_id"] == "usr_default"
+        assert res.status_code == 401
 
         # anonymous list ignores ?user_id= impersonation
         listed = await client.get("/api/studies", params={"user_id": "usr_owner"})
@@ -210,14 +210,21 @@ async def test_persona_read_and_memories_are_owner_scoped(scoped_app):
     app, _ = scoped_app
 
     class _FakeMemoryService:
-        async def list_for_persona(self, persona_id, kind=None, limit=50, *, sources=("persona",)):
+        async def list_for_persona(
+            self, persona_id, kind=None, limit=50, *, owner_id=None, sources=("persona",),
+        ):
+            assert owner_id == "usr_owner", "memories must be scoped to the authenticated owner"
             return []
 
     app.state.memory_service = _FakeMemoryService()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/api/personas/per_owned")).status_code == 404
         assert (await client.get("/api/personas/per_shared")).status_code == 200
-        assert (await client.get("/api/personas/per_owned/memories")).status_code == 404
+        # Memories are tenant-private: anonymous reads are refused uniformly (owned,
+        # shared and nonexistent ids alike), so the 401 reveals nothing.
+        assert (await client.get("/api/personas/per_owned/memories")).status_code == 401
+        assert (await client.get("/api/personas/per_shared/memories")).status_code == 401
+        assert (await client.get("/api/personas/per_missing/memories")).status_code == 401
         assert (await client.get("/api/personas/per_owned", headers=_owner_headers())).status_code == 200
         # owner reaches their memories (empty here — the gate lets them through)
         owner_mem = await client.get("/api/personas/per_owned/memories", headers=_owner_headers())
@@ -246,13 +253,11 @@ async def test_copilot_generate_personas_refuses_foreign_study(scoped_app):
 async def test_provenance_hides_owned_persona_rows_from_anonymous(scoped_app):
     app, _ = scoped_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        anon = (await client.get("/api/provenance")).json()
-        anon_ids = [i["request_id"] for i in anon["items"]]
-        assert "req_infra" in anon_ids and "req_owned" not in anon_ids
+        assert (await client.get("/api/provenance")).status_code == 401
 
         owner = (await client.get("/api/provenance", headers=_owner_headers())).json()
         owner_ids = [i["request_id"] for i in owner["items"]]
-        assert "req_owned" in owner_ids and "req_infra" in owner_ids
+        assert owner_ids == ["req_owned"]
 
 
 @pytest.mark.asyncio

@@ -16,11 +16,11 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from bebshax.db.models import Base
-from bebshax.llm.adapters.embeddings import CANONICAL_DIM
+from bebshax.llm.embedding_space import CANONICAL_DIM
 
 MEMORY_SOURCES = ("persona", "interviewer", "system")
 
@@ -31,8 +31,12 @@ def _utcnow() -> datetime:
 
 class MemoryItems(Base):
     __tablename__ = "memory_items"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "persona_id", "content_hash", name="uq_memory_owner_persona_content"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     persona_id: Mapped[str] = mapped_column(String(64), ForeignKey("personas.id"), index=True)
     kind: Mapped[str] = mapped_column(String(16), index=True)  # episodic|semantic|reflection
     text: Mapped[str] = mapped_column(Text)

@@ -1,52 +1,26 @@
-"""H2 regression: losing the local Ollama tier must be loud at startup.
+"""Retired local-tier startup paths cannot return as implicit fallback probes."""
 
-The emergency pool is local-FIRST; a dead daemon means EMERGENCY_FALLBACK has
-no route at all, which the 2026-08-24 audit found failing silently.
-"""
+import importlib
+import os
 
-import logging
-
-import pytest
-
-from bebshax.llm.adapters.base import RouteCandidate
-from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
-from bebshax.main import warn_if_local_tier_down
+from bebshax import main
+from bebshax.config import Settings
+from bebshax.llm.pools import POOLS
 
 
-@pytest.mark.asyncio
-async def test_warns_when_ollama_has_no_routes(caplog) -> None:
-    with caplog.at_level(logging.WARNING, logger="bebshax.main"):
-        up = await warn_if_local_tier_down({"ollama": FakeAdapter([])})
-    assert up is False
-    assert any("local tier DOWN" in r.message for r in caplog.records)
+def test_local_tier_startup_probe_is_removed():
+    assert not hasattr(main, "warn_if_local_tier_down")
 
 
-@pytest.mark.asyncio
-async def test_warns_when_ollama_adapter_missing(caplog) -> None:
-    with caplog.at_level(logging.WARNING, logger="bebshax.main"):
-        up = await warn_if_local_tier_down({})
-    assert up is False
-    assert any("no 'ollama' adapter" in r.message for r in caplog.records)
+def test_every_pool_has_only_primary_and_secondary_remote_adapters():
+    assert all(list(pool.adapters) == ["freellmpool", "openrouter"] for pool in POOLS.values())
 
 
-@pytest.mark.asyncio
-async def test_warns_when_candidate_discovery_raises(caplog) -> None:
-    class ExplodingAdapter(FakeAdapter):
-        async def candidates(self):
-            raise RuntimeError("boom")
-
-    with caplog.at_level(logging.WARNING, logger="bebshax.main"):
-        up = await warn_if_local_tier_down({"ollama": ExplodingAdapter([])})
-    assert up is False
-    assert any("candidate discovery failed" in r.message for r in caplog.records)
+def test_local_hash_embedding_is_still_supported():
+    assert Settings(_env_file=None).embedding_backend == "local"
 
 
-@pytest.mark.asyncio
-async def test_quiet_when_local_tier_up(caplog) -> None:
-    adapter = FakeAdapter(
-        [FakeRoute(candidate=RouteCandidate(provider="ollama", model="llama3.2:3b"))]
-    )
-    with caplog.at_level(logging.WARNING, logger="bebshax.main"):
-        up = await warn_if_local_tier_down({"ollama": adapter})
-    assert up is True
-    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+def test_import_does_not_mutate_provider_config_environment(monkeypatch):
+    monkeypatch.delenv("FREELLMPOOL_CONFIG", raising=False)
+    importlib.reload(main)
+    assert "FREELLMPOOL_CONFIG" not in os.environ

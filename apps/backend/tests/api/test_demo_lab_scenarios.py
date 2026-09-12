@@ -114,19 +114,19 @@ async def test_provider_429_fallback_serves_from_route_b(lab_client, auth_header
     assert [s["result"] for s in body["timeline"]] == ["failed", "served"]
     assert body["timeline"][0]["failure_kind"] == "RATE_LIMITED"
     assert body["timeline"][0]["fallback_reason"] == "advancing after RATE_LIMITED"
-    assert body["timeline"][1]["provider"] == "groq"
+    assert body["timeline"][1]["provider"] == "openrouter"
     assert body["provenance"]["success"] is True
-    assert body["provenance"]["served_by_provider"] == "groq"
-    assert body["extra"]["cooling_routes"] == ["openrouter/meta-llama/llama-3.3-70b-instruct:free"]
+    assert body["provenance"]["served_by_provider"] == "openrouter"
+    assert body["extra"]["cooling_routes"] == ["groq/llama-3.1-8b-instant"]
 
 
-async def test_provider_5xx_fallback_ends_on_local_route(lab_client, auth_headers):
+async def test_provider_5xx_fallback_ends_on_secondary_remote_route(lab_client, auth_headers):
     body = _run(lab_client, "provider_5xx_fallback", auth_headers)
     assert body["outcome"] == "served_after_fallback" and body["error_code"] is None
-    assert [s["result"] for s in body["timeline"]] == ["failed", "failed", "served"]
-    assert [s["failure_kind"] for s in body["timeline"]] == ["SERVER_ERROR", "TIMEOUT", None]
-    assert body["timeline"][2]["provider"] == "ollama"
-    assert body["provenance"]["served_by_model"] == "llama3.2:3b"
+    assert [s["result"] for s in body["timeline"]] == ["failed", "served"]
+    assert [s["failure_kind"] for s in body["timeline"]] == ["SERVER_ERROR", None]
+    assert body["timeline"][1]["provider"] == "openrouter"
+    assert body["provenance"]["served_by_model"] == "meta-llama/llama-3.3-70b-instruct:free"
 
 
 async def test_all_providers_down_is_an_explicit_failure_with_full_trail(lab_client, auth_headers):
@@ -149,11 +149,11 @@ async def test_context_overflow_refuses_before_any_call(lab_client, auth_headers
     assert body["outcome"] == "explicit_failure"
     assert body["error_code"] == "context_window_exceeded"
     assert body["provenance"]["attempts"] == []
-    assert len(body["timeline"]) == 3 and all(s["result"] == "skipped" for s in body["timeline"])
+    assert len(body["timeline"]) == 2 and all(s["result"] == "skipped" for s in body["timeline"])
     assert all("context" in s["fallback_reason"] for s in body["timeline"])
     extra = body["extra"]
     assert extra["estimated_tokens"] > extra["largest_window"] == 4096
-    assert extra["adapter_calls"] == {"openrouter": [], "freellmpool": [], "ollama": []}
+    assert extra["adapter_calls"] == {"freellmpool": [], "openrouter": []}
     assert extra["any_adapter_called"] is False and extra["truncated"] is False
 
 

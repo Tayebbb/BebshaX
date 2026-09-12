@@ -10,6 +10,7 @@ No docker/network involved — plain file parsing, so it runs in the unit suite.
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import subprocess
@@ -77,22 +78,37 @@ def test_full_profile_startup_order_gates_on_health() -> None:
     assert services["web"]["depends_on"]["app"]["condition"] == "service_healthy"
 
 
-def test_app_container_migrates_before_serving() -> None:
-    command = _compose()["services"]["app"]["command"]
-    assert "alembic upgrade head" in command
-    assert command.index("alembic upgrade head") < command.index("uvicorn")
-    assert "exec python -m uvicorn" in command, "uvicorn must exec so it is PID 1 (SIGTERM)"
+def test_app_container_requires_explicit_migration_before_serving() -> None:
+    service = _compose()["services"]["app"]
+    assert "command" not in service
+    dockerfile = (REPO_ROOT / "apps" / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    command = json.loads(next(line[4:] for line in dockerfile.splitlines() if line.startswith("CMD ")))
+    entrypoint = json.loads(next(
+        line[11:] for line in dockerfile.splitlines() if line.startswith("ENTRYPOINT ")
+    ))
+    assert command[:4] == ["python", "-m", "uvicorn", "bebshax.main:app"]
+    assert entrypoint == ["python", "/app/deploy/runtime_config.py"]
+    assert "alembic" not in command
+    assert service["init"] is True
 
 
-def test_app_container_mounts_grounding_data_read_only() -> None:
-    """.dockerignore drops data/ from the image; the mounts put it back."""
+def test_app_container_mounts_durable_data_and_immutable_artifacts() -> None:
     assert re.search(r"^data/\s*$", DOCKERIGNORE.read_text(encoding="utf-8"), re.MULTILINE)
-    volumes = _compose()["services"]["app"]["volumes"]
-    assert "./data/processed:/app/data/processed:ro" in volumes
-    assert "./data/metadata:/app/data/metadata:ro" in volumes
+    compose = _compose()
+    service = compose["services"]["app"]
+    volumes = service["volumes"]
+    assert "bebshax_appdata:/app/data" in volumes
+    assert "bebshax_appdata" in compose["volumes"]
+    artifact_mount = next(volume for volume in volumes if isinstance(volume, dict))
+    assert artifact_mount["type"] == "bind"
+    assert artifact_mount["target"] == "/app/artifacts"
+    assert artifact_mount["read_only"] is True
+    assert artifact_mount["bind"]["create_host_path"] is False
+    assert service["read_only"] is True
+    assert service["user"] == "10001:10001"
 
 
-def test_compose_base_images_are_pinned_to_minor_tags() -> None:
+def test_compose_base_images_are_pinned_to_versioned_digests() -> None:
     web_dockerfile = (REPO_ROOT / "deploy" / "web.Dockerfile").read_text(encoding="utf-8")
     app_dockerfile = (REPO_ROOT / "apps" / "backend" / "Dockerfile").read_text(encoding="utf-8")
     froms = re.findall(r"^FROM\s+(\S+)", web_dockerfile + "\n" + app_dockerfile, re.MULTILINE)
@@ -101,11 +117,13 @@ def test_compose_base_images_are_pinned_to_minor_tags() -> None:
         assert not image.endswith(":latest") and ":" in image, f"floating base image: {image}"
         tag = image.split(":", 1)[1].split("@", 1)[0]
         assert re.match(r"^\d+\.\d+", tag), f"tag must carry major.minor: {image}"
+        assert re.search(r"@sha256:[0-9a-f]{64}$", image), f"missing immutable digest: {image}"
 
 
-def test_nginx_spa_location_sets_security_headers() -> None:
+def test_nginx_spa_inherits_security_headers_and_built_csp() -> None:
     conf = NGINX_CONF.read_text(encoding="utf-8")
-    spa_block = conf.split("location / {", 1)[1]
+    server_headers = re.split(r"^\s*location\s", conf.split("server {", 1)[1], maxsplit=1, flags=re.MULTILINE)[0]
+    assert "add_header_inherit merge;" in server_headers
     for header in (
         'X-Frame-Options "DENY"',
         'X-Content-Type-Options "nosniff"',
@@ -113,10 +131,14 @@ def test_nginx_spa_location_sets_security_headers() -> None:
         "Permissions-Policy",
         "Content-Security-Policy",
     ):
-        assert header in spa_block, f"nginx SPA location lost header: {header}"
-    csp = re.search(r'Content-Security-Policy "([^"]+)"', spa_block).group(1)
-    assert "script-src 'self'" in csp and "'unsafe-eval'" not in csp
-    assert "frame-ancestors 'none'" in csp
+        assert header in server_headers, f"nginx server lost inherited header: {header}"
+    assert 'Content-Security-Policy "__BEBSHAX_CSP__" always;' in server_headers
+    policy_source = (REPO_ROOT / "scripts" / "ops" / "web-config.mjs").read_text(encoding="utf-8")
+    assert "script-src 'self'" in policy_source and "'unsafe-eval'" not in policy_source
+    assert "frame-ancestors 'none'" in policy_source
+    dockerfile = (REPO_ROOT / "deploy" / "web.Dockerfile").read_text(encoding="utf-8")
+    assert "node scripts/ops/web-config.mjs nginx deploy/nginx.conf /build/nginx.conf" in dockerfile
+    assert "COPY --from=build /build/nginx.conf /etc/nginx/nginx.conf" in dockerfile
     # SSE proxying must stay unbuffered regardless of header work.
     assert "proxy_buffering off;" in conf
 
@@ -127,15 +149,19 @@ def test_ci_keeps_hardening_steps() -> None:
     frontend_runs = [step.get("run", "") for step in jobs["frontend"]["steps"]]
     assert "npm run theme:check" in frontend_runs
     node_version = next(
-        step["with"]["node-version"] for step in jobs["frontend"]["steps"] if "with" in step
+        step["with"]["node-version"] for step in jobs["frontend"]["steps"]
+        if "node-version" in step.get("with", {})
     )
-    assert str(node_version) == "24", "CI Node major must match deploy/web.Dockerfile"
+    web_dockerfile = (REPO_ROOT / "deploy" / "web.Dockerfile").read_text(encoding="utf-8")
+    image_node_version = re.search(r"^FROM node:(\d+\.\d+\.\d+)-", web_dockerfile, re.MULTILINE)
+    assert image_node_version is not None
+    assert str(node_version) == image_node_version.group(1), "CI and image Node pins must match"
     backend_runs = " ".join(step.get("run", "") for step in jobs["backend"]["steps"])
     assert "pip_audit" in backend_runs
     drift_runs = " ".join(step.get("run", "") for step in jobs["migration-drift"]["steps"])
     assert 'test "$head_count" = "1"' in drift_runs, "multi-head alembic chains must fail CI"
     compose_runs = " ".join(step.get("run", "") for step in jobs["compose-config"]["steps"])
-    assert "docker compose --profile full config --quiet" in compose_runs
+    assert "python scripts/ops/compose_check.py" in compose_runs
 
 
 def _ci_commands(job_name: str) -> list[list[str]]:
@@ -148,11 +174,16 @@ def _ci_commands(job_name: str) -> list[list[str]]:
     ]
 
 
-@pytest.mark.parametrize("job_name", ["backend", "typecheck", "migration-drift"])
-def test_ci_python_job_installs_editable_ml_package_with_backend(job_name: str) -> None:
-    assert [
-        "pip", "install", "-e", "ml_persona", "-e", "apps/backend[dev]",
-    ] in _ci_commands(job_name), f"{job_name} must install both local packages"
+@pytest.mark.parametrize(
+    ("job_name", "install_command"),
+    [
+        ("backend", ["python", "scripts/ops/dependencies.py", "install", "--wheelhouse", ".tmp/wheelhouse"]),
+        ("typecheck", [".venv/bin/python", "scripts/ops/dependencies.py", "install"]),
+        ("migration-drift", ["python", "scripts/ops/dependencies.py", "install"]),
+    ],
+)
+def test_ci_python_jobs_use_reviewed_locked_installer(job_name: str, install_command: list[str]) -> None:
+    assert install_command in _ci_commands(job_name)
 
 
 def test_ci_backend_runs_ml_tests_in_isolation() -> None:
@@ -176,8 +207,11 @@ def test_ci_backend_preserves_coverage_floor() -> None:
     ] in _ci_commands("backend")
 
 
-def test_ci_typecheck_keeps_separate_pyright_install() -> None:
-    assert ["pip", "install", "pyright"] in _ci_commands("typecheck")
+def test_ci_typecheck_uses_locked_pyright_in_isolated_environment() -> None:
+    commands = _ci_commands("typecheck")
+    assert ["python", "-m", "venv", ".venv"] in commands
+    assert [".venv/bin/python", "scripts/ops/typecheck.py", "apps/backend/bebshax"] in commands
+    assert ["pip", "install", "pyright"] not in commands
 
 
 def test_ml_runtime_constraints_pin_trained_artifact_versions_exactly() -> None:
@@ -220,33 +254,33 @@ def test_ml_runtime_constraint_is_exact_and_within_declared_bounds(dependency: s
     ("source", "destination"),
     [
         ("ml_persona/pyproject.toml", "./ml_persona/"),
-        ("ml_persona/constraints.txt", "./ml_persona/"),
+        ("ml_persona/constraints.txt", "./constraints.txt"),
         ("ml_persona/src", "./ml_persona/src"),
     ],
 )
-def test_backend_image_copies_ml_package_before_install(source: str, destination: str) -> None:
+def test_backend_image_copies_ml_package_before_wheel_build(source: str, destination: str) -> None:
     dockerfile = (REPO_ROOT / "apps" / "backend" / "Dockerfile").read_text(encoding="utf-8")
     copy_command = f"COPY {source} {destination}"
     assert copy_command in dockerfile
-    assert dockerfile.index(copy_command) < dockerfile.index("RUN pip install")
+    assert dockerfile.index(copy_command) < dockerfile.index("RUN python -m pip --isolated wheel")
 
 
-def test_backend_image_installs_both_local_packages() -> None:
+def test_backend_image_builds_both_packages_and_installs_offline_wheels() -> None:
     dockerfile = (REPO_ROOT / "apps" / "backend" / "Dockerfile").read_text(encoding="utf-8")
-    install_commands = [
-        shlex.split(line)
-        for line in dockerfile.splitlines()
-        if line.startswith("RUN pip install")
-    ]
-    assert install_commands == [
-        [
-            "RUN", "pip", "install", "--constraint", "./ml_persona/constraints.txt",
-            "./ml_persona", ".",
-        ],
-    ]
+    build_command = next(
+        shlex.split(line) for line in dockerfile.splitlines()
+        if line.startswith("RUN python -m pip --isolated wheel")
+    )
+    assert build_command[-2:] == ["./ml_persona", "./apps/backend"]
+    assert {"--no-deps", "--no-build-isolation", "--no-index"} <= set(build_command)
+    runtime_stage = dockerfile.rsplit("FROM ", 1)[1]
+    assert "COPY deploy/python/runtime.lock ./requirements.lock" in runtime_stage
+    assert "--require-hashes --only-binary=:all:" in runtime_stage
+    assert "COPY --from=build /local-wheels /local-wheels" in runtime_stage
+    assert "RUN python -m pip --isolated install --no-deps --no-index /local-wheels/*.whl" in runtime_stage
 
 
-def test_local_setup_installs_editable_ml_package_with_backend() -> None:
+def test_local_setup_uses_reviewed_locked_backend_installer() -> None:
     with patch.object(
         setup_script.subprocess, "run", return_value=subprocess.CompletedProcess([], 0),
     ) as subprocess_run:
@@ -254,9 +288,8 @@ def test_local_setup_installs_editable_ml_package_with_backend() -> None:
 
     subprocess_run.assert_called_once_with(
         [
-            str(setup_script.VENV_PY), "-m", "pip", "install",
-            "-e", str(setup_script.ROOT / "ml_persona"),
-            "-e", str(setup_script.ROOT / "apps" / "backend") + "[dev]",
+            str(setup_script.VENV_PY),
+            str(setup_script.ROOT / "scripts" / "ops" / "dependencies.py"), "install",
         ],
         cwd=setup_script.ROOT,
         check=True,

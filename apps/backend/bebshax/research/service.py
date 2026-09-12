@@ -7,22 +7,30 @@ relevance evaluation, and automated dataset ingestion.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import datetime
 from datetime import timezone
+import hashlib
 import logging
 from pathlib import Path
 import uuid
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import String, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 
 from bebshax.api.errors import APIError
-from bebshax.datasets.discovery.engine import DatasetDiscoveryEngine, materialize_candidate
+from bebshax.datasets.discovery.base_adapter import DatasetCandidateData
+from bebshax.datasets.discovery.engine import DatasetDiscoveryEngine
+from bebshax.datasets.discovery.downloader import DatasetDownloadFailed, fetch_resource_bytes, looks_downloadable
+from bebshax.datasets.orm import DatasetVersions
+from bebshax.datasets.parser import DatasetParseError, detect_format
+from bebshax.datasets.service import DatasetService
 from bebshax.db.models import (
+    Base,
     DatasetCandidates,
     DatasetSources,
     EvidenceChunks,
@@ -34,6 +42,8 @@ from bebshax.db.models import (
 )
 from bebshax.llm.service import LLMService
 from bebshax.llm.failures import LLMError
+from bebshax.jobs.runtime import FencedSession, JobContext
+from bebshax.jobs.store import LeaseLost
 from bebshax.research.chunker import chunk_document
 from bebshax.research.claim_extractor import extract_claims_with_llm
 from bebshax.research.planner import (
@@ -83,6 +93,141 @@ def _mark_progress(run: ResearchRuns, step_progress: dict[str, Any]) -> None:
     flag_modified(run, "step_progress")
 
 
+def _input_snapshot[Row: Base](row: Row) -> Row:
+    return type(row)(**{
+        attribute.key: copy.deepcopy(getattr(row, attribute.key))
+        for attribute in row.__mapper__.column_attrs
+    })
+
+
+async def _prepare_materialized_candidate(
+    storage: DatasetService, *, study_id: str, user_id: str, name: str, description: str,
+    source: str, publisher: str, license_text: str, url: str | None, download_url: str | None,
+    declared_format: str | None, raw_data_content: str | None = None, http_client: Any = None,
+) -> tuple[DatasetSources, DatasetVersions]:
+    if raw_data_content:
+        content = raw_data_content.encode("utf-8")
+        fetched_from, content_type = download_url or url or source, "text/csv"
+    else:
+        if download_url is None or not looks_downloadable(download_url):
+            raise DatasetDownloadFailed("No direct dataset resource is published; upload the source file manually.", extra={"url": url})
+        content, metadata = await fetch_resource_bytes(download_url, http_client=http_client)
+        fetched_from, content_type = metadata["url"], metadata["content_type"]
+    file_type = (declared_format or "").lower() or detect_format(content, filename=fetched_from, content_type=content_type)
+    return await storage.prepare_discovered_dataset(
+        content=content, study_id=study_id, user_id=user_id, name=name,
+        description=f"{description}\n\nSource: {source} ({publisher}) | License: {license_text or 'not stated'}\nFetched from: {fetched_from}",
+        source_url=url or download_url, fetched_from=fetched_from, file_type=file_type, content_type=content_type,
+    )
+
+
+async def materialize_candidate(
+    *, session: AsyncSession, study_id: str, user_id: str, name: str, description: str,
+    source: str, publisher: str, license_text: str, url: str | None, download_url: str | None,
+    declared_format: str | None, raw_data_content: str | None = None, http_client: Any = None,
+    job: JobContext | None = None,
+) -> DatasetSources:
+    storage = DatasetService(async_sessionmaker(session.bind, expire_on_commit=False))
+    dataset, version = await _prepare_materialized_candidate(
+        storage, study_id=study_id, user_id=user_id, name=name, description=description,
+        source=source, publisher=publisher, license_text=license_text, url=url, download_url=download_url,
+        declared_format=declared_format, raw_data_content=raw_data_content, http_client=http_client,
+    )
+    try:
+        if job is not None:
+            await job.fence(session)
+        await storage.retain_publication(session, version)
+        session.add(dataset)
+        await session.flush()
+        session.add(version)
+        return dataset
+    except BaseException:
+        await session.rollback()
+        await storage._cleanup_uncommitted_versions([version])
+        raise
+
+
+class _VersionedDiscoveryEngine(DatasetDiscoveryEngine):
+    def __init__(self, engine: DatasetDiscoveryEngine) -> None:
+        super().__init__(adapters=engine.adapters, evaluator=engine.evaluator, http_client=engine._http_client)
+
+    async def discover_and_process_datasets(
+        self, session: AsyncSession, study_id: str, user_id: str, run_id: str,
+        idea: str, queries: list[str], requirements: list[Any], countries: list[str] | None = None,
+    ) -> tuple[list[DatasetCandidates], list[DatasetSources]]:
+        if session.in_transaction():
+            raise ValueError("Dataset discovery requires a committed input snapshot.")
+        storage = DatasetService(async_sessionmaker(session.bind, expire_on_commit=False))
+        raw_candidates = []
+        for adapter in self.adapters:
+            try:
+                raw_candidates.extend(await adapter.search(queries, requirements, countries=countries))
+            except Exception as exc:
+                logger.warning("Dataset discovery adapter failed (%s)", type(exc).__name__)
+        evaluations = await storage._cpu(self.evaluator.evaluate_candidates, raw_candidates, idea, requirements, queries)
+        candidates: list[DatasetCandidates] = []
+        datasets: list[DatasetSources] = []
+        versions: list[DatasetVersions] = []
+        try:
+            for evaluation in evaluations:
+                candidate = evaluation.candidate
+                attributes = {attribute.key for attribute in DatasetCandidates.__mapper__.column_attrs}
+                values = {name: getattr(candidate, name) for name in DatasetCandidateData.model_fields if name in attributes}
+                row = DatasetCandidates(
+                    id=f"cand_{uuid.uuid4().hex[:16]}", study_id=study_id, user_id=user_id, run_id=run_id,
+                    **values, relevance_score=evaluation.relevance_score, quality_score=evaluation.quality_score,
+                    selection_status=evaluation.selection_status, selection_reason=evaluation.selection_reason,
+                    evaluation_details={**evaluation.evaluation_details, "is_sample": candidate.is_sample,
+                                        "tags": candidate.tags, "modified_at": candidate.modified_at},
+                )
+                metadata_errors = {}
+                for column in DatasetCandidates.__table__.columns:
+                    value = values.get(column.name)
+                    maximum = column.type.length if isinstance(column.type, String) else None
+                    if isinstance(value, str) and maximum is not None and len(value) > maximum:
+                        metadata_errors[column.name] = {"actual_length": len(value), "max_length": maximum}
+                        replacement = "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest() if column.name in {"source", "external_id"} else f"See evaluation_details.raw_metadata.{column.name}"
+                        setattr(row, column.name, replacement)
+                if metadata_errors:
+                    row.selection_status = "import_failed"
+                    row.evaluation_details = {**row.evaluation_details, "metadata_errors": metadata_errors,
+                                              "raw_metadata": candidate.model_dump(mode="json"), "import_error": "Dataset metadata exceeds storage limits."}
+                elif evaluation.is_selected:
+                    try:
+                        dataset, version = await _prepare_materialized_candidate(
+                            storage, study_id=study_id, user_id=user_id, name=candidate.name,
+                            description=candidate.description, source=candidate.source, publisher=candidate.publisher,
+                            license_text=candidate.license, url=candidate.url, download_url=candidate.download_url,
+                            declared_format=candidate.format, raw_data_content=candidate.raw_data_content, http_client=self._http_client,
+                        )
+                        row.imported_dataset_id, row.selection_status = dataset.id, "imported"
+                        row.sample_rows, row.sample_columns = dataset.row_count, dataset.column_count
+                        datasets.append(dataset)
+                        versions.append(version)
+                    except (DatasetDownloadFailed, DatasetParseError) as exc:
+                        row.selection_status = "import_failed"
+                        row.evaluation_details = {**row.evaluation_details, "import_error": getattr(exc, "detail", str(exc))}
+                    except Exception as exc:
+                        row.selection_status = "import_failed"
+                        row.evaluation_details = {**row.evaluation_details, "import_error": type(exc).__name__}
+                candidates.append(row)
+            for version in versions:
+                await storage.retain_publication(session, version)
+            session.add_all(datasets)
+            await session.flush()
+            session.add_all(versions)
+            session.add_all(candidates)
+            await session.flush()
+            for row in [*datasets, *candidates]:
+                session.expunge(row)
+            await session.commit()
+            return candidates, datasets
+        except BaseException:
+            await session.rollback()
+            await storage._cleanup_uncommitted_versions(versions)
+            raise
+
+
 class ResearchEngineService:
     """Orchestrates autonomous end-to-end research runs across evidence and public datasets."""
 
@@ -94,21 +239,45 @@ class ResearchEngineService:
         discovery_engine: Optional[DatasetDiscoveryEngine] = None,
     ) -> None:
         self.search_provider = search_provider or WikipediaResearchProvider()
+        self._owned_search_provider = self.search_provider if search_provider is None else None
         self.vector_engine = vector_engine or VectorSearchEngine()
         self.llm_service = llm_service
-        self.discovery_engine = discovery_engine or DatasetDiscoveryEngine()
+        configured_discovery = discovery_engine or DatasetDiscoveryEngine()
+        self.discovery_engine = _VersionedDiscoveryEngine(configured_discovery) if type(configured_discovery) is DatasetDiscoveryEngine else configured_discovery
         _upload_dir().mkdir(parents=True, exist_ok=True)
+
+    async def aclose(self) -> None:
+        provider = self._owned_search_provider
+        if provider is not None:
+            close = getattr(provider, "aclose", None)
+            if callable(close):
+                await close()
+            self._owned_search_provider = None
 
     async def run_study_research(
         self,
         session: AsyncSession,
         study: Studies,
         user_id: Optional[str] = None,
+        *, job: JobContext | None = None, run_id: str | None = None,
     ) -> ResearchRuns:
         """Execute an autonomous research run for a study, generating research plans, evidence, and discovered datasets."""
+        study = _input_snapshot(study)
+        if user_id is not None and study.user_id != user_id:
+            raise ValueError("Research owner does not match the study owner.")
         effective_user_id = user_id or study.user_id or ANONYMOUS_OWNER_ID
-        run_id = f"run_{uuid.uuid4().hex[:16]}"
+        admitted_run_id = run_id
+        run_id = run_id or f"run_{uuid.uuid4().hex[:16]}"
         prompt = study.prompt or study.title
+        if job is not None:
+            if job.lease.owner_id != effective_user_id or job["scope_id"] != study.id:
+                raise ValueError("Research job owner does not match its study.")
+            await session.commit()
+            await job.begin_item("research_run", input_data={
+                "study_id": study.id, "prompt": prompt, "target_audience": study.target_audience,
+                "pricing_hypothesis": study.pricing_hypothesis,
+            })
+            session = cast(AsyncSession, FencedSession(session, job))
 
         step_progress: dict[str, Any] = {
             "understanding_idea": {"status": "in_progress", "label": "Understanding business idea"},
@@ -121,6 +290,7 @@ class ResearchEngineService:
             # Honesty markers for consumers: where each artefact came from and
             # what was NOT produced. Never a substitute for the artefact itself.
             "summary": {
+                "study_revision": study.revision,
                 "plan_source": None,
                 "queries_source": None,
                 "evidence_provider": self.search_provider.name,
@@ -131,18 +301,25 @@ class ResearchEngineService:
             },
         }
         summary = step_progress["summary"]
+        if job is not None:
+            summary["job_id"] = job["job_id"]
 
-        run = ResearchRuns(
-            id=run_id,
-            study_id=study.id,
-            user_id=effective_user_id,
-            status="understanding_idea",
-            current_step="understanding_idea",
-            step_progress=step_progress,
-            started_at=datetime.datetime.now(timezone.utc),
-        )
-        session.add(run)
+        if admitted_run_id is None:
+            run = ResearchRuns(id=run_id, study_id=study.id, user_id=effective_user_id)
+            session.add(run)
+        else:
+            run = await session.get(ResearchRuns, run_id)
+            if run is None or run.user_id != effective_user_id or run.study_id != study.id or run.status != "queued":
+                raise ValueError("Research run is not an owned queued admission.")
+        run.status = run.current_step = "understanding_idea"
+        run.step_progress = step_progress
+        run.started_at = datetime.datetime.now(timezone.utc)
+        if job is not None:
+            await session.flush()
+            await job.complete_item("research_run", result_refs={"run_id": run_id}, session=session)
         await session.commit()
+        if job is not None:
+            job["result_refs"] = {"run_id": run_id}
 
         try:
             # -------------------------------------------------------------
@@ -154,6 +331,8 @@ class ResearchEngineService:
             _mark_progress(run, step_progress)
             await session.commit()
 
+            if job is not None:
+                await job.begin_item("research_plan", input_data={"run_id": run_id, "prompt": prompt})
             plan_result: ResearchPlanResult = await generate_structured_research_plan(
                 idea=prompt,
                 target_audience=study.target_audience,
@@ -190,8 +369,13 @@ class ResearchEngineService:
             run.current_step = "searching_evidence"
             step_progress["searching_evidence"]["status"] = "in_progress"
             _mark_progress(run, step_progress)
+            if job is not None:
+                await session.flush()
+                await job.complete_item("research_plan", result_refs={"run_id": run_id, "plan_id": plan_id}, session=session)
             await session.commit()
 
+            if job is not None:
+                await job.begin_item("research_evidence", input_data={"run_id": run_id, "prompt": prompt})
             query_set = await generate_research_queries(
                 idea=prompt,
                 target_audience=study.target_audience,
@@ -266,7 +450,10 @@ class ResearchEngineService:
                         )
                         chunks_to_insert.append(chunk)
 
+            source_inputs = [_input_snapshot(source) for source in sources_to_insert]
+            chunk_inputs = [_input_snapshot(chunk) for chunk in chunks_to_insert]
             session.add_all(sources_to_insert)
+            await session.flush()
             session.add_all(chunks_to_insert)
             step_progress["searching_evidence"]["status"] = "completed"
 
@@ -276,6 +463,11 @@ class ResearchEngineService:
             run.current_step = "discovering_datasets"
             step_progress["discovering_datasets"]["status"] = "in_progress"
             _mark_progress(run, step_progress)
+            if job is not None:
+                await session.flush()
+                await job.complete_item("research_evidence", result_refs={
+                    "source_ids": [source.id for source in source_inputs], "chunk_ids": [chunk.id for chunk in chunk_inputs],
+                }, session=session)
             await session.commit()
 
             try:
@@ -315,6 +507,11 @@ class ResearchEngineService:
             _mark_progress(run, step_progress)
             await session.commit()
 
+            if job is not None:
+                await job.begin_item("research_claims", input_data={
+                    "run_id": run_id, "source_ids": [source.id for source in source_inputs],
+                    "chunk_ids": [chunk.id for chunk in chunk_inputs],
+                })
             if not sources_to_insert:
                 # Nothing was found for these queries: say so. No hypothesis
                 # list is written in place of evidence (RULES.md R2).
@@ -325,8 +522,8 @@ class ResearchEngineService:
                     raise LLMUnavailable("Evidence claim extraction")
                 claims_data = await extract_claims_with_llm(
                     idea=prompt,
-                    sources=sources_to_insert,
-                    chunks=chunks_to_insert,
+                    sources=source_inputs,
+                    chunks=chunk_inputs,
                     llm_service=self.llm_service,
                 )
                 summary["claims_status"] = "extracted"
@@ -359,14 +556,21 @@ class ResearchEngineService:
             # Finalize run
             run.status = "completed"
             run.current_step = "completed"
-            _mark_progress(run, step_progress)
             run.completed_at = datetime.datetime.now(timezone.utc)
-            study.status = "in_progress"
+            projection = await session.execute(update(Studies).where(
+                Studies.id == study.id, Studies.user_id == study.user_id, Studies.revision == study.revision,
+                Studies.status.notin_(("archived", "completed")),
+            ).values(status="in_progress", revision=Studies.revision + 1).returning(Studies.id))
+            summary["study_projection_applied"] = projection.scalar_one_or_none() is not None
+            _mark_progress(run, step_progress)
+            if job is not None:
+                await session.flush()
+                await job.complete_item("research_claims", result_refs={"run_id": run_id, "claim_ids": [claim.id for claim in claims_to_insert]}, session=session)
             await session.commit()
             await session.refresh(run)
             return run
 
-        except Exception as exc:
+        except (Exception, asyncio.CancelledError) as exc:
             error_code, message = _safe_error(exc)
             database_failed = isinstance(exc, SQLAlchemyError) or not session.is_active
             failed_step = next(
@@ -382,6 +586,8 @@ class ResearchEngineService:
                 exc_info=not isinstance(exc, ExplicitFailure),
             )
             await session.rollback()
+            if isinstance(exc, LeaseLost):
+                raise
             run = await session.get(ResearchRuns, run_id)
             if run is None:
                 raise
@@ -395,7 +601,7 @@ class ResearchEngineService:
             run.completed_at = datetime.datetime.now(timezone.utc)
             await session.commit()
             await session.refresh(run)
-            if database_failed:
+            if database_failed or job is not None or isinstance(exc, asyncio.CancelledError):
                 raise
             return run
 
@@ -486,6 +692,7 @@ class ResearchEngineService:
         study_id: str,
         candidate_id: str,
         user_id: str,
+        *, job: JobContext | None = None,
     ) -> DatasetSources:
         """Import a discovered candidate by fetching its published resource.
 
@@ -502,6 +709,8 @@ class ResearchEngineService:
         candidate = res.scalar_one_or_none()
         if not candidate:
             raise ValueError("Dataset candidate not found")
+        if candidate.user_id != user_id:
+            raise ValueError("Dataset candidate owner does not match the caller.")
 
         if (candidate.evaluation_details or {}).get("metadata_errors"):
             raise APIError(
@@ -512,23 +721,49 @@ class ResearchEngineService:
                 error_code="invalid_metadata",
             )
 
+        candidate_input = _input_snapshot(candidate)
+        if candidate.imported_dataset_id:
+            existing = await session.get(DatasetSources, candidate.imported_dataset_id)
+            if existing is not None and existing.user_id == user_id:
+                if job is not None:
+                    refs = {"dataset_id": existing.id, "candidate_id": candidate_id}
+                    await job.complete_item("dataset", result_refs=refs, session=session)
+                    job["result_refs"] = refs
+                    await session.commit()
+                    await session.refresh(existing)
+                return existing
+        await session.commit()
         imported_ds = await materialize_candidate(
             session=session,
             study_id=study_id,
             user_id=user_id,
-            name=candidate.name,
-            description=candidate.description or "",
-            source=candidate.source,
-            publisher=candidate.publisher or candidate.source,
-            license_text=candidate.license or "",
-            url=candidate.url,
-            download_url=candidate.download_url,
-            declared_format=candidate.format,
+            name=candidate_input.name,
+            description=candidate_input.description or "",
+            source=candidate_input.source,
+            publisher=candidate_input.publisher or candidate_input.source,
+            license_text=candidate_input.license or "",
+            url=candidate_input.url,
+            download_url=candidate_input.download_url,
+            declared_format=candidate_input.format,
+            job=job,
         )
+        candidate = await session.scalar(select(DatasetCandidates).where(
+            DatasetCandidates.id == candidate_id, DatasetCandidates.study_id == study_id,
+            DatasetCandidates.user_id == user_id,
+        ).with_for_update().execution_options(populate_existing=True))
+        if candidate is None or any(getattr(candidate, name) != getattr(candidate_input, name) for name in (
+            "name", "description", "source", "publisher", "license", "url", "download_url", "format", "imported_dataset_id",
+        )):
+            await session.rollback()
+            raise APIError(409, "The dataset candidate changed during import.", error_code="dataset_candidate_changed")
         candidate.imported_dataset_id = imported_ds.id
         candidate.selection_status = "imported"
         candidate.sample_rows = imported_ds.row_count
         candidate.sample_columns = imported_ds.column_count
+        if job is not None:
+            refs = {"dataset_id": imported_ds.id, "candidate_id": candidate_id}
+            await job.complete_item("dataset", result_refs=refs, session=session)
+            job["result_refs"] = refs
         await session.commit()
         await session.refresh(imported_ds)
         return imported_ds

@@ -49,27 +49,33 @@ def _limit_str(qualified: str) -> str:
         ("bebshax.api.datasets.generate_personas_from_dataset", "10 per 1 minute"),
         ("bebshax.api.datasets.refresh_dataset", "10 per 1 hour"),
         ("bebshax.api.datasets.refresh_study_dataset", "10 per 1 hour"),
-        # anonymous study creation (signed-in callers are exempt)
-        ("bebshax.api.studies.create_study", "30 per 1 hour"),
+        # study creation is budgeted per signed-in account (fallback: client key)
+        ("bebshax.api.studies.create_study", "60 per 1 hour"),
     ],
 )
 def test_llm_spending_routes_carry_rate_limits(qualified: str, expected: str):
     assert expected in _limit_str(qualified)
 
 
-def test_anonymous_study_limit_exempts_validly_signed_tokens():
+def test_study_creation_limit_is_keyed_per_account():
     from starlette.requests import Request
 
-    from bebshax.api.studies import _has_valid_bearer_token
+    from bebshax.api.studies import _account_or_client_key
 
     def _req(headers: dict[str, str]) -> Request:
         raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
-        return Request({"type": "http", "method": "POST", "path": "/api/studies", "headers": raw})
+        return Request({
+            "type": "http", "method": "POST", "path": "/api/studies",
+            "headers": raw, "client": ("198.51.100.4", 4242),
+        })
 
-    assert _has_valid_bearer_token(_req({})) is False
-    assert _has_valid_bearer_token(_req({"Authorization": "Bearer not-a-real-token"})) is False
+    # No or unverifiable credentials fall back to the client key, never a shared bucket.
+    assert _account_or_client_key(_req({})) == "198.51.100.4"
+    assert _account_or_client_key(_req({"Authorization": "Bearer not-a-real-token"})) == "198.51.100.4"
     good = create_access_token({"sub": "usr_x"})
-    assert _has_valid_bearer_token(_req({"Authorization": f"Bearer {good}"})) is True
+    assert _account_or_client_key(_req({"Authorization": f"Bearer {good}"})) == "account:usr_x"
+    other = create_access_token({"sub": "usr_y"})
+    assert _account_or_client_key(_req({"Authorization": f"Bearer {other}"})) == "account:usr_y"
 
 
 # ---------------------------------------------------------------------------
@@ -85,8 +91,14 @@ async def jobs_cap_app(tmp_path):
     async with maker() as session:
         session.add_all(
             [
-                Users(id="usr_cap", email="cap@example.com", hashed_password="x", full_name="Cap"),
-                Users(id="usr_other_cap", email="other-cap@example.com", hashed_password="x", full_name="Other"),
+                Users(
+                    id="usr_cap", email="cap@example.com", hashed_password="x", full_name="Cap",
+                    is_active=True, is_verified=True,
+                ),
+                Users(
+                    id="usr_other_cap", email="other-cap@example.com", hashed_password="x",
+                    full_name="Other", is_active=True, is_verified=True,
+                ),
                 Studies(id="std_cap", user_id="usr_cap", title="Cap Study", status="in_progress"),
                 Studies(id="std_other_cap", user_id="usr_other_cap", title="Other", status="in_progress"),
             ]

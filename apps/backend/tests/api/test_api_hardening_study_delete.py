@@ -38,7 +38,8 @@ def _owner_headers() -> dict[str, str]:
 def test_every_table_with_a_study_id_column_is_in_the_cascade():
     scoped = study_scoped_tables(Base.metadata)
     with_study_id = {
-        t.name for t in Base.metadata.sorted_tables if "study_id" in t.c and t.name != "studies"
+        t.name for t in Base.metadata.sorted_tables
+        if "study_id" in t.c and t.name not in {"studies", "llm_requests"}
     }
     assert with_study_id, "sanity: the schema has study-scoped tables"
     assert with_study_id <= set(scoped), f"missing from cascade: {with_study_id - set(scoped)}"
@@ -52,7 +53,7 @@ def test_fk_children_of_scoped_tables_are_in_the_cascade():
         "conversation_turns", "behavioral_test_scenarios",
     ):
         assert chained in scoped, chained
-    # Provenance is deliberately kept (no FK by design) and users are never touched.
+    # Historical provenance is kept even when it carries study attribution.
     assert "llm_requests" not in scoped
     assert "users" not in scoped
     assert "studies" not in scoped
@@ -108,7 +109,10 @@ async def _seed_full_study(app) -> dict[str, str]:
                 Conversations(id="conv_keep", study_id="std_keep", persona_id="per_keep", objective="o", user_id=_OWNER),
                 BehavioralTests(id="bt_del", study_id="std_del", user_id=_OWNER, name="t", test_type="pricing_test"),
                 BehavioralTests(id="bt_keep", study_id="std_keep", user_id=_OWNER, name="t", test_type="pricing_test"),
-                LLMRequests(request_id="req_prov_del", task=TaskType.PERSONA_INTERVIEW, persona_id="per_del", success=True),
+                LLMRequests(
+                    request_id="req_prov_del", task=TaskType.PERSONA_INTERVIEW,
+                    persona_id="per_del", study_id="std_del", success=True,
+                ),
             ]
         )
         await session.flush()
@@ -181,4 +185,9 @@ def test_tables_with_both_study_id_and_fk_use_either_path(table: str):
     stmt = next(s for s in study_cascade_deletes("std_x") if s.table.name == table)
     sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
     assert f"{table}.study_id = 'std_x'" in sql
-    assert "IN (SELECT" in sql
+    assert "EXISTS (SELECT" in sql
+    parent_join = (
+        "conversations.persona_id = personas.id" if table == "conversations"
+        else "interview_insights.interview_id = conversations.id"
+    )
+    assert parent_join in sql

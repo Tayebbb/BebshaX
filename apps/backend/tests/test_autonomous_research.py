@@ -85,7 +85,7 @@ async def test_full_autonomous_research_service_execution(tmp_path, monkeypatch,
     adapter = _FakeLiveAdapter()
 
     async with session_maker() as session:
-        user = Users(id=user_id, email="auto_test@example.com", full_name="Auto Tester", hashed_password="pw")
+        user = Users(id=user_id, email="auto_test@example.com", full_name="Auto Tester", hashed_password="pw", is_verified=True)
         study = Studies(
             id=study_id,
             user_id=user_id,
@@ -154,8 +154,8 @@ async def test_research_endpoints_and_idor_protection(tmp_path, monkeypatch, res
     study_id = "std_idor_research_1"
 
     async with session_maker() as session:
-        user_owner = Users(id=owner_id, email="owner@example.com", full_name="Owner", hashed_password="pw")
-        user_other = Users(id=other_user_id, email="intruder@example.com", full_name="Other", hashed_password="pw")
+        user_owner = Users(id=owner_id, email="owner@example.com", full_name="Owner", hashed_password="pw", is_verified=True)
+        user_other = Users(id=other_user_id, email="intruder@example.com", full_name="Other", hashed_password="pw", is_verified=True)
         study = Studies(
             id=study_id,
             user_id=owner_id,

@@ -1,12 +1,22 @@
+import asyncio
+from collections.abc import AsyncIterator, Callable
+from pathlib import Path
+
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from bebshax.api.jobs import job_runtime, shutdown_jobs
 from bebshax.auth.models import Users
 from bebshax.auth.security import create_access_token
+from bebshax.datasets.discovery.engine import DatasetDiscoveryEngine
 from bebshax.db.models import Base
+from bebshax.jobs.store import SQLJobStore
+from bebshax.llm.adapters.fake import FakeAdapter
+from bebshax.llm.router import PoolRouter
 from bebshax.llm.types import TaskType
-from bebshax.main import app
+from bebshax.main import create_app
 from bebshax.research.chunker import chunk_document, clean_text
 from bebshax.research.query_generator import derive_queries_from_study_text
 from bebshax.research.search_provider import (
@@ -16,7 +26,63 @@ from bebshax.research.search_provider import (
     compute_content_hash,
     normalize_url,
 )
+from bebshax.research.service import ResearchEngineService
 from bebshax.research.vector_search import VectorSearchEngine, _cosine_similarity
+
+
+@pytest.fixture
+async def evidence_app(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    research_llm: Callable[..., tuple[PoolRouter, FakeAdapter]],
+    sample_evidence_provider: IllustrativeSampleProvider,
+) -> AsyncIterator[FastAPI]:
+    application = create_app()
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'evidence_api.db'}")
+    research_service = None
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        application.state.db_engine = engine
+        application.state.db_sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+        llm, adapter = research_llm()
+        application.state.llm_service = llm
+        application.state.research_llm_adapter = adapter
+        application.state.research_search_provider = sample_evidence_provider
+        monkeypatch.setattr("bebshax.research.service._upload_dir", lambda: tmp_path / "uploads")
+        research_service = ResearchEngineService(
+            llm_service=llm,
+            search_provider=sample_evidence_provider,
+            discovery_engine=DatasetDiscoveryEngine(adapters=[]),
+        )
+        application.state.research_engine = research_service
+        job_runtime(application)
+        yield application
+    finally:
+        try:
+            await shutdown_jobs(application)
+        finally:
+            try:
+                if research_service is not None:
+                    await research_service.aclose()
+            finally:
+                await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_evidence_fixture_uses_a_private_app(evidence_app: FastAPI) -> None:
+    from bebshax.main import app as shared_app
+
+    assert evidence_app is not shared_app
+    runtime = evidence_app.state.job_runtime
+    assert isinstance(runtime.store, SQLJobStore)
+    assert runtime.store is evidence_app.state.job_store
+    assert runtime.store.sessionmaker is evidence_app.state.db_sessionmaker
+    async with runtime.store.sessionmaker() as session:
+        assert session.bind is evidence_app.state.db_engine
+    research_service = evidence_app.state.research_engine
+    assert research_service.llm_service is evidence_app.state.llm_service
+    assert research_service.search_provider is evidence_app.state.research_search_provider
 
 
 def test_clean_text_and_chunking():
@@ -74,26 +140,21 @@ async def test_wikipedia_provider_network_failure_yields_no_sources(monkeypatch)
     def _boom(request):
         raise httpx.ConnectError("offline", request=request)
 
-    provider = WikipediaResearchProvider(http_client=httpx.AsyncClient(transport=httpx.MockTransport(_boom)))
-    assert await provider.search(["anything"]) == []
+    async with httpx.AsyncClient(transport=httpx.MockTransport(_boom)) as client:
+        provider = WikipediaResearchProvider(http_client=client)
+        assert await provider.search(["anything"]) == []
 
 
 @pytest.mark.asyncio
-async def test_evidence_api_lifecycle_and_user_isolation(research_llm, sample_evidence_provider):
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    session_maker = async_sessionmaker(engine, expire_on_commit=False)
-    app.state.db_sessionmaker = session_maker
-    llm, adapter = research_llm(app)
-    app.state.llm_service = llm
-    app.state.research_search_provider = sample_evidence_provider
+async def test_evidence_api_lifecycle_and_user_isolation(evidence_app: FastAPI) -> None:
+    app = evidence_app
+    session_maker = app.state.db_sessionmaker
+    adapter = app.state.research_llm_adapter
 
     # Create Alice & Bob
     async with session_maker() as session:
-        alice = Users(id="usr_alice", email="alice@research.com", hashed_password="hash", full_name="Alice")
-        bob = Users(id="usr_bob", email="bob@research.com", hashed_password="hash", full_name="Bob")
+        alice = Users(id="usr_alice", email="alice@research.com", hashed_password="hash", full_name="Alice", is_verified=True)
+        bob = Users(id="usr_bob", email="bob@research.com", hashed_password="hash", full_name="Bob", is_verified=True)
         session.add_all([alice, bob])
         await session.commit()
 
@@ -117,13 +178,29 @@ async def test_evidence_api_lifecycle_and_user_isolation(research_llm, sample_ev
         study = res_study.json()
         study_id = study["id"]
 
-        # 2. Alice runs research
+        # 2. Alice runs research — admitted as a durable job (202), then followed to completion.
         res_run = await client.post(
             f"/api/studies/{study_id}/research",
             headers={"Authorization": f"Bearer {token_alice}"},
         )
-        assert res_run.status_code == 201
-        run_data = res_run.json()
+        assert res_run.status_code == 202, res_run.text
+        accepted = res_run.json()
+        assert accepted["status"] == "queued" and accepted["job_id"]
+        await asyncio.wait_for(app.state.job_runtime.drain(), timeout=10)
+        job = await client.get(
+            f"/api/studies/{study_id}/research/jobs/{accepted['job_id']}",
+            headers={"Authorization": f"Bearer {token_alice}"},
+        )
+        assert job.status_code == 200, job.text
+        final = job.json()
+        assert final["state"] == "completed", (final["state"], final.get("error_code"), final.get("error"))
+        assert final["result_refs"]["run_id"] == accepted["id"]
+        res_detail = await client.get(
+            f"/api/studies/{study_id}/research/{accepted['id']}",
+            headers={"Authorization": f"Bearer {token_alice}"},
+        )
+        assert res_detail.status_code == 200, res_detail.text
+        run_data = res_detail.json()
         assert run_data["status"] == "completed", run_data["error_message"]
         assert run_data["query_count"] >= 3
         assert run_data["source_count"] == 3
@@ -199,21 +276,50 @@ async def test_evidence_api_lifecycle_and_user_isolation(research_llm, sample_ev
         )
         assert bob_claims.status_code == 404
 
+        bob_job = await client.get(
+            f"/api/studies/{study_id}/research/jobs/{accepted['job_id']}",
+            headers={"Authorization": f"Bearer {token_bob}"},
+        )
+        assert bob_job.status_code == 404
+        bob_run = await client.get(
+            f"/api/studies/{study_id}/research/{accepted['id']}",
+            headers={"Authorization": f"Bearer {token_bob}"},
+        )
+        assert bob_run.status_code == 404
+        bob_research = await client.post(
+            f"/api/studies/{study_id}/research",
+            headers={"Authorization": f"Bearer {token_bob}"},
+        )
+        assert bob_research.status_code == 404
+        anonymous_research = await client.post(f"/api/studies/{study_id}/research")
+        assert anonymous_research.status_code == 401
+
         # 8. Without an LLM the run fails explicitly at the plan step — no
         # template plan, queries or hypothesis claims are written (R2).
         app.state.llm_service = None
+        app.state.research_engine.llm_service = None
         res_nollm = await client.post(
             f"/api/studies/{study_id}/research",
             headers={"Authorization": f"Bearer {token_alice}"},
         )
-        assert res_nollm.status_code == 201
-        failed = res_nollm.json()
+        assert res_nollm.status_code == 202, res_nollm.text
+        accepted_nollm = res_nollm.json()
+        assert accepted_nollm["status"] == "queued" and accepted_nollm["job_id"]
+        await asyncio.wait_for(app.state.job_runtime.drain(), timeout=10)
+        job = await client.get(
+            f"/api/studies/{study_id}/research/jobs/{accepted_nollm['job_id']}",
+            headers={"Authorization": f"Bearer {token_alice}"},
+        )
+        assert job.status_code == 200, job.text
+        assert job.json()["state"] == "failed"
+        res_failed = await client.get(
+            f"/api/studies/{study_id}/research/{accepted_nollm['id']}",
+            headers={"Authorization": f"Bearer {token_alice}"},
+        )
+        assert res_failed.status_code == 200, res_failed.text
+        failed = res_failed.json()
         assert failed["status"] == "failed" and failed["current_step"] == "failed"
         assert failed["summary"]["error_code"] == "llm_unavailable"
         assert failed["summary"]["plan_source"] is None
         assert failed["claim_count"] == 0 and failed["research_plan"] is None
         assert "Research planning" in failed["error_message"]
-
-    app.state.llm_service = None
-    app.state.research_search_provider = None
-    await engine.dispose()

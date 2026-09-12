@@ -96,12 +96,15 @@ async def test_behavioral_compare_is_reachable_and_validates_run_ids(api_test_ap
 # Health
 # ---------------------------------------------------------------------------
 
-async def test_health_reports_db_local_tier_and_sink_counters(api_test_app: TestClient):
+async def test_health_reports_db_capabilities_and_sink_counters(api_test_app: TestClient):
     body = api_test_app.get("/api/health").json()
     assert body["status"] == "ok"  # legacy shape intact
     assert body["db"] == "ok"
-    assert isinstance(body["local_tier_up"], bool)
-    assert set(body["sink"]) == {"written", "dropped", "db_errors"}
+    # Remote-only runtime: no local tier flag; capabilities replace it.
+    assert "local_tier_up" not in body
+    assert set(body["capabilities"]) == {"chat", "persona_generation", "memory_embeddings"}
+    assert isinstance(body["providers"], list)
+    assert {"written", "dropped", "db_errors", "pending", "retained_failures"} <= set(body["sink"])
 
 
 async def test_ready_is_200_when_db_answers(api_test_app: TestClient):
@@ -133,7 +136,7 @@ def test_ready_is_503_and_health_degrades_when_db_is_unreachable():
     health = client.get("/api/health")
     assert health.status_code == 200, "liveness stays up so the operator can read the snapshot"
     assert health.json()["db"] == "unreachable"
-    assert health.json()["local_tier_up"] is None  # lifespan did not run on this bare app
+    assert health.json()["core_ready"] is False  # lifespan did not run on this bare app
 
 
 def test_db_probe_gives_up_after_its_timeout():
@@ -188,6 +191,7 @@ async def _seed_provenance(app) -> None:
                 ),
                 LLMRequests(
                     request_id="req_owned_fail",
+                    owner_id=_OWNER,
                     task=TaskType.PERSONA_INTERVIEW,
                     pool="conversation",
                     persona_id="per_prov_owned",
@@ -203,25 +207,20 @@ async def _seed_provenance(app) -> None:
         await session.commit()
 
 
-async def test_anonymous_provenance_shows_failure_kind_but_not_failure_detail(api_test_app: TestClient):
+async def test_anonymous_provenance_requires_authentication(api_test_app: TestClient):
     await _seed_provenance(api_test_app.app)
     resp = api_test_app.get("/api/provenance")
-    assert resp.status_code == 200
-    items = {i["request_id"]: i for i in resp.json()["items"]}
-    infra = items["req_infra_fail"]
-    assert infra["attempts"][0]["failure_kind"] == "SERVER_ERROR"
-    assert infra["attempts"][0]["failure_detail"] is None
+    assert resp.status_code == 401
     assert "my secret prompt" not in resp.text
-    # Owned rows are not even listed to anonymous callers.
-    assert "req_owned_fail" not in items
 
 
-async def test_owner_sees_failure_detail_on_their_own_rows_only(api_test_app: TestClient):
+async def test_owner_sees_only_stamped_rows_with_redacted_failure_details(api_test_app: TestClient):
     await _seed_provenance(api_test_app.app)
     resp = api_test_app.get("/api/provenance", headers=_owner_headers())
     items = {i["request_id"]: i for i in resp.json()["items"]}
-    assert items["req_owned_fail"]["attempts"][0]["failure_detail"] == _DETAIL
-    assert items["req_infra_fail"]["attempts"][0]["failure_detail"] is None
+    assert items["req_owned_fail"]["attempts"][0]["failure_kind"] == "RATE_LIMITED"
+    assert items["req_owned_fail"]["attempts"][0]["failure_detail"] is None
+    assert "req_infra_fail" not in items
 
 
 def test_redact_attempts_is_pure_and_keeps_other_fields():
@@ -231,6 +230,24 @@ def test_redact_attempts_is_pure_and_keeps_other_fields():
     out = redact_attempts(src)
     assert out == [{"provider": "p", "failure_kind": "TIMEOUT", "failure_detail": None}, {"provider": "q"}]
     assert src[0]["failure_detail"] == "x", "input must not be mutated (ORM JSON column)"
+
+
+@pytest.mark.parametrize("reported_model", [None, "actual-serving-model"])
+async def test_provenance_separates_requested_alias_from_reported_serving_identity(api_test_app, reported_model):
+    await _seed_provenance(api_test_app.app)
+    async with api_test_app.app.state.db_sessionmaker() as session:
+        session.add(LLMRequests(
+            request_id="req_alias_identity", owner_id=_OWNER,
+            task=TaskType.PERSONA_RESPONSE, pool="conversation", success=True,
+            served_by_provider="openrouter", request_model="requested/alias:free",
+            response_model=reported_model,
+        ))
+        await session.commit()
+    response = api_test_app.get("/api/provenance", headers=_owner_headers())
+    assert response.status_code == 200
+    row = next(item for item in response.json()["items"] if item["request_id"] == "req_alias_identity")
+    assert row["served_by_model"] == (reported_model or "unknown")
+    assert row["requested_model"] == "requested/alias:free"
 
 
 @pytest.mark.parametrize("path", ["/api/health", "/api/health/ready", "/api/provenance"])

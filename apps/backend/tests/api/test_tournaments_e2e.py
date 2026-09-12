@@ -2,14 +2,15 @@
 
 Every tournament drives the public API (auth → business → persona → interview →
 memory → provenance → evaluation) through the production routing, persona,
-interview and memory code. The ONLY scripted component is the model: three
-``FakeAdapter`` slots (openrouter / freellmpool / ollama) behind a real
+interview and memory code. The ONLY scripted component is the model: two
+``FakeAdapter`` slots (freellmpool / openrouter) behind a real
 ``PoolRouter`` (RULES.md R7 — never a live provider). Each test is one
 tournament; its docstring is the judge-facing claim it proves.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -22,36 +23,35 @@ from typing import Any
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
+from starlette.requests import Request
 from starlette.testclient import TestClient
 
+from bebshax.api import personas as personas_api
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.auth.security import create_access_token
-from bebshax.db.models import Personas, Studies
+from bebshax.db.models import Businesses, LLMRequests, Personas, Studies
 from bebshax.db.sink import ProvenanceSink
 from bebshax.interview.engine import InterviewEngine, build_identity_card
 from bebshax.interview.orm import Conversations, ConversationTurns
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.failures import FailureKind
-from bebshax.llm.pools import FREELLMPOOL, OLLAMA, OPENROUTER
+from bebshax.llm.pools import FREELLMPOOL, OPENROUTER
 from bebshax.llm.provenance import AttemptRecord, ProvenanceRecord
 from bebshax.llm.router import PoolRouter
 from bebshax.llm.types import LLMRequest, TaskType
 from bebshax.persona.evidence import MAX_STORED_CHARS, EvidenceStore
 from bebshax.persona.generation import PersonaEngine
+from bebshax.tenancy_context import tenant_scope
 
 # ---------------------------------------------------------------- fixtures ---
 
 _OWNER = "usr_judge_owner"
 
-# One scripted route per adapter slot; pool order decides who is tried first
-# (reasoning/conversation: openrouter → freellmpool → ollama).
-_ROUTE_OR = RouteCandidate(provider="openrouter", model="meta-llama/llama-3.3-70b-instruct:free")
-_ROUTE_A = RouteCandidate(provider="groq", model="llama-3.1-8b-instant")
-_ROUTE_B = RouteCandidate(provider="llm7", model="codestral-latest")
-_ROUTE_LOCAL = RouteCandidate(provider="ollama", model="llama3.2:3b", context_window=8192)
-_LOCAL = "ollama/llama3.2:3b"
+_ROUTE_OR = RouteCandidate(provider="openrouter", model="meta-llama/llama-3.3-70b-instruct:free", context_window=131072)
+_ROUTE_A = RouteCandidate(provider="groq", model="llama-3.1-8b-instant", context_window=131072)
+_ROUTE_B = RouteCandidate(provider="llm7", model="codestral-latest", context_window=131072)
 _OPENROUTER = "openrouter/meta-llama/llama-3.3-70b-instruct:free"
 
 _BUSINESS = {
@@ -188,10 +188,9 @@ def _install(
     *,
     openrouter: list[FakeRoute] | None = None,
     freellmpool: list[FakeRoute] | None = None,
-    ollama: list[FakeRoute] | None = None,
     evidence: list[str] | None = None,
 ) -> _Lab:
-    """Scripted PoolRouter over three FakeAdapter slots, wired into the fixture
+    """Scripted PoolRouter over two remote FakeAdapter slots, wired into the fixture
     app exactly where main.py wires production (router, persona and interview
     engines, provenance sink)."""
     journal: list[LLMRequest] = []
@@ -199,14 +198,13 @@ def _install(
     adapters: dict[str, FakeAdapter] = {
         OPENROUTER: _TracedAdapter(openrouter or [], journal),
         FREELLMPOOL: _TracedAdapter(freellmpool or [], journal),
-        OLLAMA: _TracedAdapter(ollama or [], journal),
     }
     sink = app.state.provenance_sink
     sink.batch_size = 1  # flush per record so /api/provenance is pollable within the 2 s bound
 
-    def on_provenance(record: ProvenanceRecord) -> None:
+    async def on_provenance(record: ProvenanceRecord) -> None:
         captured.append(record)
-        sink(record)
+        await sink.persist(record)
 
     router = PoolRouter(adapters, on_provenance=on_provenance)
     app.state.llm_adapters = adapters
@@ -321,14 +319,10 @@ def _turns(client: TestClient, headers: dict[str, str], conversation_id: str) ->
 def _poll_provenance(
     client: TestClient, headers: dict[str, str], request_id: str, timeout_s: float = 2.0
 ) -> dict[str, Any] | None:
-    """The sink writes asynchronously: poll /api/provenance (bounded) for one record."""
-    deadline = time.monotonic() + timeout_s
-    while True:
-        items = client.get("/api/provenance?limit=50", headers=headers).json()["items"]
-        hit = next((item for item in items if item["request_id"] == request_id), None)
-        if hit is not None or time.monotonic() >= deadline:
-            return hit
-        time.sleep(0.05)
+    """An acknowledged durable write must be visible immediately."""
+    response = client.get("/api/provenance?limit=50", headers=headers)
+    assert response.status_code == 200, response.text
+    return next((item for item in response.json()["items"] if item["request_id"] == request_id), None)
 
 
 def _attribute(persona: dict[str, Any], value: str) -> dict[str, Any]:
@@ -338,8 +332,144 @@ def _attribute(persona: dict[str, Any], value: str) -> dict[str, Any]:
 # ------------------------------------------------------------ tournaments ---
 
 
+async def test_legacy_persona_generation_persists_provenance_without_writer_deadlock(
+    api_test_app: TestClient, tmp_path: Path,
+) -> None:
+    app = api_test_app.app
+    headers = await _seed_owner(app)
+    lab = _install(
+        app, tmp_path, openrouter=[FakeRoute(_ROUTE_OR, replies=[_persona_json()])],
+    )
+    business_id = _create_business(api_test_app, headers)
+
+    response = api_test_app.post(
+        f"/api/businesses/{business_id}/personas", json={}, headers=headers,
+    )
+
+    [record] = lab.captured
+    assert record.success is True
+    assert response.status_code == 201, response.text
+    assert app.state.provenance_sink.total_db_errors == 0
+    assert app.state.provenance_sink.failed_records == {}
+    persona_id = response.json()["id"]
+    async with app.state.db_sessionmaker() as session:
+        persisted = await session.scalar(select(LLMRequests).where(
+            LLMRequests.request_id == record.request_id,
+        ))
+        assert persisted is not None
+        assert persisted.success is True
+        assert persisted.owner_id == _OWNER
+        assert persisted.persona_id == persona_id
+        assert persisted.task == "PERSONA_GENERATION"
+        persona = await session.get(Personas, persona_id)
+        assert persona is not None
+        assert persona.owner_id == _OWNER
+        assert persona.business_id == business_id
+
+
+@pytest.mark.parametrize(("changed_field", "changed_value", "expected_status"), [
+    ("name", "Revised planner", 409),
+    ("description", "A different research context", 409),
+    ("industry", "Transport", 409),
+    ("target_market", "Delivery couriers", 409),
+    ("owner_id", "usr_system_holder", 409),
+    ("owner_id", "usr_judge_reassigned", 404),
+    ("deleted", None, 404),
+])
+async def test_legacy_persona_generation_rejects_business_changes_during_completion(
+    api_test_app: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    changed_field: str, changed_value: str | None, expected_status: int,
+) -> None:
+    app = api_test_app.app
+    headers = await _seed_owner(app)
+    lab = _install(
+        app, tmp_path, openrouter=[FakeRoute(_ROUTE_OR, replies=[_persona_json()])],
+    )
+    business_id = _create_business(api_test_app, headers)
+    adapter = lab.adapters[OPENROUTER]
+    original_complete = adapter.complete
+
+    async def complete_with_business_change(candidate: RouteCandidate, request: LLMRequest):
+        completion = await original_complete(candidate, request)
+        async with app.state.db_sessionmaker() as writer:
+            business = await writer.get(Businesses, business_id)
+            if changed_field == "deleted":
+                await writer.delete(business)
+            else:
+                if changed_value == "usr_judge_reassigned":
+                    writer.add(Users(
+                        id=changed_value, email="reassigned-judge@example.com",
+                        full_name="Reassigned Synthetic Owner", hashed_password="x",
+                        is_active=True, is_verified=True,
+                    ))
+                    await writer.flush()
+                setattr(business, changed_field, changed_value)
+            await writer.commit()
+        return completion
+
+    monkeypatch.setattr(adapter, "complete", complete_with_business_change)
+    response = api_test_app.post(
+        f"/api/businesses/{business_id}/personas", json={}, headers=headers,
+    )
+
+    assert response.status_code == expected_status, response.text
+    [record] = lab.captured
+    assert record.success is True
+    assert app.state.provenance_sink.total_db_errors == 0
+    async with app.state.db_sessionmaker() as session:
+        assert await session.scalar(select(func.count()).select_from(Personas)) == 0
+        persisted = await session.scalar(select(LLMRequests).where(
+            LLMRequests.request_id == record.request_id,
+        ))
+        assert persisted is not None
+        assert persisted.owner_id == _OWNER
+        assert persisted.success is True
+        business = await session.get(Businesses, business_id)
+        if changed_field == "deleted":
+            assert business is None
+        else:
+            assert getattr(business, changed_field) == changed_value
+
+
+async def test_legacy_persona_generation_cancellation_rolls_back_save_not_provenance(
+    api_test_app: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = api_test_app.app
+    headers = await _seed_owner(app)
+    lab = _install(
+        app, tmp_path, openrouter=[FakeRoute(_ROUTE_OR, replies=[_persona_json()])],
+    )
+    business_id = _create_business(api_test_app, headers)
+    original_save = personas_api.save_persona
+
+    async def cancel_after_save(*args: Any, **kwargs: Any) -> None:
+        await original_save(*args, **kwargs)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(personas_api, "save_persona", cancel_after_save)
+    with tenant_scope(_OWNER), pytest.raises(asyncio.CancelledError):
+        await personas_api.generate_persona_endpoint.__wrapped__(
+            business_id=business_id,
+            body=personas_api.PersonaGenerateRequest(),
+            request=Request({"type": "http", "app": app}),
+            current_user=Users(id=_OWNER),
+        )
+
+    [record] = lab.captured
+    assert record.success is True
+    async with app.state.db_sessionmaker() as session:
+        assert await session.scalar(select(func.count()).select_from(Personas)) == 0
+        persisted = await session.scalar(select(LLMRequests).where(
+            LLMRequests.request_id == record.request_id,
+        ))
+        assert persisted is not None
+        assert persisted.owner_id == _OWNER
+        assert persisted.success is True
+    _create_business(api_test_app, headers)
+
+
 async def test_tournament_a_happy_path_evidence_persona_interview_memory_evaluation(
-    api_test_app: TestClient, tmp_path: Path
+    api_test_app: TestClient, tmp_path: Path, developer_headers: dict[str, str]
 ):
     """Judge claim: one journey, every layer real. The persona's OBSERVED claims cite
     evidence ids that exist in the corpus and are stored with it; the interview persists
@@ -392,7 +522,10 @@ async def test_tournament_a_happy_path_evidence_persona_interview_memory_evaluat
 
     assert [r.task for r in lab.captured] == ["PERSONA_GENERATION", "PERSONA_INTERVIEW", "PERSONA_INTERVIEW"]
     assert all(_poll_provenance(api_test_app, headers, r.request_id) for r in lab.captured)
-    metrics = api_test_app.get("/api/evaluation/metrics", headers=headers)
+    # Fleet-wide evaluation metrics are a developer diagnostic (SEC-09): the study
+    # owner is deliberately refused, a seeded developer on the loopback peer is not.
+    assert api_test_app.get("/api/evaluation/metrics", headers=headers).status_code == 403
+    metrics = api_test_app.get("/api/evaluation/metrics", headers=developer_headers)
     assert metrics.status_code == 200
     health, pools = metrics.json()["overall_health"], metrics.json()["pools"]
     assert isinstance(health["total_personas_generated"], int) and health["total_personas_generated"] >= 1
@@ -403,8 +536,15 @@ async def test_tournament_a_happy_path_evidence_persona_interview_memory_evaluat
     assert {p["pool"] for p in pools} == {"reasoning", "conversation"}
     for pool in pools:
         assert isinstance(pool["requests"], int) and pool["requests"] >= 1
-        for key in ("success_rate", "fallback_rate", "local_serve_rate"):
+        for key in ("success_rate", "fallback_rate", "historical_ollama_provider_rate"):
             assert isinstance(pool[key], float) and 0.0 <= pool[key] <= 1.0
+        # Route locality is not measured after the local tier's removal (RT-12):
+        # the metric is null rather than a fabricated 0.0, and the old label survives
+        # only as an explicitly historical provider share.
+        assert pool["local_serve_rate"] is None
+        assert pool["historical_ollama_provider_rate"] == 0.0
+    window = metrics.json()["metrics_window"]
+    assert window["local_serve_rate_is_historical"] is True and window["route_kind_measured"] is False
 
 
 async def test_tournament_b_provider_failure_falls_back_and_provenance_records_both_attempts(
@@ -462,13 +602,11 @@ async def test_tournament_c_total_failure_is_explicit_and_never_fabricates(
     headers = await _seed_owner(app)
     lab = _install(
         app, tmp_path,
-        openrouter=[FakeRoute(_ROUTE_OR, behaviors=[FailureKind.SERVER_ERROR])],
+        openrouter=[FakeRoute(_ROUTE_OR, behaviors=[FailureKind.CONNECTION, FailureKind.CONNECTION])],
         freellmpool=[
             FakeRoute(_ROUTE_A, behaviors=[FailureKind.SERVER_ERROR]),
             FakeRoute(_ROUTE_B, behaviors=[FailureKind.SERVER_ERROR]),
         ],
-        # CONNECTION policy retries the same route once → two scripted failures.
-        ollama=[FakeRoute(_ROUTE_LOCAL, behaviors=[FailureKind.CONNECTION, FailureKind.CONNECTION])],
     )
     conversation_id = _start_conversation(api_test_app, headers, await _seed_persona_row(app))
 
@@ -483,14 +621,13 @@ async def test_tournament_c_total_failure_is_explicit_and_never_fabricates(
     assert body["request_id"] == "judge-total-failure" == res.headers["X-Request-ID"]
     assert body["llm_request_id"] == lab.captured[0].request_id
     assert lab.captured[0].success is False
-    # every attempt made is in the body: 4 routes, ollama retried once (CONNECTION policy)
-    assert len(body["attempts"]) == len(lab.calls()) == 5
+    assert len(body["attempts"]) == len(lab.calls()) == 4
     assert [a["failure_kind"] for a in body["attempts"]] == [
-        "SERVER_ERROR", "SERVER_ERROR", "SERVER_ERROR", "CONNECTION", "CONNECTION"
+        "SERVER_ERROR", "SERVER_ERROR", "CONNECTION", "CONNECTION"
     ]
-    assert [a["provider"] for a in body["attempts"]] == ["openrouter", "groq", "llm7", "ollama", "ollama"]
+    assert [a["provider"] for a in body["attempts"]] == ["groq", "llm7", "openrouter", "openrouter"]
     assert all(set(a) == {"provider", "model", "failure_kind", "fallback_reason"} for a in body["attempts"])
-    assert isinstance(body["routing_path"], list) and _LOCAL in body["routing_path"]
+    assert isinstance(body["routing_path"], list) and _OPENROUTER in body["routing_path"]
     # nothing fabricated: no reply key, no default fake reply, no provider detail
     assert "reply" not in body
     assert "fake reply" not in res.text and "scripted failure" not in res.text
@@ -526,7 +663,7 @@ async def test_tournament_d_prompt_injection_in_evidence_is_treated_as_data(
             behaviors=[_claim(injected_claim, [_eid(_EV_INJECTED)])],
             goals=[_claim(ghost_claim, ["ghost_999"])],
         )])],
-        ollama=[FakeRoute(_ROUTE_LOCAL, replies=[
+        openrouter=[FakeRoute(_ROUTE_OR, replies=[
             "Sorry, that is not me — my week is classes and tutoring, nothing to do with running a company."
         ])],
         evidence=[_EV_INJECTED, _EV_GROUPS],
@@ -583,7 +720,6 @@ async def test_tournament_e_context_overflow_fails_before_any_call_and_truncates
         app, tmp_path,
         openrouter=[FakeRoute(_ROUTE_OR.model_copy(update=tiny))],
         freellmpool=[FakeRoute(_ROUTE_A.model_copy(update=tiny))],
-        ollama=[FakeRoute(_ROUTE_LOCAL.model_copy(update=tiny))],
     )
     conversation_id = _start_conversation(api_test_app, headers, await _seed_persona_row(app))
 
@@ -605,7 +741,7 @@ async def test_tournament_e_context_overflow_fails_before_any_call_and_truncates
     assert lab.journal == []
     [record] = lab.captured  # the refusal itself is on the record: every route skipped for context
     assert record.success is False and record.attempts == []
-    assert sum("[skipped: context 2000 <" in step for step in record.routing_path) == 3
+    assert sum("[skipped: context 2000 <" in step for step in record.routing_path) == 2
     assert _turns(api_test_app, headers, conversation_id) == []
 
 
@@ -664,7 +800,7 @@ async def test_tournament_g_twenty_turn_interview_with_identity_attacks_keeps_id
     replies.insert(15, _DRIFTED[1])
     assert len(replies) == 20
     # the route consumes (pops) its queue — give it a copy so the oracle stays intact
-    lab = _install(app, tmp_path, ollama=[FakeRoute(_ROUTE_LOCAL, replies=list(replies))])
+    lab = _install(app, tmp_path, openrouter=[FakeRoute(_ROUTE_OR, replies=list(replies))])
 
     started = api_test_app.post(
         f"/api/studies/{study_id}/personas/{persona_id}/interviews",
@@ -719,12 +855,12 @@ async def test_tournament_h_recovery_after_failed_turn_continues_cleanly(
     with later turns numbered monotonically and the cooled routes honestly skipped."""
     app = api_test_app.app
     headers = await _seed_owner(app)
-    local = FakeRoute(_ROUTE_LOCAL, behaviors=[FailureKind.CONNECTION, FailureKind.CONNECTION])
+    secondary = FakeRoute(_ROUTE_OR, behaviors=[FailureKind.CONNECTION, FailureKind.CONNECTION])
     lab = _install(
         app, tmp_path,
-        openrouter=[FakeRoute(_ROUTE_OR, behaviors=[FailureKind.SERVER_ERROR])],
-        freellmpool=[FakeRoute(_ROUTE_A, behaviors=[FailureKind.SERVER_ERROR])],
-        ollama=[local],
+        openrouter=[secondary],
+        freellmpool=[FakeRoute(_ROUTE_A, behaviors=[FailureKind.SERVER_ERROR]),
+                FakeRoute(_ROUTE_B, behaviors=[FailureKind.SERVER_ERROR])],
     )
     conversation_id = _start_conversation(api_test_app, headers, await _seed_persona_row(app))
 
@@ -732,13 +868,12 @@ async def test_tournament_h_recovery_after_failed_turn_continues_cleanly(
     assert failed.status_code == 503 and failed.json()["error_code"] == "all_candidates_failed"
     assert _turns(api_test_app, headers, conversation_id) == []
 
-    # the local daemon is back: re-script the route to succeed
-    local.behaviors.clear()
-    local.replies.extend(_IN_CHARACTER[:2])
+    secondary.behaviors.clear()
+    secondary.replies.extend(_IN_CHARACTER[:2])
 
     second = _ask(api_test_app, headers, conversation_id, _QUESTIONS[0])
     assert second.status_code == 200, second.text
-    assert second.json()["turn_number"] == 2 and second.json()["served_by"] == _LOCAL
+    assert second.json()["turn_number"] == 2 and second.json()["served_by"] == _OPENROUTER
     assert second.json()["reply"] == _IN_CHARACTER[0]
     turns = _turns(api_test_app, headers, conversation_id)
     assert [(t["turn_number"], t["role"], t["content"]) for t in turns] == [
@@ -752,7 +887,7 @@ async def test_tournament_h_recovery_after_failed_turn_continues_cleanly(
 
     failed_record, served_record, _ = lab.captured
     assert failed_record.success is False and served_record.success is True
-    assert served_record.attempts[0].success and served_record.served_by_provider == "ollama"
+    assert served_record.attempts[0].success and served_record.served_by_provider == "openrouter"
     # the cloud routes that 5xx'd are still cooling and are skipped, visibly
     assert sum("cooling down" in step for step in served_record.routing_path) == 2
 
@@ -802,14 +937,14 @@ async def test_chaos_provenance_sink_db_error_is_counted_not_silent(caplog):
         task=TaskType.PERSONA_INTERVIEW,
         pool="conversation",
         success=True,
-        attempts=[AttemptRecord(attempt_number=1, provider="ollama", model="llama3.2:3b", success=True)],
+        attempts=[AttemptRecord(attempt_number=1, provider="openrouter", model="simulation/secondary:free", success=True)],
     )
 
     await sink._insert_batch([record])
 
     assert (sink.total_db_errors, sink.total_dropped, sink.total_written) == (1, 1, 0)
     errors = [r for r in caplog.records if r.name == "bebshax.db.sink" and r.levelno == logging.ERROR]
-    assert len(errors) == 1 and "ProvenanceSink: DB error #1" in errors[0].getMessage()
+    assert len(errors) == 1 and "ProvenanceSink: database commit failed" in errors[0].getMessage()
 
 
 async def test_chaos_empty_message_rejected_422(api_test_app: TestClient, tmp_path: Path):
@@ -817,7 +952,7 @@ async def test_chaos_empty_message_rejected_422(api_test_app: TestClient, tmp_pa
     standard 422 envelope (error_code + request_id) and no turn is written."""
     app = api_test_app.app
     headers = await _seed_owner(app)
-    lab = _install(app, tmp_path, ollama=[FakeRoute(_ROUTE_LOCAL)])
+    lab = _install(app, tmp_path, openrouter=[FakeRoute(_ROUTE_OR)])
     conversation_id = _start_conversation(api_test_app, headers, await _seed_persona_row(app))
 
     for payload in ({"content": ""}, {"content": "   "}, {}):
@@ -839,7 +974,7 @@ async def test_chaos_malformed_json_body_422(api_test_app: TestClient, tmp_path:
     stable error_code, a human-readable message and a request id — not a bare 500."""
     app = api_test_app.app
     headers = await _seed_owner(app)
-    lab = _install(app, tmp_path, ollama=[FakeRoute(_ROUTE_LOCAL)])
+    lab = _install(app, tmp_path, openrouter=[FakeRoute(_ROUTE_OR)])
     conversation_id = _start_conversation(api_test_app, headers, await _seed_persona_row(app))
 
     res = api_test_app.post(

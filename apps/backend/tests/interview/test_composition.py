@@ -18,7 +18,7 @@ async def test_composition_places_identity_history_and_message(
 ) -> None:
     llm, adapter = llm_factory(["reply one", "reply two"])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "learn about delivery pain points")
+    conversation = await engine.start(stored_persona.id, "learn about delivery pain points", user_id="test-interview-owner")
 
     await engine.ask(conversation.id, "How often do you order food online?")
     await engine.ask(conversation.id, "What annoys you about it?")

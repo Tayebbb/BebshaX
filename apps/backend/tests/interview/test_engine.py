@@ -16,7 +16,7 @@ async def test_multi_turn_stability_and_transcript(
 ) -> None:
     llm, adapter = llm_factory(["I'm Rina!", "I'm 24.", "I study at university."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "identity check")
+    conversation = await engine.start(stored_persona.id, "identity check", user_id="test-interview-owner")
 
     for question in ("What's your name?", "How old are you?", "What do you do?"):
         result = await engine.ask(conversation.id, question)
@@ -42,7 +42,7 @@ async def test_each_exchange_writes_an_observation_memory(
 ) -> None:
     llm, _ = llm_factory(["a", "b"])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "obj")
+    conversation = await engine.start(stored_persona.id, "obj", user_id="test-interview-owner")
     await engine.ask(conversation.id, "q1")
     await engine.ask(conversation.id, "q2")
 
@@ -85,15 +85,22 @@ async def test_suggested_questions_are_model_written_from_the_transcript(
 
     llm, adapter = llm_factory([
         "I usually skip breakfast because the canteen opens late.",
-        json.dumps(["What happens on days the canteen opens on time?", "How much does a typical breakfast cost you?"]),
+        json.dumps({"questions": ["What happens on days the canteen opens on time?", "How much does a typical breakfast cost you?"]}),
         "I pay about 60 taka when I do eat.",
         "not json",
     ])
     engine = InterviewEngine(llm, session_maker, memory=memory_service, suggest_questions=True)
-    conversation = await engine.start(stored_persona.id, "breakfast habits")
+    conversation = await engine.start(stored_persona.id, "breakfast habits", user_id="test-interview-owner")
 
     first = await engine.ask(conversation.id, "Tell me about your mornings.")
-    assert first["suggested_questions"] == [
+    assert first["suggested_questions"] == []
+    assert len(adapter.requests) == 1
+    await engine.refresh_suggestions(
+        conversation.id, owner_id="test-interview-owner", expected_turn_count=2,
+        persona_version=conversation.persona_version,
+    )
+    _, turns = await engine.transcript(conversation.id)
+    assert turns[-1].metadata_json["suggested_questions"] == [
         "What happens on days the canteen opens on time?",
         "How much does a typical breakfast cost you?",
     ]
@@ -104,12 +111,18 @@ async def test_suggested_questions_are_model_written_from_the_transcript(
     assert "topics_not_yet_explored" in prompt
 
     second = await engine.ask(conversation.id, "What does it cost?")
-    assert second["suggested_questions"] == []  # unusable reply -> nothing substituted
+    await engine.refresh_suggestions(
+        conversation.id, owner_id="test-interview-owner", expected_turn_count=4,
+        persona_version=conversation.persona_version,
+    )
+    assert second["suggested_questions"] == []
+    _, turns = await engine.transcript(conversation.id)
+    assert turns[-1].metadata_json["suggested_questions"] == []
 
     # Disabled engines never spend a call on suggestions.
     quiet_llm, quiet_adapter = llm_factory(["reply"])
     quiet = InterviewEngine(quiet_llm, session_maker, memory=memory_service)
-    conv2 = await quiet.start(stored_persona.id, "x")
+    conv2 = await quiet.start(stored_persona.id, "x", user_id="test-interview-owner")
     res = await quiet.ask(conv2.id, "q")
     assert res["suggested_questions"] == [] and len(quiet_adapter.requests) == 1
 
@@ -123,9 +136,9 @@ async def test_optional_suggestions_preserve_answer_when_fast_or_blocked(
     reply = "I usually skip breakfast because the canteen opens late."
     question = "Tell me about your mornings."
     suggestions = ["What happens when the canteen opens on time?"]
-    llm, adapter = llm_factory([reply, json.dumps(suggestions)])
+    llm, adapter = llm_factory([reply, json.dumps({"questions": suggestions})])
     engine = InterviewEngine(llm, session_maker, memory=memory_service, suggest_questions=True)
-    conversation = await engine.start(stored_persona.id, "breakfast habits")
+    conversation = await engine.start(stored_persona.id, "breakfast habits", user_id="test-interview-owner")
     suggestion_started = asyncio.Event()
     suggestion_cancelled = asyncio.Event()
     original_complete = adapter.complete
@@ -154,9 +167,7 @@ async def test_optional_suggestions_preserve_answer_when_fast_or_blocked(
     with caplog.at_level(logging.INFO, logger=interview_engine.__name__):
         answer_task = asyncio.create_task(get_answer())
         try:
-            if blocked:
-                await asyncio.wait_for(suggestion_started.wait(), timeout=5)
-            result = await asyncio.wait_for(answer_task, timeout=1)
+            result = await asyncio.wait_for(answer_task, timeout=5)
         finally:
             if not answer_task.done():
                 answer_task.cancel()
@@ -165,13 +176,15 @@ async def test_optional_suggestions_preserve_answer_when_fast_or_blocked(
     assert result["reply"] == reply
     assert result["served_by"] == "fake/m1"
     assert result["turn_number"] == 2
-    assert result["suggested_questions"] == ([] if blocked else suggestions)
-    assert suggestion_cancelled.is_set() is blocked
+    assert result["suggested_questions"] == []
+    assert not suggestion_started.is_set()
+    assert not suggestion_cancelled.is_set()
+    assert len(adapter.requests) == 1
     timeout_logs = [
         record.getMessage() for record in caplog.records
         if record.name == interview_engine.__name__ and "timed out" in record.getMessage()
     ]
-    assert bool(timeout_logs) is blocked
+    assert not timeout_logs
     assert all(reply not in message and question not in message for message in timeout_logs)
 
     _, turns = await engine.transcript(conversation.id)

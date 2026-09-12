@@ -118,7 +118,7 @@ async def test_detail_refresh_never_calls_llm(
         pytest.param([], id="explicit-empty-replaces-saved"),
     ],
 )
-async def test_post_suggestions_survive_detail_refresh(
+async def test_post_defers_generated_suggestions_and_preserves_detail_refresh(
     api_test_app, auth_headers, monkeypatch, questions
 ) -> None:
     client = api_test_app
@@ -180,16 +180,16 @@ async def test_post_suggestions_survive_detail_refresh(
     assert posted["turn_number"] == 4
     assert posted["turn_count"] == 4
     assert posted["served_by"] == "pollinations/deepseek-r1"
-    assert posted["suggested_questions"] == questions
-    assert complete.await_count == 2
-    assert adapter.calls[calls_before:] == ["pollinations/deepseek-r1"] * 2
+    assert posted["suggested_questions"] == []
+    assert complete.await_count == 1
+    assert adapter.calls[calls_before:] == ["pollinations/deepseek-r1"]
     requests = adapter.requests[requests_before:]
     assert [request.task for request in requests] == [
-        TaskType.PERSONA_INTERVIEW, TaskType.STRUCTURED_OUTPUT,
+        TaskType.PERSONA_INTERVIEW,
     ]
-    suggestion_context = requests[-1].messages[-1].content
-    for content in (previous_question, previous_reply, question, reply):
-        assert content in suggestion_context
+    primary_context = "\n".join(message.content for message in requests[0].messages)
+    for content in (previous_question, previous_reply, question):
+        assert content in primary_context
 
     for _refresh in range(2):
         response = client.get(
@@ -197,7 +197,7 @@ async def test_post_suggestions_survive_detail_refresh(
         )
         assert response.status_code == 200
         detail = response.json()
-        assert detail["suggested_questions"] == questions
+        assert detail["suggested_questions"] == []
         assert detail["turn_count"] == 4
         assert [turn["turn_number"] for turn in detail["turns"]] == [1, 2, 3, 4]
         assert [turn["content"] for turn in detail["turns"]] == [
@@ -205,8 +205,8 @@ async def test_post_suggestions_survive_detail_refresh(
         ]
         persona_turn = detail["turns"][-1]
         assert persona_turn["role"] == "persona"
-        assert persona_turn["metadata"]["suggested_questions"] == questions
+        assert persona_turn["metadata"]["suggested_questions"] == []
         assert persona_turn["served_by"] == posted["served_by"]
         assert persona_turn["latency_ms"] == posted["latency_ms"]
-        assert complete.await_count == 2
-        assert len(adapter.calls) == calls_before + 2
+        assert complete.await_count == 1
+        assert len(adapter.calls) == calls_before + 1

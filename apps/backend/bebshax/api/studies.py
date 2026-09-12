@@ -5,36 +5,43 @@ from datetime import datetime, timezone
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import MetaData, Table, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.sql import ColumnElement
 
 from bebshax.auth.models import Users
 from bebshax.auth.security import decode_access_token
-from bebshax.api.auth import get_optional_current_user
 from bebshax.api.deps import (
+    get_tenant_user as get_current_user,
+    get_optional_tenant_user as get_optional_current_user,
     get_session,
     owner_accessible,
     owner_can_write,
     require_study_access,
     user_owns_study,
 )
-from bebshax.api.limiter import limiter
-from bebshax.api.jobs import get_job, start_job
-from bebshax.db.models import Base, SavedAudiences, Studies, StudyReports
+from bebshax.api.evidence import start_study_research as trigger_study_research
+from bebshax.api.limiter import _client_key, limiter
+from bebshax.api.jobs import cancel_job_async, get_job_async, replay_job_input, run_job_inline, start_job_async
+from bebshax.datasets.service import enqueue_dataset_cleanup
+from bebshax.db.models import Base, DatasetSources, SavedAudiences, Studies, StudyReports
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
+from bebshax.jobs.runtime import JobContext
 from bebshax.llm.json_utils import parse_llm_json, unwrap_list
 from bebshax.llm.placeholders import is_placeholder
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.tenancy import ANONYMOUS_OWNER_ID
 from bebshax.tenancy import PUBLIC_OWNER_IDS as _PUBLIC_OWNER_IDS
+from bebshax.tenancy_context import tenant_scope
 from bebshax.utils.explicit_failures import InsufficientInput, LLMUnavailable, UnusableModelOutput
 from bebshax.utils.title_generator import clean_client_title, generate_deterministic_study_title
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
-from bebshax.research.report_service import StudyReportService
-from bebshax.research.service import ResearchEngineService
+from bebshax.research.report_service import StudyReportService, capture_report_input_versions
+from bebshax.persona.context import private_persona_context
+from bebshax.personas.service import canonical_study_persona_states
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +62,7 @@ _SHORT = 64  # type / goal / status
 _TITLE = 256
 _DURATION = 128
 _LONG_TEXT = 20_000  # Text columns: prompt / target_audience / pricing_hypothesis
+_DERIVED_STUDY_FIELDS = frozenset({"persona_count", "persona_ids", "personas_data", "findings"})
 
 
 class StudyCreateRequest(BaseModel):
@@ -103,6 +111,13 @@ class StudyUpdateRequest(BaseModel):
     duration_text: Optional[str] = Field(default=None, max_length=_DURATION)
     copilot_messages: Optional[list[dict[str, Any]]] = None
     personas_data: Optional[list[dict[str, Any]]] = None
+    expected_revision: int | None = Field(default=None, ge=1, le=2_147_483_647, strict=True)
+
+    @model_validator(mode="after")
+    def reject_guarded_derived_state(self) -> "StudyUpdateRequest":
+        if self.expected_revision is not None and self.model_fields_set & _DERIVED_STUDY_FIELDS:
+            raise ValueError("Persona state and findings are server-generated and read-only.")
+        return self
 
 
 class AudienceCreateRequest(BaseModel):
@@ -111,24 +126,44 @@ class AudienceCreateRequest(BaseModel):
     study_id: Optional[str] = Field(default=None, max_length=_SHORT)
     name: str = Field(..., min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=_LONG_TEXT)
-    persona_ids: list[str] = Field(default_factory=list)
-    personas_payload: list[dict[str, Any]] = Field(default_factory=list)
+    persona_ids: list[str] = Field(default_factory=list, max_length=200)
+    personas_payload: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
     role_distribution: dict[str, Any] = Field(default_factory=dict)
 
 
-def _has_valid_bearer_token(request: Request) -> bool:
-    """slowapi ``exempt_when``: signed-in callers are exempt from the anonymous
-    study-creation limit. A signature check (no DB) is enough here — a garbage
-    token is not a way out of the anonymous bucket."""
+def _account_or_client_key(request: Request) -> str:
+    """slowapi ``key_func``: budget study creation per signed-in account. A signature
+    check (no DB) suffices — a forged token still lands in its own bucket and is
+    rejected by authentication before any write."""
     auth = request.headers.get("authorization", "")
-    if not auth.startswith("Bearer "):
-        return False
-    return decode_access_token(auth.split(" ", 1)[1].strip()) is not None
+    if auth.startswith("Bearer "):
+        payload = decode_access_token(auth.split(" ", 1)[1].strip())
+        if payload and payload.get("sub"):
+            return f"account:{payload['sub']}"
+    return _client_key(request)
 
 
-def _serialize_study(s: Studies) -> dict[str, Any]:
-    return {
+_STEP_LABELS = {1: "Context", 2: "Personas", 3: "Script", 4: "Interviews", 5: "Report"}
+
+
+def _study_summary_text(s: Studies) -> str:
+    """Progress line derived from state; the stored value was written at creation and went stale."""
+    count = s.persona_count or 0
+    personas = f"{count} synthetic persona{'' if count == 1 else 's'}"
+    if s.status == "completed":
+        return f"Completed • {'Decision report ready' if s.findings else 'Report pending'} • {personas}"
+    step = s.step or 1
+    label = _STEP_LABELS.get(step)
+    stage = f"Step {step} {label}" if label else f"Step {step}"
+    if step <= 1 and count == 0:
+        return f"Just created • {stage}"
+    return f"In Progress • {stage} • {personas if count else 'No personas yet'}"
+
+
+def _serialize_study(s: Studies, persona_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    result = {
         "id": s.id,
+        "revision": s.revision,
         "user_id": s.user_id,
         "title": s.title,
         "type": s.type,
@@ -147,12 +182,30 @@ def _serialize_study(s: Studies) -> dict[str, Any]:
         "script_meta": s.script_meta,
         "findings": s.findings,
         "is_demo": s.is_demo,
-        "duration_text": s.duration_text or "Just created • No personas yet",
+        "duration_text": _study_summary_text(s),
         "copilot_messages": s.copilot_messages or [],
         "personas_data": s.personas_data or [],
         "created_at": s.created_at.isoformat() if s.created_at else datetime.now(timezone.utc).isoformat(),
         "updated_at": s.updated_at.isoformat() if s.updated_at else datetime.now(timezone.utc).isoformat(),
     }
+    if persona_state is not None:
+        result.update(persona_state)
+    return result
+
+
+def _expected_revision(if_match: str | None, payload: StudyUpdateRequest) -> int | None:
+    if if_match is None:
+        return payload.expected_revision
+    condition = if_match.strip()
+    value = condition[1:-1] if condition.startswith('"') and condition.endswith('"') else condition
+    if not 1 <= len(value) <= 10 or not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 2_147_483_647:
+        raise HTTPException(status_code=400, detail="If-Match must contain one positive study revision.")
+    revision = int(value)
+    if payload.expected_revision is not None and payload.expected_revision != revision:
+        raise HTTPException(status_code=400, detail="If-Match and expected_revision disagree.")
+    if payload.model_fields_set & _DERIVED_STUDY_FIELDS:
+        raise HTTPException(status_code=422, detail="Persona state and findings are server-generated and read-only.")
+    return revision
 
 
 def _serialize_audience(a: SavedAudiences) -> dict[str, Any]:
@@ -226,7 +279,7 @@ async def list_studies(
 
     The `user_id` query param is accepted for API compatibility but ignored —
     identity comes exclusively from the auth token (impersonation guard).
-    Anonymous callers see demo studies plus the shared anonymous tenant.
+    Anonymous callers see only explicitly classified demo studies.
     """
     del user_id  # never trust client-supplied identity
     if current_user:
@@ -235,25 +288,21 @@ async def list_studies(
         ).order_by(Studies.created_at.desc())
     else:
         stmt = select(Studies).where(
-            or_(
-                Studies.is_demo == True,
-                Studies.user_id.is_(None),
-                Studies.user_id.in_(_PUBLIC_OWNER_IDS),
-            )
+            Studies.is_demo.is_(True)
         ).order_by(Studies.created_at.desc())
     result = await session.execute(stmt)
     studies = list(result.scalars().all())
-    return [_serialize_study(s) for s in studies]
+    states = await canonical_study_persona_states(session, studies)
+    return [_serialize_study(study, states[study.id]) for study in studies]
 
 
 @router.post("/studies", status_code=status.HTTP_201_CREATED)
-# Anonymous creates share one tenant (`usr_default`), so they are the only
-# ones that can flood it; signed-in callers are exempt (see the predicate).
-@limiter.limit("30/hour", exempt_when=_has_valid_bearer_token)
+@limiter.limit("60/hour", key_func=_account_or_client_key)
 async def create_study(
     request: Request,
+    response: Response,
     payload: StudyCreateRequest,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Create a new research study for the authenticated user with deterministic title."""
@@ -280,7 +329,7 @@ async def create_study(
     study_id = f"study_{uuid.uuid4().hex[:16]}"
     # Identity comes from the token only — payload.user_id would let any
     # caller attach rows to another tenant (spoofing).
-    study_user_id = current_user.id if current_user else ANONYMOUS_OWNER_ID
+    study_user_id = current_user.id
 
     study = Studies(
         id=study_id,
@@ -293,33 +342,35 @@ async def create_study(
         pricing_hypothesis=(payload.pricing_hypothesis or "").strip() or None,
         status=payload.status,
         step=payload.step,
-        persona_count=payload.persona_count,
-        persona_ids=payload.persona_ids,
+        persona_count=0,
+        persona_ids=[],
         suggested_roles=payload.suggested_roles,
         script_questions=payload.script_questions,
-        findings=payload.findings,
+        findings=None,
         # Never from the client: is_demo makes a study (and its personas)
         # world-readable, so only the seed may flag it.
         is_demo=False,
         duration_text=payload.duration_text,
         copilot_messages=payload.copilot_messages,
-        personas_data=payload.personas_data,
+        personas_data=[],
     )
     session.add(study)
     try:
         await session.flush()
         await session.refresh(study)
-        response = _serialize_study(study)
+        result = _serialize_study(study)
+        response.headers["ETag"] = f'"{study.revision}"'
         await session.commit()
     except Exception:
         await session.rollback()
         raise
-    return response
+    return result
 
 
 @router.get("/studies/{study_id}")
 async def get_study(
     study_id: str,
+    response: Response,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
@@ -329,7 +380,9 @@ async def get_study(
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
     if not _user_owns_study(study, current_user):
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    return _serialize_study(study)
+    states = await canonical_study_persona_states(session, [study])
+    response.headers["ETag"] = f'"{study.revision}"'
+    return _serialize_study(study, states[study.id])
 
 
 @router.patch("/studies/{study_id}")
@@ -337,43 +390,23 @@ async def get_study(
 async def update_study(
     study_id: str,
     payload: StudyUpdateRequest,
+    response: Response,
+    if_match: str | None = Header(default=None, alias="If-Match"),
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Update a research study. Creates it if missing (for seamless workflow init).
-    404 when the study exists but the caller cannot read it (existence never
-    leaks); 403 only when it is readable but not writable (e.g. the demo).
-    """
-    study = await session.get(Studies, study_id)
-    if not study:
-        # Auto-create — supports seamless workflow initialization.
-        # Identity from the token only (never payload.user_id — spoofing).
-        study_user_id = current_user.id if current_user else ANONYMOUS_OWNER_ID
-        prompt = (payload.prompt or payload.product_idea or "").strip()
-        study_type = payload.type or payload.study_type or "interviews"
-        title = clean_client_title(payload.title) or (generate_deterministic_study_title(prompt, study_type) if prompt else "Untitled Study")
-        study = Studies(
-            id=study_id,
-            user_id=study_user_id,
-            title=title,
-            type=study_type,
-            goal=payload.goal or "demand_validation",
-            prompt=prompt or None,
-            target_audience=payload.target_audience,
-            pricing_hypothesis=payload.pricing_hypothesis,
-        )
-        session.add(study)
-    else:
-        # 404-first via the shared gate: a foreign non-demo study must not be
-        # confirmed to exist by a 403 (the write check runs only for readers).
-        require_study_access(study, current_user, write=True)
-        # Backfill user_id if it was missing (e.g. created anonymously, now logged in).
-        # Only from the verified token — payload.user_id would let anonymous
-        # callers attach unowned studies to an arbitrary tenant.
-        if current_user and not study.user_id:
-            study.user_id = current_user.id
-
-    update_data = payload.model_dump(exclude_unset=True)
+    """Update existing owned state; opt-in revisions protect full-history saves."""
+    study = require_study_access(await session.get(Studies, study_id), current_user, write=True)
+    expected = _expected_revision(if_match, payload)
+    conflict_status = 412 if if_match is not None else 409
+    if expected is not None and expected != study.revision:
+        raise HTTPException(status_code=conflict_status, detail="Study changed; reload before saving.")
+    if expected is None and payload.copilot_messages is not None:
+        stored_messages = study.copilot_messages or []
+        if payload.copilot_messages[:len(stored_messages)] != stored_messages:
+            raise HTTPException(status_code=409, detail="Study history changed; reload before saving.")
+    states = await canonical_study_persona_states(session, [study])
+    update_data = payload.model_dump(exclude_unset=True, exclude=set(_DERIVED_STUDY_FIELDS) | {"expected_revision"})
     if "product_idea" in update_data and "prompt" not in update_data:
         update_data["prompt"] = update_data["product_idea"]
     if "study_type" in update_data and "type" not in update_data:
@@ -394,10 +427,26 @@ async def update_study(
         if val is not None and hasattr(study, field):
             setattr(study, field, val)
 
+    for field, value in states[study.id].items():
+        setattr(study, field, value)
     study.updated_at = datetime.now(timezone.utc)
-    await session.commit()
-    await session.refresh(study)
-    return _serialize_study(study)
+    try:
+        await session.flush()
+        result = _serialize_study(study)
+        response.headers["ETag"] = f'"{study.revision}"'
+        await session.commit()
+    except StaleDataError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=conflict_status, detail="Study changed; reload before saving.") from exc
+    except Exception:
+        await session.rollback()
+        raise
+    return result
+
+
+# Tables that carry study attribution for audit/retention but are historical
+# records: they must outlive the study they describe, never cascade with it.
+RETAINED_ON_STUDY_DELETE: frozenset[str] = frozenset({"llm_requests"})
 
 
 def study_scoped_tables(metadata: MetaData = Base.metadata) -> dict[str, Table]:
@@ -407,18 +456,20 @@ def study_scoped_tables(metadata: MetaData = Base.metadata) -> dict[str, Table]:
     ``personas``, turns and insights off ``conversations``, scenarios/results
     off behavioral tests/runs. Computed from the live metadata so a new table
     is covered the moment it is declared, never by a hand-kept list.
-    ``llm_requests`` (provenance) has no FKs by design and is kept."""
+    ``llm_requests`` (provenance) has no FKs by design and is kept even though
+    it records the study it served."""
     studies = metadata.tables["studies"]
     scoped: dict[str, Table] = {
-        t.name: t for t in metadata.sorted_tables if t is not studies and "study_id" in t.c
+        t.name: t for t in metadata.sorted_tables
+        if t is not studies and "study_id" in t.c and t.name not in RETAINED_ON_STUDY_DELETE
     }
     changed = True
     while changed:
         changed = False
         for t in metadata.sorted_tables:
-            if t is studies or t.name in scoped:
+            if t is studies or t.name in scoped or t.name in RETAINED_ON_STUDY_DELETE:
                 continue
-            if any(fk.column.table.name in scoped for fk in t.foreign_keys):
+            if any(constraint.referred_table.name in scoped for constraint in t.foreign_key_constraints):
                 scoped[t.name] = t
                 changed = True
     return scoped
@@ -428,17 +479,21 @@ def _scoped_rows(
     table: Table, study_id: str, scoped: dict[str, Table], seen: frozenset[str] = frozenset()
 ) -> ColumnElement[bool]:
     """Rows of ``table`` that belong to the study directly (``study_id``) or
-    through a foreign key into another scoped table (``fk IN (SELECT parent.id
-    WHERE <parent belongs to the study>)``)."""
+    through a complete foreign-key constraint into another scoped table."""
     clauses: list[ColumnElement[bool]] = []
     if "study_id" in table.c:
         clauses.append(table.c.study_id == study_id)
-    for fk in table.foreign_keys:
-        parent = fk.column.table
+    for constraint in table.foreign_key_constraints:
+        parent = constraint.referred_table
         if parent.name in scoped and parent is not table and parent.name not in seen:
             parent_rows = _scoped_rows(parent, study_id, scoped, seen | {table.name})
-            clauses.append(fk.parent.in_(select(fk.column).where(parent_rows)))
-    return or_(*clauses)
+            clauses.append(
+                select(1).select_from(parent).where(
+                    parent_rows,
+                    *(element.parent == element.column for element in constraint.elements),
+                ).correlate(table).exists()
+            )
+    return or_(False, *clauses)
 
 
 def study_cascade_deletes(study_id: str, metadata: MetaData = Base.metadata) -> list[Any]:
@@ -458,19 +513,32 @@ async def delete_study(
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Delete a research study and all dependent records. 404 when missing or unreadable; 403 for readable-but-not-writable."""
-    study = await session.get(Studies, study_id)
-    require_study_access(
+    """Delete study records atomically; journal dataset files for deferred cleanup.
+
+    404 when missing or unreadable; 403 for readable-but-not-writable.
+    """
+    study = await session.get(Studies, study_id, with_for_update=True)
+    study = require_study_access(
         study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
     )
-    # Metadata-driven cascade: a hand-written list used to cover 8 tables and
-    # left personas, conversations, runs, reports and behavioral rows orphaned
-    # (and still readable).
-    for stmt in study_cascade_deletes(study_id):
-        await session.execute(stmt)
+    try:
+        datasets = (await session.scalars(
+            select(DatasetSources).where(DatasetSources.study_id == study_id).with_for_update()
+        )).all()
+        for dataset in datasets:
+            await enqueue_dataset_cleanup(session, dataset)
 
-    await session.delete(study)
-    await session.commit()
+        # Metadata-driven cascade: a hand-written list used to cover 8 tables and
+        # left personas, conversations, runs, reports and behavioral rows orphaned
+        # (and still readable).
+        for stmt in study_cascade_deletes(study_id):
+            await session.execute(stmt)
+
+        await session.delete(study)
+        await session.commit()
+    except BaseException:
+        await session.rollback()
+        raise
     return {"success": True, "deleted_id": study_id}
 
 
@@ -502,12 +570,15 @@ async def list_saved_audiences(
 
 
 @router.post("/audiences", status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/hour")
 async def save_audience(
+    request: Request,
     payload: AudienceCreateRequest,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Save an audience to the Persona Library."""
+    """Save an audience to the Persona Library. Saved audiences are private writes:
+    anonymous callers never file rows into the shared pool."""
     # Body-supplied study id: a caller must at least be allowed to see the
     # study they are filing an audience under.
     if payload.study_id:
@@ -516,7 +587,7 @@ async def save_audience(
             raise HTTPException(status_code=404, detail=f"Study '{payload.study_id}' not found")
     audience_id = payload.id or f"aud_{uuid.uuid4().hex[:16]}"
     # Identity from the token only (never payload.user_id — spoofing).
-    aud_user_id = current_user.id if current_user else ANONYMOUS_OWNER_ID
+    aud_user_id = current_user.id
     audience = SavedAudiences(
         id=audience_id,
         user_id=aud_user_id,
@@ -561,8 +632,8 @@ async def delete_audience(
 @limiter.limit("20/minute")
 async def generate_script_questions(
     study_id: str,
+    request: Request,
     payload: Optional[GenerateScriptRequest] = None,
-    request: Request = None,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
@@ -570,7 +641,7 @@ async def generate_script_questions(
     study = await session.get(Studies, study_id)
     # 404-first write gate: this overwrites study.script_questions, and a 403
     # on a foreign non-demo study would confirm its existence.
-    require_study_access(
+    study = require_study_access(
         study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
     )
 
@@ -583,6 +654,10 @@ async def generate_script_questions(
             "Describe the business idea before generating a script.",
         )
     q_count = (payload and payload.question_count) or 5
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    owner_id = current_user.id
+    context_revision = study.revision
 
     llm_service = getattr(request.app.state, "llm_service", None) if request else None
     if llm_service is None:
@@ -617,7 +692,12 @@ async def generate_script_questions(
         ],
         json_mode=True,
         temperature=0.4,
+        owner_user_id=owner_id,
+        study_id=study_id,
+        data_classification="private",
     )
+    session.expunge_all()
+    await session.rollback()
 
     def _questions_of(parsed: Any) -> list[str]:
         items = unwrap_list(parsed, keys=("questions", "interview_questions", "script"))
@@ -631,7 +711,8 @@ async def generate_script_questions(
     for attempts in range(1, _SCRIPT_MAX_ATTEMPTS + 1):
         if attempts > 1:
             req = req.retry_copy()
-        res = await llm_service.complete(req)  # LLMError propagates (503/413 envelope)
+        with private_persona_context(owner_id, study_id):
+            res = await llm_service.complete(req)
         try:
             parsed = parse_llm_json(res.text)
         except ValueError:
@@ -641,7 +722,7 @@ async def generate_script_questions(
             break
         logger.warning("script generation reply unusable for study %s (attempt %d)", study_id, attempts)
         generated_questions = []
-    if not generated_questions:
+    if res is None or not generated_questions:
         raise UnusableModelOutput(
             "script_unparseable",
             f"The model's reply could not be turned into interview questions after {attempts} attempts; "
@@ -652,6 +733,12 @@ async def generate_script_questions(
 
     served_by = f"{res.provider}/{res.model}"
     llm_request_id = getattr(getattr(res, "provenance", None), "request_id", None)
+    study = require_study_access(
+        await session.get(Studies, study_id, with_for_update=True), current_user, write=True,
+    )
+    if study.revision != context_revision:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Study changed during script generation; reload and retry.")
     study.script_questions = generated_questions
     study.script_meta = {
         "source": "llm",
@@ -661,7 +748,11 @@ async def generate_script_questions(
         "attempts": attempts,
     }
     study.updated_at = datetime.now(timezone.utc)
-    await session.commit()
+    try:
+        await session.commit()
+    except StaleDataError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Study changed during script generation; reload and retry.") from exc
 
     return {
         "study_id": study_id,
@@ -671,6 +762,9 @@ async def generate_script_questions(
         "served_by": served_by,
         "llm_request_id": llm_request_id,
         "fallback_reason": "retried_after_unparseable_reply" if attempts > 1 else None,
+        # The save above advanced the revision; the client adopts it instead of
+        # re-sending the same questions against the stale one (412).
+        "study_revision": study.revision,
     }
 
 
@@ -678,48 +772,13 @@ async def generate_script_questions(
 # Autonomous Research Trigger & Status
 # ============================================================================
 
-@router.post("/studies/{study_id}/research/run")
-@limiter.limit("20/minute")
-async def trigger_study_research(
-    study_id: str,
-    request: Request = None,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> dict[str, Any]:
-    """Trigger autonomous research and dataset discovery for a study in background."""
-    study = await session.get(Studies, study_id)
-    # 404-first write gate: a research run writes evidence rows and spends LLM budget.
-    require_study_access(
-        study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
-    )
-
-    research_engine = getattr(request.app.state, "research_engine", None) if request else None
-    if not research_engine:
-        # Fallback inline engine if not registered
-        llm_service = getattr(request.app.state, "llm_service", None) if request else None
-        vector_engine = getattr(request.app.state, "vector_engine", None) if request else None
-        search_provider = getattr(request.app.state, "research_search_provider", None) if request else None
-        research_engine = ResearchEngineService(
-            llm_service=llm_service, vector_engine=vector_engine, search_provider=search_provider
-        )
-
-    effective_user_id = (current_user.id if current_user else None) or study.user_id or ANONYMOUS_OWNER_ID
-    run = await research_engine.run_study_research(
-        session=session,
-        study=study,
-        user_id=effective_user_id,
-    )
-
-    return {
-        "run_id": run.id,
-        "study_id": study_id,
-        "status": run.status,
-        "source_count": run.source_count,
-        "claim_count": run.claim_count,
-        "dataset_candidate_count": run.dataset_candidate_count,
-        "summary": (run.step_progress or {}).get("summary") or {},
-        "error_message": run.error_message,
-    }
+router.add_api_route(
+    "/studies/{study_id}/research/run",
+    trigger_study_research,
+    methods=["POST"],
+    status_code=status.HTTP_202_ACCEPTED,
+    name="trigger_study_research",
+)
 
 
 # ============================================================================
@@ -788,53 +847,68 @@ async def get_study_report_by_id(
 @limiter.limit("10/minute")
 async def generate_study_report(
     study_id: str,
+    request: Request,
     payload: Optional[GenerateReportRequest] = None,
-    request: Request = None,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Synthesize and persist a comprehensive research report for the study."""
     study = await session.get(Studies, study_id)
     # 404-first write gate: this persists a StudyReports row and spends LLM budget.
-    require_study_access(
+    study = require_study_access(
         study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
     )
 
     llm_service = getattr(request.app.state, "llm_service", None) if request else None
-    report_service = StudyReportService(session=session, llm_service=llm_service)
-
     effective_user_id = (current_user.id if current_user else None) or study.user_id or ANONYMOUS_OWNER_ID
     custom_title = payload.title if payload else None
-
-    report = await report_service.generate_report(
-        study_id=study_id,
-        user_id=effective_user_id,
-        custom_title=custom_title,
+    input_data = {
+        "title": custom_title, "study_revision": study.revision,
+        "input_versions": await capture_report_input_versions(session, study),
+    }
+    input_data = await replay_job_input(
+        request.app, kind="report_generation", scope_id=study_id, user_id=effective_user_id,
+        idempotency_key=request.headers.get("Idempotency-Key"), input_data=input_data,
+        snapshot_fields=frozenset({"study_revision", "input_versions"}),
     )
+    maker = request.app.state.db_sessionmaker
+    await session.rollback()
 
-    return _serialize_report(report)
+    async def operation(job: JobContext) -> dict[str, Any]:
+        with tenant_scope(effective_user_id):
+            async with maker() as job_session:
+                report = await StudyReportService(session=job_session, llm_service=llm_service).generate_report(
+                    study_id=study_id, user_id=effective_user_id, custom_title=custom_title, job=job,
+                    expected_input_versions=input_data["input_versions"],
+                )
+                return _serialize_report(report)
+
+    return await run_job_inline(
+        request.app, kind="report_generation", scope_id=study_id, user_id=effective_user_id,
+        input_data=input_data, operation=operation, idempotency_key=request.headers.get("Idempotency-Key"),
+    )
 
 
 # ---------------------------------------------------------------------------
 # Async report-generation jobs: synthesis reads every interview and runs LLM
 # calls on a 150 s task budget — beyond comfortable HTTP timeouts. POST
 # starts a background job (202), the UI polls; the report row is persisted
-# by the service, only job STATUS is in-memory.
+# by the service; admission and status are durable.
 # ---------------------------------------------------------------------------
 
 @router.post("/studies/{study_id}/reports/generate/jobs", status_code=202)
 @limiter.limit("10/minute")
 async def start_report_generation_job(
     study_id: str,
+    request: Request,
     payload: Optional[GenerateReportRequest] = None,
-    request: Request = None,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Start report synthesis in the background; poll the job endpoint."""
     study = await session.get(Studies, study_id)
     # 404-first write gate: the job persists a StudyReports row and spends LLM budget.
-    require_study_access(
+    study = require_study_access(
         study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found"
     )
 
@@ -845,8 +919,22 @@ async def start_report_generation_job(
     llm_service = getattr(app.state, "llm_service", None)
     effective_user_id = (current_user.id if current_user else None) or study.user_id or ANONYMOUS_OWNER_ID
     custom_title = payload.title if payload else None
+    input_data = {
+        "title": custom_title, "study_revision": study.revision,
+        "input_versions": await capture_report_input_versions(session, study),
+    }
+    input_data = await replay_job_input(
+        app, kind="report_generation", scope_id=study_id, user_id=effective_user_id,
+        idempotency_key=request.headers.get("Idempotency-Key"), input_data=input_data,
+        snapshot_fields=frozenset({"study_revision", "input_versions"}),
+    )
+    await session.rollback()
 
-    async def _runner(job: dict[str, Any]) -> None:
+    async def _runner(job: JobContext) -> None:
+        with tenant_scope(effective_user_id):
+            await _generate(job)
+
+    async def _generate(job: JobContext) -> None:
         # The request session is gone by now — the job owns its own session.
         async with sessionmaker_() as job_session:
             report_service = StudyReportService(session=job_session, llm_service=llm_service)
@@ -854,15 +942,19 @@ async def start_report_generation_job(
                 study_id=study_id,
                 user_id=effective_user_id,
                 custom_title=custom_title,
+                job=job,
+                expected_input_versions=input_data["input_versions"],
             )
             job["result"] = _serialize_report(report)
 
-    job = start_job(
+    job = await start_job_async(
         app,
         kind="report_generation",
         scope_id=study_id,
         runner=_runner,
         user_id=effective_user_id,
+        input_data=input_data,
+        idempotency_key=request.headers.get("Idempotency-Key"),
         # Honest domain failures (R2/R6) pass their message through.
         user_safe_exceptions=(ContextWindowExceeded, AllCandidatesFailed),
     )
@@ -873,7 +965,7 @@ async def start_report_generation_job(
 async def get_report_generation_job(
     study_id: str,
     job_id: str,
-    request: Request = None,
+    request: Request,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
@@ -883,10 +975,31 @@ async def get_report_generation_job(
         raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
     if not _user_owns_study(study, current_user):
         raise HTTPException(status_code=403, detail="Not authorized for this study")
-    job = get_job(request.app, job_id, kind="report_generation", scope_id=study_id)
+    if current_user is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    job = await get_job_async(
+        request.app, job_id, kind="report_generation", scope_id=study_id, user_id=current_user.id,
+    )
     if not job:
         raise HTTPException(
             status_code=404,
             detail="job not found (it may have been lost in a server restart)",
         )
+    return job
+
+
+@router.post("/studies/{study_id}/reports/generate/jobs/{job_id}/cancel")
+async def cancel_report_generation_job(
+    study_id: str, job_id: str, request: Request,
+    current_user: Users = Depends(get_current_user), session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    study = await session.get(Studies, study_id)
+    require_study_access(study, current_user, write=True, not_found_detail=f"Study '{study_id}' not found")
+    owner_id = current_user.id
+    await session.rollback()
+    job = await cancel_job_async(
+        request.app, job_id, kind="report_generation", scope_id=study_id, user_id=owner_id,
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail="Report job not found")
     return job

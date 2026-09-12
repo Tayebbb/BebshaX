@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +40,10 @@ class BehavioralTests(Base):
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
 
+    @property
+    def owner_id(self) -> str | None:
+        return self.user_id
+
 
 class BehavioralTestScenarios(Base):
     """Specific scenario and parameters bound to a behavioral test."""
@@ -72,6 +76,9 @@ class BehavioralTestRuns(Base):
     )
     study_id: Mapped[str] = mapped_column(String(64), index=True)
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    execution_token: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    input_manifest: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
     scenario_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     scenario_snapshot: Mapped[dict] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=dict
@@ -117,6 +124,7 @@ class BehavioralTestResults(Base):
     """Detailed simulation response, probability, confidence, factors, and objections for one persona."""
 
     __tablename__ = "behavioral_test_results"
+    __table_args__ = (UniqueConstraint("test_run_id", "persona_id", name="uq_behavioral_run_persona"),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     test_run_id: Mapped[str] = mapped_column(

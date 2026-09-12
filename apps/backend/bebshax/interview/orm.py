@@ -28,6 +28,9 @@ class Conversations(Base):
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     persona_id: Mapped[str] = mapped_column(String(64), ForeignKey("personas.id"), index=True)
     persona_version: Mapped[int] = mapped_column(Integer, default=1)
+    persona_snapshot: Mapped[Optional[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
     generation_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     objective: Mapped[str] = mapped_column(Text)
     custom_objective: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

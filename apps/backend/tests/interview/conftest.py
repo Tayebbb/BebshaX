@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 import bebshax.interview.orm  # noqa: F401
 import bebshax.memory.orm  # noqa: F401
 import bebshax.persona.orm  # noqa: F401
+import bebshax.personas.orm  # noqa: F401
 from bebshax.db.models import Base
 from bebshax.llm import SingleAdapterLLMService
 from bebshax.llm.adapters.base import RouteCandidate

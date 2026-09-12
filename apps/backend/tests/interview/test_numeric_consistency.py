@@ -162,7 +162,7 @@ async def test_ask_persists_numeric_contradiction_metadata(
         "I spend around 25,000 bdt on lunch per month, give or take.",
     ])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "spend consistency check")
+    conversation = await engine.start(stored_persona.id, "spend consistency check", user_id="test-interview-owner")
     await engine.ask(conversation.id, "What did lunch cost you yesterday?")
     await engine.ask(conversation.id, "How much do you spend on lunch monthly?")
 

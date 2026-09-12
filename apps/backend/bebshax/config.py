@@ -1,23 +1,27 @@
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
 from functools import lru_cache
-from dotenv import load_dotenv
-from pydantic import field_validator
+from typing import TYPE_CHECKING, Literal
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from bebshax.llm.governance import RemoteProcessingPolicy
 
-for p in (".env", "../.env", "../../.env"):
-    if os.path.exists(p):
-        load_dotenv(p)
-        break
+if TYPE_CHECKING:
+    from bebshax_persona_ml.provenance import ExpectedArtifactManifest
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 BURNED_JWT_SECRET = "bebshax-super-secret-jwt-signing-key-2026-auth-v1"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="BEBSHAX_", env_file=(".env", "../.env", "../../.env"), extra="ignore"
+        env_prefix="BEBSHAX_", env_file=None, extra="ignore"
     )
 
 
@@ -27,6 +31,9 @@ class Settings(BaseSettings):
     api_port: int = 8000
     demo_mode: bool = False
     log_level: str = "INFO"
+    provider_config_path: Path = _PROJECT_ROOT / "providers.toml"
+    remote_processing_policy: RemoteProcessingPolicy = Field(default_factory=RemoteProcessingPolicy)
+    runtime_shutdown_timeout_s: float = Field(default=15.0, gt=0, le=120)
 
     # Filesystem roots for uploaded/processed datasets. Relative paths resolve
     # against the process CWD (dev: repo root -> data/). Containers set
@@ -35,6 +42,22 @@ class Settings(BaseSettings):
     upload_dir: str | None = None  # default: <data_dir>/uploads
     processed_dir: str | None = None  # default: <data_dir>/processed
     ml_persona_artifact_dir: str | None = None
+    ml_persona_enabled: bool = True
+    ml_persona_required: bool = False
+    ml_persona_manifest_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("provider_config_path", mode="after")
+    @classmethod
+    def provider_path_absolute(cls, value: Path) -> Path:
+        return (value if value.is_absolute() else _PROJECT_ROOT / value).resolve()
+
+    @property
+    def expected_ml_persona_manifest(self) -> ExpectedArtifactManifest | None:
+        from bebshax_persona_ml.provenance import ExpectedArtifactManifest
+
+        if self.ml_persona_manifest_sha256 is None:
+            return None
+        return ExpectedArtifactManifest(metadata_sha256=self.ml_persona_manifest_sha256)
 
     @property
     def upload_dir_path(self) -> Path:
@@ -96,15 +119,16 @@ class Settings(BaseSettings):
             return url.replace("+aiosqlite", "")
         return url
 
-    # Phase 9: memory embedding backend — "local" (deterministic hash, offline),
-    # "auto" (probe Ollama on first use, semantic embeddings when the embed
-    # model is pulled, hash fallback otherwise), or "freellmpool" (requires
-    # embedding_model pin; see docs/PERSONA_ENGINE.md). Default stays "local",
-    # NOT "auto": auto can resolve to a different space across restarts
-    # (daemon up vs down), stranding earlier vectors behind the space filter —
-    # determinism beats semantics for the default. Opt into "auto" per deploy.
-    embedding_backend: str = "local"
+    embedding_backend: Literal["local", "freellmpool"] = "local"
     embedding_model: str | None = None
+
+    @model_validator(mode="after")
+    def runtime_configuration_valid(self) -> Settings:
+        if self.embedding_backend == "freellmpool" and not (self.embedding_model or "").strip():
+            raise ValueError("BEBSHAX_EMBEDDING_MODEL must pin the remote embedding model")
+        if self.ml_persona_required and not self.ml_persona_enabled:
+            raise ValueError("A required persona feature cannot be disabled")
+        return self
 
     # B4: no default — a shipped signing key lets anyone forge tokens for every
     # deployment that forgets to set the env var. Empty fails the validator below.
@@ -188,13 +212,36 @@ class Settings(BaseSettings):
 
 
 
-try:
-    settings = Settings()
-except Exception as e:
-    print(f"\nFATAL: {e}\n", file=sys.stderr)
-    raise SystemExit(1)
-
-
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings(_env_file=_PROJECT_ROOT / ".env")
+
+
+def export_provider_credentials(env_file: Path = _PROJECT_ROOT / ".env") -> list[str]:
+    """Expose provider credentials declared in .env (e.g. OPENROUTER_API_KEY) to
+    the adapter layer, which reads os.environ by the catalog's key_env names.
+    Settings only maps BEBSHAX_* keys, so without this a key that lives only in
+    .env never configured its provider. Process variables always win."""
+    if not env_file.is_file():
+        return []
+    from dotenv import dotenv_values
+
+    exported: list[str] = []
+    for name, value in dotenv_values(env_file).items():
+        if not name or name.startswith(("BEBSHAX_", "VITE_")) or value is None or name in os.environ:
+            continue
+        os.environ[name] = value
+        exported.append(name)
+    return exported
+
+
+def fail_fast_on_invalid_settings() -> Settings:
+    """Refuse to boot with a missing/short/burned JWT secret or other invalid
+    settings: a process that starts with them would mint forgeable tokens.
+    Called from create_app(), never at import time (importing config must not
+    read .env or construct Settings)."""
+    try:
+        return get_settings()
+    except Exception as exc:  # pydantic ValidationError and friends
+        print(f"\nFATAL: {exc}\n", file=sys.stderr)
+        raise SystemExit(1) from None

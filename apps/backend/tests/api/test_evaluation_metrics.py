@@ -3,15 +3,26 @@
 numbers — when there is no underlying data."""
 
 import json
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from starlette.requests import Request
 
+from bebshax.api.evaluation import get_evaluation_metrics
+from bebshax.auth.models import Users
+from bebshax.auth.security import create_access_token
 from bebshax.db.models import Base, LLMRequests, Personas
 from bebshax.llm.types import TaskType
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails
+
+_DEVELOPER_ID = "usr_evaluation_developer"
+
+
+def _developer_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {create_access_token(_DEVELOPER_ID)}"}
 
 
 @pytest.fixture
@@ -21,20 +32,52 @@ async def eval_app(tmp_path, monkeypatch):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'eval.db'}")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with maker() as session:
+        session.add(Users(
+            id=_DEVELOPER_ID, email="evaluation-developer@example.test",
+            full_name="Evaluation Developer", hashed_password="unused-fixture-hash",
+            role="developer", is_active=True, is_verified=True,
+        ))
+        await session.commit()
 
     from bebshax.main import create_app
+    from bebshax.config import Settings
 
     app = create_app()
+    settings_options: dict[str, Any] = {"_env_file": None, "environment": "development"}
+    app.state.settings = Settings(**settings_options)
     app.state.db_sessionmaker = maker
-    return app, maker, tmp_path
+    try:
+        yield app, maker, tmp_path
+    finally:
+        await engine.dispose()
 
 
 async def _get_metrics(app) -> dict:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        res = await client.get("/api/evaluation/metrics")
+        res = await client.get("/api/evaluation/metrics", headers=_developer_headers())
         assert res.status_code == 200
         return res.json()
+
+
+async def test_evaluation_requires_authentication(eval_app):
+    app, _, _ = eval_app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/evaluation/metrics")
+    assert response.status_code == 401
+
+
+async def test_evaluation_denies_a_non_developer_database_role(eval_app):
+    app, maker, _ = eval_app
+    async with maker() as session:
+        user = await session.get(Users, _DEVELOPER_ID)
+        assert user is not None
+        user.role = "user"
+        await session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/evaluation/metrics", headers=_developer_headers())
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -65,12 +108,15 @@ async def test_pool_rows_are_measured_from_provenance(eval_app):
                 # conversation pool: 2 requests, 1 ollama-served, 1 fallback chain
                 LLMRequests(
                     request_id="r1", task=TaskType.PERSONA_RESPONSE, pool="conversation",
-                    success=True, total_latency_ms=1000.0, attempts=[ok],
+                    success=True, total_latency_ms=1000.0,
+                    attempts=[{**ok, "provider": "ollama", "model": "historical"}],
                     served_by_provider="ollama",
                 ),
                 LLMRequests(
                     request_id="r2", task=TaskType.PERSONA_RESPONSE, pool="conversation",
-                    success=True, total_latency_ms=3000.0, attempts=[fail, ok],
+                    success=True, total_latency_ms=3000.0,
+                    attempts=[{**fail, "provider": "groq", "model": "first"},
+                              {**ok, "provider": "openrouter", "model": "second"}],
                     served_by_provider="openrouter",
                 ),
                 # structured pool: 1 failed persona-gen with a malformed attempt
@@ -96,11 +142,13 @@ async def test_pool_rows_are_measured_from_provenance(eval_app):
     assert conv["success_rate"] == 1.0
     assert conv["avg_latency_ms"] == 2000.0
     assert conv["fallback_rate"] == 0.5  # r2 took 2 attempts
-    assert conv["local_serve_rate"] == 0.5  # r1 via ollama
+    assert conv["local_serve_rate"] is None
+    assert conv["historical_ollama_provider_rate"] == 0.5
     structured = pools["structured"]
     assert structured["requests"] == 2
     assert structured["success_rate"] == 0.5
-    assert structured["local_serve_rate"] == 0.0
+    assert structured["local_serve_rate"] is None
+    assert structured["historical_ollama_provider_rate"] == 0.0
 
     health = data["overall_health"]
     # schema validity: 1 of 2 persona-gen requests emitted MALFORMED_RESPONSE
@@ -192,3 +240,132 @@ async def test_wrong_shape_gate_falls_back_to_older_valid_report(eval_app):
     assert gate is not None
     assert gate["source_file"] == "local_3b_gate_20260820_000000.json"
     assert gate["arms"][0]["weighted_score"] == 9.0
+
+
+@pytest.mark.parametrize("attempts", [[], [{"success": False, "failure_kind": "TIMEOUT"}],
+                                      [{"success": True, "cached": True}]])
+async def test_unmeasured_generation_never_claims_schema_validity(eval_app, attempts):
+    app, maker, _ = eval_app
+    async with maker() as session:
+        session.add(LLMRequests(request_id="unmeasured", task=TaskType.PERSONA_GENERATION,
+                                pool="reasoning", attempts=attempts, success=False))
+        await session.commit()
+    health = (await _get_metrics(app))["overall_health"]
+    assert health["schema_validity_rate"] is None
+    assert health["schema_evaluable_requests"] == 0
+    assert health["schema_unknown_requests"] == 1
+
+
+async def test_same_route_retry_is_not_a_provider_fallback(eval_app):
+    app, maker, _ = eval_app
+    async with maker() as session:
+        session.add(LLMRequests(
+            request_id="retry", task=TaskType.PERSONA_RESPONSE, pool="conversation", success=True,
+            attempts=[
+                {"provider": "openrouter", "model": "test", "success": False, "failure_kind": "CONNECTION"},
+                {"provider": "openrouter", "model": "test", "success": True},
+            ],
+        ))
+        await session.commit()
+    pool = (await _get_metrics(app))["pools"][0]
+    assert pool["fallback_rate"] == 0.0
+    assert pool["fallback_evaluable_requests"] == 1
+
+
+async def test_inner_remote_attempts_count_as_fallback_without_outer_retry(eval_app):
+    app, maker, _ = eval_app
+    async with maker() as session:
+        session.add(LLMRequests(
+            request_id="inner", task=TaskType.PERSONA_RESPONSE, pool="conversation", success=True,
+            attempts=[{"provider": "groq", "model": "answer", "via": "freellmpool/auto", "success": True,
+                       "observations": [
+                           {"provider": "cerebras", "requested_model": "first", "outcome": "failed", "consumption": "unknown"},
+                           {"provider": "groq", "requested_model": "answer", "outcome": "succeeded", "consumption": "known"},
+                       ]}],
+        ))
+        await session.commit()
+    pool = (await _get_metrics(app))["pools"][0]
+    assert pool["fallback_rate"] == 1.0
+    assert pool["fallback_evaluable_requests"] == 1
+
+
+async def test_global_evaluation_is_not_exposed_outside_development(eval_app):
+    from types import SimpleNamespace
+
+    app, _, _ = eval_app
+    app.state.settings = SimpleNamespace(environment="test")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/evaluation/metrics", headers=_developer_headers())
+    assert response.status_code == 404
+
+
+async def test_cached_answer_is_not_current_provider_availability(eval_app):
+    app, maker, _ = eval_app
+    async with maker() as session:
+        session.add(LLMRequests(
+            request_id="cached-status", task=TaskType.PERSONA_RESPONSE, pool="conversation", success=True,
+            attempts=[{"provider": "groq", "model": "test", "cached": True, "success": True}],
+        ))
+        await session.commit()
+    assert (await _get_metrics(app))["pools"][0]["status"] == "unknown"
+
+
+@pytest.mark.parametrize("provider, historical_rate", [("ollama", 1.0), ("freellmpool", 0.0)])
+async def test_provider_labels_do_not_establish_historical_locality(eval_app, provider, historical_rate):
+    app, maker, _ = eval_app
+    async with maker() as session:
+        session.add(LLMRequests(
+            request_id="ambiguous-locality", task=TaskType.PERSONA_RESPONSE,
+            pool="conversation", success=True, served_by_provider=provider,
+            attempts=[{"provider": provider, "model": "historical", "success": True}],
+        ))
+        await session.commit()
+    data = await _get_metrics(app)
+    [pool] = data["pools"]
+    assert pool["local_serve_rate"] is None
+    assert pool["historical_ollama_provider_rate"] == historical_rate
+    assert data["metrics_window"]["route_kind_measured"] is False
+
+
+async def test_cancelled_latest_attempt_stays_unknown_in_a_bounded_metrics_window(eval_app, monkeypatch):
+    app, maker, _ = eval_app
+    monkeypatch.setattr("bebshax.api.evaluation._METRICS_SCAN_LIMIT", 1)
+    now = datetime.now(timezone.utc)
+    async with maker() as session:
+        session.add_all([
+            LLMRequests(
+                request_id="older-observed-success", task=TaskType.PERSONA_RESPONSE,
+                pool="conversation", success=True, total_latency_ms=9000,
+                created_at=now - timedelta(minutes=10), served_by_provider="openrouter",
+                attempts=[{"provider": "openrouter", "model": "older", "success": True}],
+            ),
+            LLMRequests(
+                request_id="latest-cancelled", task=TaskType.PERSONA_GENERATION,
+                pool="conversation", success=False, total_latency_ms=1000, created_at=now,
+                attempts=[{
+                    "provider": "freellmpool", "model": "auto", "success": False,
+                    "observations": [{
+                        "provider": "kilo", "requested_model": "verified-model",
+                        "outcome": "aborted", "consumption": "unknown", "failure_kind": None,
+                    }],
+                }],
+            ),
+        ])
+        await session.commit()
+    data = await get_evaluation_metrics(Request({"type": "http", "method": "GET", "app": app}))
+    assert data["metrics_window"]["truncated"] is True
+    assert data["metrics_window"]["requests"] == 1
+    assert data["overall_health"]["avg_latency_ms"] == 1000
+    assert data["overall_health"]["schema_validity_rate"] is None
+    assert data["overall_health"]["schema_unknown_requests"] == 1
+    assert data["pools"][0]["status"] == "unknown"
+
+
+async def test_unwired_metrics_leave_unmeasured_values_unknown(eval_app):
+    app, _, _ = eval_app
+    app.state.db_sessionmaker = None
+    data = await get_evaluation_metrics(Request({"type": "http", "method": "GET", "app": app}))
+    assert data["overall_health"]["total_personas_generated"] is None
+    assert data["overall_health"]["avg_latency_ms"] is None
+    assert data["pools"] == []
+    assert data["metrics_window"]["truncated"] is False

@@ -26,13 +26,13 @@ async def test_persona_endpoints_idor_protection():
             id="usr_persona_a",
             email="persona_a@bebshax.ai",
             full_name="User A",
-            hashed_password="pw_hash_a",
+            hashed_password="pw_hash_a", is_verified=True,
         )
         user_b = Users(
             id="usr_persona_b",
             email="persona_b@bebshax.ai",
             full_name="User B",
-            hashed_password="pw_hash_b",
+            hashed_password="pw_hash_b", is_verified=True,
         )
         session.add_all([user_a, user_b])
 
@@ -144,13 +144,13 @@ async def test_demo_study_personas_are_listed_for_every_reader():
                     id="usr_demo_owner",
                     email="demo-owner@bebshax.ai",
                     full_name="Demo Owner",
-                    hashed_password="hash",
+                    hashed_password="hash", is_verified=True,
                 ),
                 Users(
                     id="usr_demo_reader",
                     email="demo-reader@bebshax.ai",
                     full_name="Demo Reader",
-                    hashed_password="hash",
+                    hashed_password="hash", is_verified=True,
                 ),
                 Studies(
                     id="std_demo_pub",

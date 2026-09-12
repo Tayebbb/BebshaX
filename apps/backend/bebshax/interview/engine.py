@@ -13,27 +13,33 @@ Principles (R2, R3, R6, Part 6):
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import math
 import re
 import uuid
 from collections import defaultdict
-from collections.abc import AsyncIterator, Mapping
-from contextlib import aclosing, asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import aclosing, asynccontextmanager, nullcontext
+from copy import deepcopy
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Any, Optional
+from types import SimpleNamespace
+from typing import Any, Optional, cast
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import sessionmaker
 
 from bebshax.db.models import Businesses, MarketSegments, Personas, Studies
 from bebshax.interview.normalization import normalize_reply
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm import ChatMessage, LLMError, LLMRequest, LLMResult, LLMService, TaskType
+from bebshax.llm.failures import AttemptFailed, FailureKind
 from bebshax.llm.json_utils import parse_llm_json, unwrap_list
+from bebshax.llm.latency import DeadlineContext, DeadlineExpired, await_before, resolve_deadline
+from bebshax.llm.placeholders import is_placeholder
+from bebshax.llm.provenance import ProvenanceRecord
 from bebshax.llm.prompt_safety import (
     UNTRUSTED_RULE,
     neutralise_tags,
@@ -41,8 +47,11 @@ from bebshax.llm.prompt_safety import (
     untrusted_json_block,
 )
 from bebshax.memory.service import MemoryService
+from bebshax.llm.validation import validate_text
 from bebshax.persona.schema import PersonaProfile
+from bebshax.persona.context import private_persona_context
 from bebshax.persona.store import load_persona
+from bebshax.personas.orm import PersonaVersions
 from bebshax.utils.explicit_failures import ExplicitFailure
 
 logger = logging.getLogger(__name__)
@@ -79,6 +88,45 @@ def _validate_persona_version(conversation: Conversations, persona: Personas) ->
         raise PersonaVersionChanged(
             "The persona version changed after this interview started. Start a new interview."
         )
+
+
+def _capture_persona_snapshot(persona: Any, *, legacy_profile: dict[str, Any] | None = None) -> dict[str, Any]:
+    if isinstance(persona, PersonaProfile):
+        fields = persona.model_dump(mode="json")
+        kind = "profile"
+    else:
+        fields = {
+            column.key: (value.isoformat() if isinstance(value, datetime) else deepcopy(value))
+            for column in Personas.__table__.columns
+            for value in [getattr(persona, column.key)]
+        }
+        kind = "persona"
+    return {"schema_version": 1, "kind": kind, "fields": fields,
+            "identity_card": build_identity_card(persona), "legacy_profile": deepcopy(legacy_profile)}
+
+
+def _snapshot_persona(conversation: Conversations, fallback: Any) -> Any:
+    snapshot = conversation.persona_snapshot
+    if not snapshot:
+        return fallback
+    if snapshot.get("kind") == "profile":
+        return PersonaProfile.model_validate(snapshot["fields"])
+    return SimpleNamespace(**deepcopy(snapshot["fields"]))
+
+
+def _persona_evidence(persona: Any, conversation: Conversations) -> list[dict[str, Any]]:
+    evidence = [item.model_dump(mode="json") for item in persona.evidence] if isinstance(persona, PersonaProfile) else list(getattr(persona, "evidence_citations", []) or [])
+    legacy = (conversation.persona_snapshot or {}).get("legacy_profile") or {}
+    return [*evidence, *(legacy.get("evidence") or [])]
+
+
+def _full_snapshot_context(conversation: Conversations) -> str:
+    if not conversation.persona_snapshot:
+        return ""
+    return untrusted_json_block(
+        "IMMUTABLE_PERSONA_CONTEXT", conversation.persona_snapshot,
+        source="conversation.persona_snapshot",
+    )
 
 
 SYNTHESIS_UNPARSEABLE = "interview_synthesis_unparseable"
@@ -522,11 +570,13 @@ class InterviewEngine:
     def __init__(
         self,
         llm: LLMService,
-        sessionmaker_: sessionmaker[AsyncSession],
+        sessionmaker_: Callable[[], AsyncSession],
         memory: MemoryService | None = None,
         memory_k: int = 4,
         *,
         suggest_questions: bool = False,
+        background_suggestions: bool = False,
+        max_background_suggestions: int = 4,
     ) -> None:
         self._llm = llm
         self._sessionmaker = sessionmaker_
@@ -535,6 +585,10 @@ class InterviewEngine:
         # Model-written follow-up suggestions cost one extra model call per turn;
         # the app enables them explicitly (main.py), scripted tests keep them off.
         self._suggest_questions = suggest_questions
+        self._background_suggestions = background_suggestions
+        self._max_background_suggestions = max_background_suggestions
+        self._suggestion_tasks: set[asyncio.Task[None]] = set()
+        self._closing = False
         # One lock per conversation: prepare → LLM → persist must not interleave
         # (concurrent asks used to persist duplicate turn numbers).
         self._turn_locks: dict[str, asyncio.Lock] = {}
@@ -547,13 +601,26 @@ class InterviewEngine:
         return lock
 
     @asynccontextmanager
-    async def _conversation_lock(self, conversation_id: str) -> AsyncIterator[None]:
+    async def _conversation_lock(
+        self, conversation_id: str, *, deadline_at: float | None = None,
+    ) -> AsyncIterator[None]:
         lock = self._lock_for(conversation_id)
         self._lock_users[conversation_id] = self._lock_users.get(conversation_id, 0) + 1
+        acquired = False
         try:
-            async with lock:
-                yield
+            if deadline_at is None:
+                await lock.acquire()
+                acquired = True
+            else:
+                if asyncio.get_running_loop().time() >= deadline_at:
+                    raise DeadlineExpired("interview deadline expired before lock acquisition")
+                async with asyncio.timeout_at(deadline_at):
+                    await lock.acquire()
+                    acquired = True
+            yield
         finally:
+            if acquired:
+                lock.release()
             remaining = self._lock_users[conversation_id] - 1
             if remaining:
                 self._lock_users[conversation_id] = remaining
@@ -577,6 +644,7 @@ class InterviewEngine:
 
         async with self._sessionmaker() as session:
             # Check Persona exists
+            profile = None
             persona = await session.get(Personas, persona_id)
             if persona is None:
                 # check fallback in legacy store
@@ -589,6 +657,26 @@ class InterviewEngine:
                 persona_version = persona.version
                 effective_study_id = study_id or persona.study_id
 
+            identity_persona = persona if persona is not None else profile
+            version_record = await session.get(PersonaVersions, (persona_id, persona_version))
+            if version_record is not None:
+                if persona is None or version_record.owner_id != persona.owner_id:
+                    raise PersonaVersionChanged("Persona version ownership does not match its parent.")
+                identity_persona = SimpleNamespace(**deepcopy(version_record.snapshot))
+            if persona is not None and not persona.demographics:
+                profile = (
+                    PersonaProfile.model_validate(version_record.legacy_profile)
+                    if version_record is not None and version_record.legacy_profile
+                    else await load_persona(session, persona_id)
+                )
+                if profile is not None:
+                    identity_persona = profile
+            legacy_profile = deepcopy(version_record.legacy_profile) if version_record is not None else None
+            if version_record is None:
+                profile = profile or await load_persona(session, persona_id)
+                if profile is not None:
+                    legacy_profile = profile.model_dump(mode="json")
+
             # Initial topics state
             initial_topics = {
                 topic_id: "not_explored" for topic_id, _, _ in _TOPIC_DEFINITIONS
@@ -600,6 +688,7 @@ class InterviewEngine:
                 user_id=user_id,
                 persona_id=persona_id,
                 persona_version=persona_version,
+                persona_snapshot=_capture_persona_snapshot(identity_persona, legacy_profile=legacy_profile),
                 generation_run_id=generation_run_id or (persona.generation_run_id if persona else None),
                 objective=objective,
                 custom_objective=custom_objective,
@@ -622,11 +711,15 @@ class InterviewEngine:
             await session.commit()
             return conversation
 
-    async def transcript(self, conversation_id: str) -> tuple[Conversations, list[ConversationTurns]]:
+    async def transcript(
+        self, conversation_id: str, *, owner_id: str | None = None,
+    ) -> tuple[Conversations, list[ConversationTurns]]:
         """Retrieve conversation record and all chronological turns."""
         async with self._sessionmaker() as session:
             conversation = await session.get(Conversations, conversation_id)
             if conversation is None:
+                raise ConversationNotFound(conversation_id)
+            if owner_id is not None and conversation.user_id != owner_id:
                 raise ConversationNotFound(conversation_id)
             turns = list(
                 (
@@ -646,15 +739,17 @@ class InterviewEngine:
         persona: Any,
         prior_turns: list[ConversationTurns],
         interviewer_message: str,
-    ) -> tuple[list[ChatMessage], list[str]]:
+    ) -> tuple[list[ChatMessage], list[str], list[str]]:
         """Compose controlled system prompt + history + current message.
 
         The identity card comes first and is the only researcher-independent
         text; everything that originates from researchers, documents, or
         earlier turns is wrapped in <UNTRUSTED_*> blocks (DATA, never
         instructions — see bebshax.llm.prompt_safety)."""
-        identity_card = build_identity_card(persona)
+        identity_card = (conversation.persona_snapshot or {}).get("identity_card") or build_identity_card(persona)
         system_parts = [identity_card, _GROUNDED_INSTRUCTIONS]
+        if conversation.persona_snapshot:
+            system_parts.append(_full_snapshot_context(conversation))
 
         # 1. Study & Business Context
         business_id = getattr(persona, "business_id", None)
@@ -682,6 +777,16 @@ class InterviewEngine:
                 system_parts.append(
                     "STUDY CONTEXT:\n" + untrusted_block("STUDY", study_info, source="study")
                 )
+                system_parts.append(untrusted_json_block(
+                    "STUDY_RESEARCH_CONTEXT",
+                    {
+                        "business_description": study.prompt,
+                        "copilot_messages": study.copilot_messages or [],
+                        "script_questions": study.script_questions or [],
+                        "findings": study.findings,
+                    },
+                    source="study",
+                ))
 
         # 2. Market Segment Context
         segment_id = getattr(persona, "segment_id", None)
@@ -698,7 +803,7 @@ class InterviewEngine:
                 )
 
         # 3. Evidence Citations Context
-        evidence_citations = getattr(persona, "evidence_citations", []) or []
+        evidence_citations = _persona_evidence(persona, conversation)
         if evidence_citations:
             ev_lines = []
             for ev in evidence_citations:
@@ -726,14 +831,19 @@ class InterviewEngine:
         # 5. Episodic Memories — the persona's OWN prior statements only
         # (MemoryService.retrieve defaults to source="persona"; researcher
         # text is stored for audit but never replayed as a recollection).
+        session.expunge_all()
+        await session.rollback()
         retrieved_texts = []
+        retrieved_memory_ids = []
         if self._memory is not None:
             memories = await self._memory.retrieve(
-                conversation.persona_id, interviewer_message, k=self._memory_k
+                conversation.persona_id, interviewer_message, k=self._memory_k,
+                owner_id=conversation.user_id,
             )
-            memories = [m for m in memories if m.source == "persona"]
+            memories = [m for m in memories if m.source == "persona" and m.owner_id == conversation.user_id]
             if memories:
                 retrieved_texts = [m.text for m in memories]
+                retrieved_memory_ids = [m.id for m in memories]
                 lines = "\n".join(f"- ({m.kind}) {m.text}" for m in memories)
                 system_parts.append(
                     "YOUR RELEVANT MEMORIES (stay strictly consistent):\n"
@@ -747,7 +857,7 @@ class InterviewEngine:
             messages.append(ChatMessage(role=role, content=turn.content))
         messages.append(ChatMessage(role="user", content=interviewer_message))
 
-        return messages, retrieved_texts
+        return messages, retrieved_texts, retrieved_memory_ids
 
     def _classify_topic(self, message: str, prior_topics: dict[str, str]) -> tuple[str, dict[str, str]]:
         """Identify which topic this exchange touched and update topics dictionary."""
@@ -924,6 +1034,7 @@ class InterviewEngine:
         conversation: Conversations,
         persona: Any,
         prior_turns: list[ConversationTurns],
+        *, deadline_at: float | None = None,
     ) -> list[str]:
         """Follow-up questions the researcher can click next, written by the model
         from THIS transcript and the topics still unexplored. There is no canned
@@ -939,14 +1050,26 @@ class InterviewEngine:
             {"role": turn.role, "text": turn.content or ""}
             for turn in prior_turns
         ]
+        last_question = next(
+            (turn.content for turn in reversed(prior_turns)
+             if turn.role in ("interviewer", "researcher", "user")),
+            conversation.objective,
+        )
+        async with self._sessionmaker() as session:
+            research_messages, _, memory_ids = await self._compose(
+                session, conversation, persona, [], last_question,
+            )
         context = {
+            "research_context": research_messages[0].content,
+            "retrieved_memory_ids": memory_ids,
             "persona": {
                 "name": getattr(persona, "name", ""),
                 "occupation": demo.get("occupation"),
                 "location": demo.get("location"),
                 "identity": build_identity_card(persona),
                 "pain_points": list(getattr(persona, "pain_points", []) or []),
-                "evidence_citations": getattr(persona, "evidence_citations", []) or [],
+                "evidence_citations": _persona_evidence(persona, conversation),
+                "immutable_snapshot": conversation.persona_snapshot,
             },
             "recent_turns": recent,
             "topics_not_yet_explored": unexplored,
@@ -971,9 +1094,14 @@ class InterviewEngine:
             max_output_tokens=300,
             persona_id=getattr(persona, "id", None),
             conversation_id=conversation.id,
+            owner_user_id=conversation.user_id,
+            study_id=conversation.study_id,
+            data_classification="private" if conversation.user_id is not None else None,
         )
         try:
-            result = await self._llm.complete(request)
+            result = await self._complete_request(
+                request, resolve_deadline(TaskType.STRUCTURED_OUTPUT, deadline_at=deadline_at),
+            )
             parsed = parse_llm_json(result.text)
         except Exception as exc:  # suggestions are optional UX — never block the turn
             logger.info("suggested-question generation unavailable for %s: %s", conversation.id, type(exc).__name__)
@@ -981,13 +1109,95 @@ class InterviewEngine:
         items = unwrap_list(parsed, keys=("questions", "suggestions", "follow_up_questions"))
         return [str(q).strip() for q in items if isinstance(q, (str, int, float)) and str(q).strip()][:4]
 
+    def _schedule_suggestions(self, conversation: Conversations, turn_number: int) -> None:
+        if (self._closing or not self._suggest_questions or not self._background_suggestions
+                or len(self._suggestion_tasks) >= self._max_background_suggestions):
+            return
+        task = asyncio.create_task(self.refresh_suggestions(
+            conversation.id, owner_id=conversation.user_id,
+            expected_turn_count=turn_number, persona_version=conversation.persona_version,
+        ))
+        self._suggestion_tasks.add(task)
+
+        def finished(completed: asyncio.Task[None]) -> None:
+            self._suggestion_tasks.discard(completed)
+            if not completed.cancelled() and completed.exception() is not None:
+                logger.info("optional interview suggestions unavailable: %s", type(completed.exception()).__name__)
+
+        task.add_done_callback(finished)
+
+    async def refresh_suggestions(
+        self, conversation_id: str, *, owner_id: str | None,
+        expected_turn_count: int, persona_version: int, deadline_at: float | None = None,
+    ) -> None:
+        """Owned revision callback for a durable runner or the opt-in local registry."""
+        if self._closing:
+            return
+        deadline = resolve_deadline(
+            TaskType.STRUCTURED_OUTPUT, deadline_at=deadline_at,
+            budget_s=_SUGGESTED_QUESTIONS_TIMEOUT_SECONDS,
+        )
+        await await_before(self._refresh_suggestions(
+            conversation_id, owner_id, expected_turn_count, persona_version, deadline,
+        ), deadline)
+
+    async def _refresh_suggestions(
+        self, conversation_id: str, owner_id: str | None, expected_turn_count: int,
+        persona_version: int, deadline: float,
+    ) -> None:
+        from bebshax.memory.service import require_owner_id
+
+        owner_id = require_owner_id(owner_id)
+        conversation, turns = await self.transcript(conversation_id, owner_id=owner_id)
+        if (conversation.turn_count != expected_turn_count or conversation.persona_version != persona_version
+                or conversation.status != "active" or not conversation.persona_snapshot):
+            return
+        persona = _snapshot_persona(conversation, None)
+        questions = await self.generate_suggested_questions(conversation, persona, turns, deadline_at=deadline)
+        if self._closing or not questions:
+            return
+        async with self._sessionmaker() as session:
+            current = await session.get(Conversations, conversation_id, with_for_update=True)
+            if (current is None or current.user_id != owner_id or current.turn_count != expected_turn_count
+                    or current.persona_version != persona_version or current.status != "active"):
+                return
+            turn = (await session.execute(select(ConversationTurns).where(
+                ConversationTurns.conversation_id == conversation_id,
+                ConversationTurns.turn_number == expected_turn_count,
+                ConversationTurns.role == "persona",
+            ))).scalar_one_or_none()
+            if turn is None:
+                return
+            metadata = dict(turn.metadata_json or {})
+            guidance = metadata.get("follow_up_guidance")
+            metadata["suggested_questions"] = ([guidance] if guidance else []) + questions
+            turn.metadata_json = metadata
+            if self._closing or asyncio.get_running_loop().time() >= deadline:
+                raise DeadlineExpired("suggestions expired before persistence")
+            await session.commit()
+
+    async def aclose(self, timeout_s: float = 1.0) -> None:
+        self._closing = True
+        tasks = tuple(self._suggestion_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            _, pending = await asyncio.wait(tasks, timeout=max(0.0, timeout_s))
+            if pending:
+                for task in pending:
+                    task.cancel()
+                raise TimeoutError("interview suggestion cleanup did not finish within its budget")
+
     async def _prepare_turn(
-        self, conversation_id: str, interviewer_message: str
-    ) -> tuple[Any, Any, list[ConversationTurns], list[ChatMessage], list[str]]:
+        self, conversation_id: str, interviewer_message: str,
+        *, owner_id: str | None = None,
+    ) -> tuple[Any, Any, list[ConversationTurns], list[ChatMessage], list[str], list[str]]:
         """Load conversation/persona/turns and compose the LLM context."""
         async with self._sessionmaker() as session:
             conversation = await session.get(Conversations, conversation_id)
             if conversation is None:
+                raise ConversationNotFound(conversation_id)
+            if owner_id is not None and conversation.user_id != owner_id:
                 raise ConversationNotFound(conversation_id)
 
             if conversation.status == "completed":
@@ -1006,6 +1216,8 @@ class InterviewEngine:
                 if persona is None:
                     raise PersonaNotFound(conversation.persona_id)
 
+            persona = _snapshot_persona(conversation, persona)
+
             # Prior turns
             prior_turns = list(
                 (
@@ -1018,10 +1230,10 @@ class InterviewEngine:
             )
 
             # Compose context
-            messages, retrieved_memories = await self._compose(
+            messages, retrieved_memories, retrieved_memory_ids = await self._compose(
                 session, conversation, persona, prior_turns, interviewer_message
             )
-        return conversation, persona, prior_turns, messages, retrieved_memories
+        return conversation, persona, prior_turns, messages, retrieved_memories, retrieved_memory_ids
 
     def _turn_request(self, conversation: Any, messages: list[ChatMessage]) -> LLMRequest:
         return LLMRequest(
@@ -1034,7 +1246,41 @@ class InterviewEngine:
             temperature=0.7,
             persona_id=conversation.persona_id,
             conversation_id=conversation.id,
+            owner_user_id=conversation.user_id,
+            study_id=conversation.study_id,
+            data_classification="private" if conversation.user_id is not None else None,
         )
+
+    def _deadline_arguments(self, method: Any, deadline_at: float) -> dict[str, float]:
+        parameters = inspect.signature(method).parameters.values()
+        if any(parameter.name == "deadline_at" or parameter.kind == inspect.Parameter.VAR_KEYWORD
+               for parameter in parameters):
+            return {"deadline_at": deadline_at}
+        return {}
+
+    async def _complete_request(self, request: LLMRequest, deadline_at: float) -> LLMResult:
+        scope = (private_persona_context(request.owner_user_id, request.study_id)
+                 if request.owner_user_id is not None else nullcontext())
+        with scope:
+            return await await_before(
+                self._llm.complete(request, **self._deadline_arguments(self._llm.complete, deadline_at)),
+                deadline_at,
+            )
+
+    def _validate_result(self, result: LLMResult, request: LLMRequest, persona: Any) -> None:
+        try:
+            validate_text(result.text, request, result.provider, result.model)
+            reply = normalize_reply(result.text, persona_name=getattr(persona, "name", None))
+            validate_text(reply, request, result.provider, result.model)
+            if is_placeholder(reply) or re.fullmatch(r"\{\{[^{}]+\}\}", reply.strip()):
+                raise AttemptFailed(
+                    FailureKind.MALFORMED_RESPONSE, result.provider, result.model,
+                    "placeholder interview response", provider_fault=False,
+                )
+        except AttemptFailed as exc:
+            exc.provenance = result.provenance.model_copy(deep=True)
+            exc.provenance.success = False
+            raise
 
     async def _update_snapshot(
         self, session: AsyncSession, conversation: Conversations, values: dict[str, Any]
@@ -1048,6 +1294,7 @@ class InterviewEngine:
             .where(
                 Conversations.id == conversation.id,
                 Conversations.persona_id == conversation.persona_id,
+                Conversations.user_id == conversation.user_id,
                 Conversations.persona_version == conversation.persona_version,
                 Conversations.turn_count == conversation.turn_count,
                 Conversations.question_count == conversation.question_count,
@@ -1077,6 +1324,10 @@ class InterviewEngine:
         raw_text: str,
         served_by: str,
         latency_ms: float,
+        *,
+        provenance: ProvenanceRecord | None = None,
+        deadline_at: float | None = None,
+        retrieved_memory_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Normalize, classify, persist, and shape the ask() result payload."""
         conversation_id = conversation.id
@@ -1084,7 +1335,7 @@ class InterviewEngine:
 
         # Classify topic & memory category
         topic, updated_topics = self._classify_topic(
-            interviewer_message + " " + reply, conversation.topics_explored
+            interviewer_message + " " + reply, conversation.topics_explored or {}
         )
         memory_kind = self._classify_memory_type(topic, interviewer_message, reply)
 
@@ -1106,24 +1357,14 @@ class InterviewEngine:
 
         question_count = (conversation.question_count or 0) + 1
 
-        current_exchange = [
-            ConversationTurns(role="interviewer", content=interviewer_message),
-            ConversationTurns(role="persona", content=reply),
-        ]
-        try:
-            async with asyncio.timeout(_SUGGESTED_QUESTIONS_TIMEOUT_SECONDS):
-                suggested_questions = await self.generate_suggested_questions(
-                    conversation, persona, [*prior_turns, *current_exchange]
-                )
-        except TimeoutError:
-            logger.info(
-                "suggested-question generation timed out after %s seconds for %s",
-                _SUGGESTED_QUESTIONS_TIMEOUT_SECONDS,
-                conversation_id,
-            )
-            suggested_questions = []
+        suggested_questions: list[str] = []
         if follow_up_guidance:
             suggested_questions.insert(0, follow_up_guidance)
+
+        prepared_memories = (
+            await self._memory.prepare([reply, interviewer_message]) if self._memory is not None else []
+        )
+        retrieved_memory_ids = retrieved_memory_ids or []
 
         # Persist turns and update conversation in DB
         async with self._sessionmaker() as session:
@@ -1172,6 +1413,10 @@ class InterviewEngine:
                         "memory_kind": memory_kind,
                         "decision_state": decision_state,
                         "suggested_questions": suggested_questions,
+                        "provenance": provenance.model_dump(mode="json") if provenance else None,
+                        "llm_request_id": provenance.request_id if provenance else None,
+                        "retrieved_memory_ids": retrieved_memory_ids,
+                        "persona_snapshot_status": "captured" if conversation.persona_snapshot else "legacy_unknown",
                     },
                     created_at=datetime.now(timezone.utc),
                 )
@@ -1183,8 +1428,10 @@ class InterviewEngine:
                     kind="episodic",
                     importance=0.65 if has_contradiction or memory_kind in ("budget", "decision", "frustration", "objection") else 0.45,
                     source="persona",
+                    owner_id=conversation.user_id,
                     conversation_id=conversation_id,
                     session=session,
+                    prepared=prepared_memories[0],
                 )
                 await self._memory.remember(
                     conversation.persona_id,
@@ -1192,11 +1439,16 @@ class InterviewEngine:
                     kind="episodic",
                     importance=0.2,
                     source="interviewer",
+                    owner_id=conversation.user_id,
                     conversation_id=conversation_id,
                     session=session,
+                    prepared=prepared_memories[1],
                 )
+            if deadline_at is not None and asyncio.get_running_loop().time() >= deadline_at:
+                raise DeadlineExpired("interview deadline expired before commit")
             await session.commit()
 
+        self._schedule_suggestions(conversation, persona_turn_num)
         return {
             "reply": reply,
             "turn_number": persona_turn_num,
@@ -1209,6 +1461,7 @@ class InterviewEngine:
             "is_finished": is_auto_finished,
             "suggested_questions": suggested_questions,
             "retrieved_memories": retrieved_memories,
+            "retrieved_memory_ids": retrieved_memory_ids,
             "contradiction_detected": has_contradiction,
             "contradiction_details": contradiction_details,
             **( {"confidence": confidence} if confidence is not None else {} ),
@@ -1216,19 +1469,27 @@ class InterviewEngine:
             "drift_notes": drift_notes,
             "memory_kind": memory_kind,
             "decision_state": decision_state,
+            "provenance": provenance.model_dump(mode="json") if provenance else None,
+            "llm_request_id": provenance.request_id if provenance else None,
         }
 
-    async def ask(self, conversation_id: str, interviewer_message: str) -> dict[str, Any]:
+    async def ask(
+        self, conversation_id: str, interviewer_message: str,
+        *, owner_id: str | None = None, deadline_at: float | None = None,
+    ) -> dict[str, Any]:
         """Process a researcher question and return the persona response with updated state."""
-        async with self._conversation_lock(conversation_id):
+        deadline = resolve_deadline(TaskType.PERSONA_INTERVIEW, deadline_at=deadline_at)
+        async with self._conversation_lock(conversation_id, deadline_at=deadline):
             start_time = datetime.now(timezone.utc)
-            conversation, persona, prior_turns, messages, retrieved_memories = await self._prepare_turn(
-                conversation_id, interviewer_message
+            conversation, persona, prior_turns, messages, retrieved_memories, retrieved_memory_ids = await await_before(
+                self._prepare_turn(conversation_id, interviewer_message, owner_id=owner_id), deadline,
             )
 
-            result = await self._llm.complete(self._turn_request(conversation, messages))
+            request = self._turn_request(conversation, messages)
+            result = await self._complete_request(request, deadline)
+            self._validate_result(result, request, persona)
             latency_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
-            return await self._finalize_turn(
+            return await await_before(self._finalize_turn(
                 conversation,
                 persona,
                 prior_turns,
@@ -1237,10 +1498,14 @@ class InterviewEngine:
                 result.text,
                 f"{result.provider}/{result.model}",
                 latency_ms,
-            )
+                provenance=result.provenance,
+                deadline_at=deadline,
+                retrieved_memory_ids=retrieved_memory_ids,
+            ), deadline)
 
     async def ask_stream(
-        self, conversation_id: str, interviewer_message: str
+        self, conversation_id: str, interviewer_message: str,
+        *, owner_id: str | None = None, deadline_at: float | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Streaming ask(): yields {"type": "delta", "text"} chunks as the
         persona speaks, then {"type": "done", ...ask()-shaped payload...}.
@@ -1252,42 +1517,99 @@ class InterviewEngine:
         The per-conversation lock is held for the whole generator lifetime;
         callers must drive it to completion or close it (``aclosing``).
         """
-        async with self._conversation_lock(conversation_id):
+        deadline = resolve_deadline(TaskType.PERSONA_INTERVIEW, deadline_at=deadline_at)
+        async with self._conversation_lock(conversation_id, deadline_at=deadline):
             start_time = datetime.now(timezone.utc)
-            conversation, persona, prior_turns, messages, retrieved_memories = await self._prepare_turn(
-                conversation_id, interviewer_message
+            conversation, persona, prior_turns, messages, retrieved_memories, retrieved_memory_ids = await await_before(
+                self._prepare_turn(conversation_id, interviewer_message, owner_id=owner_id), deadline,
             )
 
+            request = self._turn_request(conversation, messages)
             final: LLMResult | None = None
             # aclosing: breaking out of the router stream must release the pool
             # semaphore and fire provenance NOW, not at GC (critic finding #1).
-            async with aclosing(self._llm.stream(self._turn_request(conversation, messages))) as stream:
-                async for event in stream:
-                    if isinstance(event, LLMResult):
-                        final = event
+            stream = self._llm.stream(request, **self._deadline_arguments(self._llm.stream, deadline))
+
+            async def advance():
+                scope = (private_persona_context(request.owner_user_id, request.study_id)
+                         if request.owner_user_id is not None else nullcontext())
+                with scope:
+                    return await anext(stream)
+
+            @asynccontextmanager
+            async def close_stream():
+                try:
+                    yield
+                finally:
+                    scope = (private_persona_context(request.owner_user_id, request.study_id)
+                             if request.owner_user_id is not None else nullcontext())
+                    with scope:
+                        async with aclosing(cast(Any, stream)):
+                            pass
+
+            async with DeadlineContext(close_stream(), deadline):
+                while True:
+                    try:
+                        event = await await_before(advance(), deadline)
+                    except StopAsyncIteration:
                         break
-                    yield {"type": "delta", "text": event.text}
+                    if final is not None:
+                        raise AttemptFailed(
+                            FailureKind.MALFORMED_RESPONSE, final.provider, final.model,
+                            "stream continued after terminal result", provenance=final.provenance,
+                            provider_fault=False,
+                        )
+                    if isinstance(event, LLMResult):
+                        self._validate_result(event, request, persona)
+                        final = event
+                    else:
+                        yield {"type": "delta", "text": event.text}
             if final is None:
-                raise LLMError("stream ended without a final result")
+                raise AttemptFailed(
+                    FailureKind.MALFORMED_RESPONSE, "unknown", "unknown",
+                    "stream ended without a final result", provider_fault=False,
+                    provenance=ProvenanceRecord(
+                        request_id=request.request_id, task=request.task,
+                        persona_id=request.persona_id, conversation_id=request.conversation_id,
+                        owner_user_id=request.owner_user_id, study_id=request.study_id,
+                        data_classification=request.data_classification or "unknown",
+                    ),
+                )
 
             latency_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
-            payload = await self._finalize_turn(
-                conversation,
-                persona,
-                prior_turns,
-                retrieved_memories,
-                interviewer_message,
-                final.text,
-                f"{final.provider}/{final.model}",
-                latency_ms,
-            )
+            try:
+                payload = await await_before(self._finalize_turn(
+                    conversation,
+                    persona,
+                    prior_turns,
+                    retrieved_memories,
+                    interviewer_message,
+                    final.text,
+                    f"{final.provider}/{final.model}",
+                    latency_ms,
+                    provenance=final.provenance,
+                    deadline_at=deadline,
+                    retrieved_memory_ids=retrieved_memory_ids,
+                ), deadline)
+            except TimeoutError as exc:
+                provenance = final.provenance.model_copy(deep=True)
+                provenance.success = False
+                raise AttemptFailed(
+                    FailureKind.TIMEOUT, final.provider, final.model,
+                    "interview persistence deadline exceeded", provider_fault=False,
+                    provenance=provenance,
+                ) from exc
         yield {"type": "done", **payload}
 
 
-    async def complete(self, conversation_id: str) -> dict[str, Any]:
+    async def complete(
+        self, conversation_id: str, *, owner_id: str | None = None,
+        deadline_at: float | None = None,
+    ) -> dict[str, Any]:
         """Complete the interview, synthesize findings, and extract structured insights with turn provenance."""
-        async with self._conversation_lock(conversation_id):
-            return await self._complete(conversation_id)
+        deadline = resolve_deadline(TaskType.STRUCTURED_OUTPUT, deadline_at=deadline_at)
+        async with self._conversation_lock(conversation_id, deadline_at=deadline):
+            return await await_before(self._complete(conversation_id, owner_id=owner_id, deadline_at=deadline), deadline)
 
     async def _stored_completion(
         self, session: AsyncSession, conversation: Conversations
@@ -1312,14 +1634,20 @@ class InterviewEngine:
             ],
             "insights_dropped": metadata.get("insights_dropped", 0),
             **{key: metadata[key] for key in (
-                "source", "served_by", "error_code", "fallback_reason",
+                "source", "served_by", "error_code", "fallback_reason", "provenance",
             ) if key in metadata},
         }
 
-    async def _complete(self, conversation_id: str) -> dict[str, Any]:
+    async def _complete(
+        self, conversation_id: str, *, owner_id: str | None = None,
+        deadline_at: float | None = None,
+    ) -> dict[str, Any]:
+        deadline = resolve_deadline(TaskType.STRUCTURED_OUTPUT, deadline_at=deadline_at)
         async with self._sessionmaker() as session:
             conversation = await session.get(Conversations, conversation_id)
             if conversation is None:
+                raise ConversationNotFound(conversation_id)
+            if owner_id is not None and conversation.user_id != owner_id:
                 raise ConversationNotFound(conversation_id)
             if conversation.status == "completed" and conversation.summary:
                 return await self._stored_completion(session, conversation)
@@ -1328,6 +1656,7 @@ class InterviewEngine:
             if persona is None:
                 raise PersonaNotFound(conversation.persona_id)
             _validate_persona_version(conversation, persona)
+            persona = _snapshot_persona(conversation, persona)
             persona_name = persona.name
 
             turns = list(
@@ -1380,9 +1709,9 @@ class InterviewEngine:
         )
         identity_block = untrusted_block(
             "PERSONA_IDENTITY", build_identity_card(persona), source="persona"
-        )
+        ) + "\n" + _full_snapshot_context(conversation)
         evidence_block = untrusted_json_block(
-            "EVIDENCE", persona.evidence_citations or [], source="persona.evidence_citations"
+            "EVIDENCE", _persona_evidence(persona, conversation), source="persona.evidence_citations"
         )
 
         analysis_prompt = f"""
@@ -1435,6 +1764,9 @@ Output valid JSON adhering strictly to this schema:
             max_output_tokens=1000,
             persona_id=conversation.persona_id,
             conversation_id=conversation_id,
+            owner_user_id=conversation.user_id,
+            study_id=conversation.study_id,
+            data_classification="private" if conversation.user_id is not None else None,
         )
 
         # Model-written synthesis or an explicit, recorded failure. A mechanical
@@ -1447,11 +1779,13 @@ Output valid JSON adhering strictly to this schema:
         synthesis_source = "llm"
         synthesis_error: Optional[str] = None
         served_by: Optional[str] = None
+        synthesis_provenance: list[dict[str, Any]] = []
         try:
             for attempt in range(1, _SYNTHESIS_MAX_ATTEMPTS + 1):
                 if attempt > 1:
                     request = request.retry_copy()
-                res = await self._llm.complete(request)
+                res = await self._complete_request(request, deadline)
+                synthesis_provenance.append(res.provenance.model_dump(mode="json"))
                 served_by = f"{res.provider}/{res.model}"
                 try:
                     parsed = parse_llm_json(res.text)
@@ -1467,9 +1801,16 @@ Output valid JSON adhering strictly to this schema:
                 synthesis_source = "unavailable"
                 synthesis_error = SYNTHESIS_UNPARSEABLE
         except LLMError as exc:
+            failed_provenance = getattr(exc, "provenance", None)
+            if failed_provenance is not None:
+                synthesis_provenance.append(failed_provenance.model_dump(mode="json"))
             logger.warning("insight synthesis failed for %s: %s", conversation_id, type(exc).__name__)
             synthesis_source = "unavailable"
-            synthesis_error = f"llm_error:{type(exc).__name__}"
+            failures = [attempt.failure_kind for attempt in getattr(getattr(exc, "provenance", None), "attempts", [])]
+            malformed = getattr(exc, "kind", None) == FailureKind.MALFORMED_RESPONSE or (
+                bool(failures) and all(kind == FailureKind.MALFORMED_RESPONSE for kind in failures)
+            )
+            synthesis_error = SYNTHESIS_UNPARSEABLE if malformed else f"llm_error:{type(exc).__name__}"
 
         # Persist structured insights and update interview record. Every turn is
         # already stored, so the conversation closes as completed regardless of
@@ -1536,10 +1877,13 @@ Output valid JSON adhering strictly to this schema:
                             "error_code": synthesis_error,
                             "fallback_reason": None,
                             "insights_dropped": insights_dropped,
+                            "provenance": synthesis_provenance,
                         },
                     }
                 )
             )
+            if asyncio.get_running_loop().time() >= deadline:
+                raise DeadlineExpired("interview synthesis deadline expired before commit")
             await session.commit()
 
         return {
@@ -1556,5 +1900,6 @@ Output valid JSON adhering strictly to this schema:
             "served_by": served_by,
             "error_code": synthesis_error,
             "fallback_reason": None,
+            "provenance": synthesis_provenance,
         }
 

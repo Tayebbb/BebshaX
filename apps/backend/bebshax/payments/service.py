@@ -15,6 +15,14 @@ from bebshax.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+class BillingDisabledError(RuntimeError):
+    """Billing has not been explicitly enabled by verified server configuration."""
+
+
+class PaymentInputError(ValueError):
+    """An application-authored payment validation message safe for public output."""
+
+
 # Plan tier definitions & default pricing (USD cents / month)
 PLAN_CONFIGS: dict[str, dict[str, Any]] = {
     "pro": {
@@ -43,28 +51,36 @@ def _assert_internal_redirect(url: Optional[str], base_url: str) -> None:
     """
     if not url:
         return
-    target = urlparse(url)
-    allowed = urlparse(base_url)
+    try:
+        target = urlparse(url)
+        allowed = urlparse(base_url)
+    except ValueError:
+        raise PaymentInputError("Redirect URL must stay within the application origin.") from None
     if (target.scheme, target.netloc) != (allowed.scheme, allowed.netloc):
-        raise ValueError("Redirect URL must stay within the application origin.")
+        raise PaymentInputError("Redirect URL must stay within the application origin.")
 
 
 class StripePaymentService:
     """Encapsulates Stripe Checkout, Billing Portal, and Webhook lifecycle."""
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.settings = get_settings()
-        if self.settings.stripe_secret_key:
+        if getattr(self.settings, "payments_enabled", False) is True and self.settings.stripe_secret_key:
             stripe.api_key = self.settings.stripe_secret_key
+
+    def require_enabled(self) -> None:
+        if getattr(self.settings, "payments_enabled", False) is not True:
+            raise BillingDisabledError("Billing is disabled.")
 
     async def get_or_create_customer(self, user: Users) -> str:
         """Ensure the user has an associated Stripe customer ID."""
+        self.require_enabled()
         db_user = await self.session.get(Users, user.id) or user
         if db_user.stripe_customer_id:
             return db_user.stripe_customer_id
 
         if not self.settings.stripe_secret_key:
-            raise ValueError("Stripe secret key is not configured.")
+            raise PaymentInputError("Payment processing is not configured.")
 
         customer = stripe.Customer.create(
             email=db_user.email,
@@ -83,14 +99,14 @@ class StripePaymentService:
         cancel_url: Optional[str] = None,
     ) -> dict[str, Any]:
         """Create a Stripe Checkout Session for subscription purchase."""
+        self.require_enabled()
         plan_lower = plan.lower().strip()
         if plan_lower not in PLAN_CONFIGS:
-            raise ValueError(f"Invalid plan '{plan}'. Allowed plans: {list(PLAN_CONFIGS.keys())}")
+            raise PaymentInputError("Invalid plan. Allowed plans: " + ", ".join(PLAN_CONFIGS))
 
         if not self.settings.stripe_secret_key:
-            raise ValueError("Stripe secret key is not configured.")
+            raise PaymentInputError("Payment processing is not configured.")
 
-        customer_id = await self.get_or_create_customer(user)
         plan_info = PLAN_CONFIGS[plan_lower]
 
         base_url = self.settings.frontend_base_url.rstrip("/")
@@ -98,6 +114,7 @@ class StripePaymentService:
         default_cancel = f"{base_url}/app?checkout=cancelled"
         _assert_internal_redirect(success_url, base_url)
         _assert_internal_redirect(cancel_url, base_url)
+        customer_id = await self.get_or_create_customer(user)
 
         # Prefer a Stripe Dashboard price id when configured; the inline
         # price_data path below is the unchanged default.
@@ -151,13 +168,14 @@ class StripePaymentService:
         return_url: Optional[str] = None,
     ) -> dict[str, Any]:
         """Create a Stripe Customer Billing Portal session for subscription management."""
+        self.require_enabled()
         if not self.settings.stripe_secret_key:
-            raise ValueError("Stripe secret key is not configured.")
+            raise PaymentInputError("Payment processing is not configured.")
 
-        customer_id = await self.get_or_create_customer(user)
         base_url = self.settings.frontend_base_url.rstrip("/")
         default_return = f"{base_url}/app"
         _assert_internal_redirect(return_url, base_url)
+        customer_id = await self.get_or_create_customer(user)
 
         portal_session = stripe.billing_portal.Session.create(
             customer=customer_id,
@@ -174,21 +192,22 @@ class StripePaymentService:
         sig_header: Optional[str] = None,
     ) -> dict[str, Any]:
         """Process incoming Stripe webhook events."""
+        self.require_enabled()
         event: dict[str, Any]
 
         if not self.settings.stripe_webhook_secret or not sig_header:
             # Without signature verification anyone could POST a forged
             # checkout.session.completed and upgrade an arbitrary account.
             logger.error("Stripe webhook rejected: signature verification is not configured")
-            raise ValueError("Webhook signature verification is not configured")
+            raise PaymentInputError("Webhook signature verification is not configured")
 
         try:
             event = stripe.Webhook.construct_event(
                 payload, sig_header, self.settings.stripe_webhook_secret
             )
-        except Exception as e:
-            logger.error(f"Stripe webhook signature verification failed: {e}")
-            raise ValueError("Invalid webhook signature") from e
+        except Exception:
+            logger.error("Stripe webhook signature verification failed")
+            raise PaymentInputError("Invalid webhook signature") from None
 
         event_type = event.get("type", "")
         data_object = event.get("data", {}).get("object", {})
@@ -251,9 +270,18 @@ class StripePaymentService:
     @staticmethod
     def get_subscription_status(user: Users) -> dict[str, Any]:
         """Return formatted subscription status for a user."""
+        if getattr(get_settings(), "payments_enabled", False) is not True:
+            return {
+                "plan": "free", "status": "disabled", "is_paid": False,
+                "expires_at": None, "has_billing_account": False, "billing_enabled": False,
+            }
+        expiry = user.subscription_expires_at
+        if expiry is not None and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
         is_paid = (
             user.subscription_status == "active"
             and user.subscription_plan in ("pro", "enterprise")
+            and (expiry is None or expiry > datetime.now(timezone.utc))
         )
         return {
             "plan": user.subscription_plan,
@@ -261,4 +289,5 @@ class StripePaymentService:
             "is_paid": is_paid,
             "expires_at": user.subscription_expires_at.isoformat() if user.subscription_expires_at else None,
             "has_billing_account": user.stripe_customer_id is not None,
+            "billing_enabled": True,
         }

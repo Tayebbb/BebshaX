@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-import asyncio
+import json
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field, ValidationError, field_validator
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bebshax.api.auth import get_optional_current_user
+from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.deps import get_session, user_can_write_study, user_owns_study
 from bebshax.api.errors import APIError
+from bebshax.api.jobs import cancel_job_async, get_job_async, start_job_async
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.behavioral.engine import BehavioralSimulationEngine
@@ -27,6 +29,8 @@ from bebshax.behavioral.orm import (
     BehavioralTests,
 )
 from bebshax.db.models import Personas, Studies
+from bebshax.jobs.store import input_snapshot
+from bebshax.jobs.runtime import JobContext
 from bebshax.llm.failures import LLMError
 from bebshax.utils.explicit_failures import LLMUnavailable
 
@@ -34,30 +38,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["behavioral-testing"])
 
-# asyncio only keeps weak references to tasks: an un-referenced run task could
-# be garbage-collected mid-simulation. Strong refs live here until done.
-_RUN_TASKS: set[asyncio.Task] = set()
-
-
-def _track_run_task(task: asyncio.Task, run_id: str) -> None:
-    _RUN_TASKS.add(task)
-
-    def _done(t: asyncio.Task) -> None:
-        _RUN_TASKS.discard(t)
-        if t.cancelled():
-            logger.warning("behavioral run %s task cancelled", run_id)
-            return
-        exc = t.exception()
-        if exc is not None:
-            # The engine already persisted the failure and logged the traceback;
-            # this is the one-line marker that the task itself ended in error.
-            logger.error("behavioral run %s task failed: %s", run_id, type(exc).__name__)
-
-    task.add_done_callback(_done)
-
-
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _read_owner(column: Any, user: Optional[Users]) -> Any:
+    return column.is_(None) if user is None else (column.is_(None) | (column == user.id))
 
 
 # ---------------------------------------------------------------------------
@@ -82,25 +68,43 @@ class UpdateBehavioralTestRequest(BaseModel):
     test_type: Optional[str] = None
     configuration: Optional[dict] = None
     status: Optional[str] = None
-    scenario_title: Optional[str] = None
-    scenario_text: Optional[str] = None
+    scenario_title: Optional[str] = Field(default=None, max_length=256)
+    scenario_text: Optional[str] = Field(default=None, max_length=10000)
 
 
 class RunBehavioralTestRequest(BaseModel):
-    scenario_id: Optional[str] = None
-    scenario_title: Optional[str] = None
-    scenario_text: Optional[str] = None
+    scenario_id: Optional[str] = Field(default=None, max_length=64)
+    scenario_title: Optional[str] = Field(default=None, max_length=256)
+    scenario_text: Optional[str] = Field(default=None, max_length=10000)
     parameters: Optional[dict] = None
     target_population_type: str = Field(default="all", pattern="^(all|segment|selected_personas)$")
-    target_segment_id: Optional[str] = None
-    target_persona_ids: Optional[list[str]] = None
+    target_segment_id: Optional[str] = Field(default=None, max_length=64)
+    target_persona_ids: Optional[list[Annotated[str, Field(min_length=1, max_length=64)]]] = Field(default=None, max_length=50)
+
+    @field_validator("parameters")
+    @classmethod
+    def bounded_parameters(cls, value: Optional[dict]) -> Optional[dict]:
+        pending: list[tuple[Any, int]] = [(value, 0)]
+        count = 0
+        while pending:
+            item, depth = pending.pop()
+            count += 1
+            if depth > 8 or count > 2048:
+                raise ValueError("Scenario parameters exceed the nesting or item limit.")
+            if isinstance(item, dict):
+                pending.extend((child, depth + 1) for child in item.values())
+            elif isinstance(item, list):
+                pending.extend((child, depth + 1) for child in item)
+        if len(json.dumps(value, ensure_ascii=True, allow_nan=False).encode("utf-8")) > 65536:
+            raise ValueError("Scenario parameters exceed 64 KiB.")
+        return value
 
 
 # ---------------------------------------------------------------------------
 # Serializers
 # ---------------------------------------------------------------------------
 
-def _serialize_test(t: BehavioralTests, scenarios: Optional[list[BehavioralTestScenarios]] = None, runs: Optional[list[BehavioralTestRuns]] = None) -> dict[str, Any]:
+def _serialize_test(t: BehavioralTests, scenarios: Optional[Sequence[BehavioralTestScenarios]] = None, runs: Optional[Sequence[BehavioralTestRuns]] = None) -> dict[str, Any]:
     latest_run = runs[0] if runs else None
     return {
         "id": t.id,
@@ -134,9 +138,10 @@ def _serialize_test(t: BehavioralTests, scenarios: Optional[list[BehavioralTestS
     }
 
 
-def _serialize_run(r: BehavioralTestRuns, results: Optional[list[BehavioralTestResults]] = None, insights: Optional[list[BehavioralInsights]] = None) -> dict[str, Any]:
+def _serialize_run(r: BehavioralTestRuns, results: Optional[Sequence[BehavioralTestResults]] = None, insights: Optional[Sequence[BehavioralInsights]] = None) -> dict[str, Any]:
     return {
         "id": r.id,
+        "job_id": r.job_id,
         "behavioral_test_id": r.behavioral_test_id,
         "study_id": r.study_id,
         "scenario_id": r.scenario_id,
@@ -144,7 +149,7 @@ def _serialize_run(r: BehavioralTestRuns, results: Optional[list[BehavioralTestR
         "target_population_type": r.target_population_type,
         "target_segment_id": r.target_segment_id,
         "target_persona_ids": r.target_persona_ids or [],
-        "status": r.status,
+        "status": "running" if r.status == "retry_pending" else r.status,
         "persona_count": r.persona_count,
         "completed_count": r.completed_count,
         "failed_count": r.failed_count,
@@ -302,6 +307,7 @@ async def list_behavioral_tests(
     query = (
         select(BehavioralTests)
         .where(BehavioralTests.study_id == study_id)
+        .where(_read_owner(BehavioralTests.user_id, user))
         .order_by(BehavioralTests.created_at.desc())
     )
 
@@ -331,6 +337,7 @@ async def list_behavioral_tests(
         res_runs = await session.execute(
             select(BehavioralTestRuns)
             .where(BehavioralTestRuns.behavioral_test_id == t.id)
+            .where(_read_owner(BehavioralTestRuns.user_id, user))
             .order_by(BehavioralTestRuns.created_at.desc())
         )
         runs = res_runs.scalars().all()
@@ -350,12 +357,12 @@ async def get_behavioral_metrics(
     await _get_study_and_verify_access(study_id, session, user)
 
     res_tests = await session.execute(
-        select(func.count(BehavioralTests.id)).where(BehavioralTests.study_id == study_id)
+        select(func.count(BehavioralTests.id)).where(BehavioralTests.study_id == study_id, _read_owner(BehavioralTests.user_id, user))
     )
     total_tests = res_tests.scalar_one() or 0
 
     res_runs = await session.execute(
-        select(BehavioralTestRuns).where(BehavioralTestRuns.study_id == study_id)
+        select(BehavioralTestRuns).where(BehavioralTestRuns.study_id == study_id, _read_owner(BehavioralTestRuns.user_id, user))
     )
     runs = res_runs.scalars().all()
 
@@ -404,6 +411,7 @@ async def compare_behavioral_runs(
         select(BehavioralTestRuns).where(
             BehavioralTestRuns.id.in_(ids),
             BehavioralTestRuns.study_id == study_id,
+            _read_owner(BehavioralTestRuns.user_id, user),
         )
     )
     runs = res.scalars().all()
@@ -437,6 +445,7 @@ async def get_behavioral_test_detail(
         select(BehavioralTests).where(
             BehavioralTests.id == test_id,
             BehavioralTests.study_id == study_id,
+            _read_owner(BehavioralTests.user_id, user),
         )
     )
     test = res.scalar_one_or_none()
@@ -456,6 +465,7 @@ async def get_behavioral_test_detail(
     res_runs = await session.execute(
         select(BehavioralTestRuns)
         .where(BehavioralTestRuns.behavioral_test_id == test_id)
+        .where(_read_owner(BehavioralTestRuns.user_id, user))
         .order_by(BehavioralTestRuns.created_at.desc())
     )
     runs = res_runs.scalars().all()
@@ -469,7 +479,7 @@ async def update_behavioral_test(
     test_id: str,
     payload: UpdateBehavioralTestRequest,
     session: AsyncSession = Depends(get_session),
-    user: Optional[Users] = Depends(get_optional_current_user),
+    user: Users = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Update behavioral test configuration or scenario."""
     await _get_study_and_verify_access(study_id, session, user, write=True)
@@ -478,6 +488,7 @@ async def update_behavioral_test(
         select(BehavioralTests).where(
             BehavioralTests.id == test_id,
             BehavioralTests.study_id == study_id,
+            BehavioralTests.user_id == user.id,
         )
     )
     test = res.scalar_one_or_none()
@@ -555,7 +566,8 @@ async def trigger_behavioral_test_run(
     payload: RunBehavioralTestRequest,
     request: Request,
     session: AsyncSession = Depends(get_session),
-    user: Optional[Users] = Depends(get_optional_current_user),
+    user: Users = Depends(get_current_user),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=200),
 ) -> dict[str, Any]:
     """Trigger a new simulation run across target personas."""
     await _get_study_and_verify_access(study_id, session, user, write=True)
@@ -572,6 +584,9 @@ async def trigger_behavioral_test_run(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Behavioral test '{test_id}' not found.",
         )
+    if user is None or test.owner_id != user.id:
+        raise APIError(404, "Behavioral test not found.", error_code="not_found")
+    verified_owner = user.id
 
     # Determine scenario snapshot — only the researcher's own text: the body's
     # scenario, the stored scenario the body names, the test's most recent stored
@@ -579,7 +594,7 @@ async def trigger_behavioral_test_run(
     # in behavioral_test_scenarios, but run() read only test.description, so a
     # test created with scenario_text alone could never be run (400).
     scenario_row: Optional[BehavioralTestScenarios] = None
-    if not (payload.scenario_text or "").strip():
+    if payload.scenario_id or not (payload.scenario_text or "").strip():
         scenario_q = select(BehavioralTestScenarios).where(
             BehavioralTestScenarios.behavioral_test_id == test_id
         )
@@ -615,9 +630,21 @@ async def trigger_behavioral_test_run(
         or (scenario_row.structured_parameters if scenario_row else None)
         or test.configuration
         or {},
+        "test_type": test.test_type,
     }
+    try:
+        RunBehavioralTestRequest(
+            scenario_title=scenario_snapshot["title"], scenario_text=scenario_text,
+            parameters=scenario_snapshot["structured_parameters"],
+        )
+    except ValidationError as exc:
+        raise APIError(422, "The stored scenario exceeds the supported input limits.", error_code="behavioral_scenario_invalid") from exc
 
     # Count personas
+    if payload.target_population_type == "selected_personas" and not payload.target_persona_ids:
+        raise APIError(422, "Select at least one persona.", error_code="behavioral_population_required")
+    if payload.target_population_type == "segment" and not payload.target_segment_id:
+        raise APIError(422, "Select a segment.", error_code="behavioral_population_required")
     target_persona_ids = payload.target_persona_ids or []
     if payload.target_population_type == "segment" and payload.target_segment_id:
         res_p = await session.execute(
@@ -653,45 +680,75 @@ async def trigger_behavioral_test_run(
             "This study has no personas to simulate. Generate personas first; BebshaX does not simulate invented respondents.",
             error_code="behavioral_requires_personas",
         )
+    if len(target_persona_ids) > 50:
+        raise APIError(422, "A behavioral run supports at most 50 personas.", error_code="behavioral_population_limit")
+
+    captured_personas = (await session.execute(select(Personas.id, Personas.version).where(
+        Personas.id.in_(target_persona_ids), Personas.study_id == study_id, Personas.owner_id == verified_owner,
+    ).order_by(Personas.id))).all()
+    persona_manifest = [{"id": persona_id, "version": version} for persona_id, version in captured_personas]
+    if len(persona_manifest) != len(set(target_persona_ids)):
+        raise APIError(409, "The target population is not owned by you.", error_code="behavioral_population_changed")
+    test_revision = test.updated_at.isoformat() if test.updated_at else None
+    scenario_revision = scenario_row.updated_at.isoformat() if scenario_row and scenario_row.updated_at else None
+    revision_manifest = {"personas": persona_manifest, "test_revision": test_revision, "scenario_revision": scenario_revision}
 
     engine: Optional[BehavioralSimulationEngine] = getattr(request.app.state, "behavioral_engine", None)
     if engine is None:
         llm = getattr(request.app.state, "llm_router", None)
         sm = getattr(request.app.state, "db_sessionmaker", None)
         if llm and sm:
-            engine = BehavioralSimulationEngine(llm, sm)
+            engine = BehavioralSimulationEngine(llm, sm, memory=getattr(request.app.state, "memory_service", None))
     if engine is None:
         # Never create a run that nothing will execute.
         raise LLMUnavailable("Behavioral simulation")
 
     run_id = f"btr_{uuid.uuid4().hex[:16]}"
-    run = BehavioralTestRuns(
-        id=run_id,
-        behavioral_test_id=test_id,
-        study_id=study_id,
-        user_id=user.id if user else None,
-        # Linked only to a scenario row verified to belong to this test; a
-        # caller's own text runs under the id they named.
-        scenario_id=scenario_row.id if scenario_row else (payload.scenario_id if (payload.scenario_text or "").strip() else None),
-        scenario_snapshot=scenario_snapshot,
-        target_population_type=payload.target_population_type,
-        target_segment_id=payload.target_segment_id,
-        target_persona_ids=target_persona_ids,
-        status="pending",
-        persona_count=len(target_persona_ids),
-        completed_count=0,
-        failed_count=0,
-    )
-    session.add(run)
-    await session.commit()
+    scenario_id = scenario_row.id if scenario_row else None
+    await session.rollback()
 
-    _track_run_task(
-        asyncio.create_task(
-            engine.execute_test_run(run_id=run_id, user_id=user.id if user else None)
-        ),
-        run_id,
-    )
+    async def prepare(db_session: AsyncSession, job: dict[str, Any]) -> dict[str, Any]:
+        owned_study = await db_session.scalar(select(Studies).where(Studies.id == study_id, Studies.user_id == verified_owner).with_for_update())
+        owned_test = await db_session.scalar(select(BehavioralTests).where(
+            BehavioralTests.id == test_id, BehavioralTests.study_id == study_id, BehavioralTests.user_id == verified_owner,
+        ).with_for_update())
+        if owned_study is None or owned_test is None:
+            raise APIError(404, "Behavioral test not found.", error_code="not_found")
+        if (owned_test.updated_at.isoformat() if owned_test.updated_at else None) != test_revision:
+            raise APIError(409, "The behavioral test changed before admission.", error_code="behavioral_input_changed")
+        if scenario_id is not None:
+            current_scenario = await db_session.scalar(select(BehavioralTestScenarios).where(
+                BehavioralTestScenarios.id == scenario_id, BehavioralTestScenarios.behavioral_test_id == test_id,
+            ).with_for_update())
+            if current_scenario is None or (current_scenario.updated_at.isoformat() if current_scenario.updated_at else None) != scenario_revision:
+                raise APIError(409, "The scenario changed before admission.", error_code="behavioral_input_changed")
+        captured = (await db_session.execute(select(Personas.id, Personas.version).where(
+            Personas.id.in_(target_persona_ids), Personas.study_id == study_id, Personas.owner_id == verified_owner,
+        ).order_by(Personas.id))).all()
+        if [{"id": persona_id, "version": version} for persona_id, version in captured] != persona_manifest:
+            raise APIError(409, "The target persona population changed or is not owned by you.", error_code="behavioral_population_changed")
+        db_session.add(BehavioralTestRuns(
+            id=run_id, behavioral_test_id=test_id, study_id=study_id, user_id=verified_owner,
+            job_id=job["job_id"], scenario_id=scenario_id, scenario_snapshot=scenario_snapshot,
+            input_manifest={"personas": persona_manifest, "test_type": scenario_snapshot["test_type"]},
+            target_population_type=payload.target_population_type, target_segment_id=payload.target_segment_id,
+            target_persona_ids=target_persona_ids, status="pending", persona_count=len(target_persona_ids),
+            completed_count=0, failed_count=0,
+        ))
+        return {"run_id": run_id}
 
+    async def runner(job: JobContext) -> None:
+        completed = await engine.execute_test_run(run_id=job["result_refs"]["run_id"], user_id=verified_owner, job=job)
+        job["result"] = _serialize_run(completed)
+
+    job = await start_job_async(
+        request.app, kind="behavioral_simulation", scope_id=study_id, user_id=verified_owner,
+        runner=runner, input_data={"test_id": test_id, "request": payload.model_dump(), "scenario": scenario_snapshot, "revision": revision_manifest},
+        input_revision=input_snapshot(revision_manifest)[1], idempotency_key=idempotency_key, prepare=prepare,
+    )
+    run = await session.get(BehavioralTestRuns, job["result_refs"]["run_id"])
+    if run is None:
+        raise APIError(404, "Behavioral run no longer exists.", error_code="not_found")
     return _serialize_run(run)
 
 
@@ -710,6 +767,7 @@ async def list_behavioral_test_runs(
         .where(
             BehavioralTestRuns.behavioral_test_id == test_id,
             BehavioralTestRuns.study_id == study_id,
+            _read_owner(BehavioralTestRuns.user_id, user),
         )
         .order_by(BehavioralTestRuns.created_at.desc())
     )
@@ -721,6 +779,7 @@ async def list_behavioral_test_runs(
 async def get_behavioral_run_status(
     study_id: str,
     run_id: str,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict[str, Any]:
@@ -739,6 +798,23 @@ async def get_behavioral_run_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Behavioral test run '{run_id}' not found.",
         )
+    if run.user_id is not None and (user is None or run.user_id != user.id):
+        raise APIError(404, "Behavioral test run not found.", error_code="not_found")
+    job = None
+    if request is not None and run.job_id and user is not None and run.user_id == user.id:
+        run_job_id = run.job_id
+        await session.rollback()
+        job = await get_job_async(request.app, run_job_id, kind="behavioral_simulation", scope_id=study_id, user_id=user.id)
+        if job is not None and job["status"] == "failed":
+            await session.execute(update(BehavioralTestRuns).where(
+                BehavioralTestRuns.id == run_id, BehavioralTestRuns.job_id == run_job_id,
+                BehavioralTestRuns.user_id == user.id,
+                BehavioralTestRuns.status.in_(("pending", "running", "retry_pending")),
+            ).values(status="cancelled" if job["state"] == "cancelled" else "failed", error_message=job["error"], completed_at=_utcnow(), execution_token=None))
+            await session.commit()
+        run = await session.get(BehavioralTestRuns, run_id, populate_existing=True)
+        if run is None:
+            raise APIError(404, "Behavioral test run not found.", error_code="not_found")
 
     res_results = await session.execute(
         select(BehavioralTestResults)
@@ -754,28 +830,36 @@ async def get_behavioral_run_status(
     )
     insights = res_insights.scalars().all()
 
-    return _serialize_run(run, results=results, insights=insights)
+    response = _serialize_run(run, results=results, insights=insights)
+    if job is not None:
+        response["job_state"] = job["state"]
+        response["job_error_code"] = job["error_code"]
+        response["provider_outcome_unknown"] = job["provider_outcome_unknown"]
+        response["checkpoints"] = job["checkpoints"]
+    return response
 
 
 @router.get("/studies/{study_id}/behavioral-tests/runs/{run_id}/results")
 async def get_behavioral_run_results(
     study_id: str,
     run_id: str,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     user: Optional[Users] = Depends(get_optional_current_user),
 ) -> dict[str, Any]:
     """Get full structured results and breakdown for a simulation run."""
-    return await get_behavioral_run_status(study_id, run_id, session, user)
+    return await get_behavioral_run_status(study_id, run_id, request, session, user)
 
 
-@router.post("/studies/{study_id}/behavioral-tests/runs/{run_id}/retry-failed")
+@router.post("/studies/{study_id}/behavioral-tests/runs/{run_id}/retry-failed", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("10/minute")
 async def retry_failed_simulations(
     study_id: str,
     run_id: str,
     request: Request,
     session: AsyncSession = Depends(get_session),
-    user: Optional[Users] = Depends(get_optional_current_user),
+    user: Users = Depends(get_current_user),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=200),
 ) -> dict[str, Any]:
     """Retry only failed persona simulations in a run."""
     await _get_study_and_verify_access(study_id, session, user, write=True)
@@ -796,13 +880,16 @@ async def retry_failed_simulations(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Behavioral test run '{run_id}' not found.",
         )
+    if user is None or owned_run.user_id != user.id:
+        raise APIError(404, "Behavioral test run not found.", error_code="not_found")
+    verified_owner = user.id
 
     engine: Optional[BehavioralSimulationEngine] = getattr(request.app.state, "behavioral_engine", None)
     if engine is None:
         llm = getattr(request.app.state, "llm_router", None)
         sm = getattr(request.app.state, "db_sessionmaker", None)
         if llm and sm:
-            engine = BehavioralSimulationEngine(llm, sm)
+            engine = BehavioralSimulationEngine(llm, sm, memory=getattr(request.app.state, "memory_service", None))
 
     if not engine:
         raise HTTPException(
@@ -810,16 +897,84 @@ async def retry_failed_simulations(
             detail="Behavioral engine is not configured.",
         )
 
-    try:
-        updated_run = await engine.retry_failed_simulations(run_id, study_id=study_id)
-        return await get_behavioral_run_status(study_id, run_id, session, user)
-    except LLMError:
-        # Routing failures keep their classified envelope (503 all_candidates_failed /
-        # 413 context_window_exceeded with attempts) via the global handlers.
-        raise
-    except Exception:
-        logger.error("behavioral retry failed for run %s", run_id, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Retry failed. Please try again.",
-        )
+    retry_input = {
+        "run_id": run_id, "operation": "retry_failed", "scenario": owned_run.scenario_snapshot,
+        "input_manifest": owned_run.input_manifest, "persona_ids": owned_run.target_persona_ids,
+    }
+    await session.rollback()
+
+    async def prepare(db_session: AsyncSession, job: dict[str, Any]) -> dict[str, Any]:
+        parent = await db_session.scalar(select(Studies).where(Studies.id == study_id, Studies.user_id == verified_owner).with_for_update())
+        current = await db_session.scalar(select(BehavioralTestRuns).where(
+            BehavioralTestRuns.id == run_id, BehavioralTestRuns.study_id == study_id, BehavioralTestRuns.user_id == verified_owner,
+        ).with_for_update())
+        if parent is None or current is None:
+            raise APIError(404, "Behavioral test run not found.", error_code="not_found")
+        if current.status in {"pending", "running", "retry_pending"}:
+            raise APIError(409, "This behavioral run is already executing.", error_code="behavioral_run_active")
+        current.status, current.job_id = "retry_pending", job["job_id"]
+        current.execution_token = None
+        return {"run_id": run_id}
+
+    async def runner(job: JobContext) -> None:
+        completed = await engine.retry_failed_simulations(run_id, study_id=study_id, user_id=verified_owner, job=job)
+        job["result"] = _serialize_run(completed)
+
+    job = await start_job_async(
+        request.app, kind="behavioral_simulation", scope_id=study_id, user_id=verified_owner,
+        input_data=retry_input, input_revision=input_snapshot(retry_input)[1], idempotency_key=idempotency_key,
+        runner=runner, prepare=prepare,
+    )
+    current = await session.get(BehavioralTestRuns, run_id)
+    if current is None:
+        raise APIError(404, "Behavioral run no longer exists.", error_code="not_found")
+    response = _serialize_run(current)
+    response["job_id"] = job["job_id"]
+    return response
+
+
+@router.post("/studies/{study_id}/behavioral-tests/runs/{run_id}/cancel")
+@limiter.limit("30/minute")
+async def cancel_behavioral_run(
+    study_id: str, run_id: str, request: Request,
+    session: AsyncSession = Depends(get_session), user: Users = Depends(get_current_user),
+) -> dict[str, Any]:
+    await _get_study_and_verify_access(study_id, session, user, write=True)
+    run = await session.scalar(select(BehavioralTestRuns).where(
+        BehavioralTestRuns.id == run_id, BehavioralTestRuns.study_id == study_id, BehavioralTestRuns.user_id == user.id,
+    ))
+    if run is None:
+        raise APIError(404, "Behavioral test run not found.", error_code="not_found")
+    if not run.job_id:
+        was_running = run.status in {"running", "retry_pending"}
+        await session.execute(update(BehavioralTestRuns).where(
+            BehavioralTestRuns.id == run_id, BehavioralTestRuns.study_id == study_id,
+            BehavioralTestRuns.user_id == user.id, BehavioralTestRuns.job_id.is_(None),
+            BehavioralTestRuns.status.in_(("pending", "running", "retry_pending")),
+        ).values(status="cancelled", execution_token=None, completed_at=_utcnow(),
+                 error_message="Legacy execution cancelled; any external request outcome remains unknown."))
+        await session.commit()
+        run = await session.get(BehavioralTestRuns, run_id, populate_existing=True)
+        if run is None:
+            raise APIError(404, "Behavioral test run not found.", error_code="not_found")
+        response = _serialize_run(run)
+        response["provider_outcome_unknown"] = was_running
+        return response
+    run_job_id = run.job_id
+    await session.rollback()
+    job = await cancel_job_async(request.app, run_job_id, kind="behavioral_simulation", scope_id=study_id, user_id=user.id)
+    if job is None:
+        raise APIError(404, "Behavioral job not found.", error_code="not_found")
+    if job["status"] == "failed":
+        await session.execute(update(BehavioralTestRuns).where(
+            BehavioralTestRuns.id == run_id, BehavioralTestRuns.study_id == study_id,
+            BehavioralTestRuns.user_id == user.id, BehavioralTestRuns.job_id == run_job_id,
+            BehavioralTestRuns.status.in_(("pending", "running", "retry_pending")),
+        ).values(status="cancelled" if job["state"] == "cancelled" else "failed", error_message=job["error"], completed_at=_utcnow(), execution_token=None))
+        await session.commit()
+    run = await session.get(BehavioralTestRuns, run_id, populate_existing=True)
+    if run is None:
+        raise APIError(404, "Behavioral test run not found.", error_code="not_found")
+    response = _serialize_run(run)
+    response["job_state"] = job["state"]
+    return response

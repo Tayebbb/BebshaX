@@ -2,6 +2,8 @@
 SYNTHETIC and labelled, LLM claims are coerced against the record ids actually
 shown, and every persona carries its real origin model."""
 
+from copy import deepcopy
+import hashlib
 import json
 
 import pytest
@@ -15,6 +17,8 @@ import bebshax.memory.orm  # noqa: F401
 import bebshax.persona.orm  # noqa: F401
 from bebshax.config import get_settings
 from bebshax.api.errors import APIError
+from bebshax.auth.models import Users
+from bebshax.datasets.orm import DatasetVersions
 from bebshax.datasets.service import (
     DATASET_PERSONA_UNPARSEABLE,
     DatasetService,
@@ -118,24 +122,41 @@ def test_persona_hardening_claim_coercion_only_trusts_shown_ids() -> None:
 async def dataset_session_maker(tmp_path, monkeypatch):
     monkeypatch.setenv("BEBSHAX_UPLOAD_DIR", str(tmp_path / "uploads"))
     get_settings.cache_clear()
+    upload_root = tmp_path / "uploads"
+    upload_root.mkdir()
+    records = json.dumps([_RECORD]).encode("utf-8")
+    digest = hashlib.sha256(records).hexdigest()
+    file_path = upload_root / f"ds_test.v_0123456789abcdef.{digest}.json"
+    file_path.write_bytes(records)
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with maker() as session:
+        session.add(Users(id="usr_test", email="persona-hardening@example.test", full_name="Synthetic owner"))
+        await session.flush()
         session.add(
             DatasetSources(
                 id="ds_test",
+                user_id="usr_test",
                 name="Student survey",
                 source_type="upload",
                 file_type="csv",
                 status="ready",
                 row_count=1,
                 column_count=5,
-                segments=[_SEGMENT],
+                segments=[deepcopy(_SEGMENT)],
+                file_path=str(file_path),
+                content_hash=digest,
                 persona_count_generated=0,
             )
         )
+        await session.flush()
+        session.add(DatasetVersions(
+            id="ds_test_version", dataset_id="ds_test", owner_id="usr_test", version=1,
+            content_hash=digest, records_hash=digest, file_path=str(file_path), file_type="csv",
+            row_count=1, column_count=5, schema_metadata={}, statistics={}, segments=[deepcopy(_SEGMENT)],
+        ))
         await session.commit()
     yield maker
     await engine.dispose()
@@ -190,7 +211,7 @@ async def test_persona_hardening_llm_claims_are_coerced_against_shown_records(da
 async def test_persona_hardening_unusable_reply_is_recorded_not_replaced(dataset_session_maker) -> None:
     shown = record_evidence_id(_RECORD)
     adapter = FakeAdapter(
-        [FakeRoute(candidate=RouteCandidate(provider="fake", model="m9"), replies=["this is not json", "nor this", _llm_persona([shown])])]
+        [FakeRoute(candidate=RouteCandidate(provider="fake", model="m9"), replies=['{"name": ""}', '{"goals": []}', _llm_persona([shown])])]
     )
     service = DatasetService(dataset_session_maker, llm=SingleAdapterLLMService(adapter))
     result = await service.generate_personas_from_dataset("ds_test", requested_count=2, user_id="usr_test")
@@ -205,13 +226,26 @@ async def test_persona_hardening_unusable_reply_is_recorded_not_replaced(dataset
 
 
 async def test_persona_hardening_all_unusable_raises(dataset_session_maker) -> None:
-    adapter = FakeAdapter([FakeRoute(candidate=RouteCandidate(provider="fake", model="m9"), reply="garbage")])
+    adapter = FakeAdapter([FakeRoute(candidate=RouteCandidate(provider="fake", model="m9"), reply='{"name": ""}')])
     service = DatasetService(dataset_session_maker, llm=SingleAdapterLLMService(adapter))
     with pytest.raises(UnusableModelOutput) as info:
         await service.generate_personas_from_dataset("ds_test", requested_count=1, user_id="usr_test")
     assert info.value.error_code == DATASET_PERSONA_UNPARSEABLE
     async with dataset_session_maker() as session:
         assert list((await session.execute(select(Personas))).scalars()) == []
+
+
+async def test_dataset_persona_prompt_retains_every_supplied_evidence_record(dataset_session_maker):
+    tail = {**_RECORD, "student_id": 3, "name": "Synthetic tail evidence"}
+    async with dataset_session_maker() as session, session.begin():
+        dataset = await session.get(DatasetSources, "ds_test")
+        dataset.segments = [{**_SEGMENT, "sample_records": [_RECORD, {**_RECORD, "student_id": 2}, tail]}]
+    adapter = FakeAdapter([FakeRoute(candidate=RouteCandidate(provider="fake", model="m9"), reply=_llm_persona([record_evidence_id(tail)]))])
+    service = DatasetService(dataset_session_maker, llm=SingleAdapterLLMService(adapter))
+    await service.generate_personas_from_dataset("ds_test", requested_count=1, user_id="usr_test")
+    prompt = adapter.requests[0].messages[1].content
+    assert record_evidence_id(tail) in prompt
+    assert "Synthetic tail evidence" in prompt
 
 
 @pytest.mark.parametrize("bad", [None, "", "   "])

@@ -1,7 +1,9 @@
 """Scoped persona lifecycle regressions with SQLite foreign keys enabled."""
 
 from collections.abc import AsyncIterator
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import hashlib
 from inspect import unwrap
 import json
 from pathlib import Path
@@ -21,6 +23,7 @@ from bebshax.api import copilot as copilot_module
 from bebshax.api.errors import APIError
 from bebshax.auth.models import Users
 from bebshax.datasets import service as dataset_module
+from bebshax.datasets.orm import DatasetVersions
 from bebshax.datasets.service import DatasetService
 from bebshax.db.models import (
     Base, Businesses, DatasetPersonaRuns, DatasetSources, MarketSegments, PersonaGenerationRuns, Personas,
@@ -128,7 +131,7 @@ async def exhibition_run_artifacts(
     async with exhibition_persona_db() as session:
         session.add(Users(
             id="usr_other_lifecycle", email="other-lifecycle@example.test",
-            full_name="Other Synthetic Owner", auth_provider="email",
+            full_name="Other Synthetic Owner", auth_provider="email", is_verified=True,
         ))
         await session.flush()
         session.add(Studies(
@@ -216,7 +219,9 @@ async def test_delete_run_removes_owned_dependents_and_repairs_study_counts(
         assert study is not None
         assert study.persona_count == 1
         assert study.persona_ids == ["per_keep"]
-        assert study.personas_data == [{"id": "per_keep"}]
+        remaining_persona = await session.get(Personas, "per_keep")
+        assert remaining_persona is not None
+        assert study.personas_data == [service_module.serialize_persona(remaining_persona)]
 
 
 async def test_delete_run_wrong_owner_changes_nothing(
@@ -473,6 +478,41 @@ async def exhibition_dataset(
     return owned_file
 
 
+@pytest.fixture
+async def exhibition_versioned_dataset(
+    exhibition_persona_db: async_sessionmaker[AsyncSession], exhibition_dataset: Path,
+) -> Path:
+    records = [
+        {"record_id": record_id, "name": record_id, "age": 30, "occupation": "Planner"}
+        for record_id in ("source-one", "source-two")
+    ]
+    content = json.dumps(records).encode("utf-8")
+    digest = hashlib.sha256(content).hexdigest()
+    version_file = exhibition_dataset.with_name(f"ds_lifecycle.v_0123456789abcdef.{digest}.json")
+    version_file.write_bytes(content)
+    async with exhibition_persona_db() as session:
+        dataset = await session.get(DatasetSources, "ds_lifecycle")
+        assert dataset is not None
+        dataset.file_path = str(version_file)
+        dataset.content_hash = digest
+        dataset.file_type = "json"
+        dataset.row_count = len(records)
+        dataset.column_count = len(records[0])
+        dataset.segments = [{
+            **dataset.segments[0], "population_count": len(records), "sample_records": records,
+        }]
+        await session.flush()
+        session.add(DatasetVersions(
+            id="dsv_0123456789abcdef", dataset_id=dataset.id, owner_id=dataset.user_id, version=1,
+            content_hash=digest, records_hash=digest, file_path=str(version_file), file_type=dataset.file_type,
+            row_count=dataset.row_count, column_count=dataset.column_count,
+            schema_metadata=deepcopy(dataset.schema_metadata or {}),
+            statistics=deepcopy(dataset.statistics or {}), segments=deepcopy(dataset.segments),
+        ))
+        await session.commit()
+    return version_file
+
+
 async def test_dataset_delete_keeps_owned_file_if_database_commit_fails(
     exhibition_persona_db: async_sessionmaker[AsyncSession], exhibition_dataset: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -540,7 +580,9 @@ def exhibition_dataset_selection(exhibition_parent_locks: set[Session]) -> Async
         business_name: str, business_description: str, study_context: dict[str, Any],
         claims: list[dict[str, Any]], exclude_ids: set[str], exclude_names: set[str],
     ) -> list[dict[str, Any]]:
-        assert exhibition_parent_locks, "CPU selection must run under the parent lock"
+        # Selection must not pin the parent row: the service re-locks and re-checks
+        # exclusions before persisting (see tests/jobs/test_dataset_persona_lifecycle).
+        assert not exhibition_parent_locks, "CPU selection must not run under the parent lock"
         record_id = next(record_id for record_id in ("source-one", "source-two") if record_id not in exclude_ids)
         return [{
             "name": record_id, "age": 30, "occupation": "Planner", "personality": {},
@@ -554,8 +596,8 @@ def exhibition_dataset_selection(exhibition_parent_locks: set[Session]) -> Async
 
 
 @pytest.mark.parametrize("study_id", [None, "std_lifecycle"])
-async def test_dataset_selection_and_persistence_share_parent_lock(
-    exhibition_persona_db: async_sessionmaker[AsyncSession], exhibition_dataset: Path,
+async def test_dataset_persistence_relocks_parent_and_excludes_prior_sources(
+    exhibition_persona_db: async_sessionmaker[AsyncSession], exhibition_versioned_dataset: Path,
     exhibition_parent_locks: set[Session], exhibition_dataset_selection: AsyncMock,
     monkeypatch: pytest.MonkeyPatch, study_id: str | None,
 ) -> None:
@@ -581,7 +623,10 @@ async def test_dataset_selection_and_persistence_share_parent_lock(
         for response in (first, second):
             persisted = await session.get(Personas, response["personas"][0]["id"])
             assert persisted is not None
-            assert persisted.generation_run_id == response["run_id"]
+            # Dataset cohorts use their typed origin column; generation_run_id stays for study runs.
+            assert persisted.dataset_persona_run_id == response["run_id"]
+            assert persisted.generation_run_id is None
+            assert persisted.dataset_version_id == "dsv_0123456789abcdef"
             assert persisted.owner_id == "usr_lifecycle"
         dataset = await session.get(DatasetSources, "ds_lifecycle")
         assert dataset is not None and dataset.persona_count_generated == 2
@@ -591,7 +636,7 @@ async def test_dataset_selection_and_persistence_share_parent_lock(
 
 
 async def test_dataset_integrity_failure_leaves_no_run_or_partial_personas(
-    exhibition_persona_db: async_sessionmaker[AsyncSession], exhibition_dataset: Path,
+    exhibition_persona_db: async_sessionmaker[AsyncSession], exhibition_versioned_dataset: Path,
     exhibition_dataset_selection: AsyncMock, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = DatasetService(exhibition_persona_db, ml_generator=Mock(spec=service_module.MLPersonaAdapter))
@@ -619,7 +664,7 @@ async def test_dataset_integrity_failure_leaves_no_run_or_partial_personas(
 
 
 async def test_legacy_dataset_generation_does_not_hold_parent_lock_during_model_call(
-    exhibition_persona_db: async_sessionmaker[AsyncSession], exhibition_dataset: Path,
+    exhibition_persona_db: async_sessionmaker[AsyncSession], exhibition_versioned_dataset: Path,
     exhibition_parent_locks: set[Session],
 ) -> None:
     async def complete(request: Any) -> SimpleNamespace:
@@ -641,13 +686,19 @@ def exhibition_role_request(
     exhibition_persona_db: async_sessionmaker[AsyncSession], ml_training_records: list[Any],
     exhibition_parent_locks: set[Session],
 ) -> Request:
+    from bebshax_persona_ml.model import Selection
+    from bebshax_persona_ml.provenance import SourceAttribution
+
     async def generate(
         context: Any, count: int, *, exclude_ids: set[str], exclude_names: set[str],
-    ) -> list[SimpleNamespace]:
+    ) -> list[Selection]:
         assert exhibition_parent_locks, "Role selection must run under the study lock"
         available = [record for record in ml_training_records if record.record_id not in exclude_ids
                      and record.name not in exclude_names]
-        return [SimpleNamespace(record=record, score=0.5, topic=0, model_version="fixture", warnings=[])
+        return [Selection(
+                record=record, score=0.5, topic=0, model_version="fixture", strategy="nmf",
+                source_attribution=SourceAttribution.unavailable(record.source, record.revision),
+            )
                 for record in available[:count]]
 
     app = SimpleNamespace(state=SimpleNamespace(
@@ -688,7 +739,7 @@ async def test_role_generation_excludes_active_sources_and_archives_only_owned_c
     event.listen(Session, "before_flush", check_flush)
     try:
         response = await unwrap(copilot_module.generate_study_personas)(
-            body=exhibition_role_body, request=exhibition_role_request, current_user=Users(id="usr_lifecycle"),
+            body=exhibition_role_body, request=exhibition_role_request, current_user=Users(id="usr_lifecycle", is_verified=True),
         )
     finally:
         event.remove(Session, "before_flush", check_flush)
@@ -712,7 +763,7 @@ async def test_role_generation_requires_database_for_a_persisted_study(
     exhibition_role_request.app.state.db_sessionmaker = None
     with pytest.raises(APIError) as raised:
         await unwrap(copilot_module.generate_study_personas)(
-            body=exhibition_role_body, request=exhibition_role_request, current_user=Users(id="usr_lifecycle"),
+            body=exhibition_role_body, request=exhibition_role_request, current_user=Users(id="usr_lifecycle", is_verified=True),
         )
     assert raised.value.status_code == 503
     assert raised.value.error_code == "database_unavailable"
@@ -731,7 +782,7 @@ async def test_role_integrity_failure_does_not_archive_previous_personas(
     try:
         with pytest.raises(APIError) as raised:
             await unwrap(copilot_module.generate_study_personas)(
-                body=exhibition_role_body, request=exhibition_role_request, current_user=Users(id="usr_lifecycle"),
+                body=exhibition_role_body, request=exhibition_role_request, current_user=Users(id="usr_lifecycle", is_verified=True),
             )
         assert raised.value.status_code == 409
         assert raised.value.error_code == "data_integrity"

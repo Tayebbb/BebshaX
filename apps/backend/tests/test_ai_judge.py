@@ -53,7 +53,7 @@ class _StubLLM:
 
 async def _seed(session_maker, *, with_persona: bool = True):
     async with session_maker() as session:
-        session.add(Users(id="usr_j", email="j@example.com", full_name="J", hashed_password="pw"))
+        session.add(Users(id="usr_j", email="j@example.com", full_name="J", hashed_password="pw", is_verified=True))
         study = Studies(id="std_j", user_id="usr_j", title="Café POS", prompt="POS software for Lisbon cafés", target_audience="independent café owners", pricing_hypothesis="29 EUR/month", status="in_progress")
         session.add(study)
         if with_persona:
@@ -190,7 +190,7 @@ async def test_ai_review_endpoints_gate_and_envelope():
 
     owner = {"Authorization": f"Bearer {create_access_token({'sub': 'usr_j', 'email': 'j@example.com'})}"}
     async with maker() as session:
-        session.add(Users(id="usr_x", email="x@example.com", full_name="X", hashed_password="pw"))
+        session.add(Users(id="usr_x", email="x@example.com", full_name="X", hashed_password="pw", is_verified=True))
         await session.commit()
     intruder = {"Authorization": f"Bearer {create_access_token({'sub': 'usr_x', 'email': 'x@example.com'})}"}
 

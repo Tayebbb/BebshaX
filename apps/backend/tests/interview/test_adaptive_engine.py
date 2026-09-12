@@ -83,6 +83,7 @@ async def test_adaptive_interview_grounded_composition(
         persona_id=persona_id,
         objective="Pricing & Pain Point Exploration",
         study_id=study_id,
+        user_id="usr_tester",
         custom_objective="Test willingness to pay for subscription",
         length_tier="short",
     )
@@ -157,6 +158,7 @@ async def test_interview_length_limit_and_completion_synthesis(
         persona_id=persona_id,
         objective="Pain Point Discovery",
         study_id=study_id,
+        user_id="usr_tester",
         length_tier="short",
     )
 
@@ -204,6 +206,7 @@ async def test_failed_synthesis_is_explicit_not_mechanical(
         persona_id=persona_id,
         objective="Pain Point Discovery",
         study_id=study_id,
+        user_id="usr_tester",
         length_tier="short",
     )
     await engine.ask(interview.id, "What's the hardest part about hostel dining?")

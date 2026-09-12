@@ -45,12 +45,20 @@ async def test_create_study_and_title_generation():
 
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
     app.state.db_sessionmaker = session_maker
+    async with session_maker() as session:
+        session.add(Users(
+            id="usr_creator", email="creator@test.com", hashed_password="hash",
+            full_name="Creator", is_active=True, is_verified=True,
+        ))
+        await session.commit()
+    headers = {"Authorization": f"Bearer {create_access_token({'sub': 'usr_creator', 'email': 'creator@test.com'})}"}
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # 1. Create with prompt only -> deterministic title
         res = await client.post(
             "/api/studies",
+            headers=headers,
             json={
                 "prompt": "I'm developing an AI-powered pricing optimization engine for local grocery stores",
                 "type": "pricing",
@@ -67,14 +75,18 @@ async def test_create_study_and_title_generation():
         study_id = data["id"]
 
         # 2. Get study
-        get_res = await client.get(f"/api/studies/{study_id}")
+        get_res = await client.get(f"/api/studies/{study_id}", headers=headers)
         assert get_res.status_code == 200
         assert get_res.json()["id"] == study_id
 
         # 3. Reject empty study creation
-        bad_res = await client.post("/api/studies", json={"prompt": "   ", "title": ""})
+        bad_res = await client.post("/api/studies", headers=headers, json={"prompt": "   ", "title": ""})
         assert bad_res.status_code == 400
         assert "Describe your product idea" in bad_res.json()["detail"]
+
+        # 4. Anonymous callers cannot create private studies at all
+        anon_res = await client.post("/api/studies", json={"prompt": "Anonymous idea"})
+        assert anon_res.status_code == 401
 
     await engine.dispose()
 
@@ -88,10 +100,16 @@ async def test_study_user_isolation_and_authorization():
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
     app.state.db_sessionmaker = session_maker
 
-    # Create Alice and Bob in users table
+    # Create Alice and Bob in users table (verified: unverified accounts cannot act)
     async with session_maker() as session:
-        alice = Users(id="usr_alice", email="alice@test.com", hashed_password="hash", full_name="Alice")
-        bob = Users(id="usr_bob", email="bob@test.com", hashed_password="hash", full_name="Bob")
+        alice = Users(
+            id="usr_alice", email="alice@test.com", hashed_password="hash", full_name="Alice",
+            is_active=True, is_verified=True,
+        )
+        bob = Users(
+            id="usr_bob", email="bob@test.com", hashed_password="hash", full_name="Bob",
+            is_active=True, is_verified=True,
+        )
         session.add_all([alice, bob])
         await session.commit()
 

@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from bebshax.auth.models import Users
 from bebshax.auth.security import create_access_token
 from bebshax.db.models import Base, PersonaGenerationRuns, Personas, Studies, StudyReports
+import bebshax.jobs.orm
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ async def jobs_app(tmp_path):
     async with maker() as session:
         session.add_all(
             [
-                Users(id="usr_owner", email="owner@example.com", hashed_password="x", full_name="Owner"),
+                Users(id="usr_owner", email="owner@example.com", hashed_password="x", full_name="Owner", is_verified=True),
                 Studies(id="std_j", user_id="usr_owner", title="Job Study", status="in_progress"),
             ]
         )
@@ -33,7 +34,13 @@ async def jobs_app(tmp_path):
 
     app = create_app()
     app.state.db_sessionmaker = maker
-    return app, maker
+    try:
+        yield app, maker
+    finally:
+        from bebshax.api.jobs import shutdown_jobs
+
+        await shutdown_jobs(app)
+        await engine.dispose()
 
 
 def _owner() -> dict[str, str]:
@@ -41,14 +48,14 @@ def _owner() -> dict[str, str]:
 
 
 async def _poll_until_done(client, url, headers=None, attempts=100) -> dict:
-    for _ in range(attempts):
-        res = await client.get(url, headers=headers or {})
-        assert res.status_code == 200
-        job = res.json()
-        if job["status"] != "running":
-            return job
-        await asyncio.sleep(0.02)
-    raise AssertionError("job never terminated")
+    runtime = getattr(client._transport.app.state, "job_runtime", None)
+    assert runtime is not None
+    await asyncio.wait_for(runtime.drain(), 5)
+    response = await client.get(url, headers=headers or {})
+    assert response.status_code == 200
+    job = response.json()
+    assert job["status"] != "running"
+    return job
 
 
 @pytest.mark.asyncio
@@ -206,7 +213,8 @@ async def test_report_generation_job_completes(jobs_app, monkeypatch):
         def __init__(self, session=None, llm_service=None):
             pass
 
-        async def generate_report(self, *, study_id, user_id, custom_title=None):
+        async def generate_report(self, *, study_id, user_id, custom_title=None, job=None, expected_input_versions=None):
+            assert job is not None and expected_input_versions is not None
             return StudyReports(
                 id="rep_1", study_id=study_id, user_id=user_id, version=1,
                 title=custom_title or "Findings", executive_summary="Summary.",
@@ -241,7 +249,7 @@ async def test_job_ids_are_scoped_to_study_and_kind(jobs_app, monkeypatch):
         def __init__(self, session=None, llm_service=None):
             pass
 
-        async def generate_report(self, *, study_id, user_id, custom_title=None):
+        async def generate_report(self, *, study_id, user_id, custom_title=None, job=None):
             return StudyReports(id="rep_x", study_id=study_id, user_id=user_id,
                                 version=1, title="T", executive_summary="S")
 
@@ -268,12 +276,12 @@ async def test_job_ids_are_scoped_to_study_and_kind(jobs_app, monkeypatch):
             f"/api/studies/std_j/personas/generate/jobs/{job_id}", headers=_owner()
         )
         assert wrong_kind.status_code == 404
-        # unknown id → 404 with the restart hint
+        # Unknown IDs stay scoped 404s; durable journals survive restarts.
         missing = await client.get(
             "/api/studies/std_j/reports/generate/jobs/job_nope", headers=_owner()
         )
         assert missing.status_code == 404
-        assert "restart" in missing.json()["detail"]
+        assert missing.json()["detail"]
 
 
 @pytest.mark.asyncio

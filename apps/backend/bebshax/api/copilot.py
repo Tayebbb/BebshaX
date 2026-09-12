@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from contextlib import nullcontext
+from copy import deepcopy
 from typing import Any, Literal, Optional, cast
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -18,8 +20,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bebshax.api.auth import get_current_user
-from bebshax.api.deps import require_study_access, user_owns_study
+from bebshax.api.deps import get_tenant_user as get_current_user, require_study_access, user_owns_study
 from bebshax.api.errors import APIError
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
@@ -28,8 +29,11 @@ from bebshax.llm.json_utils import parse_llm_json, unwrap_list
 from bebshax.llm.placeholders import contains_placeholder, is_placeholder
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_block
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
+from bebshax.persona.context import private_persona_context
 from bebshax.personas.ml_adapter import build_business_context, get_persona_ml, to_workflow_persona
-from bebshax.personas.service import active_source_exclusions, lock_persona_parent
+from bebshax.personas.service import (
+    WORKFLOW_PERSONA_FIELDS, active_source_exclusions, lock_persona_parent, record_persona_version,
+)
 from bebshax.utils.explicit_failures import LLMUnavailable, UnusableModelOutput
 
 logger = logging.getLogger(__name__)
@@ -286,7 +290,10 @@ async def _complete_json(
     for attempt in range(1, _MAX_MODEL_ATTEMPTS + 1):
         if attempt > 1:
             llm_req = llm_req.retry_copy()
-        last_result = await llm_router.complete(llm_req)
+        scope = (private_persona_context(llm_req.owner_user_id, llm_req.study_id)
+                 if llm_req.owner_user_id is not None else nullcontext())
+        with scope:
+            last_result = await llm_router.complete(llm_req)
         try:
             parsed = parse_llm_json(last_result.text)
         except ValueError:
@@ -370,6 +377,8 @@ async def study_design_copilot(
     # writes nothing, so the demo's public read allowance still applies).
     if body.study_id:
         gate_sessionmaker = getattr(request.app.state, "db_sessionmaker", None)
+        if gate_sessionmaker is None:
+            raise APIError(503, "Database unavailable", error_code="database_unavailable")
         if gate_sessionmaker:
             async with gate_sessionmaker() as gate_session:
                 study_row = await gate_session.get(Studies, body.study_id)
@@ -388,6 +397,9 @@ async def study_design_copilot(
         messages=chat_messages,
         json_mode=True,
         temperature=0.5,
+        owner_user_id=current_user.id,
+        study_id=body.study_id,
+        data_classification="private",
     )
 
     def _accept(parsed: Any) -> bool:
@@ -471,6 +483,8 @@ async def suggest_persona_roles(
         json_mode=True,
         temperature=0.6,
         max_output_tokens=2500,
+        owner_user_id=current_user.id,
+        data_classification="private",
     )
 
     def _accept(parsed: Any) -> bool:
@@ -508,6 +522,7 @@ class GeneratePersonasResponse(BaseModel):
     # by a skeleton. Empty when every selected role succeeded.
     failed_roles: list[FailedRole] = Field(default_factory=list)
     served_by: list[str] = Field(default_factory=list)
+    study_revision: int | None = None
 
 
 # The field that carries an attribute's / badge's meaning; the rest is detail.
@@ -687,6 +702,9 @@ async def generate_study_personas(
                 body, request, selected_roles, study_row, evidence_claims, db_session,
             )
             await db_session.commit()
+            # The cohort save advanced the study's revision; a client still holding
+            # the pre-generation revision would 412 on its next save without this.
+            response.study_revision = study_row.revision
             return response
         except IntegrityError as exc:
             await db_session.rollback()
@@ -712,7 +730,7 @@ async def _generate_role_cohort(
     owner_id = (study_row.user_id if study_row else None) or "usr_system_holder"
     if db_session is not None and study_row is not None:
         used_source_ids, used_names = await active_source_exclusions(
-            db_session, owner_id=owner_id, scope=Personas.study_id == study_row.id,
+            db_session, owner_id=owner_id, scope=Personas.study_id == study_row.id, study_id=study_row.id,
         )
 
     async def _one_role(
@@ -767,6 +785,11 @@ async def _generate_role_cohort(
         p["evidence_claim_count"] = len(evidence_claims)
 
     if db_session is not None and study_row is not None:
+        outgoing = (await db_session.scalars(select(Personas).where(
+            Personas.study_id == study_row.id, Personas.owner_id == owner_id, Personas.status != "archived",
+        ))).all()
+        for persona_row in outgoing:
+            await record_persona_version(db_session, persona_row, capture_kind="observed_current")
         await db_session.execute(
             update(Personas)
             .where(Personas.study_id == study_row.id, Personas.owner_id == owner_id, Personas.status != "archived")
@@ -778,6 +801,13 @@ async def _generate_role_cohort(
             persona["study_id"] = study_row.id
             demographics = persona.get("demographics") or {}
             personality = persona.get("personality") if isinstance(persona.get("personality"), dict) else None
+            detailed_attributes = {
+                **(persona.get("detailed_attributes") or {}),
+                "workflow_projection": {
+                    field: deepcopy(persona[field]) for field in WORKFLOW_PERSONA_FIELDS if field in persona
+                },
+            }
+            persona["detailed_attributes"] = detailed_attributes
             db_session.add(
                 Personas(
                     id=persona_id,
@@ -792,7 +822,7 @@ async def _generate_role_cohort(
                     tagline=persona.get("tagline"),
                     country_code=persona.get("country_code"),
                     personality=personality or None,
-                    detailed_attributes=persona.get("detailed_attributes") or {},
+                    detailed_attributes=detailed_attributes,
                     demographics=demographics,
                     bio=persona.get("description"),
                     quote=persona.get("quote"),
@@ -813,6 +843,13 @@ async def _generate_role_cohort(
                     grounding_score=float(persona.get("grounding_ratio", 0.0)),
                 )
             )
+        await db_session.flush()
+        created = (await db_session.scalars(select(Personas).where(
+            Personas.id.in_([persona["id"] for persona in all_personas]),
+            Personas.study_id == study_row.id, Personas.owner_id == owner_id,
+        ))).all()
+        for persona_row in created:
+            await record_persona_version(db_session, persona_row)
         study_row.personas_data = all_personas
         study_row.persona_ids = [persona["id"] for persona in all_personas]
         study_row.persona_count = len(all_personas)

@@ -10,9 +10,12 @@ from starlette.testclient import TestClient
 from bebshax.llm.adapters.fake import FakeAdapter
 
 
-async def test_routes_status_and_provenance(api_test_app: TestClient):
-    # Test routes status
-    status_resp = api_test_app.get("/api/routes/status")
+async def test_routes_status_and_provenance(api_test_app: TestClient, auth_headers, developer_headers):
+    # Diagnostics are developer-only: an ordinary signed-in user is refused, anonymous
+    # callers too, while the developer sees the live snapshot.
+    assert api_test_app.get("/api/routes/status").status_code == 401
+    assert api_test_app.get("/api/routes/status", headers=auth_headers).status_code == 403
+    status_resp = api_test_app.get("/api/routes/status", headers=developer_headers)
     assert status_resp.status_code == 200
     data = status_resp.json()
     assert "providers" in data
@@ -23,33 +26,38 @@ async def test_routes_status_and_provenance(api_test_app: TestClient):
     # the fixture's "pollinations" adapter has no registry entry.
     by_name = {p["name"]: p for p in data["providers"]}
     assert by_name["pollinations"]["type"] == "unknown"
-    assert by_name["ollama"]["type"] == "local"
+    assert by_name["freellmpool"]["type"] == "aggregator"
+    assert by_name["openrouter"]["type"] == "remote_api"
+    assert "ollama" not in by_name
     # M2: active_requests is a real measured integer while the system is idle
     assert all(p["active_requests"] == 0 for p in data["pools"])
 
     # Test provenance list
-    prov_resp = api_test_app.get("/api/provenance?limit=10")
+    prov_resp = api_test_app.get("/api/provenance?limit=10", headers=auth_headers)
     assert prov_resp.status_code == 200
     pdata = prov_resp.json()
     assert "items" in pdata
     assert "total" in pdata
 
 
-async def test_routes_status_reports_empty_pools_honestly(api_test_app: TestClient):
+async def test_routes_status_reports_empty_pools_honestly(api_test_app: TestClient, developer_headers):
     # M2: an empty pool must report 0 candidates — the audited code did max(count, 1)
     app = api_test_app.app
     saved = app.state.llm_adapters
     app.state.llm_adapters = {name: FakeAdapter(routes=[]) for name in saved}
     try:
-        data = api_test_app.get("/api/routes/status").json()
+        data = api_test_app.get("/api/routes/status", headers=developer_headers).json()
         assert all(p["candidates_count"] == 0 for p in data["pools"])
-        assert all(p["status"] == "degraded" for p in data["providers"])
+        # Every provider reports zero usable models; none may be advertised as healthy.
+        assert all(p["available_models"] == 0 and p["candidate_count"] == 0 for p in data["providers"])
+        assert not any(p["status"] in {"available", "healthy"} for p in data["providers"])
     finally:
         app.state.llm_adapters = saved
 
 
-async def test_evaluation_metrics_endpoint(api_test_app: TestClient):
-    res = api_test_app.get("/api/evaluation/metrics")
+async def test_evaluation_metrics_endpoint(api_test_app: TestClient, developer_headers):
+    assert api_test_app.get("/api/evaluation/metrics").status_code == 401
+    res = api_test_app.get("/api/evaluation/metrics", headers=developer_headers)
     assert res.status_code == 200
     metrics = res.json()
     assert "overall_health" in metrics
@@ -158,19 +166,21 @@ async def test_business_and_persona_and_interview_e2e(api_test_app: TestClient, 
     assert len(turns) == 2
 
 
-async def test_memories_for_unknown_persona_is_404(api_test_app: TestClient):
-    # M9: nonexistent persona must not masquerade as "no memories yet"
-    resp = api_test_app.get("/api/personas/per_does_not_exist/memories")
+async def test_memories_for_unknown_persona_is_404(api_test_app: TestClient, auth_headers):
+    # M9: nonexistent persona must not masquerade as "no memories yet"; memories are
+    # tenant-private so the caller must be signed in first.
+    assert api_test_app.get("/api/personas/per_does_not_exist/memories").status_code == 401
+    resp = api_test_app.get("/api/personas/per_does_not_exist/memories", headers=auth_headers)
     assert resp.status_code == 404
 
 
-async def test_memories_without_service_is_503(api_test_app: TestClient):
+async def test_memories_without_service_is_503(api_test_app: TestClient, auth_headers):
     # M9: a missing memory service is an operational condition, not an empty list
     app = api_test_app.app
     saved = app.state.memory_service
     app.state.memory_service = None
     try:
-        resp = api_test_app.get("/api/personas/anything/memories")
+        resp = api_test_app.get("/api/personas/anything/memories", headers=auth_headers)
         assert resp.status_code == 503
     finally:
         app.state.memory_service = saved
@@ -185,8 +195,8 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     async with api_test_app.app.state.db_sessionmaker() as session:
         session.add_all(
             [
-                Users(id="usr_alice", email="alice@example.com", hashed_password="x", full_name="Alice"),
-                Users(id="usr_bob", email="bob@example.com", hashed_password="x", full_name="Bob"),
+                Users(id="usr_alice", email="alice@example.com", hashed_password="x", full_name="Alice", is_verified=True),
+                Users(id="usr_bob", email="bob@example.com", hashed_password="x", full_name="Bob", is_verified=True),
             ]
         )
         await session.commit()
@@ -213,7 +223,9 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     assert s1["title"] == "Alice's Grocery Delivery Demand Study"
     # Verify new fields are returned in the response
     assert s1["copilot_messages"] == [{"role": "user", "content": "grocery delivery idea"}]
-    assert s1["personas_data"] == [{"id": "per_1", "name": "Alice Persona"}]
+    # Persona state is server-derived from canonical persona rows: a client-supplied
+    # snapshot is ignored, never echoed back as if it were real research state.
+    assert s1["personas_data"] == []
 
     # 2. Create study as Bob
     s2_resp = api_test_app.post(
@@ -253,16 +265,18 @@ async def test_user_studies_persistence_and_isolation(api_test_app: TestClient):
     )
     assert patch_resp.status_code == 404
 
-    # 7. Anonymous auto-create lands in the anonymous tenant (usr_default),
-    #    never a client-claimed identity
+    # 7. Anonymous PATCH of an unknown id never auto-creates a study (a
+    #    client-claimed identity must not mint tenant state) → 404, no row.
     dynamic_new_id = f"new_study_{uuid.uuid4().hex[:8]}"
     patch2_resp = api_test_app.patch(
         f"/api/studies/{dynamic_new_id}",
         json={"status": "in_progress", "step": 2, "user_id": "usr_alice", "title": "New auto-created"},
     )
-    assert patch2_resp.status_code == 200
-    assert patch2_resp.json()["step"] == 2
-    assert patch2_resp.json()["user_id"] == "usr_default"
+    assert patch2_resp.status_code == 404
+    from bebshax.db.models import Studies
+
+    async with api_test_app.app.state.db_sessionmaker() as session:
+        assert await session.get(Studies, dynamic_new_id) is None
 
     # 8. Anonymous delete of Bob's study — blocked with 404 (never confirms
     #    the hidden study exists)

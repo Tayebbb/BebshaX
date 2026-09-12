@@ -27,16 +27,24 @@ async def study_atomicity_db() -> AsyncIterator[async_sessionmaker[AsyncSession]
 async def study_atomicity_client(study_atomicity_db):
     app = FastAPI()
     app.include_router(studies.router, prefix="/api")
+    async with study_atomicity_db() as seed_session:
+        owner = Users(
+            id="usr_atomic", email="atomic@example.test", full_name="Atomic Owner",
+            auth_provider="email", is_active=True, is_verified=True,
+        )
+        seed_session.add(owner)
+        await seed_session.commit()
     async with study_atomicity_db() as session:
         async def get_session() -> AsyncSession:
             return session
 
-        async def get_current_user() -> None:
-            await session.execute(select(Users).limit(1))
-            return None
+        async def get_current_user() -> Users:
+            # Creation requires an authenticated owner; resolve it through the request session
+            # so the handler's transaction shape matches production.
+            return await session.get(Users, "usr_atomic")
 
         app.dependency_overrides[studies.get_session] = get_session
-        app.dependency_overrides[studies.get_optional_current_user] = get_current_user
+        app.dependency_overrides[studies.get_current_user] = get_current_user
         transport = ASGITransport(app=app, raise_app_exceptions=False)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             yield client, session

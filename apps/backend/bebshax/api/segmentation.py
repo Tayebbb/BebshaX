@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from datetime import datetime, timezone
+from typing import Any, Optional, cast
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bebshax.api.auth import get_optional_current_user
+from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.deps import get_session, require_study_access
+from bebshax.api.errors import APIError
+from bebshax.api.jobs import cancel_job_async, get_job_async, replay_job_input, run_job_inline
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import (
@@ -22,8 +25,10 @@ from bebshax.db.models import (
 )
 from bebshax.llm.failures import LLMError
 from bebshax.segmentation.pre_check import check_segmentation_readiness
-from bebshax.segmentation.service import SegmentationEngineService
+from bebshax.segmentation.service import SegmentationEngineService, capture_segmentation_input_versions
 from bebshax.utils.explicit_failures import ExplicitFailure
+from bebshax.jobs.orm import DurableJobs
+from bebshax.jobs.runtime import FencedSession, JobContext
 
 logger = logging.getLogger(__name__)
 
@@ -144,29 +149,59 @@ async def run_segmentation(
     request: Request,
     request_data: Optional[RunSegmentationRequest] = None,
     session: AsyncSession = Depends(get_session),
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=200),
 ):
     """Trigger a new market segmentation run for a study."""
     study = await _verify_study_access(session, study_id, current_user, write=True)
-    user_id = current_user.id if current_user else study.user_id
+    user_id = current_user.id
 
     llm_service = getattr(request.app.state, "llm_service", None)
-    service = SegmentationEngineService(session=session, llm_service=llm_service)
 
     desired_clusters = request_data.desired_clusters if request_data else None
     config = request_data.configuration if request_data else None
+    command = {
+        "study_id": study_id, "desired_clusters": desired_clusters, "configuration": config,
+        "input_versions": await capture_segmentation_input_versions(session, study_id, user_id),
+    }
+    command = await replay_job_input(
+        request.app, kind="segmentation", scope_id=study_id, user_id=user_id,
+        idempotency_key=idempotency_key, input_data=command, snapshot_fields=frozenset({"input_versions"}),
+    )
+    maker = request.app.state.db_sessionmaker
+    await session.rollback()
+
+    async def operation(job: JobContext) -> dict[str, Any]:
+        await job.begin_item("segmentation", input_data=command)
+
+        async def checkpoint(db_session: AsyncSession) -> None:
+            runs = [row for row in [*db_session.new, *db_session.identity_map.values()]
+                    if isinstance(row, SegmentationRuns) and row.study_id == study_id and row.user_id == user_id]
+            for run in runs:
+                run.configuration = {**(run.configuration or {}), "job_id": job["job_id"]}
+                await db_session.flush()
+                refs = {"run_id": run.id}
+                job["result_refs"] = refs
+                await db_session.execute(update(DurableJobs).where(DurableJobs.id == job["job_id"]).values(result_refs=refs))
+                if run.status == "completed":
+                    await job.complete_item("segmentation", result_refs=refs, session=db_session)
+
+        async with maker() as work_session:
+            fenced = FencedSession(work_session, job, before_commit=checkpoint)
+            service = SegmentationEngineService(session=cast(AsyncSession, fenced), llm_service=llm_service)
+            run, segments = await service.run_segmentation(
+                study_id=study_id, user_id=user_id, desired_clusters=desired_clusters, configuration=config,
+                expected_input_versions=command["input_versions"],
+            )
+            return {"run": _serialize_run(run), "segments": [_serialize_segment(segment) for segment in segments]}
 
     try:
-        run, segments = await service.run_segmentation(
-            study_id=study_id,
-            user_id=user_id,
-            desired_clusters=desired_clusters,
-            configuration=config,
+        return await run_job_inline(
+            request.app, kind="segmentation", scope_id=study_id, user_id=user_id,
+            input_data=command, operation=operation, idempotency_key=idempotency_key,
         )
-        return {
-            "run": _serialize_run(run),
-            "segments": [_serialize_segment(s) for s in segments],
-        }
+    except APIError:
+        raise
     except ValueError as val_err:
         # Deliberate, user-facing validation messages stay verbatim.
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
@@ -180,6 +215,37 @@ async def run_segmentation(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Segmentation failed. Please try again.",
         )
+
+
+async def _reconcile_segmentation_job(app: Any, job: dict[str, Any]) -> None:
+    if job["state"] not in {"failed", "cancelled", "interrupted", "timed_out"}:
+        return
+    run_id = (job.get("result_refs") or {}).get("run_id")
+    if not run_id:
+        return
+    async with app.state.db_sessionmaker() as session, session.begin():
+        await session.execute(update(SegmentationRuns).where(
+            SegmentationRuns.id == run_id, SegmentationRuns.study_id == job["scope_id"], SegmentationRuns.user_id == job["user_id"],
+            SegmentationRuns.status.notin_(("completed", "failed", "cancelled", "interrupted", "timed_out")),
+        ).values(status=job["state"], error_message=job["error"], completed_at=datetime.now(timezone.utc)))
+
+
+@router.get("/{study_id}/segmentation/jobs/{job_id}")
+async def get_segmentation_job(study_id: str, job_id: str, request: Request, current_user: Users = Depends(get_current_user)) -> dict[str, Any]:
+    job = await get_job_async(request.app, job_id, kind="segmentation", scope_id=study_id, user_id=current_user.id)
+    if job is None:
+        raise APIError(404, "Segmentation job not found.", error_code="not_found")
+    await _reconcile_segmentation_job(request.app, job)
+    return job
+
+
+@router.post("/{study_id}/segmentation/jobs/{job_id}/cancel")
+async def cancel_segmentation_job(study_id: str, job_id: str, request: Request, current_user: Users = Depends(get_current_user)) -> dict[str, Any]:
+    job = await cancel_job_async(request.app, job_id, kind="segmentation", scope_id=study_id, user_id=current_user.id)
+    if job is None:
+        raise APIError(404, "Segmentation job not found.", error_code="not_found")
+    await _reconcile_segmentation_job(request.app, job)
+    return job
 
 
 @router.get("/{study_id}/segmentation/runs")
@@ -205,6 +271,7 @@ async def list_segmentation_runs(
 async def get_segmentation_run(
     study_id: str,
     run_id: str,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: Optional[Users] = Depends(get_optional_current_user),
 ):
@@ -220,6 +287,15 @@ async def get_segmentation_run(
     run = res.scalars().first()
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segmentation run not found.")
+    job_id = (run.configuration or {}).get("job_id")
+    if job_id and current_user is not None:
+        await session.rollback()
+        job = await get_job_async(request.app, job_id, kind="segmentation", scope_id=study_id, user_id=current_user.id)
+        if job is not None:
+            await _reconcile_segmentation_job(request.app, job)
+        run = await session.get(SegmentationRuns, run_id, populate_existing=True)
+        if run is None:
+            raise APIError(404, "Segmentation run not found.", error_code="not_found")
     return _serialize_run(run)
 
 

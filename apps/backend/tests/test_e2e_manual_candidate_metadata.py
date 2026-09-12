@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from bebshax.api.errors import APIError
-from bebshax.db.models import DatasetCandidates, DatasetSources
+from bebshax.db.models import Base, DatasetCandidates, DatasetSources
 from bebshax.research.service import ResearchEngineService
 
 
@@ -20,8 +20,8 @@ async def manual_candidate_db() -> AsyncIterator[async_sessionmaker[AsyncSession
     database = create_async_engine("sqlite+aiosqlite:///:memory:")
     try:
         async with database.begin() as connection:
-            await connection.run_sync(DatasetCandidates.__table__.create)
-            await connection.run_sync(DatasetSources.__table__.create)
+            # Publishing a version journals its file for cleanup, so the full schema is needed.
+            await connection.run_sync(Base.metadata.create_all)
         yield async_sessionmaker(database, expire_on_commit=False)
     finally:
         await database.dispose()
@@ -53,17 +53,22 @@ def manual_import_service(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[ResearchEngineService, AsyncMock, Path]:
     upload_dir = tmp_path / "uploads"
-    monkeypatch.setattr("bebshax.research.service._upload_dir", lambda: upload_dir)
-    monkeypatch.setattr("bebshax.datasets.discovery.engine._upload_dir", lambda: upload_dir)
+    upload_dir.mkdir()
+    # The storage service resolves the upload root from settings at call time.
+    from bebshax.config import get_settings
+
+    monkeypatch.setenv("BEBSHAX_UPLOAD_DIR", str(upload_dir))
+    get_settings.cache_clear()
     download = AsyncMock(return_value=(
         b"country,population\nCountry,100\nOther,200\n",
         {"url": "https://example.org/population.csv", "content_type": "text/csv"},
     ))
-    monkeypatch.setattr("bebshax.datasets.discovery.engine.fetch_resource_bytes", download)
+    monkeypatch.setattr("bebshax.research.service.fetch_resource_bytes", download)
     service = ResearchEngineService(
         search_provider=Mock(), vector_engine=Mock(), discovery_engine=Mock(),
     )
-    return service, download, upload_dir
+    yield service, download, upload_dir
+    get_settings.cache_clear()  # the env override is undone by monkeypatch; drop the cached Settings
 
 
 @pytest.mark.asyncio

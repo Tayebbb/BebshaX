@@ -16,6 +16,8 @@ from typing import Any, Callable
 from bebshax.evaluation.strategies import RoutingStrategy, StrategyRankerFactory
 from bebshax.evaluation.types import OfflineEvalResult
 from bebshax.llm.adapters.base import RouteCandidate
+from bebshax.llm.adapters.fake import FakeAdapter
+from bebshax.llm.service import Entry
 
 DATA_DIR = Path("data/processed")
 
@@ -70,7 +72,8 @@ def _replay(
     unusable_reason: str,
     synthetic_fallback: bool,
 ) -> OfflineEvalResult:
-    entries = [(None, c) for c in candidates]  # adapter unused: offline label matching only
+    offline_adapter = FakeAdapter([])
+    entries: list[Entry] = [(offline_adapter, candidate) for candidate in candidates]
     usable = [(rec, best) for rec in records if (best := best_of(rec)) is not None]
     unusable_count = len(records) - len(usable)
 
@@ -137,7 +140,7 @@ class OfflineEvaluator:
                     "query": f"Benchmark query {i}",
                     "task": "structured" if i % 3 == 0 else "general",
                     "candidates": [
-                        {"model": "qwen3.5:latest", "score": 0.92},
+                        {"model": "simulation/secondary:free", "score": 0.92},
                         {"model": "llama-3.1-70b", "score": 0.88},
                     ],
                 }
@@ -145,7 +148,7 @@ class OfflineEvaluator:
             ]
 
         candidates = [
-            RouteCandidate(provider="ollama", model="qwen3.5:latest", context_window=16384),
+            RouteCandidate(provider="openrouter", model="simulation/secondary:free", context_window=32768),
             RouteCandidate(provider="groq", model="llama-3.1-70b", context_window=128000),
         ]
         return _replay(

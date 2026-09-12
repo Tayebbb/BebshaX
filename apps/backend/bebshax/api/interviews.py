@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 from contextlib import aclosing
@@ -10,8 +11,9 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, ValidationError, field_validator
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -24,20 +26,64 @@ from bebshax.api.deps import (
     user_owns_study,
 )
 from bebshax.api.errors import APIError, request_id_of
-from bebshax.api.jobs import get_job, start_job
+from bebshax.api.jobs import get_job_async, start_job_async
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
 from bebshax.interview.engine import ConversationNotFound, InterviewEngine, InterviewFinished, PersonaNotFound
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
 from bebshax.llm import AllCandidatesFailed, ContextWindowExceeded
-from bebshax.tenancy import ANONYMOUS_OWNER_ID, allowed_owner_ids
+from bebshax.llm.failures import AttemptFailed, FailureKind
+from bebshax.llm.latency import await_before, resolve_deadline
+from bebshax.llm.types import TaskType
+from bebshax.tenancy import ANONYMOUS_OWNER_ID, PUBLIC_OWNER_IDS
 from bebshax.utils.explicit_failures import ExplicitFailure, LLMUnavailable
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["interviews"])
+class InterviewRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def bounded_handler(request: Request):
+            task = TaskType.STRUCTURED_OUTPUT if request.url.path.endswith("/complete") else TaskType.PERSONA_INTERVIEW
+            request.state.interview_deadline_at = resolve_deadline(
+                task, deadline_at=getattr(request.state, "deadline_at", None),
+            )
+            try:
+                async with asyncio.timeout_at(request.state.interview_deadline_at):
+                    return await handler(request)
+            except TimeoutError as exc:
+                raise APIError(504, "Interview request deadline exceeded.", error_code="request_timeout") from exc
+
+        return bounded_handler
+
+
+router = APIRouter(tags=["interviews"], route_class=InterviewRoute)
 _MAX_BATCH_PERSONAS = 50
+
+
+def _verified_owner(current_user: Optional[Users]) -> str:
+    if current_user is None:
+        raise HTTPException(status_code=403, detail="Sign in to access private interviews")
+    return current_user.id
+
+
+async def _release_read_session(session: AsyncSession) -> None:
+    session.expunge_all()
+    await session.rollback()
+
+
+def _failure_provenance(provenance: Any) -> dict[str, Any]:
+    if provenance is None:
+        return {}
+    public = provenance.model_dump(mode="json", exclude={"attempts": {"__all__": {"failure_detail", "notes"}}})
+    return {
+        "llm_request_id": provenance.request_id,
+        "attempts": public["attempts"],
+        "routing_path": public["routing_path"],
+        "provenance": public,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -129,16 +175,20 @@ def _serialize_interview(
     turns: Optional[list[ConversationTurns]] = None,
     insights: Optional[list[InterviewInsights]] = None,
 ) -> dict[str, Any]:
+    snapshot = c.persona_snapshot or {}
+    identity = snapshot.get("fields", {})
+    persona_name = identity.get("name") or (persona.name if persona else "Synthetic Persona")
     return {
         "id": c.id,
         "study_id": c.study_id,
         "user_id": c.user_id,
         "persona_id": c.persona_id,
-        "persona_name": persona.name if persona else "Synthetic Persona",
-        "persona_avatar": persona.name.split(" ")[0] if persona else "P",
+        "persona_name": persona_name,
+        "persona_avatar": persona_name.split(" ")[0],
         "persona_version": c.persona_version,
-        "persona_demographics": persona.demographics if persona else {},
-        "persona_segment_id": persona.segment_id if persona else None,
+        "persona_snapshot_status": "captured" if snapshot else "legacy_unknown",
+        "persona_demographics": identity.get("demographics", {}) if snapshot else (persona.demographics if persona else {}),
+        "persona_segment_id": identity.get("segment_id") if snapshot else (persona.segment_id if persona else None),
         "generation_run_id": c.generation_run_id,
         "objective": c.objective,
         "custom_objective": c.custom_objective,
@@ -181,9 +231,15 @@ async def _get_study_and_verify_access(
     return study
 
 
+def _is_public_demo_child(study: Studies, owner_id: Optional[str]) -> bool:
+    """Only an explicit demo study publishes example interviews, and only those stamped
+    with no owner or a shared-pool owner. Everything else is tenant-private."""
+    return bool(study.is_demo) and (owner_id is None or owner_id in PUBLIC_OWNER_IDS)
+
+
 def _require_interview_in_study(
     conversation: Optional[Conversations],
-    study_id: str,
+    study: Studies,
     current_user: Optional[Users],
     *,
     write: bool = False,
@@ -194,26 +250,27 @@ def _require_interview_in_study(
     ``conversation.study_id and ...``, so a row with a NULL/empty ``study_id``
     skipped the check entirely and was accepted under *any* study id.
 
-    Reads also require access to the conversation's own tenant stamp.
-    ``write=True`` additionally applies the strict write predicate to the row's
-    own tenant stamp, mirroring ``_guard_legacy_conversation``.
+    Reads require the caller's own tenant stamp, except for a demo study's
+    published example children. Writes always require the caller's own stamp.
     """
     if not conversation:
         raise HTTPException(status_code=404, detail="Interview not found")
-    if conversation.study_id != study_id:
+    if conversation.study_id != study.id:
         raise HTTPException(status_code=403, detail="Interview does not belong to this study")
-    if not owner_accessible(conversation.user_id, current_user):
+    owns_row = owner_can_write(conversation.user_id, current_user)
+    if not owns_row and not (not write and _is_public_demo_child(study, conversation.user_id)):
         raise HTTPException(status_code=403, detail="Not authorized to access this interview")
-    if write and not owner_can_write(conversation.user_id, current_user):
+    if write and not owns_row:
         raise HTTPException(status_code=403, detail="Not authorized to modify this interview")
     return conversation
 
 
-def _conversation_read_scope(current_user: Optional[Users]) -> ColumnElement[bool]:
-    return or_(
-        Conversations.user_id.is_(None),
-        Conversations.user_id.in_(allowed_owner_ids(current_user.id if current_user else None)),
-    )
+def _conversation_read_scope(study: Studies, current_user: Optional[Users]) -> ColumnElement[bool]:
+    own = Conversations.user_id == current_user.id if current_user else false()
+    if not study.is_demo:
+        return own
+    shared = or_(Conversations.user_id.is_(None), Conversations.user_id.in_(PUBLIC_OWNER_IDS))
+    return or_(own, shared)
 
 
 # ============================================================================
@@ -242,6 +299,7 @@ async def start_study_persona_interview(
         raise HTTPException(status_code=403, detail="Not authorized to interview this persona")
 
     user_id = current_user.id if current_user else None
+    await _release_read_session(session)
     try:
         conversation = await request.app.state.interview_engine.start(
             persona_id=persona_id,
@@ -268,10 +326,10 @@ async def list_study_interviews(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """List all interviews conducted in this study with filtering and search."""
-    await _get_study_and_verify_access(session, study_id, current_user)
+    study = await _get_study_and_verify_access(session, study_id, current_user)
 
     stmt = select(Conversations).where(
-        Conversations.study_id == study_id, _conversation_read_scope(current_user)
+        Conversations.study_id == study_id, _conversation_read_scope(study, current_user)
     )
     if persona_id:
         stmt = stmt.where(Conversations.persona_id == persona_id)
@@ -319,13 +377,13 @@ async def get_study_interview_metrics(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Aggregate metric counts for study interviews."""
-    await _get_study_and_verify_access(session, study_id, current_user)
+    study = await _get_study_and_verify_access(session, study_id, current_user)
 
     agg_stmt = select(
         func.count().label("total"),
         func.sum(case((Conversations.status == "active", 1), else_=0)).label("active"),
         func.sum(case((Conversations.status == "completed", 1), else_=0)).label("completed"),
-    ).where(Conversations.study_id == study_id, _conversation_read_scope(current_user))
+    ).where(Conversations.study_id == study_id, _conversation_read_scope(study, current_user))
     row = (await session.execute(agg_stmt)).one()
     total = row.total or 0
     active = row.active or 0
@@ -338,7 +396,7 @@ async def get_study_interview_metrics(
             ).where(
                 InterviewInsights.study_id == study_id,
                 Conversations.study_id == study_id,
-                _conversation_read_scope(current_user),
+                _conversation_read_scope(study, current_user),
             )
         )
     ).scalar() or 0
@@ -361,10 +419,10 @@ async def get_study_interview_detail(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Get full interview detail including transcript, topics, and structured insights."""
-    await _get_study_and_verify_access(session, study_id, current_user)
+    study = await _get_study_and_verify_access(session, study_id, current_user)
 
     conversation = _require_interview_in_study(
-        await session.get(Conversations, interview_id), study_id, current_user
+        await session.get(Conversations, interview_id), study, current_user
     )
 
     persona = await session.get(Personas, conversation.persona_id)
@@ -415,10 +473,10 @@ async def post_study_interview_message(
     global handlers in api/errors.py, which render the rich envelope (attempts,
     failure kinds, llm_request_id) — a local ``except`` would flatten it.
     """
-    await _get_study_and_verify_access(session, study_id, current_user, write=True)
+    study = await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
     _require_interview_in_study(
-        await session.get(Conversations, interview_id), study_id, current_user, write=True
+        await session.get(Conversations, interview_id), study, current_user, write=True
     )
 
     text = body.content or body.message
@@ -426,8 +484,12 @@ async def post_study_interview_message(
         raise HTTPException(status_code=422, detail="Message content cannot be empty")
 
     now_iso = datetime.now(timezone.utc).isoformat()
+    await _release_read_session(session)
     try:
-        result = await request.app.state.interview_engine.ask(interview_id, text.strip())
+        result = await request.app.state.interview_engine.ask(
+            interview_id, text.strip(), owner_id=_verified_owner(current_user),
+            deadline_at=request.state.interview_deadline_at,
+        )
     except ConversationNotFound as exc:
         raise HTTPException(status_code=404, detail="Interview not found") from exc
     except PersonaNotFound as exc:
@@ -465,6 +527,9 @@ async def post_study_interview_message(
         "max_turns": result.get("max_turns"),
         "is_finished": is_finished,
         "suggested_questions": suggested_questions,
+        "retrieved_memory_ids": result.get("retrieved_memory_ids", []),
+        "llm_request_id": result.get("llm_request_id"),
+        "provenance": result.get("provenance"),
         **consistency,
         "user_message": {
             "role": "researcher",
@@ -482,6 +547,7 @@ async def post_study_interview_message(
             "turn_number": turn_num,
             "topic": topic,
             "retrieved_memories": result.get("retrieved_memories", []),
+            "retrieved_memory_ids": result.get("retrieved_memory_ids", []),
             **consistency,
         },
     }
@@ -501,10 +567,10 @@ async def post_study_interview_message_stream(
     speaks, then one `done` event with the canonical ask() payload (normalized
     reply + provenance). Errors after headers are sent arrive as `error` events
     carrying the same ``error_code`` values as the JSON envelope."""
-    await _get_study_and_verify_access(session, study_id, current_user, write=True)
+    study = await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
     _require_interview_in_study(
-        await session.get(Conversations, interview_id), study_id, current_user, write=True
+        await session.get(Conversations, interview_id), study, current_user, write=True
     )
 
     text = body.content or body.message
@@ -513,6 +579,9 @@ async def post_study_interview_message_stream(
 
     engine = request.app.state.interview_engine
     http_request_id = request_id_of(request)
+    owner_id = _verified_owner(current_user)
+    deadline_at = request.state.interview_deadline_at
+    await _release_read_session(session)
 
     def _sse(event: str, data: dict[str, Any]) -> str:
         return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
@@ -526,7 +595,9 @@ async def post_study_interview_message_stream(
         try:
             # aclosing: deterministic cleanup of the whole generator chain on
             # client disconnect, not GC-scheduled finalization.
-            async with aclosing(engine.ask_stream(interview_id, text.strip())) as agen:
+            async with aclosing(engine.ask_stream(
+                interview_id, text.strip(), owner_id=owner_id, deadline_at=deadline_at,
+            )) as agen:
                 async for item in agen:
                     if item.get("type") == "delta":
                         yield _sse("delta", {"text": item["text"]})
@@ -550,6 +621,7 @@ async def post_study_interview_message_stream(
                             "latency_ms": payload.get("latency_ms"),
                             "served_by": payload.get("served_by"),
                             "retrieved_memories": payload.get("retrieved_memories", []),
+                            "retrieved_memory_ids": payload.get("retrieved_memory_ids", []),
                         }
                         yield _sse("done", payload)
         except InterviewFinished as exc:
@@ -582,6 +654,13 @@ async def post_study_interview_message_stream(
                 ],
                 routing_path=list(exc.provenance.routing_path),
             )
+        except AttemptFailed as exc:
+            yield _error(
+                exc.kind.value, exc.kind.value.lower(), "The interview response could not be completed.",
+                provider=exc.provider, model=exc.model, **_failure_provenance(exc.provenance),
+            )
+        except TimeoutError:
+            yield _error(FailureKind.TIMEOUT.value, "request_timeout", "Interview request deadline exceeded.")
         except ExplicitFailure as exc:
             yield _sse("error", {
                 **exc.extra,
@@ -612,14 +691,17 @@ async def complete_study_interview(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Finish the interview, extract structured insights with turn provenance, and generate executive summary."""
-    await _get_study_and_verify_access(session, study_id, current_user, write=True)
+    study = await _get_study_and_verify_access(session, study_id, current_user, write=True)
 
     _require_interview_in_study(
-        await session.get(Conversations, interview_id), study_id, current_user, write=True
+        await session.get(Conversations, interview_id), study, current_user, write=True
     )
 
+    await _release_read_session(session)
     try:
-        synthesis = await request.app.state.interview_engine.complete(interview_id)
+        synthesis = await request.app.state.interview_engine.complete(
+            interview_id, owner_id=_verified_owner(current_user), deadline_at=request.state.interview_deadline_at,
+        )
     except ConversationNotFound as exc:
         raise HTTPException(status_code=404, detail="Interview not found") from exc
 
@@ -634,10 +716,10 @@ async def get_study_interview_insights(
     session: AsyncSession = Depends(get_session),
 ) -> list[dict[str, Any]]:
     """List structured insights extracted from this interview."""
-    await _get_study_and_verify_access(session, study_id, current_user)
+    study = await _get_study_and_verify_access(session, study_id, current_user)
 
     _require_interview_in_study(
-        await session.get(Conversations, interview_id), study_id, current_user
+        await session.get(Conversations, interview_id), study, current_user
     )
 
     stmt = select(InterviewInsights).where(InterviewInsights.interview_id == interview_id)
@@ -674,7 +756,7 @@ async def _guard_legacy_conversation(
     ``write=True`` uses the stricter write predicate: appending turns to a
     shared-pool conversation is a mutation, and the shared pool is a read pool
     only — otherwise any caller could hijack another visitor's transcript."""
-    predicate = owner_can_write if write else owner_accessible
+    predicate = owner_can_write
     async with request.app.state.db_sessionmaker() as session:
         conv = await session.get(Conversations, conversation_id)
         if conv is None:
@@ -757,7 +839,10 @@ async def post_message(
 
     now_iso = datetime.now(timezone.utc).isoformat()
     try:
-        result = await request.app.state.interview_engine.ask(conversation_id, text.strip())
+        result = await request.app.state.interview_engine.ask(
+            conversation_id, text.strip(), owner_id=_verified_owner(current_user),
+            deadline_at=request.state.interview_deadline_at,
+        )
     except ConversationNotFound as exc:
         raise HTTPException(status_code=404, detail="conversation not found") from exc
     except PersonaNotFound as exc:
@@ -776,6 +861,9 @@ async def post_message(
         "turn_number": turn_num,
         "served_by": served_by,
         "conversation_id": conversation_id,
+        "retrieved_memory_ids": result.get("retrieved_memory_ids", []),
+        "llm_request_id": result.get("llm_request_id"),
+        "provenance": result.get("provenance"),
         "user_message": {
             "role": "user",
             "content": text.strip(),
@@ -788,6 +876,7 @@ async def post_message(
             "latency_ms": result.get("latency_ms"),
             "served_by": served_by,
             "retrieved_memories": result.get("retrieved_memories", []),
+            "retrieved_memory_ids": result.get("retrieved_memory_ids", []),
         },
     }
 
@@ -804,18 +893,43 @@ _BATCH_JOB_TIMEOUT_S = 600.0
 _BATCH_TURN_RETRY_DELAY_S = 20.0  # one provider-wide cooldown window is 30-60 s
 
 
-async def _ask_with_one_retry(engine, conversation_id: str, question: str, entry: dict[str, Any]) -> None:
+async def _ask_with_one_retry(
+    engine, conversation_id: str, question: str, entry: dict[str, Any],
+    *, owner_id: str, deadline_at: float,
+) -> None:
     """One interview turn; a transient route exhaustion (every candidate cooling
     or timing out at once) is retried ONCE after a pause and recorded in the
     job entry. Anything else — and a second exhaustion — propagates: the turn
     is never faked and the interview is marked failed honestly."""
     try:
-        await engine.ask(conversation_id, question)
+        await engine.ask(conversation_id, question, owner_id=owner_id, deadline_at=deadline_at)
     except AllCandidatesFailed:
         entry["retried_turns"] = int(entry.get("retried_turns") or 0) + 1
         logger.info("batch turn exhausted all routes for %s; retrying once in %.0fs", conversation_id, _BATCH_TURN_RETRY_DELAY_S)
-        await asyncio.sleep(_BATCH_TURN_RETRY_DELAY_S)
-        await engine.ask(conversation_id, question)
+        await await_before(asyncio.sleep(_BATCH_TURN_RETRY_DELAY_S), deadline_at)
+        await engine.ask(conversation_id, question, owner_id=owner_id, deadline_at=deadline_at)
+
+
+async def _persist_batch_interruption(
+    app, *, conversation_id: str, owner_id: str, study_id: str, job_id: str, outcome: str,
+) -> None:
+    sessionmaker = getattr(app.state, "db_sessionmaker", None)
+    if sessionmaker is None:
+        raise RuntimeError("Batch interruption persistence requires a database session.")
+    async with sessionmaker() as session:
+        conversation = await session.get(Conversations, conversation_id, with_for_update=True)
+        if conversation is None or conversation.user_id != owner_id or conversation.study_id != study_id:
+            raise ConversationNotFound(conversation_id)
+        if conversation.status == "completed":
+            return
+        finished_at = datetime.now(timezone.utc)
+        conversation.status = outcome
+        conversation.updated_at = finished_at
+        conversation.configuration = {
+            **(conversation.configuration or {}),
+            "batch_execution": {"job_id": job_id, "outcome": outcome, "finished_at": finished_at.isoformat()},
+        }
+        await session.commit()
 
 
 async def _run_batch_job(
@@ -827,8 +941,10 @@ async def _run_batch_job(
     study_goal: str,
     study_prompt: Optional[str],
     user_id: str,
+    *, job_deadline_at: datetime | None = None,
 ) -> None:
     engine = getattr(app.state, "interview_engine", None)
+    deadline = asyncio.get_running_loop().time() + _BATCH_JOB_TIMEOUT_S
     for p in personas:
         entry = job["personas"][p["id"]]
         if engine is None:
@@ -838,22 +954,45 @@ async def _run_batch_job(
             continue
         entry["status"] = "in_progress"
         try:
-            conv = await engine.start(
+            conv = await await_before(engine.start(
                 persona_id=p["id"],
                 objective=study_goal,
                 study_id=study_id,
                 user_id=user_id,
                 custom_objective=study_prompt,
                 length_tier="standard",
-            )
+            ), deadline)
+            entry["interview_id"] = conv.id
             for q in questions:
-                await _ask_with_one_retry(engine, conv.id, q, entry)
-            synthesis = await engine.complete(conv.id)
+                await _ask_with_one_retry(engine, conv.id, q, entry, owner_id=user_id, deadline_at=deadline)
+            synthesis = await engine.complete(conv.id, owner_id=user_id, deadline_at=deadline)
             entry["status"] = "completed"
             entry["interview_id"] = conv.id
             # Rows the database rejected are counted, never silently lost.
             entry["insights_dropped"] = int((synthesis or {}).get("insights_dropped") or 0)
             job["completed_count"] += 1
+        except asyncio.CancelledError:
+            # The job runtime cancels the runner for both an operator cancel and the
+            # batch deadline; past the deadline the honest per-interview outcome is a
+            # timeout failure, not a cancellation. The lease deadline is the runtime's
+            # own clock, so this label cannot disagree with its job_timeout verdict.
+            timed_out = (
+                datetime.now(timezone.utc) >= job_deadline_at if job_deadline_at is not None
+                else asyncio.get_running_loop().time() >= deadline
+            )
+            entry["status"] = "failed" if timed_out else "cancelled"
+            entry["error"] = (
+                "Batch deadline exceeded before this interview completed."
+                if timed_out else "Batch cancelled before this interview completed."
+            )
+            job["failed_count"] += 1
+            if entry.get("interview_id"):
+                await _persist_batch_interruption(
+                    app, conversation_id=entry["interview_id"], owner_id=user_id,
+                    study_id=study_id, job_id=job["job_id"],
+                    outcome="timed_out" if timed_out else "cancelled",
+                )
+            raise
         except Exception as exc:
             logger.warning(
                 "batch-run job %s: interview failed for persona %s",
@@ -862,6 +1001,12 @@ async def _run_batch_job(
             entry["status"] = "failed"
             entry["error"] = f"{exc.__class__.__name__}: interview failed"
             job["failed_count"] += 1
+            if entry.get("interview_id"):
+                await _persist_batch_interruption(
+                    app, conversation_id=entry["interview_id"], owner_id=user_id,
+                    study_id=study_id, job_id=job["job_id"],
+                    outcome="timed_out" if isinstance(exc, TimeoutError) else "failed",
+                )
     job["status"] = "completed" if job["failed_count"] == 0 else (
         "completed_with_failures" if job["completed_count"] > 0 else "failed"
     )
@@ -872,8 +1017,8 @@ async def _run_batch_job(
 @limiter.limit("5/minute")
 async def batch_run_study_interviews(
     study_id: str,
+    request: Request,
     payload: Optional[BatchInterviewRunRequest] = None,
-    request: Request = None,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
@@ -948,6 +1093,9 @@ async def batch_run_study_interviews(
 
     # Detach plain values before the request session closes.
     personas_data = [{"id": p.id, "name": p.name} for p in personas]
+    study_goal = study.goal or "demand_validation"
+    study_prompt = study.prompt
+    await _release_read_session(session)
 
     job: dict[str, Any] = {
         "study_id": study_id,
@@ -970,7 +1118,8 @@ async def batch_run_study_interviews(
         try:
             await _run_batch_job(
                 request.app, job, personas_data, list(questions),
-                study_id, study.goal or "demand_validation", study.prompt, effective_user_id,
+                study_id, study_goal, study_prompt, effective_user_id,
+                job_deadline_at=getattr(getattr(registered_job, "lease", None), "deadline_at", None),
             )
         finally:
             if job["status"] == "running":
@@ -981,8 +1130,15 @@ async def batch_run_study_interviews(
                         job["failed_count"] += 1
                 job["status"] = "completed_with_failures" if job["completed_count"] else "failed"
                 job["finished_at"] = datetime.now(timezone.utc).isoformat()
+            # `result` is only persisted for completed jobs; the per-persona ledger
+            # travels in result_refs so a timed-out or cancelled batch still reports
+            # which interviews finished instead of the admission-time snapshot.
+            registered_job["result_refs"] = {"batch": copy.deepcopy(job)}
 
-    registered_job = start_job(
+    async def _prepare_batch(_session: AsyncSession, admitted_job: dict[str, Any]) -> dict[str, Any]:
+        return {"batch": {**job, "job_id": admitted_job["job_id"]}}
+
+    registered_job = await start_job_async(
         request.app,
         kind="interview_batch",
         scope_id=study_id,
@@ -990,6 +1146,9 @@ async def batch_run_study_interviews(
         user_id=effective_user_id,
         timeout_s=_BATCH_JOB_TIMEOUT_S,
         job_id_prefix="bjob",
+        input_data={"study_id": study_id, "persona_ids": [item["id"] for item in personas_data],
+                "questions": list(questions)},
+        prepare=_prepare_batch,
     )
     job["job_id"] = registered_job["job_id"]
     registered_job["result"] = job
@@ -1007,19 +1166,44 @@ async def batch_run_study_interviews(
 async def get_batch_run_status(
     study_id: str,
     job_id: str,
-    request: Request = None,
+    request: Request,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Poll a batch interview job. 404 for unknown/lost jobs (e.g. after a restart)."""
     await _get_study_and_verify_access(session, study_id, current_user)
-    registered_job = get_job(request.app, job_id, kind="interview_batch", scope_id=study_id)
+    if current_user is None:
+        raise HTTPException(status_code=404, detail="batch job not found")
+    registered_job = await get_job_async(
+        request.app, job_id, kind="interview_batch", scope_id=study_id, user_id=current_user.id,
+    )
     if not registered_job or not owner_can_write(registered_job.get("user_id"), current_user):
         raise HTTPException(status_code=404, detail="batch job not found (it may have been lost in a server restart)")
-    job = registered_job["result"]
+    job = registered_job.get("result") or (registered_job.get("result_refs") or {}).get("batch") or {
+        "study_id": study_id, "total_personas": None, "completed_count": None,
+        "failed_count": None, "personas": {},
+    }
+    # The ledger's own status distinguishes completed / completed_with_failures /
+    # failed for a job the runtime regards as successfully finished.
+    job = {**job, "job_id": registered_job["job_id"],
+           "status": job.get("status") if registered_job["status"] == "completed" and job.get("status") not in (None, "running") else registered_job["status"],
+           "state": registered_job.get("state")}
     if registered_job["status"] == "failed":
+        # A job that timed out or was interrupted before its runner could record
+        # anything still carries the admission-time ledger: settle every interview
+        # that never finished as failed so the counts match the terminal state.
+        personas = {key: dict(entry) for key, entry in (job.get("personas") or {}).items()}
+        for entry in personas.values():
+            if entry.get("status") in ("pending", "in_progress"):
+                entry["status"] = "failed"
+                entry["error"] = registered_job["error"] or "Batch stopped before this interview completed."
+        completed = sum(1 for entry in personas.values() if entry.get("status") == "completed")
         return {
             **job,
+            "status": "completed_with_failures" if completed else "failed",
+            "personas": personas,
+            "completed_count": completed,
+            "failed_count": len(personas) - completed,
             "error": registered_job["error"],
             "error_code": registered_job["error_code"],
             "finished_at": registered_job["finished_at"],
@@ -1035,7 +1219,9 @@ async def get_conversation(
 ) -> dict:
     await _guard_legacy_conversation(request, conversation_id, current_user)
     try:
-        conversation, turns = await request.app.state.interview_engine.transcript(conversation_id)
+        conversation, turns = await request.app.state.interview_engine.transcript(
+            conversation_id, owner_id=current_user.id if current_user else None,
+        )
     except ConversationNotFound as exc:
         raise HTTPException(status_code=404, detail="conversation not found") from exc
     return {

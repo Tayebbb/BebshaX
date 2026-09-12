@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import logging
+import hashlib
+import json
 import uuid
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from typing import Optional, cast
+from typing import Any, Literal, Optional, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from bebshax.api.errors import APIError
+from bebshax.datasets.orm import DatasetVersions
+from bebshax.jobs.orm import DurableJobs
+from bebshax.jobs.runtime import FencedSession, JobContext
+from bebshax.jobs.store import LeaseLost
 from bebshax.utils.safe_errors import safe_error_summary
 from bebshax.db.models import (
     Businesses,
@@ -30,6 +37,9 @@ from bebshax.memory.orm import MemoryItems
 from bebshax.persona.orm import PersonaAttributes, PersonaDetails, PersonaEvidence
 from bebshax.personas.generator import generate_personas_for_study
 from bebshax.personas.ml_adapter import MLPersonaAdapter
+from bebshax.personas.orm import PersonaSourceSelections, PersonaVersions
+from bebshax.personas.source_ledger import release_source_selections, source_exclusions, synchronize_persona_source
+from bebshax.tenancy import PUBLIC_OWNER_IDS, allowed_owner_ids
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +54,161 @@ _ACTIVE_RUN_STATES = (
 # active one; without this cutoff a single interrupted run locked the study
 # out of persona generation until someone deleted the row by hand.
 STALE_RUN_AFTER = timedelta(minutes=30)
+WORKFLOW_PERSONA_FIELDS = (
+    "description", "age", "occupation", "location", "income_range", "education",
+    "role_id", "role_title", "initials", "badges", "attributes", "grounding_ratio",
+    "grounding_basis", "evidence_claim_count", "consistency_score",
+)
+
+
+async def capture_persona_input_versions(session: AsyncSession, study_id: str) -> dict[str, Any]:
+    study = await session.get(Studies, study_id, populate_existing=True)
+    if study is None:
+        raise APIError(404, "Study not found.", error_code="not_found")
+
+    def fingerprint(row: Any) -> str:
+        values = {attribute.key: getattr(row, attribute.key) for attribute in row.__mapper__.column_attrs}
+        return hashlib.sha256(json.dumps(values, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    versions: dict[str, Any] = {"study_revision": study.revision, "study_hash": fingerprint(study)}
+    for model in (MarketSegments, DatasetSources, EvidenceClaims, Personas, PersonaSourceSelections):
+        statement = select(model).where(model.study_id == study_id)
+        if model is Personas:
+            statement = statement.where(Personas.status != "archived")
+        if model is PersonaSourceSelections:
+            statement = statement.where(PersonaSourceSelections.released_at.is_(None))
+        rows = list(await session.scalars(statement.order_by(model.id).execution_options(populate_existing=True)))
+        versions[model.__tablename__] = [{"id": row.id, "hash": fingerprint(row)} for row in rows]
+    published = list(await session.scalars(select(DatasetVersions).join(
+        DatasetSources, (DatasetVersions.dataset_id == DatasetSources.id)
+        & (DatasetVersions.file_path == DatasetSources.file_path)
+        & (DatasetVersions.content_hash == DatasetSources.content_hash),
+    ).where(DatasetSources.study_id == study_id).order_by(DatasetVersions.id)))
+    versions["dataset_versions"] = [{"id": row.id, "version": row.version, "hash": fingerprint(row)} for row in published]
+    return versions
+
+
+async def record_persona_version(
+    session: AsyncSession, persona: Personas, *,
+    legacy_profile: dict[str, Any] | None = None,
+    capture_kind: Literal["generated", "observed_current"] = "generated",
+) -> PersonaVersions:
+    """Append the available version in the caller's transaction; never invent older history."""
+    await session.flush()
+    if not persona.owner_id or persona.version < 1:
+        raise ValueError("A persona version requires an owner and a positive version.")
+    existing = await session.get(PersonaVersions, (persona.id, persona.version))
+    if existing is not None:
+        if existing.owner_id != persona.owner_id:
+            raise ValueError("Persona version owner is immutable.")
+        immutable_fields = (
+            "study_id", "business_id", "generation_run_id", "segment_id",
+            "dataset_persona_run_id", "dataset_version_id", "dataset_segment_key",
+        )
+        old_source = (existing.snapshot.get("detailed_attributes") or {}).get("ml_provenance")
+        new_source = (persona.detailed_attributes or {}).get("ml_provenance")
+        if old_source != new_source or any(
+            existing.snapshot.get(field) != getattr(persona, field) for field in immutable_fields
+        ):
+            raise ValueError("Persona version source and parent lineage are immutable.")
+        await synchronize_persona_source(session, persona, existing)
+        return existing
+    snapshot = {
+        column.name: (
+            value.isoformat() if isinstance(value := getattr(persona, column.name), datetime) else deepcopy(value)
+        )
+        for column in Personas.__table__.columns
+    }
+    version = PersonaVersions(
+        persona_id=persona.id, version=persona.version, owner_id=persona.owner_id,
+        study_id=persona.study_id, snapshot=snapshot, legacy_profile=deepcopy(legacy_profile),
+        capture_kind=capture_kind,
+    )
+    session.add(version)
+    await session.flush()
+    await synchronize_persona_source(session, persona, version)
+    return version
+
+
+async def list_persona_versions(
+    session: AsyncSession, persona_id: str, *, owner_id: str,
+) -> list[PersonaVersions]:
+    return list((await session.scalars(
+        select(PersonaVersions).where(
+            PersonaVersions.persona_id == persona_id, PersonaVersions.owner_id == owner_id,
+        ).order_by(PersonaVersions.version)
+    )).all())
+
+
+async def get_persona_version(
+    session: AsyncSession, persona_id: str, version: int, *, owner_id: str,
+) -> PersonaVersions | None:
+    return (await session.scalars(select(PersonaVersions).where(
+        PersonaVersions.persona_id == persona_id, PersonaVersions.version == version,
+        PersonaVersions.owner_id == owner_id,
+    ))).one_or_none()
+
+
+def serialize_persona(persona: Personas, segment_name: str | None = None) -> dict[str, Any]:
+    """Canonical public representation shared by persona and study endpoints."""
+    detailed = persona.detailed_attributes or {}
+    commercial = persona.commercial_profile or {}
+    result = {
+        column.name: getattr(persona, column.name)
+        for column in Personas.__table__.columns
+        if column.name not in {"owner_id", "business_id"}
+    }
+    for field in (
+        "goals", "needs", "pain_points", "behaviors", "preferences", "motivations",
+        "objections", "evidence_citations", "dataset_refs", "validation_warnings",
+    ):
+        result[field] = result[field] or []
+    for field in ("personality", "demographics", "technology_profile"):
+        result[field] = result[field] or {}
+    result.update(
+        segment_name=segment_name,
+        data_source=persona.data_source or "live",
+        detailed_attributes=detailed,
+        commercial_profile=commercial,
+        domain_attributes=detailed.get("domain_attributes", {}),
+        constraints=detailed.get("constraints") or commercial.get("constraints", {}),
+    )
+    for field in ("created_at", "updated_at"):
+        value = result[field]
+        result[field] = value.isoformat() if value else None
+    projection = detailed.get("workflow_projection")
+    if isinstance(projection, dict):
+        result.update({field: deepcopy(projection[field]) for field in WORKFLOW_PERSONA_FIELDS if field in projection})
+    return result
+
+
+async def canonical_study_persona_states(
+    session: AsyncSession, studies: list[Studies],
+) -> dict[str, dict[str, Any]]:
+    """Build active snapshots in one query, excluding inconsistent cross-tenant rows."""
+    states: dict[str, dict[str, Any]] = {
+        study.id: {"persona_count": 0, "persona_ids": [], "personas_data": []}
+        for study in studies
+    }
+    if not states:
+        return states
+    statement = (
+        select(Personas)
+        .join(Studies, Studies.id == Personas.study_id)
+        .where(
+            Studies.id.in_(states), Personas.status != "archived",
+            Personas.owner_id == func.coalesce(Studies.user_id, "usr_system_holder"),
+        )
+        .order_by(Personas.created_at, Personas.id)
+    )
+    for persona in (await session.scalars(statement)).all():
+        if persona.study_id is None:
+            continue
+        state = states[persona.study_id]
+        state["persona_ids"].append(persona.id)
+        state["personas_data"].append(serialize_persona(persona))
+        state["persona_count"] += 1
+    return states
 
 
 def _run_age(run: PersonaGenerationRuns, now: datetime) -> timedelta:
@@ -58,6 +223,7 @@ def _run_age(run: PersonaGenerationRuns, now: datetime) -> timedelta:
 async def lock_persona_parent(
     session: AsyncSession, *, owner_id: str, study_id: str | None = None,
     business_id: str | None = None, dataset_id: str | None = None,
+    allow_shared_business: bool = False,
 ) -> Studies | Businesses | DatasetSources:
     """Lock one owned parent until commit/rollback; call before exclusions and writes.
 
@@ -72,11 +238,16 @@ async def lock_persona_parent(
     if len(selected) != 1:
         raise ValueError("Exactly one persona parent must be specified.")
     parent_model, parent_id, owner_column = selected[0]
+    if allow_shared_business and business_id is None:
+        raise ValueError("Shared parent access applies only to businesses.")
+    owner_scope = func.coalesce(owner_column, "usr_system_holder") == owner_id
+    if allow_shared_business:
+        owner_scope = owner_column.in_(allowed_owner_ids(owner_id))
     statement = (
         select(parent_model)
         .where(
             parent_model.id == parent_id,
-            func.coalesce(owner_column, "usr_system_holder") == owner_id,
+            owner_scope,
         )
         .with_for_update()
         .execution_options(populate_existing=True)
@@ -110,7 +281,7 @@ async def delete_persona_artifacts(
     ))
     await session.execute(delete(MemoryItems).where(MemoryItems.persona_id.in_(persona_ids)))
     await session.execute(delete(Conversations).where(Conversations.id.in_(conversation_ids)))
-    for model in (PersonaAttributes, PersonaEvidence, PersonaDetails):
+    for model in (PersonaAttributes, PersonaEvidence, PersonaDetails, PersonaSourceSelections, PersonaVersions):
         await session.execute(delete(model).where(model.persona_id.in_(persona_ids)))
     await session.execute(delete(Personas).where(Personas.id.in_(persona_ids)))
     return persona_ids
@@ -119,24 +290,39 @@ async def delete_persona_artifacts(
 async def refresh_study_persona_state(
     session: AsyncSession, *, study: Studies, owner_id: str, removed_ids: set[str],
 ) -> None:
-    """Keep the study's active count and cached persona references consistent after deletion."""
+    """Refresh every derived field inside the caller's parent-locked transaction."""
+    if (study.user_id or "usr_system_holder") != owner_id:
+        raise ValueError("Study not found for this owner.")
     await session.flush()
-    study.persona_count = int(await session.scalar(
-        select(func.count()).select_from(Personas).where(
-            Personas.study_id == study.id, Personas.owner_id == owner_id,
-            Personas.status != "archived",
-        ),
-    ) or 0)
-    study.persona_ids = [persona_id for persona_id in (study.persona_ids or []) if persona_id not in removed_ids]
-    if study.personas_data is not None:
-        study.personas_data = [
-            persona for persona in study.personas_data
-            if not isinstance(persona, dict) or persona.get("id") not in removed_ids
-        ]
+    if owner_id not in PUBLIC_OWNER_IDS:
+        archived_ids = set((await session.scalars(select(Personas.id).where(
+            Personas.study_id == study.id, Personas.owner_id == owner_id, Personas.status == "archived",
+        ))).all())
+        await release_source_selections(
+            session, owner_id=owner_id, study_id=study.id, persona_ids=archived_ids | removed_ids,
+        )
+        dataset_ids = (await session.scalars(select(PersonaSourceSelections.dataset_id).join(
+            DatasetSources, DatasetSources.id == PersonaSourceSelections.dataset_id,
+        ).where(
+            PersonaSourceSelections.owner_id == owner_id,
+            PersonaSourceSelections.scope_owner_id == DatasetSources.user_id,
+            PersonaSourceSelections.persona_id.in_(archived_ids | removed_ids),
+            PersonaSourceSelections.released_at.is_(None),
+            DatasetSources.study_id.is_(None) | (DatasetSources.study_id == study.id),
+        ).distinct())).all()
+        for dataset_id in dataset_ids:
+            await release_source_selections(
+                session, owner_id=owner_id, dataset_id=dataset_id, persona_ids=archived_ids | removed_ids,
+            )
+    state = (await canonical_study_persona_states(session, [study]))[study.id]
+    study.persona_count = state["persona_count"]
+    study.persona_ids = state["persona_ids"]
+    study.personas_data = state["personas_data"]
 
 
 async def active_source_exclusions(
     session: AsyncSession, *, owner_id: str, scope: ColumnElement[bool],
+    study_id: str | None = None, business_id: str | None = None, dataset_id: str | None = None,
 ) -> tuple[set[str], set[str]]:
     exclude_ids: set[str] = set()
     exclude_names: set[str] = set()
@@ -149,6 +335,12 @@ async def active_source_exclusions(
             exclude_ids.add(provenance["record_id"])
         if name:
             exclude_names.add(name)
+    if any(parent is not None for parent in (study_id, business_id, dataset_id)):
+        source_ids, source_names = await source_exclusions(
+            session, owner_id=owner_id, study_id=study_id, business_id=business_id, dataset_id=dataset_id,
+        )
+        exclude_ids.update(source_ids)
+        exclude_names.update(source_names)
     return exclude_ids, exclude_names
 
 
@@ -225,12 +417,22 @@ class PersonaGenerationService:
         target_count: Optional[int] = None,
         distribution_strategy: str = "population_weighted",
         existing_run_id: Optional[str] = None,
+        *, job: JobContext | None = None, expected_input_versions: dict[str, Any] | None = None,
     ) -> tuple[PersonaGenerationRuns, list[Personas]]:
         """Orchestrate and persist a complete synthetic persona generation run."""
+        original_session = self.session
         try:
+            if job is not None:
+                if job.lease.owner_id != user_id or job["scope_id"] != study_id:
+                    raise ValueError("Persona job does not match its owner and study.")
+                if expected_input_versions is not None and await capture_persona_input_versions(self.session, study_id) != expected_input_versions:
+                    raise APIError(409, "Persona inputs changed after admission.", error_code="persona_input_changed")
+                await self.session.rollback()
+                await job.begin_item("persona_generation", input_data={"study_id": study_id, "input_versions": expected_input_versions})
+                self.session = cast(AsyncSession, FencedSession(self.session, job))
             return await self._create_generation_run(
                 study_id, user_id, segmentation_run_id, personas_per_segment,
-                target_count, distribution_strategy, existing_run_id,
+                target_count, distribution_strategy, existing_run_id, job, expected_input_versions,
             )
         except IntegrityError as exc:
             await self.session.rollback()
@@ -240,16 +442,21 @@ class PersonaGenerationService:
         except BaseException:
             await self.session.rollback()
             raise
+        finally:
+            self.session = original_session
 
     async def _create_generation_run(
         self, study_id: str, user_id: Optional[str], segmentation_run_id: Optional[str],
         personas_per_segment: Optional[int], target_count: Optional[int],
         distribution_strategy: str, existing_run_id: Optional[str],
+        job: JobContext | None = None, expected_input_versions: dict[str, Any] | None = None,
     ) -> tuple[PersonaGenerationRuns, list[Personas]]:
         owner_id = user_id or "usr_system_holder"
         study = cast(Studies, await lock_persona_parent(
             self.session, owner_id=owner_id, study_id=study_id,
         ))
+        if expected_input_versions is not None and await capture_persona_input_versions(self.session, study_id) != expected_input_versions:
+            raise APIError(409, "Persona inputs changed after admission.", error_code="persona_input_changed")
         run = None
         if existing_run_id is not None:
             run = await self.get_run(study_id, existing_run_id, user_id)
@@ -367,6 +574,11 @@ class PersonaGenerationService:
         run.started_at = _utcnow()
         run.completed_at = None
         run.error_message = None
+        if job is not None:
+            run.configuration = {**run.configuration, "job_id": job["job_id"], "input_versions": expected_input_versions}
+            await self.session.flush()
+            job["result_refs"] = {"run_id": run_id}
+            await self.session.execute(update(DurableJobs).where(DurableJobs.id == job["job_id"]).values(result_refs={"run_id": run_id}))
         await self.session.commit()
 
         # Step 6: Generate Personas
@@ -379,7 +591,7 @@ class PersonaGenerationService:
                 ))
                 await self._require_generating_run(study_id, run_id, user_id)
                 exclude_ids, exclude_names = await active_source_exclusions(
-                    self.session, owner_id=owner_id,
+                    self.session, owner_id=owner_id, study_id=study_id,
                     scope=Personas.study_id == study_id,
                 )
             drafts = await generate_personas_for_study(
@@ -400,6 +612,8 @@ class PersonaGenerationService:
                     self.session, owner_id=owner_id, study_id=study_id,
                 ))
                 await self._require_generating_run(study_id, run_id, user_id)
+            if expected_input_versions is not None and await capture_persona_input_versions(self.session, study_id) != expected_input_versions:
+                raise APIError(409, "Persona inputs changed during generation.", error_code="persona_input_changed")
             run.status = "saving_personas"
 
             persisted_personas: list[Personas] = []
@@ -431,7 +645,7 @@ class PersonaGenerationService:
                     archetype=draft.archetype,
                     tagline=draft.tagline,
                     country_code=draft.country_code,
-                    personality=draft.personality,
+                    personality=draft.personality or {},
                     detailed_attributes=draft.detailed_attributes,
                     demographics=draft.demographics,
                     bio=draft.bio,
@@ -471,20 +685,24 @@ class PersonaGenerationService:
 
             # Update study step & count
             await self.session.flush()
-            study.persona_count = await self.session.scalar(
-                select(func.count()).select_from(Personas).where(
-                    Personas.study_id == study_id,
-                    Personas.owner_id == (user_id or "usr_system_holder"),
-                    Personas.status != "archived",
-                )
+            for persona in persisted_personas:
+                await record_persona_version(self.session, persona)
+            await refresh_study_persona_state(
+                self.session, study=study, owner_id=owner_id, removed_ids=set(),
             )
             study.step = max(study.step, 3)
 
+            if job is not None:
+                references = {"run_id": run_id, "persona_versions": [{"id": persona.id, "version": persona.version} for persona in persisted_personas]}
+                await job.complete_item("persona_generation", result_refs=references, session=self.session)
+                job["result_refs"] = references
             await self.session.commit()
             return run, persisted_personas
 
         except Exception as exc:
             await self.session.rollback()
+            if isinstance(exc, LeaseLost):
+                raise
             failed_run = await self.get_run(study_id, run_id, user_id)
             error_summary = safe_error_summary(exc)
             if failed_run is not None:
@@ -492,7 +710,7 @@ class PersonaGenerationService:
                 failed_run.error_message = error_summary
                 failed_run.completed_at = _utcnow()
             logger.error(
-                "persona generation run %s failed: %s", run_id, error_summary, exc_info=True
+                "persona generation run %s failed: %s", run_id, error_summary
             )
             await self.session.commit()
             raise
@@ -522,11 +740,15 @@ class PersonaGenerationService:
         """List study personas with optional filters and pagination."""
         stmt = (
             select(Personas)
-            .where(Personas.study_id == study_id)
+            .join(Studies, Studies.id == Personas.study_id)
+            .where(
+                Personas.study_id == study_id,
+                Personas.owner_id == func.coalesce(Studies.user_id, "usr_system_holder"),
+            )
             .order_by(Personas.created_at.desc())
         )
         if user_id:
-            stmt = stmt.where(Personas.user_id == user_id)
+            stmt = stmt.where(Personas.owner_id == user_id)
         if segment_id:
             stmt = stmt.where(Personas.segment_id == segment_id)
         if status:
@@ -549,12 +771,13 @@ class PersonaGenerationService:
         self, study_id: str, persona_id: str, user_id: Optional[str] = None
     ) -> Optional[Personas]:
         """Get a single persona by ID with ownership verification."""
-        stmt = select(Personas).where(
+        stmt = select(Personas).join(Studies, Studies.id == Personas.study_id).where(
             Personas.id == persona_id,
             Personas.study_id == study_id,
+            Personas.owner_id == func.coalesce(Studies.user_id, "usr_system_holder"),
         )
         if user_id:
-            stmt = stmt.where(Personas.user_id == user_id)
+            stmt = stmt.where(Personas.owner_id == user_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -603,7 +826,7 @@ class PersonaGenerationService:
         exclude_names: set[str] = set()
         if self.ml_generator is not None:
             exclude_ids, exclude_names = await active_source_exclusions(
-                self.session, owner_id=owner_id,
+                self.session, owner_id=owner_id, study_id=study_id,
                 scope=Personas.study_id == study_id,
             )
         else:
@@ -629,6 +852,7 @@ class PersonaGenerationService:
                 if current_persona.version != previous_version:
                     raise APIError(409, "The persona changed during regeneration.", error_code="data_integrity")
                 persona = current_persona
+            await record_persona_version(self.session, persona, capture_kind="observed_current")
             draft = drafts[0]
             persona.version += 1
             persona.name = draft.name
@@ -636,7 +860,7 @@ class PersonaGenerationService:
             persona.archetype = draft.archetype
             persona.tagline = draft.tagline
             persona.country_code = draft.country_code
-            persona.personality = draft.personality
+            persona.personality = draft.personality or {}
             persona.detailed_attributes = draft.detailed_attributes
             persona.demographics = draft.demographics
             persona.bio = draft.bio
@@ -657,6 +881,11 @@ class PersonaGenerationService:
             persona.status = draft.status
             persona.validation_warnings = draft.validation_warnings
             persona.updated_at = _utcnow()
+            await record_persona_version(self.session, persona)
+            if study is not None:
+                await refresh_study_persona_state(
+                    self.session, study=study, owner_id=owner_id, removed_ids=set(),
+                )
             await self.session.commit()
         else:
             await self.session.commit()

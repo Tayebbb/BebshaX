@@ -34,14 +34,14 @@ async def test_happy_path_single_generation_call(evidence_store, persona_json) -
 
 
 async def test_schema_invalid_output_gets_one_refinement(evidence_store, persona_json) -> None:
-    engine, adapter = _engine(["this is not json at all", persona_json()], evidence_store)
+    engine, adapter = _engine(['{"name":"Incomplete persona"}', persona_json()], evidence_store)
     profile = await engine.generate("b1", "QuickBite", "Online food delivery")
     assert profile.name == "Rina Akter"
     assert _tasks(adapter) == [TaskType.PERSONA_GENERATION, TaskType.PERSONA_REFINEMENT]
 
 
 async def test_schema_invalid_twice_fails_explicitly(evidence_store) -> None:
-    engine, adapter = _engine(["nope", "still nope"], evidence_store)
+    engine, adapter = _engine(['{"name":"Incomplete persona"}', '{"name":"Still incomplete"}'], evidence_store)
     with pytest.raises(PersonaGenerationFailed):
         await engine.generate("b1", "QuickBite", "Online food delivery")
     assert _tasks(adapter) == [TaskType.PERSONA_GENERATION, TaskType.PERSONA_REFINEMENT]

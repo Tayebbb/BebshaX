@@ -131,7 +131,7 @@ async def test_complete_stores_an_insight_whose_type_overflows_the_column(
         ]
     )
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Pricing objections")
+    conversation = await engine.start(stored_persona.id, "Pricing objections", user_id="test-interview-owner")
     await engine.ask(conversation.id, "What decides whether you order?")
 
     synthesis = await engine.complete(conversation.id)
@@ -184,7 +184,7 @@ async def test_a_row_the_database_rejects_is_dropped_visibly_and_the_interview_s
         ]
     )
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Pain points")
+    conversation = await engine.start(stored_persona.id, "Pain points", user_id="test-interview-owner")
     await engine.ask(conversation.id, "What frustrates you most?")
 
     synthesis = await engine.complete(conversation.id)  # must not raise

@@ -7,7 +7,7 @@ import pytest
 
 from bebshax.api import interviews as interviews_api
 from bebshax.api.auth import get_optional_current_user
-from bebshax.api.jobs import start_job
+from bebshax.api.jobs import start_job_async
 from bebshax.auth.models import Users
 from bebshax.db.models import Personas, Studies
 from bebshax.interview.orm import Conversations
@@ -35,8 +35,8 @@ def _jobs_finished(client, timeout_s=2.0):
 
 @pytest.fixture
 async def exhibition_batch_case(api_test_app, monkeypatch):
-    owner = Users(id="exhibition_batch_owner", email="batch-owner@example.test", full_name="Batch Owner")
-    visitor = Users(id="exhibition_batch_visitor", email="batch-visitor@example.test", full_name="Batch Visitor")
+    owner = Users(id="exhibition_batch_owner", email="batch-owner@example.test", full_name="Batch Owner", is_verified=True)
+    visitor = Users(id="exhibition_batch_visitor", email="batch-visitor@example.test", full_name="Batch Visitor", is_verified=True)
     async with api_test_app.app.state.db_sessionmaker() as session:
         session.add_all([owner, visitor])
         await session.flush()
@@ -92,9 +92,9 @@ def test_batch_respects_jobs_running_in_other_features(exhibition_batch_case):
 
     async def seed_jobs():
         for index in range(3):
-            start_job(
+            await start_job_async(
                 client.app, kind="persona_generation", scope_id=f"synthetic_scope_{index}",
-                runner=blocked_job, user_id=users["owner"].id,
+                runner=blocked_job, user_id=users["owner"].id, input_data={"index": index},
             )
 
     client.portal.call(seed_jobs)
@@ -150,9 +150,9 @@ def test_running_jobs_are_not_evicted_out_of_the_admission_count(exhibition_batc
 
     async def seed_jobs():
         for index in range(51):
-            start_job(
+            await start_job_async(
                 client.app, kind="persona_generation", scope_id=f"synthetic_scope_{index}",
-                runner=blocked_job,
+                runner=blocked_job, input_data={"index": index},
                 user_id=users["owner"].id if index < 3 else f"synthetic_owner_{index}",
             )
 
@@ -191,7 +191,7 @@ def test_batch_terminal_status_and_counts_remain_compatible(
 ):
     client, _ = exhibition_batch_case
 
-    async def answer(conversation_id, question):
+    async def answer(conversation_id, question, **_governance):
         async with client.app.state.db_sessionmaker() as session:
             conversation = await session.get(Conversations, conversation_id)
             if conversation.persona_id in failed_personas:
@@ -287,7 +287,7 @@ def test_batch_cancellation_preserves_completed_interviews(exhibition_batch_case
     second_started = asyncio.Event()
     calls = 0
 
-    async def answer_then_block(conversation_id, question):
+    async def answer_then_block(conversation_id, question, **_governance):
         nonlocal calls
         calls += 1
         if calls == 2:
@@ -313,7 +313,8 @@ def test_batch_cancellation_preserves_completed_interviews(exhibition_batch_case
     assert job["status"] == "completed_with_failures"
     assert job["completed_count"] == job["failed_count"] == 1
     assert job["finished_at"] is not None
-    assert sorted(entry["status"] for entry in job["personas"].values()) == ["completed", "failed"]
+    # The interrupted interview is reported as cancelled (counted as a failure), never faked.
+    assert sorted(entry["status"] for entry in job["personas"].values()) == ["cancelled", "completed"]
 
 
 def test_batch_rejects_persona_belonging_to_another_study(exhibition_batch_case):

@@ -126,6 +126,7 @@ async def test_404_envelope_has_error_code_and_request_id(api_test_app: TestClie
 async def test_422_envelope_keeps_pydantic_detail_and_adds_message(api_test_app: TestClient):
     # `message` must be a string (title too long) — the frontend showed
     # "[object Object]" when it rendered the raw pydantic list.
+    await _seed_interview_fixture(api_test_app.app)
     resp = api_test_app.post(
         "/api/studies", json={"title": "x" * 257, "prompt": "ok"}, headers=_owner_headers()
     )
@@ -140,6 +141,7 @@ async def test_422_envelope_keeps_pydantic_detail_and_adds_message(api_test_app:
 async def test_duplicate_client_supplied_id_is_409_not_500(api_test_app: TestClient):
     """IntegrityError → 409 conflict. Audiences are the write path that still
     honours a client id (study ids are always server-generated, see below)."""
+    await _seed_interview_fixture(api_test_app.app)
     payload = {"id": "aud_dup_1", "name": "Dup", "persona_ids": []}
     first = api_test_app.post("/api/audiences", json=payload, headers=_owner_headers())
     assert first.status_code == 201
@@ -154,6 +156,7 @@ async def test_duplicate_client_supplied_id_is_409_not_500(api_test_app: TestCli
 async def test_client_supplied_study_id_is_ignored_on_create(api_test_app: TestClient):
     """The frontend never sends an id on create; a caller-picked primary key
     let one visitor collide with (or probe for) another's study."""
+    await _seed_interview_fixture(api_test_app.app)
     first = api_test_app.post(
         "/api/studies", json={"id": "study_mine", "prompt": "A"}, headers=_owner_headers()
     )
@@ -296,9 +299,10 @@ async def test_dataset_upload_route_is_exempt_from_the_global_body_cap(api_test_
         data={"name": "Big"},
         headers=_owner_headers(),
     )
-    # Reached the route: the parser's row cap answers 400, not the global 413.
-    assert resp.status_code == 400, resp.text
-    assert resp.json()["error_code"] == "bad_request"
+    # Reached the route: the parser's own row cap answers with its specific code,
+    # never the global `payload_too_large` envelope.
+    assert resp.status_code == 413, resp.text
+    assert resp.json()["error_code"] == "dataset_limits_exceeded"
 
 
 async def test_rate_limited_envelope_has_request_id_and_error_code(api_test_app: TestClient):
@@ -336,7 +340,28 @@ def _bare_app() -> FastAPI:
     async def typed():
         raise APIError(409, "Already running.", error_code="run_in_progress", extra={"run_id": "r1"})
 
+    @app.post("/stale")
+    async def stale():
+        from sqlalchemy.orm.exc import StaleDataError
+
+        raise StaleDataError("UPDATE statement on table 'studies' expected to update 1 row(s); 0 were matched.")
+
     return app
+
+
+def test_lost_revision_race_is_a_409_write_conflict_not_a_500(caplog):
+    """Persona generation once answered 500 when a queued study PATCH bumped the
+    revision counter mid-save; the caller must get a retryable conflict."""
+    client = TestClient(_bare_app(), raise_server_exceptions=False)
+    with caplog.at_level("WARNING"):
+        resp = client.post("/stale", headers={"X-Request-ID": "race-1"})
+    assert resp.status_code == 409
+    body = resp.json()
+    assert body["error_code"] == "write_conflict"
+    assert body["request_id"] == "race-1"
+    assert "Reload and try again" in body["detail"]
+    assert "studies" not in resp.text
+    assert any("race-1" in rec.getMessage() for rec in caplog.records)
 
 
 def test_unhandled_exception_is_generic_500_with_request_id(caplog):

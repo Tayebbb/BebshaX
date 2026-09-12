@@ -88,7 +88,7 @@ async def test_full_history_reaches_the_model_without_dropping_or_shortening_tur
     ]
     llm, adapter = await _roomy_llm(llm_factory, replies)
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Keep the full meal-planning history")
+    conversation = await engine.start(stored_persona.id, "Keep the full meal-planning history", user_id="test-interview-owner")
     async with session_maker() as session:
         stored = await session.get(Conversations, conversation.id)
         assert stored is not None
@@ -141,11 +141,12 @@ async def test_identity_prompt_preserves_every_item_in_lists_longer_than_four(
         assert persona is not None
         for field, values in identity_lists.items():
             setattr(persona, field, values)
+        persona.version += 1
         await session.commit()
 
     llm, adapter = await _roomy_llm(llm_factory, ["I compare meal options.", "I plan ahead."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Explore the complete identity")
+    conversation = await engine.start(stored_persona.id, "Explore the complete identity", user_id="test-interview-owner")
     await engine.ask(conversation.id, "How do you choose dinner?")
     await engine.ask(conversation.id, "What else matters to you?")
 
@@ -183,11 +184,12 @@ async def test_evidence_prompt_preserves_every_citation_and_full_claim(
         persona = await session.get(Personas, stored_persona.id)
         assert persona is not None
         persona.evidence_citations = citations
+        persona.version += 1
         await session.commit()
 
     llm, adapter = await _roomy_llm(llm_factory, ["I compare delivery options."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Retain all supplied evidence")
+    conversation = await engine.start(stored_persona.id, "Retain all supplied evidence", user_id="test-interview-owner")
     await engine.ask(conversation.id, "What matters when ordering dinner?")
 
     assert len(adapter.requests) == 1
@@ -211,7 +213,7 @@ async def test_second_memory_failure_rolls_back_turns_counters_and_first_memory(
     reply = "I compare meal prices and choose affordable delivery."
     llm, adapter = await _roomy_llm(llm_factory, [reply])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Atomic meal-budget interview")
+    conversation = await engine.start(stored_persona.id, "Atomic meal-budget interview", user_id="test-interview-owner")
     before = await _persisted_state(session_maker, conversation)
     assert before["turns"] == before["memories"] == []
     assert (before["conversation"]["turn_count"], before["conversation"]["question_count"]) == (0, 0)
@@ -252,7 +254,7 @@ async def test_changed_persona_version_fails_before_llm_or_interview_writes(
 ) -> None:
     llm, adapter = await _roomy_llm(llm_factory, ["This reply must never be requested."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Keep the starting persona version")
+    conversation = await engine.start(stored_persona.id, "Keep the starting persona version", user_id="test-interview-owner")
     before = await _persisted_state(session_maker, conversation)
     assert before["turns"] == before["memories"] == []
     assert (before["conversation"]["turn_count"], before["conversation"]["question_count"]) == (0, 0)
@@ -302,7 +304,7 @@ async def test_complete_waits_for_in_flight_ask_and_synthesizes_its_committed_tu
         [reply, json.dumps({"summary": summary, "key_findings": [summary], "insights": []})],
     )
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Complete only after the current exchange")
+    conversation = await engine.start(stored_persona.id, "Complete only after the current exchange", user_id="test-interview-owner")
     model_entered = asyncio.Event()
     release_reply = asyncio.Event()
     completion_waiting = asyncio.Event()
@@ -372,7 +374,7 @@ async def test_in_flight_turn_rejects_changed_snapshot_without_writing(
 ) -> None:
     llm, adapter = await _roomy_llm(llm_factory, ["This stale reply must not be stored."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Preserve the starting snapshot")
+    conversation = await engine.start(stored_persona.id, "Preserve the starting snapshot", user_id="test-interview-owner")
     entered = asyncio.Event()
     release = asyncio.Event()
     original_complete = llm.complete
@@ -425,7 +427,7 @@ async def test_different_engines_reject_a_stale_reply_after_another_exchange_com
     winner_llm, _ = await _roomy_llm(llm_factory, ["I compare meal prices."])
     stale_engine = InterviewEngine(stale_llm, session_maker, memory=memory_service)
     winner_engine = InterviewEngine(winner_llm, session_maker, memory=memory_service)
-    conversation = await stale_engine.start(stored_persona.id, "Concurrent meal planning")
+    conversation = await stale_engine.start(stored_persona.id, "Concurrent meal planning", user_id="test-interview-owner")
     entered = asyncio.Event()
     release = asyncio.Event()
 
@@ -493,7 +495,7 @@ async def test_successful_completion_is_idempotent_across_engines(
     })
     llm, adapter = await _roomy_llm(llm_factory, ["I compare meal prices.", synthesis])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Complete once")
+    conversation = await engine.start(stored_persona.id, "Complete once", user_id="test-interview-owner")
     if not empty:
         await engine.ask(conversation.id, "How do you choose meals?")
     first = await engine.complete(conversation.id)
@@ -518,7 +520,7 @@ async def test_failed_synthesis_can_retry_then_success_is_idempotent(
         json.dumps({"summary": "The participant compares prices.", "insights": []}),
     ])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Recover synthesis")
+    conversation = await engine.start(stored_persona.id, "Recover synthesis", user_id="test-interview-owner")
     await engine.ask(conversation.id, "How do you choose dinner?")
     failed = await engine.complete(conversation.id)
     assert failed["source"] == "unavailable"
@@ -540,7 +542,7 @@ async def test_completion_rejects_persona_version_changes_without_writes(
         "I compare prices.", json.dumps({"summary": "A stale synthesis.", "insights": []}),
     ])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Preserve synthesis identity")
+    conversation = await engine.start(stored_persona.id, "Preserve synthesis identity", user_id="test-interview-owner")
     await engine.ask(conversation.id, "How do you choose dinner?")
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -595,7 +597,7 @@ async def test_stale_completion_cannot_overwrite_another_engine_commit(
     second_llm, _ = await _roomy_llm(llm_factory, [second_reply])
     first_engine = InterviewEngine(first_llm, session_maker, memory=memory_service)
     second_engine = InterviewEngine(second_llm, session_maker, memory=memory_service)
-    conversation = await first_engine.start(stored_persona.id, "Do not overwrite concurrent work")
+    conversation = await first_engine.start(stored_persona.id, "Do not overwrite concurrent work", user_id="test-interview-owner")
     await first_engine.ask(conversation.id, "How do you plan meals?")
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -639,7 +641,6 @@ async def test_all_interview_prompts_preserve_full_context_outside_transactions(
     }
     llm, adapter = await _roomy_llm(llm_factory, [replies[operation]])
     engine = InterviewEngine(llm, session_maker, suggest_questions=True)
-    conversation = await engine.start(stored_persona.id, "Keep every supplied context item")
     identity_lists = {
         field: [f"{field} identity value {number} sentinel" for number in range(7)]
         for field in ("goals", "pain_points", "objections", "behaviors")
@@ -649,6 +650,20 @@ async def test_all_interview_prompts_preserve_full_context_outside_transactions(
         "claim": f"Claim {number} " + "Complete meal planning evidence. " * 20 + f"claim tail {number}",
     } for number in range(7)]
     segment_traits = {f"trait_{number}": f"Segment identity trait {number}" for number in range(6)}
+    async with session_maker() as session:
+        persona = await session.get(Personas, stored_persona.id)
+        for field, values in identity_lists.items():
+            setattr(persona, field, values)
+        persona.evidence_citations = citations
+        persona.segment_id = "segment-full-context"
+        persona.version += 1
+        session.add(MarketSegments(
+            id=persona.segment_id, study_id="study-full-context", name="Meal planners",
+            segmentation_run_id="segmentation-full-context", description="Synthetic meal planners",
+            population_percentage=100.0, population_count=10, characteristics=segment_traits,
+        ))
+        await session.commit()
+    conversation = await engine.start(stored_persona.id, "Keep every supplied context item", user_id="test-interview-owner")
     history = [
         ConversationTurns(
             id=f"full-context-turn-{number}", conversation_id=conversation.id,
@@ -658,16 +673,6 @@ async def test_all_interview_prompts_preserve_full_context_outside_transactions(
         for number in range(8)
     ]
     async with session_maker() as session:
-        persona = await session.get(Personas, stored_persona.id)
-        for field, values in identity_lists.items():
-            setattr(persona, field, values)
-        persona.evidence_citations = citations
-        persona.segment_id = "segment-full-context"
-        session.add(MarketSegments(
-            id=persona.segment_id, study_id="study-full-context", name="Meal planners",
-            segmentation_run_id="segmentation-full-context", description="Synthetic meal planners",
-            population_percentage=100.0, population_count=10, characteristics=segment_traits,
-        ))
         session.add_all(history)
         stored = await session.get(Conversations, conversation.id)
         stored.turn_count = 8
@@ -696,14 +701,17 @@ async def test_all_interview_prompts_preserve_full_context_outside_transactions(
         if operation == "ask":
             await engine.ask(conversation.id, "How do you choose dinner?")
         elif operation == "suggest":
-            await engine.generate_suggested_questions(stored, persona, history)
+            await engine.refresh_suggestions(
+                conversation.id, owner_id="test-interview-owner", expected_turn_count=8,
+                persona_version=conversation.persona_version,
+            )
         else:
             await engine.complete(conversation.id)
     finally:
         event.remove(async_engine.sync_engine, "begin", opened)
         event.remove(async_engine.sync_engine, "commit", closed)
         event.remove(async_engine.sync_engine, "rollback", closed)
-    assert len(adapter.requests) == (2 if operation == "ask" else 1)
+    assert len(adapter.requests) == 1
     for request in adapter.requests:
         assert request.persona_id == stored_persona.id
         assert request.conversation_id == conversation.id
@@ -723,7 +731,7 @@ async def test_both_memories_share_the_finalization_session_and_one_commit(
 ) -> None:
     llm, _ = await _roomy_llm(llm_factory, ["I compare meal prices."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "One exchange transaction")
+    conversation = await engine.start(stored_persona.id, "One exchange transaction", user_id="test-interview-owner")
     write_sessions = []
     commits = []
     original_remember = memory_service.remember
@@ -759,7 +767,7 @@ async def test_legacy_profile_projection_cannot_hide_canonical_version_change(
 ) -> None:
     llm, adapter = await _roomy_llm(llm_factory, ["This must not be requested."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Canonical identity version")
+    conversation = await engine.start(stored_persona.id, "Canonical identity version", user_id="test-interview-owner")
     async with session_maker() as session:
         await session.execute(update(Personas).where(Personas.id == stored_persona.id)
                               .values(demographics={}, version=Personas.version + 1))

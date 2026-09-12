@@ -47,8 +47,8 @@ async def test_segmentation_multi_user_idor_isolation():
 
     # 1. Create User A and User B
     async with session_maker() as session:
-        user_a = Users(id="usr_a_seg", email="usera_seg@example.com", full_name="User A", hashed_password="pw")
-        user_b = Users(id="usr_b_seg", email="userb_seg@example.com", full_name="User B", hashed_password="pw")
+        user_a = Users(id="usr_a_seg", email="usera_seg@example.com", full_name="User A", hashed_password="pw", is_verified=True)
+        user_b = Users(id="usr_b_seg", email="userb_seg@example.com", full_name="User B", hashed_password="pw", is_verified=True)
         session.add_all([user_a, user_b])
         await session.commit()
 

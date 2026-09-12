@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bebshax.api.auth import get_optional_current_user
+from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.api.deps import get_session, require_study_access, user_owns_study
+from bebshax.api.errors import APIError
+from bebshax.api.jobs import cancel_job_async, get_job_async, start_job_async
 from bebshax.api.limiter import limiter
 from bebshax.auth.models import Users
 from bebshax.db.models import (
@@ -22,6 +26,7 @@ from bebshax.db.models import (
 )
 from bebshax.research.service import ResearchEngineService
 from bebshax.research.vector_search import VectorSearchEngine
+from bebshax.jobs.runtime import JobContext
 
 router = APIRouter(prefix="/studies", tags=["evidence"])
 
@@ -39,6 +44,7 @@ class SemanticSearchRequest(BaseModel):
 def _serialize_run(r: ResearchRuns) -> dict[str, Any]:
     return {
         "id": r.id,
+        "job_id": ((r.step_progress or {}).get("summary") or {}).get("job_id"),
         "study_id": r.study_id,
         "user_id": r.user_id,
         "status": r.status,
@@ -101,13 +107,14 @@ def _serialize_claim(c: EvidenceClaims) -> dict[str, Any]:
     }
 
 
-@router.post("/{study_id}/research", status_code=status.HTTP_201_CREATED)
+@router.post("/{study_id}/research", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("20/minute")
 async def start_study_research(
     study_id: str,
     request: Request,
-    current_user: Optional[Users] = Depends(get_optional_current_user),
+    current_user: Users = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", min_length=1, max_length=200),
 ) -> dict[str, Any]:
     """Trigger a new autonomous evidence and dataset research run for a study."""
     study = await session.get(Studies, study_id)
@@ -121,11 +128,82 @@ async def start_study_research(
     # Deployments/tests may pin the evidence provider (e.g. an offline sample
     # corpus); the default is the live keyless Wikipedia provider.
     search_provider = getattr(request.app.state, "research_search_provider", None)
-    service = ResearchEngineService(llm_service=llm_service, search_provider=search_provider)
-    effective_user_id = current_user.id if current_user else study.user_id
+    service = getattr(request.app.state, "research_engine", None)
+    if service is None:
+        service = ResearchEngineService(llm_service=llm_service, search_provider=search_provider)
+        request.app.state.research_engine = service
+        register = getattr(request.app.state, "register_runtime_resource", None)
+        if callable(register) and callable(getattr(service, "aclose", None)):
+            register(service)
+    owner_id = current_user.id
+    study_input = {name: getattr(study, name) for name in (
+        "id", "user_id", "title", "prompt", "target_audience", "pricing_hypothesis", "revision",
+    )}
+    run_id = f"run_{uuid.uuid4().hex[:16]}"
+    maker = request.app.state.db_sessionmaker
+    await session.rollback()
 
-    run = await service.run_study_research(session, study, user_id=effective_user_id)
+    async def prepare(db_session: AsyncSession, job: dict[str, Any]) -> dict[str, Any]:
+        current = await db_session.scalar(select(Studies).where(
+            Studies.id == study_id, Studies.user_id == owner_id,
+        ).with_for_update())
+        if current is None:
+            raise APIError(404, "Study not found.", error_code="not_found")
+        if any(getattr(current, name) != value for name, value in study_input.items()):
+            raise APIError(409, "The study changed before research admission.", error_code="research_input_changed")
+        db_session.add(ResearchRuns(
+            id=run_id, study_id=study_id, user_id=owner_id, status="queued", current_step="queued",
+            step_progress={"summary": {"job_id": job["job_id"]}},
+        ))
+        return {"run_id": run_id}
+
+    async def runner(job: JobContext) -> None:
+        async with maker() as work_session:
+            run = await service.run_study_research(
+                work_session, Studies(**study_input), user_id=owner_id,
+                job=job, run_id=job["result_refs"]["run_id"],
+            )
+            job["result"] = _serialize_run(run)
+
+    job = await start_job_async(
+        request.app, kind="research_generation", scope_id=study_id, user_id=owner_id,
+        input_data={"study": study_input}, idempotency_key=idempotency_key, prepare=prepare, runner=runner,
+    )
+    run = await session.get(ResearchRuns, job["result_refs"]["run_id"])
+    if run is None:
+        raise APIError(404, "Research run is no longer available.", error_code="not_found")
     return _serialize_run(run)
+
+
+async def _reconcile_research_job(app: Any, job: dict[str, Any]) -> None:
+    if job["state"] not in {"failed", "cancelled", "interrupted", "timed_out"}:
+        return
+    run_id = (job.get("result_refs") or {}).get("run_id")
+    if not run_id:
+        return
+    async with app.state.db_sessionmaker() as session, session.begin():
+        await session.execute(update(ResearchRuns).where(
+            ResearchRuns.id == run_id, ResearchRuns.study_id == job["scope_id"], ResearchRuns.user_id == job["user_id"],
+            ResearchRuns.status.notin_(("completed", "failed", "cancelled", "interrupted", "timed_out")),
+        ).values(status=job["state"], current_step=job["state"], error_message=job["error"], completed_at=datetime.now(timezone.utc)))
+
+
+@router.get("/{study_id}/research/jobs/{job_id}")
+async def get_research_job(study_id: str, job_id: str, request: Request, current_user: Users = Depends(get_current_user)) -> dict[str, Any]:
+    job = await get_job_async(request.app, job_id, kind="research_generation", scope_id=study_id, user_id=current_user.id)
+    if job is None:
+        raise APIError(404, "Research job not found.", error_code="not_found")
+    await _reconcile_research_job(request.app, job)
+    return job
+
+
+@router.post("/{study_id}/research/jobs/{job_id}/cancel")
+async def cancel_research_job(study_id: str, job_id: str, request: Request, current_user: Users = Depends(get_current_user)) -> dict[str, Any]:
+    job = await cancel_job_async(request.app, job_id, kind="research_generation", scope_id=study_id, user_id=current_user.id)
+    if job is None:
+        raise APIError(404, "Research job not found.", error_code="not_found")
+    await _reconcile_research_job(request.app, job)
+    return job
 
 
 @router.get("/{study_id}/research")
@@ -167,6 +245,7 @@ async def get_study_research_plan(
 async def get_study_research_run(
     study_id: str,
     run_id: str,
+    request: Request,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
@@ -179,6 +258,15 @@ async def get_study_research_run(
     if not run or run.study_id != study_id:
         raise HTTPException(status_code=404, detail=f"Research run '{run_id}' not found")
 
+    job_id = ((run.step_progress or {}).get("summary") or {}).get("job_id")
+    if request is not None and job_id and current_user is not None:
+        await session.rollback()
+        job = await get_job_async(request.app, job_id, kind="research_generation", scope_id=study_id, user_id=current_user.id)
+        if job is not None:
+            await _reconcile_research_job(request.app, job)
+        run = await session.get(ResearchRuns, run_id, populate_existing=True)
+        if run is None:
+            raise APIError(404, "Research run not found.", error_code="not_found")
     return _serialize_run(run)
 
 

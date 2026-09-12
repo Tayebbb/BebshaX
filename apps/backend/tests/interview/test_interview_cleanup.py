@@ -41,7 +41,7 @@ async def test_abandoned_stream_closes_router_and_releases_conversation_lock(
         on_provenance=records.append,
     )
     engine = InterviewEngine(router, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Stream cleanup")
+    conversation = await engine.start(stored_persona.id, "Stream cleanup", user_id="test-interview-owner")
     closed = asyncio.Event()
     suspended = asyncio.Event()
     release = asyncio.Event()
@@ -94,7 +94,7 @@ async def test_cancellation_during_llm_releases_lock_without_new_turns(
 ) -> None:
     llm, _ = llm_factory(["I compare prices."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Cancellation")
+    conversation = await engine.start(stored_persona.id, "Cancellation", user_id="test-interview-owner")
     if operation == "complete":
         await engine.ask(conversation.id, "What do you compare?")
     before = await _counts(session_maker, conversation)
@@ -135,7 +135,7 @@ async def test_cancellation_during_second_memory_rolls_back_whole_exchange(
 ) -> None:
     llm, _ = llm_factory(["I compare prices."])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Atomic cancellation")
+    conversation = await engine.start(stored_persona.id, "Atomic cancellation", user_id="test-interview-owner")
     entered = asyncio.Event()
     release = asyncio.Event()
     original_remember = memory_service.remember
@@ -186,7 +186,7 @@ async def test_lock_stays_shared_until_active_and_queued_operations_finish(
         "I compare prices.", json.dumps({"summary": "Prices matter.", "insights": []}),
     ])
     engine = InterviewEngine(llm, session_maker, memory=memory_service)
-    conversation = await engine.start(stored_persona.id, "Waiter lifecycle")
+    conversation = await engine.start(stored_persona.id, "Waiter lifecycle", user_id="test-interview-owner")
     ask_entered, completion_entered = asyncio.Event(), asyncio.Event()
     release_ask, release_completion = asyncio.Event(), asyncio.Event()
     queued = [asyncio.Event() for _index in range(3)]

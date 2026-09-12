@@ -71,13 +71,15 @@ class RoutingChaosSimulator:
     def _setup_adapters(self) -> dict[str, ChaosFakeAdapter]:
         random.seed(self.seed)
         adapters = {
-            # Keyless-openrouter equivalent: registered, contributes no routes.
             "openrouter": ChaosFakeAdapter(
                 name="openrouter",
-                candidates=[],
-                failure_prob=0.0,
-                latency_ms=0.0,
-                fail_kind=FailureKind.PROVIDER_UNAVAILABLE,
+                candidates=[RouteCandidate(
+                    provider="openrouter", model="simulation/secondary:free",
+                    context_window=32768, supports_json=True,
+                )],
+                failure_prob=0.15,
+                latency_ms=25.0,
+                fail_kind=FailureKind.SERVER_ERROR,
             ),
             "freellmpool": ChaosFakeAdapter(
                 name="freellmpool",
@@ -89,16 +91,6 @@ class RoutingChaosSimulator:
                 failure_prob=0.15,
                 latency_ms=25.0,
                 fail_kind=FailureKind.RATE_LIMITED,
-            ),
-            "ollama": ChaosFakeAdapter(
-                name="ollama",
-                candidates=[
-                    RouteCandidate(provider="ollama", model="qwen3.5:latest", context_window=16384, supports_json=True),
-                    RouteCandidate(provider="ollama", model="llama3.2:3b", context_window=8192, supports_json=True),
-                ],
-                failure_prob=0.02,
-                latency_ms=10.0,
-                fail_kind=FailureKind.SERVER_ERROR,
             ),
         }
         return adapters

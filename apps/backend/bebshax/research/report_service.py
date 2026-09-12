@@ -7,6 +7,7 @@ into a multi-section executive decision report with versioning and provenance tr
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import uuid
@@ -15,11 +16,13 @@ from typing import Any, Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bebshax.api.errors import APIError
 from bebshax.behavioral.orm import (
     BehavioralTestResults,
     BehavioralTestRuns,
     BehavioralTests,
 )
+from bebshax.datasets.orm import DatasetVersions
 from bebshax.db.models import (
     DatasetSources,
     EvidenceChunks,
@@ -32,6 +35,8 @@ from bebshax.db.models import (
     _utcnow,
 )
 from bebshax.interview.orm import Conversations, ConversationTurns, InterviewInsights
+from bebshax.jobs.runtime import JobContext
+from bebshax.personas.orm import PersonaVersions
 from bebshax.llm.json_utils import parse_llm_json
 from bebshax.llm.placeholders import is_placeholder
 from bebshax.llm.prompt_safety import UNTRUSTED_RULE, untrusted_json_block
@@ -76,6 +81,86 @@ _LIST_FIELDS: tuple[str, ...] = (
     "recommendations",
 )
 _TITLE_MAX = 256  # StudyReports.title String(256)
+
+
+_REPORT_INPUT_MODELS = (
+    ("evidence_sources", EvidenceSources), ("evidence_claims", EvidenceClaims),
+    ("evidence_chunks", EvidenceChunks), ("datasets", DatasetSources),
+    ("segments", MarketSegments), ("personas", Personas),
+    ("conversations", Conversations), ("interview_insights", InterviewInsights),
+    ("behavioral_tests", BehavioralTests), ("behavioral_runs", BehavioralTestRuns),
+    ("behavioral_results", BehavioralTestResults),
+)
+
+
+def _report_digest(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=True, default=str).encode("utf-8")).hexdigest()
+
+
+def _report_row_values(row: Any) -> dict[str, Any]:
+    return {attribute.key: getattr(row, attribute.key) for attribute in row.__mapper__.column_attrs}
+
+
+async def capture_report_input_versions(
+    session: AsyncSession, study: Studies, *, records: dict[str, list[Any]] | None = None,
+) -> dict[str, Any]:
+    if records is None:
+        records = {}
+        for name, model in _REPORT_INPUT_MODELS:
+            statement = select(model).where(model.study_id == study.id)
+            if model is Personas:
+                statement = statement.where(
+                    (Personas.status != "archived")
+                    | Personas.id.in_(select(Conversations.persona_id).where(Conversations.study_id == study.id))
+                    | Personas.id.in_(select(BehavioralTestResults.persona_id).where(BehavioralTestResults.study_id == study.id))
+                )
+            records[name] = list(await session.scalars(statement.execution_options(populate_existing=True)))
+        records["conversation_turns"] = list(await session.scalars(
+            select(ConversationTurns).join(Conversations, ConversationTurns.conversation_id == Conversations.id)
+            .where(Conversations.study_id == study.id).execution_options(populate_existing=True),
+        ))
+    study_values = _report_row_values(study)
+    for field in ("revision", "status", "step", "findings", "updated_at"):
+        study_values.pop(field, None)
+    versions: dict[str, Any] = {
+        "study": {"id": study.id, "revision": study.revision, "hash": _report_digest(study_values)},
+        **{
+            name: [{"id": row.id, "hash": _report_digest(_report_row_values(row))} for row in sorted(rows, key=lambda row: row.id)]
+            for name, rows in records.items()
+        },
+    }
+    dataset_versions = list(await session.scalars(select(DatasetVersions).where(
+        DatasetVersions.dataset_id.in_([dataset.id for dataset in records["datasets"]]),
+    ).order_by(DatasetVersions.version))) if records["datasets"] else []
+    published = {
+        (version.dataset_id, version.owner_id, version.file_path, version.content_hash): version
+        for version in dataset_versions
+    }
+    datasets = {dataset.id: dataset for dataset in records["datasets"]}
+    for reference in versions["datasets"]:
+        dataset = datasets[reference["id"]]
+        version = published.get((dataset.id, dataset.user_id, dataset.file_path, dataset.content_hash))
+        reference.update({
+            "version_id": version.id if version else None,
+            "version": version.version if version else None,
+            "content_hash": dataset.content_hash,
+            "records_hash": version.records_hash if version else None,
+        })
+    persona_versions = list(await session.scalars(select(PersonaVersions).where(
+        PersonaVersions.persona_id.in_([persona.id for persona in records["personas"]]),
+    ))) if records["personas"] else []
+    captured = {(version.persona_id, version.version, version.owner_id): version for version in persona_versions}
+    personas = {persona.id: persona for persona in records["personas"]}
+    for reference in versions["personas"]:
+        persona = personas[reference["id"]]
+        version = captured.get((persona.id, persona.version, persona.owner_id))
+        reference.update({
+            "version": persona.version, "owner_id": persona.owner_id,
+            "capture_kind": version.capture_kind if version else "legacy_unversioned",
+            "snapshot_hash": _report_digest(version.snapshot) if version else None,
+            "dataset_version_id": persona.dataset_version_id,
+        })
+    return versions
 
 
 def _render_text(value: Any, indent: int = 0) -> str:
@@ -191,6 +276,7 @@ class StudyReportService:
         study_id: str,
         user_id: Optional[str] = None,
         custom_title: Optional[str] = None,
+        *, job: JobContext | None = None, expected_input_versions: dict[str, Any] | None = None,
     ) -> StudyReports:
         """Generate and persist a new report version for the given study."""
         study = await self.session.get(Studies, study_id)
@@ -198,6 +284,10 @@ class StudyReportService:
             raise ValueError(f"Study '{study_id}' not found")
 
         effective_user_id = user_id or study.user_id or ANONYMOUS_OWNER_ID
+        if user_id is not None and study.user_id != user_id:
+            raise ValueError("Report owner does not match the study owner.")
+        if job is not None and (job.lease.owner_id != effective_user_id or job["scope_id"] != study_id):
+            raise ValueError("Report job does not match the verified study owner.")
 
         # 1. Gather all study data from database
         evidence_sources = list(
@@ -312,6 +402,18 @@ class StudyReportService:
             ).scalars()
         )
 
+        input_versions = await capture_report_input_versions(self.session, study, records={
+            "evidence_sources": evidence_sources, "evidence_claims": evidence_claims,
+            "evidence_chunks": evidence_chunks, "datasets": datasets, "segments": segments,
+            "personas": personas, "conversations": conversations, "conversation_turns": conversation_turns,
+            "interview_insights": interview_insights, "behavioral_tests": behavioral_tests,
+            "behavioral_runs": behavioral_runs, "behavioral_results": behavioral_results,
+        })
+        if expected_input_versions is not None and input_versions != expected_input_versions:
+            raise APIError(409, "Report inputs changed after admission.", error_code="report_input_changed")
+        captured_title = study.title
+        captured_prompt = study.prompt
+
         # A report over nothing is a template by construction: the model can only
         # write "no data available", yet the row would mark the study completed.
         if not any((personas, conversations, evidence_claims, segments, behavioral_results, datasets)):
@@ -337,12 +439,16 @@ class StudyReportService:
             behavioral_runs=behavioral_runs,
             behavioral_results=behavioral_results,
             custom_title=custom_title,
+            job=job,
+            input_versions=input_versions,
         )
 
         # 3. Persist the normalized report and study findings under one short lock.
         fields = _normalize_report_fields(report_data)
         report_id = f"rep_{uuid.uuid4().hex[:16]}"
         async with self.session.begin():
+            if job is not None:
+                await job.fence(self.session)
             study = (
                 await self.session.execute(
                     select(Studies)
@@ -353,19 +459,34 @@ class StudyReportService:
             ).scalar_one_or_none()
             if study is None:
                 raise ValueError(f"Study '{study_id}' not found")
+            if user_id is not None and study.user_id != user_id:
+                raise ValueError("Report study owner changed during generation.")
             latest_version_stmt = select(func.max(StudyReports.version)).where(
                 StudyReports.study_id == study_id
             )
             max_version = (await self.session.execute(latest_version_stmt)).scalar() or 0
             new_version = max_version + 1
+            current_versions = await capture_report_input_versions(self.session, study)
+            current_versions["study"]["revision"] = input_versions["study"]["revision"]
+            projection_applied = current_versions == input_versions and study.status != "archived"
+            if projection_applied and study.revision != input_versions["study"]["revision"]:
+                previous_report = await self.session.scalar(select(StudyReports).where(
+                    StudyReports.study_id == study_id, StudyReports.version == max_version,
+                    StudyReports.id == (study.findings or {}).get("report_id"),
+                ))
+                projection_applied = (
+                    previous_report is not None
+                    and previous_report.metrics.get("published_study_revision") == study.revision
+                    and previous_report.metrics.get("input_manifest", {}).get("input_versions") == input_versions
+                )
             report = StudyReports(
                 id=report_id,
                 study_id=study_id,
                 user_id=effective_user_id,
                 version=new_version,
-                title=_bound_title(custom_title or fields["title"] or study.title or "Research Synthesis Report"),
+                title=_bound_title(custom_title or fields["title"] or captured_title or "Research Synthesis Report"),
                 executive_summary=fields.get("executive_summary")
-                or f"Validation report for {study.prompt or study.title}.",
+                or f"Validation report for {captured_prompt or captured_title}.",
                 key_findings=fields["key_findings"],
                 target_market_summary=fields["target_market_summary"],
                 market_context_summary=fields["market_context_summary"],
@@ -391,6 +512,8 @@ class StudyReportService:
                     "confidence_score": None,
                     "demand_score": None,
                     **fields["metrics"],
+                    "study_projection_applied": projection_applied,
+                    "published_study_revision": study.revision + 1 if projection_applied else None,
                 },
                 is_synthetic=True,
                 created_at=_utcnow(),
@@ -398,19 +521,27 @@ class StudyReportService:
             )
             self.session.add(report)
 
-            study.findings = {
-                "report_id": report_id,
-                "version": new_version,
-                "title": report.title,
-                "executive_summary": report.executive_summary,
-                "key_findings": report.key_findings,
-                "metrics": report.metrics,
-                "generated_at": _utcnow().isoformat(),
-            }
-            study.status = "completed"
-            study.step = 5
-            study.updated_at = _utcnow()
+            if projection_applied:
+                study.findings = {
+                    "report_id": report_id,
+                    "version": new_version,
+                    "title": report.title,
+                    "executive_summary": report.executive_summary,
+                    "key_findings": report.key_findings,
+                    "metrics": report.metrics,
+                    "generated_at": _utcnow().isoformat(),
+                }
+                study.status = "completed"
+                study.step = 5
+                study.updated_at = _utcnow()
+            if job is not None:
+                references = {"report_id": report.id, "version": report.version,
+                              "input_manifest": report.metrics["input_manifest"]}
+                await self.session.flush()
+                await job.complete_item("report_synthesis", result_refs=references, session=self.session)
 
+        if job is not None:
+            job["result_refs"] = references
         await self.session.refresh(report)
         return report
 
@@ -431,6 +562,8 @@ class StudyReportService:
         custom_title: Optional[str] = None,
         evidence_chunks: list[EvidenceChunks] | None = None,
         conversation_turns: list[ConversationTurns] | None = None,
+        job: JobContext | None = None,
+        input_versions: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Synthesize the report with the model from the stored study data.
         Raises ``LLMUnavailable`` (no service), ``UnusableModelOutput`` (after one
@@ -759,8 +892,37 @@ class StudyReportService:
             # output headroom; the full input still must fit the selected model.
             max_output_tokens=REPORT_MAX_OUTPUT_TOKENS,
         )
+        def digest(value: Any) -> str:
+            return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=True, default=str).encode("utf-8")).hexdigest()
+
+        manifest = {
+            "study_id": study.id,
+            "study_revision": study.revision,
+            "input_versions": input_versions,
+            "captured_at": _utcnow().isoformat(),
+            "consistency": "captured_inputs_not_database_version_freeze",
+            "context_hash": digest(study_context),
+            "evidence_sources": [{"id": source.id, "content_hash": source.content_hash} for source in evidence_sources],
+            "evidence_claims": [{"id": claim.id, "status": claim.status, "hash": digest({
+                "text": claim.claim_text, "supporting_source_ids": claim.supporting_source_ids,
+                "supporting_chunk_ids": claim.supporting_chunk_ids, "contradicting_source_ids": claim.contradicting_source_ids,
+            })} for claim in evidence_claims],
+            "evidence_chunks": [{"id": chunk.id, "source_id": chunk.source_id, "hash": digest(chunk.content)} for chunk in evidence_chunks or []],
+            "datasets": [{"id": dataset.id, "content_hash": dataset.content_hash, "file_path": dataset.file_path} for dataset in datasets],
+            "segments": [{"id": segment.id, "run_id": segment.segmentation_run_id} for segment in segments],
+            "personas": [{"id": persona.id, "version": persona.version} for persona in personas],
+            "interviews": [{"id": conversation.id, "persona_id": conversation.persona_id} for conversation in conversations],
+            "turns": [{"id": turn.id, "conversation_id": turn.conversation_id, "number": turn.turn_number} for turn in conversation_turns or []],
+            "interview_insight_ids": [insight.id for insight in interview_insights],
+            "behavioral_runs": [{"id": run.id, "status": run.status} for run in behavioral_runs],
+            "behavioral_result_ids": [result.id for result in behavioral_results],
+        }
         if self.session.in_transaction():
             await self.session.commit()
+        if job is not None:
+            checkpoint = await job.begin_item("report_synthesis", input_data=manifest)
+            if checkpoint["status"] == "completed":
+                raise ValueError("Report synthesis already has a completed artifact; automatic replay is forbidden.")
         served_by = None
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             if attempt > 1:
@@ -787,6 +949,7 @@ class StudyReportService:
                         "served_by": served_by,
                         "llm_request_id": llm_req.request_id,
                         "attempts": attempt,
+                        "input_manifest": manifest,
                     }
                 )
                 parsed["metrics"] = metrics
