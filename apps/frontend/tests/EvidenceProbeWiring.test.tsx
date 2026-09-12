@@ -11,6 +11,7 @@ describe('Step 1 evidence probe wiring', () => {
   beforeEach(async () => {
     api.setMockMode(true);
     await api.resetMockStore();
+    await api.createStudy({ id: 'tj6FY3cXDO8oxpuxeAMb', title: 'Evidence probe study', type: 'interviews' });
   });
 
   afterEach(() => {

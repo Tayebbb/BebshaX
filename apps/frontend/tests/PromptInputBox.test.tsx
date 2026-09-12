@@ -33,6 +33,47 @@ describe('PromptInputBox', () => {
     expect(onSend).toHaveBeenCalledWith('q', []);
   });
 
+  it.each([
+    { signal: 'native composition', keyboard: { isComposing: true } },
+    { signal: 'legacy composition key code', keyboard: { isComposing: false, keyCode: 229 } },
+  ])('leaves Enter to the IME when $signal is present', ({ keyboard }) => {
+    const onSend = vi.fn();
+    render(<Harness onSend={onSend} />);
+    const input = screen.getByLabelText('Message');
+    fireEvent.change(input, { target: { value: 'draft' } });
+
+    expect(fireEvent.keyDown(input, { key: 'Enter', ...keyboard })).toBe(true);
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(input).toHaveValue('draft');
+  });
+
+  it('waits for composition to end before sending a later ordinary Enter', () => {
+    const onSend = vi.fn();
+    render(<Harness onSend={onSend} />);
+    const input = screen.getByLabelText('Message');
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: 'composed text' } });
+
+    expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(true);
+    expect(onSend).not.toHaveBeenCalled();
+
+    fireEvent.compositionEnd(input);
+    expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false);
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('composed text', []);
+  });
+
+  it('continues to send on Ctrl+Enter outside composition', () => {
+    const onSend = vi.fn();
+    render(<Harness onSend={onSend} />);
+    const input = screen.getByLabelText('Message');
+    fireEvent.change(input, { target: { value: 'ready' } });
+
+    expect(fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })).toBe(false);
+
+    expect(onSend).toHaveBeenCalledExactlyOnceWith('ready', []);
+  });
+
   it('shows a stop control while loading and never sends', () => {
     const onSend = vi.fn();
     const onStop = vi.fn();

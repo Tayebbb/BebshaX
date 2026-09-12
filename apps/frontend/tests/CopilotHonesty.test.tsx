@@ -10,8 +10,9 @@ import { isTemplateReply, TEMPLATE_COPILOT_ROUTE } from '../src/components/dashb
  * (backend `served_by: bebshax/copilot-engine` / `fallback_reason`) must be
  * labelled as such and must never be approvable as an AI research goal.
  */
-const renderStep1 = (studyId = 'study_template_test') =>
-  render(
+const renderStep1 = async (studyId = 'study_template_test') => {
+  await api.createStudy({ id: studyId, title: 'Copilot honesty study', type: 'interviews' });
+  const view = render(
     <StudyWorkflowView
       studyId={studyId}
       initialStep={1}
@@ -21,6 +22,9 @@ const renderStep1 = (studyId = 'study_template_test') =>
       onStepChange={vi.fn()}
     />
   );
+  await screen.findByRole('textbox', { name: 'Describe your idea or answer the copilot' });
+  return view;
+};
 
 const sendMessage = (text: string) => {
   const input = screen.getByPlaceholderText(/Type here to answer or give more context/i);
@@ -60,7 +64,7 @@ describe('Copilot template replies are labelled and cannot be approved', () => {
       fallback_reason: 'llm_error:TimeoutError',
     });
 
-    renderStep1();
+    await renderStep1();
     sendMessage('a study planner for students');
 
     const chip = await screen.findByText(/Template reply — AI providers unavailable/i);
@@ -98,7 +102,7 @@ describe('Copilot template replies are labelled and cannot be approved', () => {
       fallback_reason: null,
     });
 
-    renderStep1('study_template_mixed');
+    await renderStep1('study_template_mixed');
     sendMessage('first idea');
     await screen.findByText('Tell me more about your target users.');
     expect(screen.getAllByText(/Template reply — AI providers unavailable/i)).toHaveLength(1);
@@ -124,7 +128,7 @@ describe('Copilot template replies are labelled and cannot be approved', () => {
       served_by: 'llm7/codestral-latest',
     });
 
-    renderStep1('study_llm_goal');
+    await renderStep1('study_llm_goal');
     sendMessage('a study planner');
 
     const approve = await screen.findByRole('button', { name: /Approve Goal & Discover Personas/i });
@@ -141,7 +145,7 @@ describe('Copilot template replies are labelled and cannot be approved', () => {
     });
     vi.spyOn(api, 'sendStudyCopilotMessage').mockRejectedValue(err);
 
-    renderStep1('study_copilot_envelope');
+    await renderStep1('study_copilot_envelope');
     sendMessage('my idea');
 
     const bubble = await screen.findByText(/All AI routes failed — nothing was fabricated\. 1 attempt: groq\/llama→RATE_LIMITED/i);
@@ -160,8 +164,9 @@ describe('Step 3 script source honesty', () => {
     vi.restoreAllMocks();
   });
 
-  const renderStep3 = (studyId: string) =>
-    render(
+  const renderStep3 = async (studyId: string) => {
+    await api.createStudy({ id: studyId, title: 'Script honesty study', type: 'interviews' });
+    const view = render(
       <StudyWorkflowView
         studyId={studyId}
         initialStep={3}
@@ -171,6 +176,9 @@ describe('Step 3 script source honesty', () => {
         onStepChange={vi.fn()}
       />
     );
+    await screen.findByRole('button', { name: /^Generate Questions$/i });
+    return view;
+  };
 
   it('keeps the starter-template label when the backend served fallback_static questions', async () => {
     vi.spyOn(api, 'generateStudyScriptQuestions').mockResolvedValue({
@@ -181,7 +189,7 @@ describe('Step 3 script source honesty', () => {
       fallback_reason: 'llm_error:AllCandidatesFailed',
     });
 
-    renderStep3('study_script_static');
+    await renderStep3('study_script_static');
     fireEvent.click(screen.getByRole('button', { name: /^Generate Questions$/i }));
 
     await screen.findByDisplayValue('Canned Q1?');
@@ -200,7 +208,7 @@ describe('Step 3 script source honesty', () => {
       source: 'llm',
     });
 
-    renderStep3('study_script_llm');
+    await renderStep3('study_script_llm');
     fireEvent.click(screen.getByRole('button', { name: /^Generate Questions$/i }));
 
     await screen.findByDisplayValue('Real Q1?');

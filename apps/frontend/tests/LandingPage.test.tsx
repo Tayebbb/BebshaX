@@ -15,12 +15,12 @@ const signIn = (): void => {
 
 const heroSection = (): HTMLElement =>
   screen
-    .getByText(/Evidence in\./i)
+    .getByRole('heading', { level: 1, name: /BebshaX\. Synthetic persona research\./i })
     .closest('section') as HTMLElement;
 
 const finalCtaSection = (): HTMLElement =>
   screen
-    .getByRole('heading', { name: /Describe a business\. Meet its personas\./i })
+    .getByRole('heading', { name: /Bring your next question\./i })
     .closest('section') as HTMLElement;
 
 describe('BebshaX Premium Landing Page', () => {
@@ -31,48 +31,39 @@ describe('BebshaX Premium Landing Page', () => {
     render(<App />);
 
     expect(
-      screen.getByText(/Evidence in\./i)
+      screen.getByRole('heading', { level: 1, name: /BebshaX\. Synthetic persona research\./i })
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText(/Personas out\./i)
+      screen.getByText(/Develop hypotheses to test with real people\./i)
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText(/Then interview them\./i)
+      screen.getByRole('img', { name: /BebshaX research workspace/i })
     ).toBeInTheDocument();
 
     expect(
-      screen.getByText('Synthetic Persona Research')
+      screen.getByText(/Synthetic personas are not real participants or validated demand\./i)
     ).toBeInTheDocument();
   });
 
-  it('renders all key landing sections and metrics', () => {
+  it('renders the product story and research boundaries', () => {
     render(<App />);
 
-    // Capability metrics
-    expect(screen.getByText('Routing pools')).toBeInTheDocument();
-    expect(screen.getByText('Provenance classes')).toBeInTheDocument();
-    expect(screen.getByText('Failure kinds')).toBeInTheDocument();
+    expect(screen.getByText('Synthetic', { selector: 'dt' })).toBeInTheDocument();
+    expect(screen.getByText('Inferred', { selector: 'dt' })).toBeInTheDocument();
+    expect(screen.getByText('Observed', { selector: 'dt' })).toBeInTheDocument();
 
-    // Problem section
     expect(
-      screen.getByText(/Asking a model for a persona is easy\./i)
+      screen.getByRole('heading', { name: /From a question to a research trail/i })
     ).toBeInTheDocument();
 
-    // How it works
     expect(
-      screen.getByRole('heading', { name: /From a rough idea to a decision you can defend/i })
+      screen.getByRole('heading', { name: /A workspace for the questions/i })
     ).toBeInTheDocument();
 
-    // Console showcase
     expect(
-      screen.getByText(/Four tabs\./i)
-    ).toBeInTheDocument();
-
-    // FAQ section
-    expect(
-      screen.getByText(/Everything you need to know\./i)
+      screen.getByRole('heading', { name: /A few important answers/i })
     ).toBeInTheDocument();
   });
 
@@ -95,16 +86,16 @@ describe('BebshaX Premium Landing Page', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('sends a signed-out visitor from the hero CTA to the sign-up page', async () => {
+  it('sends a signed-out visitor from the hero CTA to the sign-in page', async () => {
     render(<App />);
 
     const cta = within(heroSection()).getByRole('button', {
-      name: /Generate your first persona/i,
+      name: /Open workspace/i,
     });
     fireEvent.click(cta);
 
     expect(
-      await screen.findByRole('heading', { name: /Create your account/i })
+      await screen.findByRole('heading', { name: /Welcome back/i })
     ).toBeInTheDocument();
   });
 
@@ -113,7 +104,7 @@ describe('BebshaX Premium Landing Page', () => {
     render(<App />);
 
     const cta = await within(heroSection()).findByRole('button', {
-      name: /Launch Console/i,
+      name: /Open workspace/i,
     });
     fireEvent.click(cta);
 
@@ -130,7 +121,7 @@ describe('BebshaX Premium Landing Page', () => {
     render(<App />);
 
     const cta = await within(finalCtaSection()).findByRole('button', {
-      name: /Launch Console/i,
+      name: /Open workspace/i,
     });
     fireEvent.click(cta);
 

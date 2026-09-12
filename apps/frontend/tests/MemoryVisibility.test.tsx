@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { ConsistencyFlags, MemoryDisclosure, RouteDisclosure } from '../src/components/common/MemoryDisclosure';
+import { RequestIdTag } from '../src/components/common/RequestIdTag';
 import { PersonaMemoryPanel } from '../src/components/dashboard/views/persona/PersonaMemoryPanel';
 import { Step4Interviews } from '../src/components/dashboard/views/workflow/Step4Interviews';
 import { InterviewWorkspace } from '../src/components/interview/InterviewWorkspace';
@@ -26,6 +27,180 @@ vi.mock('../src/services/api', () => ({
     completeStudyInterview: vi.fn(),
   },
 }));
+
+describe('RequestIdTag clipboard feedback', () => {
+  const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+
+  function stubClipboard(clipboard: Partial<Pick<Clipboard, 'writeText'>> | undefined): void {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard });
+  }
+
+  function pendingWrite() {
+    let fulfill!: () => void;
+    let reject!: (reason: Error) => void;
+    const promise = new Promise<void>((resolve, rejectPromise) => {
+      fulfill = resolve;
+      reject = rejectPromise;
+    });
+    return { writeText: vi.fn(() => promise), fulfill, reject };
+  }
+
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => {
+    cleanup();
+    if (clipboardDescriptor) Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it.each([undefined, null, ''])('renders no copy control for an absent ID (%s)', (requestId) => {
+    const { container } = render(<RequestIdTag requestId={requestId} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it.each([
+    { name: 'clipboard API', clipboard: undefined },
+    { name: 'clipboard writer', clipboard: {} },
+  ])('shows visible manual-copy recovery when the $name is unavailable', async ({ clipboard }) => {
+    stubClipboard(clipboard);
+    render(<RequestIdTag requestId="req_unavailable" />);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' })); });
+
+    expect(screen.getByRole('status')).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent(/select and copy the request ID manually/i);
+    expect(screen.getByText('req_unavailable')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Request ID copied' })).not.toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('shows manual-copy recovery on rejection without logging the ID as an error', async () => {
+    stubClipboard({ writeText: vi.fn().mockRejectedValue(new Error('Permission denied')) });
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<RequestIdTag requestId="req_denied" />);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' })); });
+
+    expect(screen.getByRole('status')).toHaveTextContent(/select and copy the request ID manually/i);
+    expect(screen.getByRole('button', { name: 'Copy request ID' })).toBeEnabled();
+    expect(errorLog).not.toHaveBeenCalled();
+  });
+
+  it('shows manual-copy recovery when an available writer throws synchronously', async () => {
+    stubClipboard({ writeText: vi.fn(() => { throw new Error('Clipboard blocked'); }) });
+    render(<RequestIdTag requestId="req_blocked" />);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' })); });
+
+    expect(screen.getByRole('status')).toHaveTextContent(/select and copy the request ID manually/i);
+  });
+
+  it('reports copied only after fulfillment and resets feedback after 1500ms', async () => {
+    const clipboard = pendingWrite();
+    stubClipboard(clipboard);
+    render(<RequestIdTag requestId="req_success" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' }));
+    expect(clipboard.writeText).toHaveBeenCalledExactlyOnceWith('req_success');
+    expect(screen.queryByRole('button', { name: 'Request ID copied' })).not.toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => { clipboard.fulfill(); });
+    expect(screen.getByRole('button', { name: 'Request ID copied' })).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(1499); });
+    expect(screen.getByRole('button', { name: 'Request ID copied' })).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(screen.getByRole('button', { name: 'Copy request ID' })).toBeInTheDocument();
+  });
+
+  it('clears copied feedback and its timer when the ID changes', async () => {
+    stubClipboard({ writeText: vi.fn().mockResolvedValue(undefined) });
+    const { rerender } = render(<RequestIdTag requestId="req_old" />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' })); });
+    expect(screen.getByRole('button', { name: 'Request ID copied' })).toBeInTheDocument();
+
+    rerender(<RequestIdTag requestId="req_new" />);
+
+    expect(screen.getByRole('button', { name: 'Copy request ID' })).toBeInTheDocument();
+    expect(screen.getByText('req_new')).toBeVisible();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears manual-copy failure feedback when the ID changes', async () => {
+    stubClipboard(undefined);
+    const { rerender } = render(<RequestIdTag requestId="req_old" />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' })); });
+    expect(screen.getByRole('status')).toHaveTextContent(/manually/i);
+
+    rerender(<RequestIdTag requestId="req_new" />);
+
+    expect(screen.queryByText(/select and copy the request ID manually/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy request ID' })).toBeInTheDocument();
+  });
+
+  it.each(['fulfill', 'reject'] as const)('ignores a stale %s after the ID changes', async (outcome) => {
+    const clipboard = pendingWrite();
+    stubClipboard(clipboard);
+    const { rerender } = render(<RequestIdTag requestId="req_old" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' }));
+    rerender(<RequestIdTag requestId="req_new" />);
+
+    await act(async () => {
+      if (outcome === 'fulfill') clipboard.fulfill();
+      else clipboard.reject(new Error('Permission denied'));
+    });
+
+    expect(screen.getByRole('button', { name: 'Copy request ID' })).toBeInTheDocument();
+    expect(screen.queryByText(/select and copy the request ID manually/i)).not.toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears the success timer on unmount', async () => {
+    stubClipboard({ writeText: vi.fn().mockResolvedValue(undefined) });
+    const { unmount } = render(<RequestIdTag requestId="req_unmount" />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' })); });
+    expect(vi.getTimerCount()).toBe(1);
+
+    unmount();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['fulfill', 'reject'] as const)('ignores a late %s after unmount without scheduling feedback', async (outcome) => {
+    const clipboard = pendingWrite();
+    stubClipboard(clipboard);
+    const { unmount } = render(<RequestIdTag requestId="req_unmount" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' }));
+    unmount();
+
+    await act(async () => {
+      if (outcome === 'fulfill') clipboard.fulfill();
+      else clipboard.reject(new Error('Permission denied'));
+    });
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('starts a fresh feedback interval on a repeated successful copy', async () => {
+    stubClipboard({ writeText: vi.fn().mockResolvedValue(undefined) });
+    render(<RequestIdTag requestId="req_repeat" />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy request ID' })); });
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Request ID copied' })); });
+    expect(vi.getTimerCount()).toBe(1);
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(screen.getByRole('button', { name: 'Request ID copied' })).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.getByRole('button', { name: 'Copy request ID' })).toBeInTheDocument();
+  });
+
+  it('uses the shared metadata font floor', () => {
+    const { container } = render(<RequestIdTag requestId="req_readable" />);
+    expect(container.firstElementChild).toHaveStyle({ fontSize: 'var(--fs-xs)' });
+  });
+});
 
 describe('MemoryDisclosure / RouteDisclosure', () => {
   it('renders nothing when no memories were recalled', () => {
@@ -165,7 +340,7 @@ describe('Step 4 transcript shows recalled memories per persona turn', () => {
     );
     expect(screen.getByText('TimeoutError: interview failed')).toBeInTheDocument();
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent(/Batch interviews failed: All AI routes failed/);
+    expect(alert).toHaveTextContent(/Batch interview status: All AI routes failed/);
     expect(within(alert).getByText('req_batch_1')).toBeInTheDocument();
   });
 });

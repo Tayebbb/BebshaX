@@ -57,7 +57,7 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
     });
   });
 
-  it('navigates to Persona Library view showing empirical grounded personas', async () => {
+  it('navigates to Persona Library showing saved personas with a synthetic research disclosure', async () => {
     renderDashboard();
 
     // Click on Persona Library tab in sidebar
@@ -66,7 +66,7 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /^Persona Library$/i })).toBeInTheDocument();
-      expect(screen.getByText('Saved personas and audiences you can reuse in any study.')).toBeInTheDocument();
+      expect(screen.getByText('Synthetic participants: findings are research hypotheses to validate with real users.')).toBeVisible();
       expect(screen.getByText('Sarah Chen')).toBeInTheDocument();
     });
   });
@@ -103,7 +103,7 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
     expect(screen.queryByRole('button', { name: /Model Router/i })).toBeNull();
   });
 
-  it('initiates study workflow from New Study prompt and moves through steps', async () => {
+  it('starts the selected study workflow only after explicit submission', async () => {
     renderDashboard();
 
     const input = screen.getByPlaceholderText(/Describe your business idea|Should we lead/i);
@@ -112,6 +112,10 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
     const userInterviewsCard = screen.getByText('User Interviews');
     fireEvent.click(userInterviewsCard);
 
+    expect(screen.getByRole('heading', { name: 'What do you want to find out?' })).toBeInTheDocument();
+    expect(screen.queryByText('Design your user interviews')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Start research study' }));
+
     await waitFor(() => {
       expect(screen.getByText('Design your user interviews')).toBeInTheDocument();
       expect(screen.getByText('Test pricing sensitivity')).toBeInTheDocument();
@@ -119,6 +123,7 @@ describe('BebshaX Dashboard Platform (Post-Sign-In Application)', () => {
   });
 
   it('renders research workflow directly when deep-linking to /research/tj6FY3cXDO8oxpuxeAMb/step1', async () => {
+    await api.createStudy({ id: 'tj6FY3cXDO8oxpuxeAMb', title: 'Deep-linked study', type: 'interviews' });
     window.history.pushState({}, '', '/research/tj6FY3cXDO8oxpuxeAMb/step1');
     renderDashboard();
 

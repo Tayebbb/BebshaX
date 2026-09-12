@@ -138,16 +138,28 @@ describe('Blockers 3 & 4 — failed study creation and study-less navigation', (
     );
 
   it('reports a failed study creation instead of inventing a study id', async () => {
-    vi.spyOn(api, 'createStudy').mockRejectedValue(new Error('Server unavailable'));
+    const createStudy = vi.spyOn(api, 'createStudy').mockRejectedValue(new Error('Server unavailable'));
     renderDashboard();
 
-    fireEvent.change(screen.getByPlaceholderText(/Describe your business idea|Should we lead/i), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Business idea description' }), {
       target: { value: 'Test pricing sensitivity' },
     });
-    fireEvent.click(screen.getByText('User Interviews'));
+    const studyType = screen.getByRole('radio', { name: 'Pricing & WTP' });
+    fireEvent.click(studyType);
+    expect(studyType).toBeChecked();
+    expect(createStudy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Start research study' }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/couldn't create your study/i);
+      expect(screen.getByRole('alert')).toHaveTextContent('Server unavailable');
+    });
+    expect(createStudy).toHaveBeenCalledExactlyOnceWith({
+      type: 'ab_test',
+      prompt: 'Test pricing sensitivity',
+      status: 'in_progress',
+      step: 1,
     });
     // Still on the New Study screen — no fabricated workflow was entered.
     expect(screen.getByText('What do you want to find out?')).toBeInTheDocument();

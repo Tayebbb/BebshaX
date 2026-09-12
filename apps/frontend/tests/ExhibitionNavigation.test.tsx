@@ -194,24 +194,99 @@ describe('Exhibition navigation through the real console shell', () => {
     expect(updateStudy).not.toHaveBeenCalled();
   });
 
+  it('keeps the working study in scope for Study tabs after a detour through workspace views', async () => {
+    const study = emptyStudyFixture('study_scope_a', 'Scoped Study A');
+    vi.mocked(api.getStudies).mockResolvedValue([study]);
+    vi.spyOn(api, 'getStudy').mockResolvedValue(study);
+    vi.spyOn(api, 'getStudyById').mockResolvedValue(study);
+    vi.spyOn(api, 'listStudyInterviews').mockResolvedValue({ interviews: [], total: 0 });
+    vi.spyOn(api, 'getStudyInterviewMetrics').mockResolvedValue({
+      total_interviews: 0, active_interviews: 0, completed_interviews: 0, total_insights_generated: 0,
+    });
+    vi.spyOn(api, 'getStudyPersonas').mockResolvedValue({ personas: [], total: 0 } as never);
+    vi.spyOn(api, 'getBehavioralTests').mockResolvedValue([] as never);
+    vi.spyOn(api, 'getBehavioralMetrics').mockRejectedValue(new Error('metrics unavailable in this fixture'));
+
+    await act(async () => { renderShell(`/research/${study.id}/interviews`); });
+    const sidebar = screen.getByRole('complementary');
+    const chipTitle = () => sidebar.querySelector('.bx-study-chip__title')?.textContent;
+    await waitFor(() => expect(chipTitle()).toBe(study.title));
+
+    // Persona Library is workspace-level: its route drops the study id...
+    await act(async () => { fireEvent.click(within(sidebar).getByRole('button', { name: 'Persona Library' })); });
+    expect(window.location.pathname).toBe('/persona-library');
+    // ...but the Study group must still point at the study being worked in.
+    expect(chipTitle()).toBe(study.title);
+
+    await act(async () => { fireEvent.click(within(sidebar).getByRole('button', { name: 'Behavioral Testing' })); });
+    expect(window.location.pathname).toBe(`/research/${study.id}/behavioral-tests`);
+    expect(screen.queryByRole('heading', { name: 'No study selected for behavioral testing' })).not.toBeInTheDocument();
+  });
+
+  it('forgets a remembered study that no longer exists instead of scoping tabs to it', async () => {
+    api.setStoredUser({
+      id: 'usr_scope', email: 'scope@example.test', full_name: 'Scope Reviewer', avatar_url: null,
+      is_active: true, is_verified: true, auth_provider: 'email', created_at: '2026-09-12T00:00:00Z',
+    });
+    sessionStorage.setItem('bebshax_study_scope_usr_scope', 'study_deleted');
+    vi.mocked(api.getStudies).mockResolvedValue([]);
+    vi.spyOn(api, 'getStudyById').mockResolvedValue(null);
+
+    await act(async () => { renderShell('/persona-library'); });
+    const sidebar = screen.getByRole('complementary');
+    await waitFor(() => expect(within(sidebar).getByText('No study selected')).toBeInTheDocument());
+    expect(sessionStorage.getItem('bebshax_study_scope_usr_scope')).toBeNull();
+    await act(async () => { fireEvent.click(within(sidebar).getByRole('button', { name: 'Interviews' })); });
+    expect(window.location.pathname).toBe('/interviews');
+    sessionStorage.clear();
+  });
+
+  it('drops a study from the sidebar recent list as soon as any view deletes it', async () => {
+    api.setStoredUser({
+      id: 'usr_recent', email: 'recent@example.test', full_name: 'Recent Reviewer', avatar_url: null,
+      is_active: true, is_verified: true, auth_provider: 'email', created_at: '2026-09-12T00:00:00Z',
+    });
+    const keep = { ...emptyStudyFixture('study_keep', 'Kept Study'), user_id: 'usr_recent' };
+    const doomed = { ...emptyStudyFixture('study_doomed', 'Doomed Study'), user_id: 'usr_recent' };
+    api.persistStoredUserStudies([keep, doomed]);
+    let studies = [keep, doomed];
+    vi.mocked(api.getStudies).mockImplementation(async () => studies);
+    vi.spyOn(api, 'fetchStudies').mockImplementation(async () => studies);
+
+    await act(async () => { renderShell('/dashboard'); });
+    const sidebar = screen.getByRole('complementary');
+    expect(await within(sidebar).findByRole('button', { name: 'Doomed Study' })).toBeInTheDocument();
+
+    // The real client funnels every delete through saveStoredUserStudies, which broadcasts the change.
+    studies = [keep];
+    await act(async () => { api.saveStoredUserStudies([keep]); });
+
+    await waitFor(() => expect(within(sidebar).queryByRole('button', { name: 'Doomed Study' })).not.toBeInTheDocument());
+    expect(within(sidebar).getByRole('button', { name: 'Kept Study' })).toBeInTheDocument();
+  });
+
   it('re-enables the same new-study form when the parent reports a creation failure', async () => {
     const createStudy = vi.spyOn(api, 'createStudy').mockRejectedValue(new Error('Exhibition service unavailable'));
     renderShell('/create-study');
     const prompt = 'Research a refill subscription for independent office managers.';
     const input = screen.getByRole('textbox', { name: 'Business idea description' });
     const submit = screen.getByRole('button', { name: 'Start research study' });
+    const studyType = screen.getByRole('radio', { name: 'User Interviews' });
     fireEvent.change(input, { target: { value: prompt } });
     fireEvent.click(submit);
 
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleName('Creating study...');
+    expect(studyType).toBeDisabled();
     expect(await screen.findByRole('alert')).toHaveTextContent('Exhibition service unavailable');
     expect(window.location.pathname).toBe('/create-study');
     expect(screen.getByRole('textbox', { name: 'Business idea description' })).toBe(input);
     expect(input).toHaveValue(prompt);
     await waitFor(() => expect(submit).toBeEnabled());
     expect(submit).toHaveAccessibleName('Start research study');
-    expect(screen.getByRole('button', { name: /User Interviews/i })).toBeEnabled();
+    expect(screen.getByRole('radio', { name: 'User Interviews' })).toBe(studyType);
+    expect(studyType).toBeEnabled();
+    expect(studyType).toBeChecked();
     expect(createStudy).toHaveBeenCalledWith({ type: 'interviews', prompt, status: 'in_progress', step: 1 });
 
     fireEvent.click(submit);

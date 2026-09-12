@@ -1,15 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { StudyWorkflowView } from '../src/components/dashboard/views/StudyWorkflowView';
 import { MAX_PERSONAS_PER_ROLE } from '../src/components/dashboard/views/workflow/types';
 import { EvidenceSummary, Persona, PersonaRoleSuggestion, Study } from '../src/types';
 import { api } from '../src/services/api';
+import { discardStudyDraft, pendingStudyDraft, queueStudyWrite, rememberStudyRevision } from '../src/services/studyPersistence';
 
 vi.mock('../src/services/api', () => {
   const stub = {
     getStudy: vi.fn(),
     getStudyReports: vi.fn(),
+    getPendingJobHandle: vi.fn().mockReturnValue(null),
+    getPendingStudyDraft: vi.fn().mockReturnValue(undefined),
+    getStoredUser: vi.fn().mockReturnValue(null),
     getEvidenceSummary: vi.fn(),
     updateStudy: vi.fn(),
     generateStudyPersonas: vi.fn(),
@@ -127,6 +131,69 @@ const clickPlusFiveTimes = async () => {
   }
 };
 
+describe('Accessible role selection', () => {
+  it.each(['Enter', ' '] as const)('toggles the native role checkbox with %s and synchronizes its count', async (key) => {
+    vi.mocked(api.getStudy).mockResolvedValue(study({}));
+    renderWorkflow(1);
+
+    const checkbox = await screen.findByRole('checkbox', { name: 'UNIVERSITY STUDENT' });
+    expect(checkbox.tagName).toBe('INPUT');
+    expect(checkbox).toHaveAttribute('type', 'checkbox');
+    expect(checkbox).toBeChecked();
+    expect(checkbox.closest('label')).not.toBeNull();
+    expect(checkbox.closest('label')!.querySelector('button')).toBeNull();
+    checkbox.focus();
+    expect(checkbox).toHaveFocus();
+
+    fireEvent.keyDown(checkbox, { key });
+    fireEvent.keyUp(checkbox, { key });
+    expect(checkbox).not.toBeChecked();
+    expect(within(plusButton().parentElement!).getByText('0')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Generate Personas$/i })).toBeDisabled();
+
+    fireEvent.keyDown(checkbox, { key });
+    fireEvent.keyUp(checkbox, { key });
+    expect(checkbox).toBeChecked();
+    expect(within(plusButton().parentElement!).getByText(String(MAX_PERSONAS_PER_ROLE))).toBeInTheDocument();
+    expect(plusButton()).toBeDisabled();
+    fireEvent.keyDown(checkbox, { key, repeat: true });
+    expect(checkbox).toBeChecked();
+    expect(fireEvent.keyDown(checkbox, { key: 'Tab' })).toBe(true);
+    expect(api.generateStudyPersonasDetailed).not.toHaveBeenCalled();
+  });
+
+  it('keeps the checkbox synchronized when independent count buttons select and deselect a role', async () => {
+    vi.mocked(api.getStudy).mockResolvedValue(study({}));
+    renderWorkflow(1);
+
+    const checkbox = await screen.findByRole('checkbox', { name: 'PARENTAL BUYER' });
+    const increase = screen.getByRole('button', { name: 'Increase PARENTAL BUYER count' });
+    const decrease = screen.getByRole('button', { name: 'Decrease PARENTAL BUYER count' });
+    expect(checkbox).not.toBeChecked();
+    expect(increase.closest('label')).toBeNull();
+    expect(decrease.closest('label')).toBeNull();
+    fireEvent.click(increase);
+    expect(checkbox).toBeChecked();
+    expect(within(increase.parentElement!).getByText('1')).toBeInTheDocument();
+    fireEvent.click(decrease);
+    expect(checkbox).not.toBeChecked();
+    expect(within(increase.parentElement!).getByText('0')).toBeInTheDocument();
+    expect(decrease).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'UNIVERSITY STUDENT' })).toBeChecked();
+  });
+
+  it('disables role checkboxes and count buttons for a read-only example', async () => {
+    vi.mocked(api.getStudy).mockResolvedValue(study({ is_demo: true }));
+    renderWorkflow(1);
+
+    expect(await screen.findByRole('checkbox', { name: 'UNIVERSITY STUDENT' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'PARENTAL BUYER' })).toBeDisabled();
+    expect(plusButton()).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Decrease UNIVERSITY STUDENT count' })).toBeDisabled();
+    expect(api.generateStudyPersonasDetailed).not.toHaveBeenCalled();
+  });
+});
+
 describe('Role count cap — the UI never asks for more personas per role than the server delivers', () => {
   it('clicking "+" five times leaves the count at the cap and disables the button', async () => {
     (api.getStudy as any).mockResolvedValue(study({}));
@@ -202,8 +269,6 @@ describe('Guards run before the step change', () => {
       />
     );
 
-    // Deselect the only active role (the row is a div onClick; the click
-    // bubbles up from the role name).
     fireEvent.click(await screen.findByText('UNIVERSITY STUDENT'));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /^Generate Personas$/i })).toBeDisabled()
@@ -215,5 +280,80 @@ describe('Guards run before the step change', () => {
     expect(api.generateStudyPersonasDetailed).not.toHaveBeenCalled();
     // Never moved to step 2 while the user still had roles to pick.
     expect(onStepChange).not.toHaveBeenCalledWith(2);
+  });
+});
+
+describe('Generated persona draft-save recovery', () => {
+  it('retries only the failed draft and keeps the generated personas', async () => {
+    const original = study({ revision: 1 });
+    const persist = vi.fn()
+      .mockResolvedValueOnce(study({ revision: 2, step: 2 }))
+      .mockRejectedValueOnce(new Error('Draft save unavailable'))
+      .mockResolvedValueOnce(study({ revision: 3, step: 2 }));
+    vi.mocked(api.getStudy).mockResolvedValue(original);
+    rememberStudyRevision(original);
+    vi.mocked(api.updateStudy).mockImplementation((id, updates) =>
+      queueStudyWrite(id, 'anonymous', updates, async () => original, persist));
+    const view = renderWorkflow(1);
+
+    try {
+      fireEvent.click(await screen.findByRole('button', { name: /^Generate Personas$/i }));
+      const retry = await screen.findByRole('button', { name: 'Retry save' });
+      expect(screen.getByText('Nusrat Jahan')).toBeInTheDocument();
+      expect(persist).toHaveBeenCalledTimes(2);
+      const retainedDraft = pendingStudyDraft('anonymous', original.id);
+      expect(retainedDraft).toBeDefined();
+      await waitFor(() => expect(retry).toBeEnabled());
+      fireEvent.click(retry);
+
+      await waitFor(() => expect(persist).toHaveBeenCalledTimes(3));
+      await waitFor(() => expect(screen.queryByText(/Study draft save failed:/)).not.toBeInTheDocument());
+      expect(persist.mock.calls[2][0]).toEqual(retainedDraft);
+      expect(api.generateStudyPersonasDetailed).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('Nusrat Jahan')).toBeInTheDocument();
+      expect(pendingStudyDraft('anonymous', original.id)).toBeUndefined();
+    } finally {
+      view.unmount();
+      discardStudyDraft('anonymous', original.id);
+    }
+  });
+
+  it('blocks overlapping retries and offers recovery again after another failed save', async () => {
+    const original = study({ revision: 1 });
+    let rejectRetry: (error: Error) => void = () => {};
+    const pendingRetry = new Promise<Study>((_resolve, reject) => { rejectRetry = reject; });
+    const persist = vi.fn()
+      .mockResolvedValueOnce(study({ revision: 2, step: 2 }))
+      .mockRejectedValueOnce(new Error('Draft save unavailable'))
+      .mockReturnValueOnce(pendingRetry)
+      .mockResolvedValueOnce(study({ revision: 3, step: 2 }));
+    vi.mocked(api.getStudy).mockResolvedValue(original);
+    rememberStudyRevision(original);
+    vi.mocked(api.updateStudy).mockImplementation((id, updates) =>
+      queueStudyWrite(id, 'anonymous', updates, async () => original, persist));
+    const view = renderWorkflow(1);
+
+    try {
+      fireEvent.click(await screen.findByRole('button', { name: /^Generate Personas$/i }));
+      const retry = await screen.findByRole('button', { name: 'Retry save' });
+      await waitFor(() => expect(retry).toBeEnabled());
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+      await waitFor(() => expect(persist).toHaveBeenCalledTimes(3));
+      expect(screen.getByRole('button', { name: 'Saving draft' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /Regenerate Personas/i })).toBeDisabled();
+      await act(async () => { rejectRetry(new Error('Draft still unavailable')); });
+
+      const nextRetry = await screen.findByRole('button', { name: 'Retry save' });
+      await waitFor(() => expect(nextRetry).toBeEnabled());
+      fireEvent.click(nextRetry);
+      await waitFor(() => expect(persist).toHaveBeenCalledTimes(4));
+      await waitFor(() => expect(screen.queryByText(/Study draft save failed:/)).not.toBeInTheDocument());
+      expect(api.generateStudyPersonasDetailed).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('Nusrat Jahan')).toBeInTheDocument();
+    } finally {
+      view.unmount();
+      discardStudyDraft('anonymous', original.id);
+    }
   });
 });

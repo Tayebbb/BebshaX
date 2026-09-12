@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { api } from '../src/services/api';
 import { parseApiError, toUserMessage, toApiErrorInstance, summariseDetail } from '../src/utils/apiError';
 
 describe('parseApiError — backend error envelope', () => {
@@ -116,5 +117,118 @@ describe('toUserMessage — friendly copy per error_code', () => {
   it('falls back to the error message for plain errors', () => {
     expect(toUserMessage(new Error('LLM providers busy'))).toBe('LLM providers busy');
     expect(toUserMessage(undefined)).toBe('The request did not complete.');
+  });
+});
+
+describe('saved research API reads', () => {
+  const fetchMock = vi.fn<typeof fetch>();
+  const studyId = 'study_read_regression';
+
+  beforeEach(() => {
+    localStorage.clear();
+    api.setMockMode(false);
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    api.setMockMode(true);
+    localStorage.clear();
+  });
+
+  describe.each([
+    {
+      name: 'getMarketSegments',
+      read: (id: string) => api.getMarketSegments(id),
+      emptyResult: [],
+    },
+    {
+      name: 'listStudyInterviews',
+      read: (id: string) => api.listStudyInterviews(id),
+      emptyResult: { interviews: [], total: 0 },
+    },
+  ])('$name', ({ read, emptyResult }) => {
+    it.each([
+      { status: 404, errorCode: 'not_found' },
+      { status: 500, errorCode: 'internal_error' },
+      { status: 503, errorCode: 'database_unavailable' },
+    ])('rejects HTTP $status with its error envelope instead of empty research', async ({ status, errorCode }) => {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+        detail: 'Unable to read saved research',
+        error_code: errorCode,
+        request_id: 'req_saved_research',
+      }), { status, headers: { 'Content-Type': 'application/json' } }));
+
+      const request = read(studyId);
+
+      await expect(request).rejects.toBeInstanceOf(Error);
+      await expect(request).rejects.toMatchObject({
+        message: 'Unable to read saved research',
+        status,
+        errorCode,
+        requestId: 'req_saved_research',
+      });
+      expect(api.isLive()).toBe(false);
+    });
+
+    it('rejects a non-JSON server error and preserves the request ID header', async () => {
+      fetchMock.mockResolvedValueOnce(new Response('Upstream unavailable', {
+        status: 502,
+        headers: { 'X-Request-ID': 'req_upstream' },
+      }));
+
+      await expect(read(studyId)).rejects.toMatchObject({
+        message: expect.stringContaining('HTTP 502'),
+        status: 502,
+        errorCode: 'internal_error',
+        requestId: 'req_upstream',
+      });
+    });
+
+    it('rejects the original transport error instead of empty research', async () => {
+      const error = new TypeError('Failed to fetch');
+      fetchMock.mockRejectedValueOnce(error);
+
+      await expect(read(studyId)).rejects.toBe(error);
+      expect(api.isLive()).toBe(false);
+    });
+
+    it('returns genuine empty research from HTTP 200', async () => {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(emptyResult), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+
+      await expect(read(studyId)).resolves.toEqual(emptyResult);
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(api.isLive()).toBe(true);
+    });
+  });
+
+  it('preserves the explicit mock segment result without fetching', async () => {
+    api.setMockMode(true);
+
+    await expect(api.getMarketSegments(studyId)).resolves.toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns seeded interviews in explicit mock mode without fetching', async () => {
+    api.setMockMode(true);
+    await api.resetMockStore();
+    const study = api.getStoredUserStudies().find((item) => (item.interviews?.length ?? 0) > 0);
+    const interviews = study?.interviews;
+    expect(study).toBeDefined();
+    if (!study || !interviews) throw new Error('Expected a study fixture with saved interviews');
+
+    await expect(api.listStudyInterviews(study.id)).resolves.toMatchObject({
+      total: interviews.length,
+      interviews: interviews.map((interview) => ({
+        id: interview.id,
+        persona_id: interview.persona_id,
+        summary: interview.key_takeaway,
+      })),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

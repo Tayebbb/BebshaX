@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { ModelRouterView } from '../src/components/dashboard/views/ModelRouterView';
 import { JudgeLabPanel } from '../src/components/dashboard/views/router/JudgeLabPanel';
+import { ProvenanceTraceRow } from '../src/components/dashboard/views/router/ProvenanceTraceRow';
 import { api } from '../src/services/api';
 import type { EvaluationMetrics, ProvenanceRecord, RoutesStatusResponse } from '../src/types';
 
@@ -144,6 +145,129 @@ describe('Routing & Provenance inspector', () => {
     const outputRow = screen.getByText('Output tokens').nextElementSibling as HTMLElement;
     expect(outputRow).toHaveTextContent('—');
     expect(screen.getByText(/yes — served from the provider response cache/)).toBeInTheDocument();
+  });
+
+  it('wraps long trace metadata in both headers and preserves full expanded provenance', () => {
+    const taskType: ProvenanceRecord['task'] = 'PERSONA_GENERATION';
+    const longPool = `reasoning_${'high_context_'.repeat(8)}`;
+    const longProvider = `provider-${'remote-region-'.repeat(8)}`;
+    const longModel = `model_${'instructioncontext'.repeat(16)}`;
+    const longRoute = `${longProvider}/${longModel}`;
+    const requestId = `req_${'full_provenance_'.repeat(8)}`;
+    const trace: ProvenanceRecord = {
+      ...fallbackTrace,
+      request_id: requestId,
+      task: taskType,
+      pool: longPool,
+      served_by_provider: longProvider,
+      served_by_model: longModel,
+      routing_path: [longRoute],
+      attempts: [{ ...fallbackTrace.attempts[1], attempt_number: 1, provider: longProvider, model: longModel }],
+    };
+
+    render(<ProvenanceTraceRow rec={trace} />);
+
+    const toggle = screen.getByRole('button', { expanded: false });
+    const task = within(toggle).getByText(taskType);
+    const pool = within(toggle).getByText(longPool);
+    const servedRoute = within(toggle).getByText(longProvider).parentElement as HTMLElement;
+    expect(servedRoute).toHaveTextContent(`Served: ${longProvider} (${longModel})`);
+    for (const header of [task.parentElement, servedRoute.parentElement]) {
+      expect(header).toHaveStyle('flex-wrap: wrap; min-width: 0; max-width: 100%; overflow-wrap: anywhere');
+    }
+    for (const metadata of [task, pool, servedRoute]) {
+      expect(metadata).toHaveStyle('min-width: 0; max-width: 100%; overflow-wrap: anywhere');
+    }
+    for (const icon of toggle.querySelectorAll('svg')) {
+      expect(icon).toHaveStyle('flex-shrink: 0');
+    }
+    expect(within(toggle).getByText('Success')).toHaveStyle('white-space: nowrap; flex-shrink: 0');
+
+    fireEvent.click(toggle);
+
+    const panel = document.getElementById(toggle.getAttribute('aria-controls')!) as HTMLElement;
+    expect(panel).toHaveStyle('min-width: 0; max-width: 100%; overflow-wrap: anywhere');
+    expect(within(panel).getByText(requestId)).toBeInTheDocument();
+    expect(within(panel).getByText(longPool)).toBeInTheDocument();
+    expect(within(panel).getAllByText(longRoute)).toHaveLength(2);
+    const timeline = within(panel).getByRole('heading', { name: 'Attempts timeline' }).closest('section') as HTMLElement;
+    expect(within(timeline).getByRole('list')).toHaveStyle('min-width: 0');
+    expect(within(panel).getByText('Pool').closest('dl')).toHaveStyle('grid-template-columns: auto minmax(0, 1fr)');
+    expect(within(panel).getByText('served')).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(panel).not.toBeInTheDocument();
+  });
+
+  it('wraps complete attempt IDs, failure details and route annotations in shrinkable columns', () => {
+    const longModel = `model_${'unbrokenidentifier'.repeat(16)}`;
+    const longRoute = `groq/${longModel}`;
+    const skippedRoute = `remote/${longModel}`;
+    const skipReason = `context_${'budget'.repeat(24)}`;
+    const annotation = `context_${'annotation'.repeat(24)}`;
+    const fallbackReason = `fallback_${'reason'.repeat(24)}`;
+    const failureDetail = `HTTP_429_${'diagnostic'.repeat(24)}`;
+    const trace: ProvenanceRecord = {
+      ...fallbackTrace,
+      routing_path: [longRoute, `${skippedRoute} [skipped: ${skipReason}]`, `[${annotation}]`],
+      attempts: [
+        { ...fallbackTrace.attempts[0], model: longModel, fallback_reason: fallbackReason, failure_detail: failureDetail },
+        fallbackTrace.attempts[1],
+      ],
+    };
+
+    render(<ProvenanceTraceRow rec={trace} />);
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+
+    const timeline = screen.getByRole('heading', { name: 'Attempts timeline' }).closest('section') as HTMLElement;
+    const routing = screen.getByRole('heading', { name: 'Routing path' }).closest('section') as HTMLElement;
+    for (const section of [timeline, routing]) {
+      expect(section).toHaveStyle('min-width: 0');
+    }
+    for (const attempt of within(timeline).getAllByRole('listitem')) {
+      expect(attempt).toHaveStyle('grid-template-columns: 28px minmax(0, 1fr); min-width: 0');
+      expect(attempt.lastElementChild).toHaveStyle('min-width: 0; overflow-wrap: anywhere');
+    }
+    expect(within(timeline).getByText(longRoute)).toHaveStyle('min-width: 0; max-width: 100%; overflow-wrap: anywhere');
+    for (const detail of [fallbackReason, failureDetail]) {
+      expect(within(timeline).getByText(detail)).toHaveStyle('min-width: 0; overflow-wrap: anywhere');
+    }
+    for (const label of [longRoute, skippedRoute, `skipped — ${skipReason}`, annotation]) {
+      expect(within(routing).getByText(label).closest('li')).toHaveStyle('min-width: 0; overflow-wrap: anywhere');
+    }
+    for (const label of ['2 attempts', 'RATE_LIMITED', 'served', 'CACHED', 'Attempts timeline', 'Routing path', failureDetail, `skipped — ${skipReason}`]) {
+      expect(screen.getByText(label)).toHaveStyle('font-size: 0.75rem');
+    }
+    const toggle = screen.getByRole('button', { expanded: true });
+    expect(within(toggle).getByText('reasoning')).toHaveStyle('font-size: 0.75rem');
+    for (const marker of timeline.querySelectorAll('span[aria-hidden="true"]')) {
+      if (marker.textContent) expect(marker).toHaveStyle('font-size: 0.75rem');
+    }
+  });
+
+  it('retains the failed status and unmeasured provenance when no route was attempted', () => {
+    render(<ProvenanceTraceRow rec={{
+      ...fallbackTrace,
+      pool: null,
+      attempts: [],
+      routing_path: [],
+      served_by_provider: null,
+      served_by_model: null,
+      input_tokens: null,
+      output_tokens: null,
+      total_latency_ms: null,
+      success: false,
+    }} />);
+
+    const toggle = screen.getByRole('button', { expanded: false });
+    expect(within(toggle).getByText('not served')).toBeInTheDocument();
+    expect(within(toggle).getByText('Failed')).toHaveStyle('white-space: nowrap; flex-shrink: 0');
+    fireEvent.click(toggle);
+    expect(screen.getByText(/No provider was attempted/)).toBeInTheDocument();
+    for (const label of ['Pool', 'Input tokens', 'Output tokens']) {
+      expect(screen.getByText(label).nextElementSibling).toHaveTextContent('—');
+    }
   });
 
   it('renders null active_requests / active_cooldowns as "—", never 0', async () => {

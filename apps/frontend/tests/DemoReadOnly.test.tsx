@@ -10,6 +10,8 @@ vi.mock('../src/services/api', () => {
   const stub = {
     getStudy: vi.fn(),
     getStudyReports: vi.fn(),
+    getPendingJobHandle: vi.fn().mockReturnValue(null),
+    getPendingStudyDraft: vi.fn().mockReturnValue(undefined),
     getEvidenceSummary: vi.fn(),
     updateStudy: vi.fn(),
     generateStudyPersonas: vi.fn(),

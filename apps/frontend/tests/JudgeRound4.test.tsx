@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { StudiesDashboardView } from '../src/components/dashboard/views/StudiesDashboardView';
 import { PersonaLibraryView } from '../src/components/dashboard/views/PersonaLibraryView';
@@ -196,40 +196,51 @@ describe('Step 1 status line', () => {
 
 describe('Blocker 3 — demo study blurb is data-driven', () => {
   it('promises only the report when the study has no personas or interviews', async () => {
-    (api.getStudies as any).mockResolvedValue([
+    vi.mocked(api.getStudies).mockResolvedValue([
       study({ id: 'demo_done', title: 'Finished Demo', is_demo: true, status: 'completed', step: 5 }),
     ]);
 
     render(<StudiesDashboardView onCreateStudy={vi.fn()} onOpenStudy={vi.fn()} />);
 
-    await waitFor(() => expect(screen.getByText('DEMO STUDY')).toBeInTheDocument());
-    expect(screen.getByText('Sample study — explore a finished decision report')).toBeInTheDocument();
-    expect(screen.queryByText(/pre-generated interviews/i)).toBeNull();
+    const sampleStudy = await screen.findByRole('button', { name: /Finished Demo.*DEMO STUDY/i });
+    expect(within(sampleStudy).getByText(/\ba finished decision report\b/i)).toBeVisible();
+    expect(sampleStudy).not.toHaveTextContent(/personas?|interviews?/i);
   });
 
   it('names personas when the study has them — and never advertises interviews (the list never serializes them)', async () => {
-    (api.getStudies as any).mockResolvedValue([
-      study({
+    const sampleWithInterviews = {
+      ...study({
         id: 'demo_done',
         title: 'Finished Demo',
         is_demo: true,
         status: 'completed',
         step: 5,
         persona_count: 3,
-        // Even a hypothetical interviews payload must not be advertised: the
-        // backend never puts interviews on the study list, so the clause was
-        // dead in production and has been removed.
-        interviews: [{ id: 'iv_1' }, { id: 'iv_2' }] as any,
       }),
-    ]);
+      // Even a hypothetical interviews payload must not be advertised: the
+      // backend never puts interviews on the study list, so the clause was
+      // dead in production and has been removed.
+      interviews: ['iv_1', 'iv_2'].map((id) => ({
+        id,
+        persona_id: `persona_${id}`,
+        persona_name: 'Synthetic fixture',
+        persona_archetype: 'Fixture participant',
+        status: 'completed' as const,
+        turns_count: 2,
+        duration_minutes: 1,
+        key_takeaway: 'Synthetic test result',
+        sentiment: 'neutral' as const,
+      })),
+    };
+    vi.mocked(api.getStudies).mockResolvedValue([sampleWithInterviews]);
 
     render(<StudiesDashboardView onCreateStudy={vi.fn()} onOpenStudy={vi.fn()} />);
 
-    await waitFor(() => expect(screen.getByText('DEMO STUDY')).toBeInTheDocument());
-    expect(
-      screen.getByText('Sample study — explore a finished decision report, 3 personas'),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/2 interviews/)).toBeNull();
+    const sampleStudy = await screen.findByRole('button', { name: /Finished Demo.*DEMO STUDY/i });
+    const sampleOffers = within(sampleStudy).getByText(/\ba finished decision report\b/i);
+    expect(sampleOffers).toBeVisible();
+    expect(sampleOffers).toHaveTextContent(/\b3 synthetic personas\b/i);
+    expect(sampleStudy).not.toHaveTextContent(/interviews?/i);
   });
 });
 

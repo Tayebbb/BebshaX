@@ -7,6 +7,7 @@ import { api } from '../src/services/api';
 import {
   SyntheticPersona,
   Interview,
+  InterviewDetailResponse,
 } from '../src/types';
 
 vi.mock('../src/services/api', () => ({
@@ -85,7 +86,7 @@ const mockInterview: Interview = {
 
 // The backend returns the interview FLAT (turns/insights/suggestions at the
 // top level) — this mirrors bebshax.api.interviews._serialize_interview.
-const mockDetail = {
+const mockDetail: InterviewDetailResponse = {
   ...mockInterview,
   turns: [
     {

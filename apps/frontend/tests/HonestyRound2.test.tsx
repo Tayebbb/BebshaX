@@ -1,5 +1,6 @@
+import type { ComponentProps } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { PersonaLibraryView } from '../src/components/dashboard/views/PersonaLibraryView';
 import { InterviewsView } from '../src/components/dashboard/views/InterviewsView';
@@ -169,7 +170,11 @@ describe('Major 7 — no invented budget', () => {
 });
 
 describe('Blocker 3 — step 5 agrees with step 2', () => {
-  const renderStep5 = (personas: Persona[], report: StudyReport | null) =>
+  const renderStep5 = (
+    personas: Persona[],
+    report: StudyReport | null,
+    overrides: Partial<ComponentProps<typeof Step5Report>> = {},
+  ) =>
     render(
       <Step5Report
         study={null}
@@ -183,6 +188,7 @@ describe('Blocker 3 — step 5 agrees with step 2', () => {
         exportReportMarkdown={vi.fn()}
         handleGenerateFinalReport={vi.fn()}
         verificationAssumptions={[]}
+        {...overrides}
       />
     );
 
@@ -192,6 +198,130 @@ describe('Blocker 3 — step 5 agrees with step 2', () => {
     recommendations: [],
     metrics: { total_claims: 0 },
   };
+
+  const recoveryCases = [
+    { errorKind: 'loading', label: 'Reload saved reports' },
+    { errorKind: 'generation', label: 'Retry report generation' },
+    { errorKind: 'copy', label: 'Try copying again' },
+  ] as const;
+
+  it.each([false, true])('reloads saved reports after a loading failure without generating a report (readOnly=%s)', (isReadOnly) => {
+    const onReloadReports = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const handleGenerateFinalReport = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const copyReportMarkdown = vi.fn();
+    renderStep5([], null, {
+      reportError: 'Saved reports could not be loaded.',
+      reportErrorKind: 'loading',
+      onReloadReports,
+      handleGenerateFinalReport,
+      copyReportMarkdown,
+      isReadOnly,
+    });
+
+    const alert = within(screen.getByRole('alert'));
+    expect(alert.getByText(/Saved reports unavailable:/)).toBeVisible();
+    const retry = alert.getByRole('button', { name: 'Reload saved reports' });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+
+    expect(onReloadReports).toHaveBeenCalledTimes(1);
+    expect(handleGenerateFinalReport).not.toHaveBeenCalled();
+    expect(copyReportMarkdown).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('retries copying after a copy failure without generating a report (readOnly=%s)', (isReadOnly) => {
+    const onReloadReports = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const handleGenerateFinalReport = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const copyReportMarkdown = vi.fn();
+    renderStep5([], bareReport, {
+      reportError: 'Clipboard permission was denied.',
+      reportErrorKind: 'copy',
+      onReloadReports,
+      handleGenerateFinalReport,
+      copyReportMarkdown,
+      isReadOnly,
+    });
+
+    const alert = within(screen.getByRole('alert'));
+    expect(alert.getByText(/Report copy failed:/)).toBeVisible();
+    const retry = alert.getByRole('button', { name: 'Try copying again' });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+
+    expect(copyReportMarkdown).toHaveBeenCalledTimes(1);
+    expect(handleGenerateFinalReport).not.toHaveBeenCalled();
+    expect(onReloadReports).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { reportError: null, label: 'Generate Decision Report' },
+    { reportError: 'Report generation failed.', label: 'Retry report generation' },
+  ])('disables $label for read-only studies', ({ reportError, label }) => {
+    const handleGenerateFinalReport = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    renderStep5([], null, {
+      reportError,
+      reportErrorKind: 'generation',
+      handleGenerateFinalReport,
+      isReadOnly: true,
+    });
+
+    const generate = screen.getByRole('button', { name: label });
+    expect(generate).toBeDisabled();
+    fireEvent.click(generate);
+
+    expect(handleGenerateFinalReport).not.toHaveBeenCalled();
+  });
+
+  it.each(recoveryCases)('keeps the saved report visible after a $errorKind failure', ({ errorKind }) => {
+    const savedReport = {
+      ...bareReport,
+      title: 'Saved customer research',
+      version: 2,
+      executive_summary: 'The previously saved summary remains available.',
+      key_findings: ['Participants need clearer pricing.'],
+      recommendations: ['Test the revised pricing page.'],
+      limitations: 'Synthetic results require customer validation.',
+    };
+    renderStep5([], savedReport, {
+      reportError: 'The latest action failed.',
+      reportErrorKind: errorKind,
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Your saved report is unchanged.');
+    expect(screen.getByRole('heading', { name: savedReport.title })).toBeVisible();
+    expect(screen.getByText(/Decision Report Ready.*Version 2/)).toBeVisible();
+    expect(screen.getByText(savedReport.executive_summary)).toBeVisible();
+    expect(screen.getByText(savedReport.key_findings[0])).toBeVisible();
+    expect(screen.getByText(savedReport.recommendations[0])).toBeVisible();
+    expect(screen.getByText(savedReport.limitations)).toBeVisible();
+    expect(screen.queryByText('No report yet')).not.toBeInTheDocument();
+  });
+
+  it.each(recoveryCases.flatMap((recovery) => [
+    { ...recovery, busyFlag: 'reportsLoading' as const },
+    { ...recovery, busyFlag: 'isGeneratingReport' as const },
+  ]))('blocks duplicate $errorKind recovery actions while $busyFlag is set', ({ errorKind, label, busyFlag }) => {
+    const onReloadReports = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const handleGenerateFinalReport = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const copyReportMarkdown = vi.fn();
+    renderStep5([], bareReport, {
+      reportError: 'The latest action failed.',
+      reportErrorKind: errorKind,
+      onReloadReports,
+      handleGenerateFinalReport,
+      copyReportMarkdown,
+      [busyFlag]: true,
+    });
+
+    const retry = within(screen.getByRole('alert')).getByRole('button', { name: label });
+    expect(retry).toBeDisabled();
+    fireEvent.click(retry);
+    fireEvent.click(retry);
+
+    expect(onReloadReports).not.toHaveBeenCalled();
+    expect(handleGenerateFinalReport).not.toHaveBeenCalled();
+    expect(copyReportMarkdown).not.toHaveBeenCalled();
+  });
 
   it('counts evidence-backed personas instead of calling them all grounded', () => {
     renderStep5([workflowPersona({ grounding_ratio: 0 }), workflowPersona({ id: 'per_2', grounding_ratio: 0.7 })], bareReport);

@@ -7,7 +7,18 @@ import { NavigationProvider } from '../src/context/NavigationContext';
 import { api } from '../src/services/api';
 import { Button, Callout, ConfidenceBar, EmptyState, Metric, CommandMenu, type CommandItem } from '../src/components/ui';
 
-const renderShell = (path = '/create-study') => {
+const renderShell = (path = '/create-study', role: 'user' | 'developer' = 'user') => {
+  api.setStoredUser({
+    id: 'studio_shell_user',
+    email: 'shell@example.test',
+    full_name: 'Shell Reviewer',
+    avatar_url: null,
+    is_active: true,
+    is_verified: true,
+    auth_provider: 'email',
+    created_at: '2026-09-12T00:00:00Z',
+    role,
+  });
   window.history.pushState({}, '', path);
   return render(
     <NavigationProvider>
@@ -24,15 +35,23 @@ describe('Console shell — navigation architecture', () => {
     localStorage.setItem('bebshax_tour_dismissed', '1');
   });
 
-  it('groups primary navigation into Workspace / Study / System with one current page', () => {
+  it('groups regular-user navigation into Workspace and Study with one current page', () => {
     renderShell('/dashboard');
     const nav = screen.getByRole('navigation', { name: /primary/i });
     expect(within(nav).getByText('Workspace')).toBeInTheDocument();
     expect(within(nav).getByText('Study')).toBeInTheDocument();
-    expect(within(nav).getByText('System')).toBeInTheDocument();
+    expect(within(nav).queryByText('System')).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: 'Routing & Provenance' })).not.toBeInTheDocument();
     const current = within(nav).getAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'page');
     expect(current).toHaveLength(1);
     expect(current[0]).toHaveTextContent('Dashboard');
+  });
+
+  it('includes System navigation for a developer account', () => {
+    renderShell('/dashboard', 'developer');
+    const nav = screen.getByRole('navigation', { name: /primary/i });
+    expect(within(nav).getByText('System')).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Routing & Provenance' })).toBeInTheDocument();
   });
 
   it('tells the user when study-scoped tabs have no study to work in', () => {
@@ -50,8 +69,29 @@ describe('Console shell — navigation architecture', () => {
     expect(chip).toHaveTextContent(/Step 1/);
   });
 
+  it('opens evidence for the library-selected study when the shell has no active study', async () => {
+    renderShell('/persona-library');
+    const studyPicker = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Active study' });
+    await waitFor(() => expect(studyPicker.value).not.toBe(''));
+    const [selectedStudy] = within(studyPicker).getAllByRole<HTMLOptionElement>('option')
+      .filter((option) => option.value && option.value !== studyPicker.value);
+    expect(selectedStudy).toBeDefined();
+
+    fireEvent.change(studyPicker, { target: { value: selectedStudy.value } });
+    const openers = await screen.findAllByRole('button', { name: 'Open profile' });
+    expect(studyPicker).toHaveValue(selectedStudy.value);
+    expect(screen.getByText('No study selected')).toBeInTheDocument();
+    fireEvent.click(openers[0]);
+    fireEvent.click(screen.getByRole('tab', { name: /Evidence/ }));
+    fireEvent.click(screen.getByRole('button', { name: /View in Evidence Laboratory/ }));
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe(`/research/${selectedStudy.value}/evidence`);
+    });
+  });
+
   it('renders a breadcrumb that names the section and page', () => {
-    renderShell('/router');
+    renderShell('/router', 'developer');
     const crumbs = screen.getByRole('navigation', { name: /breadcrumb/i });
     expect(within(crumbs).getByText('System')).toBeInTheDocument();
     expect(within(crumbs).getByText('Routing & Provenance')).toHaveAttribute('aria-current', 'page');
@@ -77,7 +117,7 @@ describe('Console shell — command menu', () => {
   });
 
   it('opens with Ctrl+K, filters as you type, and Enter navigates', async () => {
-    renderShell('/dashboard');
+    renderShell('/dashboard', 'developer');
     expect(screen.queryByRole('dialog', { name: /command menu/i })).toBeNull();
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true });
     const dialog = await screen.findByRole('dialog', { name: /command menu/i });
@@ -91,6 +131,15 @@ describe('Console shell — command menu', () => {
       expect(window.location.pathname).toBe('/router');
     });
     expect(screen.queryByRole('dialog', { name: /command menu/i })).toBeNull();
+  });
+
+  it('does not offer routing commands to a regular account', async () => {
+    renderShell('/dashboard');
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true });
+    const dialog = await screen.findByRole('dialog', { name: /command menu/i });
+    fireEvent.change(within(dialog).getByRole('combobox'), { target: { value: 'routing' } });
+    expect(within(dialog).queryByRole('option')).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/Nothing matches/i)).toBeInTheDocument();
   });
 
   it('opens from the toolbar button and closes on Escape', async () => {

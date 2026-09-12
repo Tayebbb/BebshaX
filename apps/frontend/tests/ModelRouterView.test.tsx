@@ -73,4 +73,33 @@ describe('ModelRouterView honesty regressions', () => {
       screen.getAllByText(/How routing works — architecture, not live status/i)
     ).toHaveLength(1);
   });
+
+  it('renders provider status while provenance is still pending', async () => {
+    vi.mocked(api.getProvenance).mockReturnValue(new Promise(() => {}));
+    render(<ModelRouterView />);
+
+    expect(await screen.findByText('groq')).toBeInTheDocument();
+    expect(screen.getByText('Loading provenance traces...')).toBeInTheDocument();
+  });
+
+  it('retains provenance when provider status fails independently', async () => {
+    vi.mocked(api.getRoutesStatus).mockRejectedValue(new Error('Provider snapshot unavailable'));
+    render(<ModelRouterView />);
+
+    expect(await screen.findByText('not served')).toBeInTheDocument();
+    expect(screen.getByText('Provider status unavailable: Provider snapshot unavailable').closest('[role="alert"]')).toBeInTheDocument();
+    expect(screen.queryByText('Provenance traces could not be loaded.')).not.toBeInTheDocument();
+  });
+
+  it.each(['buffered', 'native', null] as const)('shows reported %s delivery capability without inventing active model counts', async (mode) => {
+    vi.mocked(api.getRoutesStatus).mockResolvedValue({
+      providers: [{ name: 'freellmpool', type: 'aggregator', status: 'configured', available_models: null, active_cooldowns: null, streaming_mode: mode, recent_success: false }],
+      pools: [],
+    });
+    render(<ModelRouterView />);
+
+    expect(await screen.findByText(mode === 'native' ? 'Native response streaming' : mode === 'buffered' ? 'Buffered response delivery' : 'Delivery capability unknown')).toBeInTheDocument();
+    expect(screen.getByText(/Models:/)).toHaveTextContent('Unknown');
+    expect(screen.queryByText(/^(healthy|operational)$/i)).not.toBeInTheDocument();
+  });
 });

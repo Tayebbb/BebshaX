@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SegmentationView } from '../src/components/dashboard/views/SegmentationView';
 import { api } from '../src/services/api';
@@ -179,6 +179,25 @@ const mockComparison: SegmentComparisonResult = {
   ],
 };
 
+const nextRun: SegmentationRun = {
+  ...mockRun,
+  id: 'segrun_next',
+  dataset_versions: [{ ...mockRun.dataset_versions[0], name: 'Updated survey', content_hash: 'hash_next' }],
+};
+const nextResult = {
+  run: nextRun,
+  segments: [{ ...mockSegments[0], id: 'seg_next', segmentation_run_id: nextRun.id, name: 'Updated cohort' }],
+};
+const segmentRequest = <Value,>() => {
+  let resolve!: (value: Value) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
+
 describe('SegmentationView Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -212,6 +231,206 @@ describe('SegmentationView Component', () => {
     await waitFor(() => {
       expect(api.runSegmentation).toHaveBeenCalledWith('study_123', { desired_clusters: 3 });
     });
+  });
+
+  it.each(['readiness', 'history'] as const)('shows saved segments while %s is pending', async (metadata) => {
+    const request = metadata === 'readiness' ? api.getSegmentationReadiness : api.listSegmentationRuns;
+    vi.mocked(request).mockReturnValueOnce(new Promise<never>(() => {}));
+
+    render(<SegmentationView studyId="study_123" />);
+
+    expect(await screen.findByTestId('deep-dive-btn-seg_01')).toBeInTheDocument();
+    expect(screen.queryByText('Loading segmentation data…')).not.toBeInTheDocument();
+  });
+
+  it.each(['readiness', 'history'] as const)('shows saved segments when %s fails', async (metadata) => {
+    const request = metadata === 'readiness' ? api.getSegmentationReadiness : api.listSegmentationRuns;
+    vi.mocked(request).mockRejectedValueOnce(new Error(`${metadata} unavailable`));
+
+    render(<SegmentationView studyId="study_123" />);
+
+    expect(await screen.findByTestId('deep-dive-btn-seg_01')).toBeInTheDocument();
+    expect(screen.queryByText('Loading segmentation data…')).not.toBeInTheDocument();
+  });
+
+  it.each(['readiness', 'history'] as const)('isolates a %s failure to its dependent actions', async (metadata) => {
+    const request = metadata === 'readiness' ? api.getSegmentationReadiness : api.listSegmentationRuns;
+    vi.mocked(request).mockRejectedValueOnce(new Error(`${metadata} unavailable`));
+    render(<SegmentationView studyId="study_123" />);
+
+    expect(await screen.findByTestId('deep-dive-btn-seg_01')).toBeEnabled();
+    expect(screen.getByTestId('export-csv-btn')).toBeEnabled();
+    expect(screen.getByRole('alert')).toHaveTextContent(metadata === 'readiness' ? 'Data readiness unavailable' : 'Run history unavailable');
+    if (metadata === 'readiness') expect(screen.getByTestId('run-segmentation-btn')).toBeDisabled();
+    else expect(screen.getByTestId('run-segmentation-btn')).toBeEnabled();
+  });
+
+  it('shows the selected older run dataset versions instead of the newest run', async () => {
+    vi.mocked(api.listSegmentationRuns).mockResolvedValueOnce([nextRun, mockRun]);
+    render(<SegmentationView studyId="study_123" />);
+    fireEvent.click(await screen.findByTestId('deep-dive-btn-seg_01'));
+    fireEvent.click(screen.getByTestId('modal-tab-provenance'));
+
+    expect(screen.getByTestId('tab-content-provenance')).toHaveTextContent('hash_abc123');
+    expect(screen.getByTestId('tab-content-provenance')).not.toHaveTextContent('hash_next');
+  });
+
+  it.each(['missing', 'other study'] as const)('does not substitute %s run history for selected lineage', async (history) => {
+    vi.mocked(api.listSegmentationRuns).mockResolvedValueOnce(history === 'missing'
+      ? [nextRun] : [{ ...mockRun, study_id: 'another-study' }]);
+    render(<SegmentationView studyId="study_123" />);
+    fireEvent.click(await screen.findByTestId('deep-dive-btn-seg_01'));
+    fireEvent.click(screen.getByTestId('modal-tab-provenance'));
+
+    const provenance = screen.getByTestId('tab-content-provenance');
+    expect(provenance).toHaveTextContent(mockRun.id);
+    expect(provenance).toHaveTextContent('Dataset provenance is unavailable for this run.');
+    expect(provenance).not.toHaveTextContent('hash_abc123');
+    expect(provenance).not.toHaveTextContent('hash_next');
+  });
+
+  it('closes an older segment selected during a run when replacement segments arrive', async () => {
+    const execution = segmentRequest<typeof nextResult>();
+    vi.mocked(api.runSegmentation).mockReturnValueOnce(execution.promise);
+    render(<SegmentationView studyId="study_123" />);
+    await screen.findByTestId('deep-dive-btn-seg_01');
+    fireEvent.click(screen.getByTestId('run-segmentation-btn'));
+    fireEvent.click(screen.getByTestId('deep-dive-btn-seg_01'));
+    fireEvent.click(screen.getByTestId('modal-tab-provenance'));
+    expect(screen.getByTestId('tab-content-provenance')).toHaveTextContent('hash_abc123');
+
+    await act(async () => execution.resolve(nextResult));
+    expect(screen.queryByTestId('segment-detail-modal')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('deep-dive-btn-seg_next'));
+    fireEvent.click(screen.getByTestId('modal-tab-provenance'));
+    expect(screen.getByTestId('tab-content-provenance')).toHaveTextContent('hash_next');
+    expect(screen.getByTestId('tab-content-provenance')).not.toHaveTextContent('hash_abc123');
+  });
+
+  it.each(['pending', 'failed'] as const)('finishes primary run results while history refresh is %s', async (history) => {
+    vi.mocked(api.runSegmentation).mockResolvedValueOnce(nextResult);
+    vi.mocked(api.listSegmentationRuns).mockResolvedValueOnce([mockRun]);
+    if (history === 'pending') vi.mocked(api.listSegmentationRuns).mockReturnValueOnce(new Promise<never>(() => {}));
+    else vi.mocked(api.listSegmentationRuns).mockRejectedValueOnce(new Error('History refresh failed'));
+    render(<SegmentationView studyId="study_123" />);
+    await screen.findByTestId('deep-dive-btn-seg_01');
+    fireEvent.click(screen.getByTestId('run-segmentation-btn'));
+
+    expect(await screen.findByTestId('deep-dive-btn-seg_next')).toBeInTheDocument();
+    expect(screen.getByTestId('run-segmentation-btn')).toBeEnabled();
+    expect(screen.queryByText('Segmentation Engine in Progress')).not.toBeInTheDocument();
+    if (history === 'failed') expect(screen.getByRole('alert')).toHaveTextContent('Run history unavailable: History refresh failed');
+    fireEvent.click(screen.getByTestId('deep-dive-btn-seg_next'));
+    fireEvent.click(screen.getByTestId('modal-tab-provenance'));
+    expect(screen.getByTestId('tab-content-provenance')).toHaveTextContent('hash_next');
+  });
+
+  it('ignores stale history after a new run has completed', async () => {
+    const history = segmentRequest<SegmentationRun[]>();
+    vi.mocked(api.listSegmentationRuns).mockReturnValueOnce(history.promise);
+    vi.mocked(api.runSegmentation).mockResolvedValueOnce(nextResult);
+    render(<SegmentationView studyId="study_123" />);
+    await screen.findByTestId('deep-dive-btn-seg_01');
+    fireEvent.click(screen.getByTestId('run-segmentation-btn'));
+    fireEvent.click(await screen.findByTestId('deep-dive-btn-seg_next'));
+    fireEvent.click(screen.getByTestId('modal-tab-provenance'));
+
+    await act(async () => history.resolve([mockRun]));
+    expect(screen.getByTestId('tab-content-provenance')).toHaveTextContent('hash_next');
+    expect(screen.getByTestId('tab-content-provenance')).not.toHaveTextContent('hash_abc123');
+  });
+
+  it.each(['history', 'run'] as const)('does not reopen dismissed details after a late %s completion', async (completion) => {
+    const history = segmentRequest<SegmentationRun[]>();
+    const execution = segmentRequest<typeof nextResult>();
+    if (completion === 'history') vi.mocked(api.listSegmentationRuns).mockReturnValueOnce(history.promise);
+    else vi.mocked(api.runSegmentation).mockReturnValueOnce(execution.promise);
+    render(<SegmentationView studyId="study_123" />);
+    await screen.findByTestId('deep-dive-btn-seg_01');
+    if (completion === 'run') fireEvent.click(screen.getByTestId('run-segmentation-btn'));
+    fireEvent.click(screen.getByTestId('deep-dive-btn-seg_01'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('segment-detail-modal')).not.toBeInTheDocument();
+
+    await act(async () => {
+      if (completion === 'history') history.resolve([mockRun]);
+      else execution.resolve(nextResult);
+    });
+    expect(screen.queryByTestId('segment-detail-modal')).not.toBeInTheDocument();
+  });
+
+  it('keeps cached segments available during a retry that fails', async () => {
+    const refresh = segmentRequest<MarketSegment[]>();
+    vi.mocked(api.getSegmentationReadiness).mockRejectedValueOnce(new Error('Readiness failed'));
+    vi.mocked(api.listStudySegments).mockResolvedValueOnce(mockSegments).mockReturnValueOnce(refresh.promise);
+    render(<SegmentationView studyId="study_123" />);
+    await screen.findByTestId('deep-dive-btn-seg_01');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry metadata' }));
+    expect(screen.getByTestId('deep-dive-btn-seg_01')).toBeEnabled();
+
+    await act(async () => refresh.reject(new Error('Segment refresh failed')));
+    expect(screen.getByRole('alert')).toHaveTextContent('Segment refresh failed');
+    expect(screen.getByTestId('deep-dive-btn-seg_01')).toBeEnabled();
+    expect(screen.getByTestId('export-json-btn')).toBeEnabled();
+  });
+
+  it.each(['success', 'failure'] as const)('ignores stale reads and auxiliary %s after a study change', async (outcome) => {
+    const segments = segmentRequest<MarketSegment[]>();
+    const readiness = segmentRequest<SegmentationReadiness>();
+    const history = segmentRequest<SegmentationRun[]>();
+    vi.mocked(api.listStudySegments).mockReturnValueOnce(segments.promise).mockResolvedValueOnce(nextResult.segments);
+    vi.mocked(api.getSegmentationReadiness).mockReturnValueOnce(readiness.promise);
+    vi.mocked(api.listSegmentationRuns).mockReturnValueOnce(history.promise).mockResolvedValueOnce([nextRun]);
+    const { rerender } = render(<SegmentationView studyId="study-old" />);
+    rerender(<SegmentationView studyId="study_123" />);
+    await screen.findByTestId('deep-dive-btn-seg_next');
+
+    await act(async () => {
+      segments.resolve(mockSegments);
+      if (outcome === 'success') {
+        readiness.resolve({ ...mockReadiness, can_run: false, guidance_message: 'Old study readiness' });
+        history.resolve([mockRun]);
+      } else {
+        readiness.reject(new Error('Old study readiness'));
+        history.reject(new Error('Old study history'));
+      }
+    });
+    expect(screen.getByTestId('deep-dive-btn-seg_next')).toBeInTheDocument();
+    expect(screen.queryByTestId('deep-dive-btn-seg_01')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Old study/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('run-segmentation-btn')).toBeEnabled();
+  });
+
+  it('does not report an empty study while primary data is pending or failed', async () => {
+    const segments = segmentRequest<MarketSegment[]>();
+    vi.mocked(api.listStudySegments).mockReturnValueOnce(segments.promise);
+    render(<SegmentationView studyId="study_123" />);
+    expect(screen.queryByTestId('no-segments-placeholder')).not.toBeInTheDocument();
+
+    await act(async () => segments.reject(new Error('Segments unavailable')));
+    expect(screen.getByRole('alert')).toHaveTextContent('Segments unavailable');
+    expect(screen.queryByTestId('no-segments-placeholder')).not.toBeInTheDocument();
+  });
+
+  it('uses the black canvas token without decorative blurred overlays', async () => {
+    render(<SegmentationView studyId="study_123" />);
+    await screen.findByTestId('deep-dive-btn-seg_01');
+    const view = screen.getByTestId('segmentation-view');
+    expect(view).toHaveClass('bg-[var(--bg-pure)]');
+    expect(view.querySelectorAll('[class*="rounded-full"][class*="blur-"]')).toHaveLength(0);
+  });
+
+  it('names the research filters and exposes each comparison selection state', async () => {
+    render(<SegmentationView studyId="study_123" />);
+    await screen.findByTestId('deep-dive-btn-seg_01');
+    expect(screen.getByRole('textbox', { name: 'Search segments' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Segment status' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Cluster count' })).toBeInTheDocument();
+    const selection = screen.getByTestId('compare-checkbox-seg_01');
+    expect(selection).toHaveAccessibleName(`Compare ${mockSegments[0].name}`);
+    expect(selection).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(selection);
+    expect(selection).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('opens and navigates tabs in the Deep Dive Inspection Modal', async () => {

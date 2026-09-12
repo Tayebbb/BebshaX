@@ -165,6 +165,124 @@ describe('Exhibition interview stream transport', () => {
     expect(onDelta.mock.calls).toEqual([['Only a partial reply.']]);
   });
 
+  it.each([{}, { ...donePayload, reply: 3 }, { ...donePayload, turn_number: -1 }, { ...donePayload, is_finished: 'yes' }])(
+    'rejects a malformed terminal payload without reporting a canonical reply', async (payload) => {
+      const stream = stubStream();
+      stream.enqueue(frame('done', payload));
+      await expect(api.sendInterviewMessageStream(studyId, interviewId, question, vi.fn()))
+        .rejects.toThrow(/Invalid interview reply/);
+      expect(stream.cancel).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([{}, { text: 42 }, { text: null }])('rejects malformed deltas without calling the consumer', async (payload) => {
+    const stream = stubStream();
+    const onDelta = vi.fn();
+    stream.enqueue(frame('delta', payload) + frame('done', donePayload));
+    stream.close();
+    await expect(api.sendInterviewMessageStream(studyId, interviewId, question, onDelta))
+      .rejects.toThrow(/Invalid interview delta/);
+    expect(onDelta).not.toHaveBeenCalled();
+  });
+
+  it('bounds an unterminated frame and cancels the reader without truncating an answer', async () => {
+    const stream = stubStream();
+    stream.enqueue('event: delta\ndata: ' + 'x'.repeat(1024 * 1024 + 1));
+    await expect(api.sendInterviewMessageStream(studyId, interviewId, question, vi.fn()))
+      .rejects.toThrow(/frame.*limit/i);
+    expect(stream.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a detail server failure instead of reporting a missing interview', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Interview storage unavailable' }), { status: 500 }));
+    await expect(api.getStudyInterviewDetail(studyId, interviewId))
+      .rejects.toMatchObject({ status: 500, message: 'Interview storage unavailable' });
+  });
+
+  it('rejects malformed flat interview detail rather than rendering fabricated state', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{}'));
+    await expect(api.getStudyInterviewDetail(studyId, interviewId)).rejects.toThrow('Invalid interview detail');
+  });
+
+  it('validates a blocking reply using the same contract as the stream terminal', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await expect(api.sendInterviewMessage(studyId, interviewId, { content: question }))
+      .rejects.toThrow(/Invalid interview reply/);
+  });
+
+  it('accepts an interview closed without synthesis only when the server says so explicitly', async () => {
+    const closed = {
+      id: interviewId, status: 'completed', summary: null, key_findings: [], structured_insights: [],
+      insights_dropped: 0, source: 'unavailable', served_by: null, error_code: 'llm_error:AllCandidatesFailed',
+    };
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(closed), { status: 200 }));
+    await expect(api.completeStudyInterview(studyId, interviewId)).resolves.toEqual(closed);
+
+    // A null summary with no explicit reason would let a silent failure pass as a completed analysis.
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ...closed, source: 'llm' }), { status: 200 }));
+    await expect(api.completeStudyInterview(studyId, interviewId)).rejects.toThrow('Invalid interview synthesis response');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ...closed, source: undefined }), { status: 200 }));
+    await expect(api.completeStudyInterview(studyId, interviewId)).rejects.toThrow('Invalid interview synthesis response');
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ...closed, summary: '   ', source: 'llm' }), { status: 200 }));
+    await expect(api.completeStudyInterview(studyId, interviewId)).rejects.toThrow('Invalid interview synthesis response');
+  });
+
+  it('keeps a written synthesis intact and rejects malformed synthesis metadata', async () => {
+    const written = {
+      id: interviewId, status: 'completed', summary: 'The persona values predictable pickup windows.',
+      key_findings: ['Time slots matter more than price.'], structured_insights: [], source: 'llm',
+      served_by: 'test/synthetic-fixture', error_code: null, insights_dropped: 0,
+    };
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(written), { status: 200 }));
+    await expect(api.completeStudyInterview(studyId, interviewId)).resolves.toEqual(written);
+    for (const broken of [
+      { ...written, status: 'active' }, { ...written, source: 'template' },
+      { ...written, insights_dropped: -1 }, { ...written, error_code: 7 }, { ...written, key_findings: [1] },
+    ]) {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(broken), { status: 200 }));
+      await expect(api.completeStudyInterview(studyId, interviewId)).rejects.toThrow('Invalid interview synthesis response');
+    }
+  });
+
+  it('never fetches a cancelled detail, fallback, or synthesis request', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(api.getStudyInterviewDetail(studyId, interviewId, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(api.sendInterviewMessage(studyId, interviewId, { content: question }, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(api.completeStudyInterview(studyId, interviewId, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['detail', 'reply', 'synthesis'] as const)('bounds %s transport even without a caller signal', async (operation) => {
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Fixture unavailable' }), { status: 503 }));
+    const request = operation === 'detail' ? api.getStudyInterviewDetail(studyId, interviewId)
+      : operation === 'reply' ? api.sendInterviewMessage(studyId, interviewId, { content: question })
+      : api.completeStudyInterview(studyId, interviewId);
+    await expect(request).rejects.toMatchObject({ status: 503 });
+    expect(timeout).toHaveBeenCalledWith(expect.any(Number));
+    const milliseconds = timeout.mock.calls[0][0];
+    expect(milliseconds).toBeGreaterThan(0);
+    expect(milliseconds).toBeLessThanOrEqual(600000);
+  });
+
+  it('closes a stalled stream at its transport deadline without fabricating a completed reply', async () => {
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+    const stream = stubStream();
+    const pending = api.sendInterviewMessageStream(studyId, interviewId, question, vi.fn());
+    const settled = pending.then((value) => ({ value }), (error: unknown) => ({ error }));
+    await Promise.resolve();
+    await Promise.resolve();
+    deadline.abort(new DOMException('Interview request timed out', 'TimeoutError'));
+    stream.close();
+
+    await expect(settled).resolves.toMatchObject({ error: { name: 'TimeoutError' } });
+    expect(timeout).toHaveBeenCalled();
+    expect(stream.cancel).toHaveBeenCalledTimes(1);
+  });
+
   it('does not fetch when the caller signal is already aborted', async () => {
     const abortController = new AbortController();
     abortController.abort();
@@ -193,6 +311,9 @@ describe('Exhibition interview stream transport', () => {
     try {
       await vi.advanceTimersByTimeAsync(0);
       expect(onDelta.mock.calls).toEqual([['Only a partial reply.']]);
+      const transportSignal = fetchMock.mock.calls[0][1]?.signal;
+      expect(transportSignal).toBeInstanceOf(AbortSignal);
+      expect(transportSignal?.aborted).toBe(false);
       abortController.abort();
       const deadline = new Promise<'pending after abort'>((resolve) => {
         deadlineTimer = setTimeout(() => resolve('pending after abort'), 25);
@@ -205,8 +326,10 @@ describe('Exhibition interview stream transport', () => {
       });
       expect(stream.cancel).toHaveBeenCalledTimes(1);
       expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
-        signal: abortController.signal,
+        signal: transportSignal,
       }));
+      expect(transportSignal?.aborted).toBe(true);
+      expect(transportSignal?.reason).toBe(abortController.signal.reason);
       expect(onDelta).toHaveBeenCalledTimes(1);
     } finally {
       if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);

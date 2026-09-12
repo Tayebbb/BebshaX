@@ -114,4 +114,14 @@ describe('getStudies read coalescing (live mode)', () => {
     expect(a).not.toBe(b);
     expect(a).toEqual(b);
   });
+
+  it('does not leak nested local edits into another saved-study reader', async () => {
+    const saved = [{ ...studies[0], copilot_messages: [{ role: 'user', content: 'Canonical saved history' }] }];
+    respondWithStudies(saved);
+    const first = await api.getStudies();
+    first[0].copilot_messages![0].content = 'Local unsaved change';
+
+    expect((await api.getStudies())[0].copilot_messages?.[0].content).toBe('Canonical saved history');
+    expect(studyRequests()).toBe(1);
+  });
 });

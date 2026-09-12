@@ -3,6 +3,9 @@ import { api } from '../src/services/api';
 import { neonAuth } from '../src/services/neonAuth';
 import type { User } from '../src/types/auth';
 
+beforeEach(() => { sessionStorage.clear(); });
+afterEach(() => { sessionStorage.clear(); });
+
 describe('getMe validates existing app tokens directly with the backend', () => {
   const originalFetch = globalThis.fetch;
   const storedUser: User = {
@@ -72,13 +75,13 @@ describe('getMe validates existing app tokens directly with the backend', () => 
     expect(api.getStoredUser()).toBeNull();
   });
 
-  it.each(['network failure', 'server error'])('preserves stored-user recovery on %s', async (failure) => {
+  it.each(['network failure', 'server error'])('reports unverified identity on %s while preserving credentials for retry', async (failure) => {
     const neonSession = vi.spyOn(neonAuth, 'getSession').mockResolvedValue(null);
     globalThis.fetch = failure === 'network failure'
       ? vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
-      : vi.fn().mockResolvedValue({ ok: false, status: 500 });
+      : vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: 'Verification unavailable' }), { status: 500 }));
 
-    await expect(api.getMe()).resolves.toEqual(storedUser);
+    await expect(api.getMe()).rejects.toThrow(failure === 'network failure' ? 'Failed to fetch' : 'Verification unavailable');
 
     expect(neonSession).not.toHaveBeenCalled();
     expect(api.getAuthToken()).toBe('existing-app-token');
@@ -209,7 +212,10 @@ describe('verify-email posts the email with the OTP so the binding gate engages'
   });
 
   it('includes both token and email in the verify-email body', async () => {
-    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({
+      access_token: 'verified-fixture-token', token_type: 'bearer', expires_in_days: 1,
+      user: { id: 'verified-fixture', email: 'user@example.com', full_name: 'Verified', is_active: true, is_verified: true },
+    }) });
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
     await api.verifyEmailOtp('user@example.com', ' 123456 ');
@@ -220,16 +226,11 @@ describe('verify-email posts the email with the OTP so the binding gate engages'
     expect(body).toEqual({ token: '123456', email: 'user@example.com' });
   });
 
-  it('omits the email key entirely when no email is available', async () => {
+  it('rejects verification without the email required by the local auth authority', async () => {
     const fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
-    await api.verifyEmailOtp('   ', '654321');
-
-    const call = fetchSpy.mock.calls.find(([url]) => String(url).includes('/auth/verify-email'));
-    expect(call).toBeDefined();
-    const body = JSON.parse((call![1] as RequestInit).body as string);
-    expect(body).toEqual({ token: '654321' });
-    expect('email' in body).toBe(false);
+    await expect(api.verifyEmailOtp('   ', '654321')).rejects.toThrow('Email is required');
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

@@ -10,8 +10,9 @@ describe('NewStudyView Component', () => {
 
     expect(screen.getByText('What do you want to find out?')).toBeInTheDocument();
     expect(
-      screen.getByText('Ask anything about your business idea, or pick any study type below.')
+      screen.getByText('Explore questions and assumptions with synthetic personas.')
     ).toBeInTheDocument();
+    expect(screen.getByText('Research question', { selector: 'label' })).toBeInTheDocument();
 
     const textarea = screen.getByPlaceholderText(/Describe your business idea/i);
     expect(textarea).toBeInTheDocument();
@@ -20,29 +21,30 @@ describe('NewStudyView Component', () => {
     expect(submitBtn).toBeInTheDocument();
   });
 
-  it('renders all 4 study types with descriptions', () => {
+  it('renders all 4 study modes and describes only the selected hypothetical exploration', () => {
     const handleStart = vi.fn();
     render(<NewStudyView onStartStudy={handleStart} />);
 
-    expect(screen.getByText('User Interviews')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'User Interviews' })).toBeChecked();
     expect(
-      screen.getByText(/Simulate in-depth discovery interviews with synthetic personas/i)
+      screen.getByText(/Explore hypothetical routines, needs, and pain points/i)
     ).toBeInTheDocument();
 
-    expect(screen.getByText('Concept & Demand')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Concept & Demand' }));
     expect(
-      screen.getByText(/Validate product-market fit, value proposition desirability/i)
+      screen.getByText(/not measured demand or product-market fit/i)
     ).toBeInTheDocument();
 
-    expect(screen.getByText('Message Testing')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Message Testing' }));
     expect(
-      screen.getByText(/Test pitch clarity, value proposition framing/i)
+      screen.getByText(/synthetic personas might interpret a message/i)
     ).toBeInTheDocument();
 
-    expect(screen.getByText('Pricing & WTP')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Pricing & WTP' }));
     expect(
-      screen.getByText(/Validate price elasticity, subscription ceilings/i)
+      screen.getByText(/not measured willingness to pay or price elasticity/i)
     ).toBeInTheDocument();
+    expect(handleStart).not.toHaveBeenCalled();
   });
 
   it('shows validation warning when submitting with empty prompt', async () => {
@@ -61,7 +63,7 @@ describe('NewStudyView Component', () => {
     expect(handleStart).not.toHaveBeenCalled();
   });
 
-  it('calls onStartStudy with selected type and entered idea when card clicked or submitted', async () => {
+  it('calls onStartStudy with the selected type and entered idea only when submitted', async () => {
     const handleStart = vi.fn().mockResolvedValue(undefined);
     render(<NewStudyView onStartStudy={handleStart} />);
 

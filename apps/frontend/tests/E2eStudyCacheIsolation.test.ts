@@ -100,19 +100,19 @@ describe('live study cache account isolation during outages', () => {
     expect(api.getStoredUserStudies()).toEqual([]);
   });
 
-  it('preserves another account cache without exposing it to the new account', async () => {
+  it('purges the previous account cache on an identity change', async () => {
     setUser('previous-account');
     const own = study('Existing owner research', 'previous-account');
     api.saveStoredUserStudies([own]);
     const previousKey = api.getUserStudiesStorageKey();
-    const previousValue = localStorage.getItem(previousKey);
+    expect(localStorage.getItem(previousKey)).not.toBeNull();
     setUser('new-account');
 
     await expect(api.getStudies()).rejects.toThrow('Failed to fetch');
     expect(api.getStoredUserStudies()).toEqual([]);
-    expect(localStorage.getItem(previousKey)).toBe(previousValue);
+    expect(localStorage.getItem(previousKey)).toBeNull();
     setUser('previous-account');
-    expect(api.getStoredUserStudies()).toEqual([own]);
+    expect(api.getStoredUserStudies()).toEqual([]);
   });
 
   it('does not persist foreign or unowned studies in the current live bucket', () => {
@@ -136,7 +136,7 @@ describe('live study cache account isolation during outages', () => {
     const pending = api.getStudies();
     setUser('new-account');
     resolveFetch(new Response(JSON.stringify([study('Previous research', 'previous-account')]), { status: 200 }));
-    await pending;
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
 
     expect(api.getStoredUserStudies()).toEqual([]);
     expect(localStorage.getItem(api.getUserStudiesStorageKey())).toBeNull();
