@@ -34,6 +34,13 @@ def _publish_source(root: Path, rows: list[dict]) -> dict:
         "dataset_id": DATASET_ID, "hf_repo_id": SOURCE, "pinned_revision": REVISION,
         "training_allowed": True, "profiles": ["ml_persona"],
         "files_or_patterns": ["data/train.parquet"],
+        "collection": {"upstream_creator": "Invented fixture authors",
+                       "source_url": "https://example.invalid/synthetic-fixture"},
+        "distribution": {"license_verified_upstream": "Fixture license; not a redistribution grant",
+                         "license_verification_url": "https://example.invalid/fixture-license",
+                         "license_notes": "Invented metadata for offline tests only."},
+        "composition": {"slice_description": "All rows of a tiny invented fixture."},
+        "preprocessing": {"cleaning_applied": "Full invented fixture narratives retained."},
     }
     artifacts = {
         "raw": root / "data/raw" / DATASET_ID / "data/train.parquet",
@@ -251,6 +258,205 @@ def _tiny_config() -> dict:
             "topics": [2], "lexical_weights": [0.35, 0.7], "threads": 1}
 
 
+def test_modernization_config_adds_only_lexical_to_the_frozen_reference_grid() -> None:
+    from bebshax_persona_ml import pipeline
+
+    configs = Path(__file__).resolve().parents[1] / "configs"
+    reference = pipeline.TrainingConfig.model_validate_json((configs / "training.json").read_text())
+    benchmark = pipeline.TrainingConfig.model_validate_json((configs / "modernization_lexical.json").read_text())
+
+    assert benchmark.model == reference.model
+    assert benchmark.topics == reference.topics
+    assert benchmark.lexical_weights == [*reference.lexical_weights, 1.0]
+    assert benchmark.threads == 2
+
+
+def test_grid_admits_one_genuine_lexical_candidate_without_any_nmf_calls(
+    prepared_case: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bebshax_persona_ml import pipeline
+
+    def forbidden_nmf(*args: object, **kwargs: object) -> None:
+        pytest.fail("Pure lexical grid candidates must skip all NMF work")
+
+    monkeypatch.setattr("bebshax_persona_ml.model.NMF", forbidden_nmf)
+    config = pipeline.TrainingConfig(**{**_tiny_config(), "topics": [2, 3], "lexical_weights": [1.0]})
+
+    report = pipeline.train(prepared_case, config=config)
+
+    assert len(report["candidates"]) == 1
+    candidate = report["candidates"][0]
+    assert candidate["config"]["strategy"] == "lexical"
+    assert candidate["config"]["lexical_weight"] == 1.0
+    assert candidate["iterations"] is None
+    assert candidate["convergence_warnings"] == []
+    assert report["test_evaluated"] is False
+    assert PersonaModel.load(prepared_case / PROCESSED / "model").config.strategy == "lexical"
+
+
+def test_mixed_grid_compares_lexical_and_nmf_on_identical_validation_only_records(
+    prepared_case: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bebshax_persona_ml import pipeline
+
+    evaluated = []
+    evaluate_model = pipeline.evaluate_model
+
+    def capture_evaluation(model: PersonaModel, records: list[TrainingRecord], **options: object) -> dict:
+        evaluated.append([record.record_id for record in records])
+        return evaluate_model(model, records, **options)
+
+    monkeypatch.setattr(pipeline, "evaluate_model", capture_evaluation)
+    report = pipeline.train(prepared_case, config=pipeline.TrainingConfig(**{
+        **_tiny_config(), "lexical_weights": [0.35, 0.7, 1.0],
+    }))
+
+    assert len(report["candidates"]) == 3
+    assert [candidate["config"]["strategy"] for candidate in report["candidates"]].count("lexical") == 1
+    validation_ids = [json.loads(line)["record_id"] for line in (
+        prepared_case / PROCESSED / "validation.jsonl"
+    ).read_text().splitlines()]
+    assert evaluated == [validation_ids] * 3
+    winner = min(report["candidates"], key=lambda candidate: (
+        -candidate["validation"]["retrieval"]["model"]["mrr"],
+        json.dumps(candidate["config"], sort_keys=True),
+    ))
+    assert report["selected_config"] == winner["config"]
+
+
+def test_training_manifest_and_export_retain_verified_attribution_and_source_digests(prepared_case: Path) -> None:
+    from bebshax_persona_ml import pipeline
+    from bebshax_persona_ml.cli import _persona
+
+    preparation = pipeline.validate(prepared_case)
+    report = pipeline.train(prepared_case, config=pipeline.TrainingConfig(**{
+        **_tiny_config(), "lexical_weights": [1.0],
+    }))
+    model_path = prepared_case / PROCESSED / "model"
+    fitted = PersonaModel.load(model_path)
+    provenance = report["provenance"]
+
+    assert provenance == fitted.provenance.model_dump(mode="json")
+    assert provenance["source_files"] == preparation["source"]["files"]
+    assert provenance["source_manifest_sha256"] == preparation["source"]["manifest_sha256"]
+    assert provenance["preparation_sha256"] == preparation["preparation_sha256"]
+    assert provenance["dataset_sha256"] == preparation["dataset_sha256"]
+    assert provenance["source_records_sha256"] == preparation["splits"]["train"]["records_sha256"]
+    assert report["artifact_manifest_sha256"] == _digest(model_path / "metadata.json")
+    selection = fitted.generate(BusinessContext(description="bread recipes"), 1)[0]
+    exported = _persona(selection)
+    attribution = exported["source"]["attribution"]
+    assert attribution == selection.source_attribution.model_dump(mode="json")
+    assert attribution["creator"] == "Invented fixture authors"
+    assert attribution["source_url"] == "https://example.invalid/synthetic-fixture"
+    assert attribution["license"] == "Fixture license; not a redistribution grant"
+    assert attribution["license_reference_url"] == "https://example.invalid/fixture-license"
+    assert attribution["metadata_status"] == "verified_ingestion_metadata"
+    assert "All rows of a tiny invented fixture." in attribution["modifications"]
+    assert "Full invented fixture narratives retained." in attribution["modifications"]
+    assert any("NFKC" in notice for notice in attribution["modifications"])
+    assert exported["source"]["documents"] == selection.record.documents
+    assert exported["model"]["strategy"] == "lexical"
+    assert exported["model"]["training_code_sha256"] == provenance["training_code_sha256"]
+    assert exported["provenance"]["source_corpus_sha256"] == provenance["source_records_sha256"]
+    assert exported["provenance"]["observed"] is False
+
+
+def test_cli_export_does_not_invent_attribution_for_records_without_verified_metadata(prepared_case: Path) -> None:
+    from bebshax_persona_ml import pipeline
+    from bebshax_persona_ml.cli import _persona
+
+    _, partitions = pipeline._load_prepared(prepared_case, None)
+    fitted = PersonaModel.fit(partitions["train"])
+    exported = _persona(fitted.generate(BusinessContext(description="bread recipes"), 1)[0])
+
+    assert exported["source"]["attribution"]["creator"] is None
+    assert exported["source"]["attribution"]["license"] is None
+    assert exported["source"]["attribution"]["metadata_status"] == "unavailable"
+
+
+def test_legacy_experiment_config_without_strategy_still_evaluates_validation(prepared_case: Path) -> None:
+    from bebshax_persona_ml import pipeline
+
+    report = pipeline.train(prepared_case, config=pipeline.TrainingConfig(**_tiny_config()))
+    directory = prepared_case / PROCESSED
+    model_path = directory / "model"
+    configuration = json.loads((model_path / "config.json").read_text())
+    configuration.pop("strategy")
+    (model_path / "config.json").write_text(json.dumps(configuration))
+    metadata = json.loads((model_path / "metadata.json").read_text())
+    metadata["schema_version"] = 1
+    metadata.pop("provenance", None)
+    metadata.pop("tokenizer_contract", None)
+    metadata["files"]["config.json"] = _digest(model_path / "config.json")
+    metadata["model_version"] = fingerprint({"corpus": metadata["corpus_fingerprint"],
+                                              "config": configuration, "algorithm": "tfidf-nmf-mmr-v1"})
+    (model_path / "metadata.json").write_text(json.dumps(metadata))
+    report["model_version"] = metadata["model_version"]
+    report["selected_config"] = configuration
+    report.pop("provenance", None)
+    report.pop("artifact_manifest_sha256", None)
+    report["experiment_sha256"] = fingerprint({key: value for key, value in report.items() if key != "experiment_sha256"})
+    (directory / "experiments" / f"{metadata['model_version']}.json").write_text(json.dumps(report))
+
+    evaluation = pipeline.evaluate(prepared_case, split="validation", threads=1)
+
+    assert evaluation["model_version"] == metadata["model_version"]
+    assert evaluation["split"] == "validation"
+
+
+def test_evaluation_rejects_wrong_artifact_manifest_even_when_experiment_is_rehashed(prepared_case: Path) -> None:
+    from bebshax_persona_ml import pipeline
+
+    report = pipeline.train(prepared_case, config=pipeline.TrainingConfig(**_tiny_config()))
+    report["artifact_manifest_sha256"] = "0" * 64
+    report["experiment_sha256"] = fingerprint({key: value for key, value in report.items() if key != "experiment_sha256"})
+    directory = prepared_case / PROCESSED
+    (directory / "experiments" / f"{report['model_version']}.json").write_text(json.dumps(report))
+
+    with pytest.raises(ValueError, match="(?i)artifact.*manifest"):
+        pipeline.evaluate(prepared_case, split="validation", threads=1)
+    assert not (directory / "evaluation.json").exists()
+
+
+def test_cli_validation_experiment_does_not_write_old_models_reports_or_splits(
+    prepared_case: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bebshax_persona_ml import pipeline
+
+    pipeline.train(prepared_case, config=pipeline.TrainingConfig(**_tiny_config()))
+    directory = prepared_case / PROCESSED
+    protected = {path: path.read_bytes() for path in directory.rglob("*") if path.is_file()}
+    experiment_dir = PROCESSED / "modernization-lexical"
+    config_path = prepared_case / "lexical-config.json"
+    config_path.write_text(json.dumps({**_tiny_config(), "lexical_weights": [0.35, 0.7, 1.0]}))
+    validation_ids = {json.loads(line)["record_id"] for line in (directory / "validation.jsonl").read_text().splitlines()}
+    original_evaluate = pipeline.evaluate_model
+    evaluated = []
+
+    def validation_only(model: PersonaModel, records: list[TrainingRecord], **options: object) -> dict:
+        assert {record.record_id for record in records} == validation_ids
+        evaluated.append(model.version)
+        return original_evaluate(model, records, **options)
+
+    monkeypatch.setattr(pipeline, "evaluate_model", validation_only)
+    status, trained = _invoke(capsys, prepared_case, "train", "--config", "lexical-config.json",
+                              "--experiment-dir", experiment_dir.as_posix())
+    assert status == 0, trained
+    status, evaluated_report = _invoke(capsys, prepared_case, "evaluate", "--split", "validation",
+                                       "--experiment-dir", experiment_dir.as_posix(), "--threads", "1")
+    assert status == 0, evaluated_report
+    assert evaluated_report["result"]["split"] == "validation"
+    assert evaluated_report["result"]["metrics"]["retrieval"]["query_count"] == 3
+    assert len(evaluated) == 4
+    assert all(path.read_bytes() == payload for path, payload in protected.items())
+    assert (prepared_case / experiment_dir / "model/metadata.json").is_file()
+    assert (prepared_case / experiment_dir / "experiments" / f"{trained['result']['model_version']}.json").is_file()
+    status, error = _invoke(capsys, prepared_case, "train", "--config", "lexical-config.json",
+                            "--experiment-dir", experiment_dir.as_posix())
+    assert status == 1 and error["error"]["code"] == "output_exists"
+
+
 def test_train_selects_validation_mrr_keeps_train_only_artifacts_and_full_experiment(prepared_case: Path) -> None:
     from bebshax_persona_ml import pipeline
 
@@ -331,7 +537,7 @@ def test_train_refuses_existing_artifacts_and_force_is_explicit(prepared_case: P
 
 
 @pytest.mark.parametrize("config", [{"topics": []}, {"topics": [0]}, {"lexical_weights": []},
-                                    {"lexical_weights": [1.0]}, {"lexical_weights": [float("nan")]},
+                                    {"lexical_weights": [1.01]}, {"lexical_weights": [float("nan")]},
                                     {"threads": 0}, {"threads": True}, {"threads": 65},
                                     {"model": {"device": "cuda"}}, {"unknown": "forbidden"}])
 def test_training_config_rejects_invalid_values(config: dict) -> None:

@@ -57,6 +57,28 @@ def test_known_perfect_cross_view_retrieval_beats_random_and_frequency(
     json.dumps(report, allow_nan=False)
 
 
+def test_lexical_evaluation_never_calls_nmf_and_has_no_topic_coverage(
+    evaluation_case: tuple[PersonaModel, list[TrainingRecord]], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reference, heldout = evaluation_case
+
+    def forbidden_nmf(*args: object, **kwargs: object) -> None:
+        pytest.fail("Lexical evaluation must not construct or call NMF")
+
+    monkeypatch.setattr("bebshax_persona_ml.model.NMF", forbidden_nmf)
+    lexical = PersonaModel.fit(reference.records, ModelConfig(strategy="lexical", lexical_weight=1.0))
+
+    report = evaluate_model(lexical, heldout)
+
+    assert report["retrieval"]["model"] == report["retrieval"]["lexical_tfidf"]
+    assert report["retrieval"]["model"]["mrr"] == 1.0
+    assert report["generation"]["coverage"]["topic_fraction"] is None
+    assert report["generation"]["coverage"]["topic_counts"] == {}
+    assert report["generation"]["failed_batches"] == len(heldout)
+    assert report["generation"]["sample_count"] == 0
+    json.dumps(report, allow_nan=False)
+
+
 def test_evaluation_does_not_fit_or_modify_the_training_index(
     evaluation_case: tuple[PersonaModel, list[TrainingRecord]], tmp_path: Path,
 ) -> None:

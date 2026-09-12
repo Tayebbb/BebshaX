@@ -106,7 +106,7 @@ def _generation_metrics(
         structural["bundle_mismatch_count"] += int(record != original)
         structural["location_rewrite_count"] += int(original is not None and record.location != original.location)
     occupations = Counter(selection.record.occupation for selection in generated)
-    topics = Counter(str(selection.topic) for selection in generated)
+    topics = Counter(str(selection.topic) for selection in generated if selection.topic is not None)
     reference_occupations = {record.occupation for record in model.records}
     return {
         "requested_batches": len(chosen), "successful_batches": len(batches), "failed_batches": failures,
@@ -122,7 +122,8 @@ def _generation_metrics(
         "coverage": {
             "record_fraction": len({selection.record.record_id for selection in generated} & source.keys()) / len(source),
             "occupation_fraction": len(occupations.keys() & reference_occupations) / len(reference_occupations),
-            "topic_fraction": len(topics.keys() & {str(index) for index in range(model._topics.shape[1])}) / model._topics.shape[1],
+            "topic_fraction": (len(topics.keys() & {str(index) for index in range(model._topics.shape[1])})
+                               / model._topics.shape[1]) if model._topics.shape[1] else None,
             "occupation_counts": dict(occupations), "topic_counts": dict(topics),
         },
         "latency_ms": {"mean": float(np.mean(latencies)) if latencies else 0.0,

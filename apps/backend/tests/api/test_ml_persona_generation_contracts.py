@@ -104,6 +104,11 @@ async def test_repeated_dataset_generation_appends_distinct_sources_and_updates_
 ) -> None:
     dataset_id = ml_uploaded_dataset["id"]
     study_id = ml_study if attach_study else None
+    if not attach_study:
+        async with ml_api_app.app.state.db_sessionmaker() as session:
+            dataset = await session.get(DatasetSources, dataset_id)
+            dataset.study_id = None
+            await session.commit()
     source_batches = []
     for generation_number in range(2):
         response = ml_api_app.post(
@@ -146,6 +151,7 @@ async def test_repeated_generation_exhaustion_preserves_original_batch_and_error
         payload = {"requested_count": 2, "study_id": study_id, "business_description": "Food delivery and study planning"}
         async with ml_api_app.app.state.db_sessionmaker() as session:
             dataset = await session.get(DatasetSources, dataset_id)
+            dataset.study_id = study_id
             dataset.segments = [
                 {**segment, "constraints": {"age_range": age_range}}
                 for segment, age_range in zip(dataset.segments, age_ranges, strict=True)
@@ -718,18 +724,29 @@ def test_workflow_enforces_explicit_role_age_constraints(
 def test_workflow_unsupported_role_preserves_partial_error_envelope(
     ml_api_app, ml_auth_headers, ml_workflow_payload, include_supported_role,
 ) -> None:
-    invalid_role = {"id": "oversized", "role": "x" * 513, "description": "Food planning", "count": 1, "selected": True}
+    # An impossible age band is a genuine model refusal (an oversize role title
+    # is no longer one: overflow text is carried as research instead of refused).
+    invalid_role = {"id": "impossible", "role": "Centenarian", "description": "Food planning", "count": 1, "selected": True, "min_age": 90, "max_age": 95}
     ml_workflow_payload["roles"] = [invalid_role, *ml_workflow_payload["roles"][:1]] if include_supported_role else [invalid_role]
     response = ml_api_app.post("/api/study/generate-personas", json=ml_workflow_payload, headers=ml_auth_headers)
     if include_supported_role:
         assert response.status_code == 200, response.text
         assert len(response.json()["personas"]) == 2
-        assert [failed["role_id"] for failed in response.json()["failed_roles"]] == ["oversized"]
+        assert [failed["role_id"] for failed in response.json()["failed_roles"]] == ["impossible"]
         assert response.json()["failed_roles"][0]["error_code"] == "ml_persona_unsupported_context"
+        assert "Insufficient" in response.json()["failed_roles"][0]["detail"]
     else:
         assert response.status_code == 422, response.text
         assert response.json()["error_code"] == "ml_persona_unsupported_context"
     assert ml_api_app.app.state.ml_test_llm.calls == []
+
+
+def test_workflow_oversize_role_title_is_carried_as_context_not_refused(ml_api_app, ml_auth_headers, ml_workflow_payload) -> None:
+    ml_workflow_payload["roles"] = [{**ml_workflow_payload["roles"][0], "role": "Meal planner " * 60}]
+    response = ml_api_app.post("/api/study/generate-personas", json=ml_workflow_payload, headers=ml_auth_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["failed_roles"] == []
+    assert len(response.json()["personas"]) == 2
 
 
 async def test_dataset_route_preserves_distribution_audit_and_rich_reload_without_router(
@@ -762,10 +779,13 @@ async def test_dataset_route_preserves_distribution_audit_and_rich_reload_withou
         assert run.distribution_target == run.distribution_actual == result["distribution"]
         dataset = await session.get(DatasetSources, dataset_id)
         assert dataset.persona_count_generated == 4
-        rows = list((await session.execute(select(Personas).where(Personas.generation_run_id == result["run_id"]))).scalars())
+        rows = list((await session.execute(select(Personas).where(Personas.dataset_persona_run_id == result["run_id"]))).scalars())
         assert len(rows) == 4
         for row in rows:
+            assert row.generation_run_id is None and row.segment_id is None
+            assert row.dataset_version_id == result["dataset_version_id"]
             expected = next(persona for persona in result["personas"] if persona["detailed_attributes"]["ml_provenance"] == row.detailed_attributes["ml_provenance"])
+            assert row.dataset_segment_key == expected["segment_id"]
             assert row.owner_id == "usr_test_fixture"
             assert row.bio == expected["description"]
             assert row.validation_warnings == expected["validation"]["warnings"]

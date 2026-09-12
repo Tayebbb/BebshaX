@@ -22,6 +22,7 @@ from threadpoolctl import threadpool_limits
 from .data import TrainingRecord, fingerprint, normalize_text, prepare_records, split_records
 from .evaluation import evaluate_model
 from .model import FILE_LIMITS, RUNTIME, ModelConfig, PersonaModel, _candidates, _complete, _identity_keys
+from .provenance import ModelProvenance, SourceAttribution
 
 DEFAULT_OUTPUT = Path("data/processed/ml_persona")
 SPLITS = ("train", "validation", "test")
@@ -75,7 +76,7 @@ class _Source(_Strict):
 class TrainingConfig(_Strict):
     model: ModelConfig = Field(default_factory=ModelConfig)
     topics: list[Annotated[int, Field(ge=1, le=256)]] = Field(default_factory=lambda: [16, 32], min_length=1, max_length=8)
-    lexical_weights: list[Annotated[float, Field(ge=0, lt=1)]] = Field(default_factory=lambda: [0.35, 0.7], min_length=1, max_length=8)
+    lexical_weights: list[Annotated[float, Field(ge=0, le=1)]] = Field(default_factory=lambda: [0.35, 0.7], min_length=1, max_length=8)
     threads: int = Field(default=2, ge=1, le=64)
 
 
@@ -281,20 +282,63 @@ def protect_output(root: Path, directory: Path, target: Path, source: dict[str, 
     return target
 
 
-def _fit_grid(partitions: dict[str, list[TrainingRecord]], config: TrainingConfig) -> tuple[PersonaModel, list[dict[str, Any]]]:
+def _training_provenance(
+    root: Path, preparation: dict[str, Any], records: list[TrainingRecord],
+) -> ModelProvenance:
+    source = _Source.model_validate(preparation["source"])
+    path = _source_paths(root, source)["metadata"]
+    _check(_sha256(path) == source.files[path.relative_to(root).as_posix()], "Source metadata changed before attribution")
+    metadata = read_json(path)
+    sections = [metadata.get(name, {}) for name in ("collection", "distribution", "composition", "preprocessing")]
+    _check(all(isinstance(section, dict) for section in sections), "Invalid source attribution metadata")
+    collection, distribution, composition, preprocessing = sections
+    creator, source_url = collection.get("upstream_creator"), collection.get("source_url")
+    license_name, license_reference = distribution.get("license_verified_upstream"), distribution.get("license_verification_url")
+    known = all((creator, source_url, license_name, license_reference))
+    modifications = [value for value in (composition.get("slice_description"), preprocessing.get("cleaning_applied")) if value]
+    modifications.extend([
+        "BebshaX applies Unicode NFKC and whitespace normalization without summarizing or truncating narratives.",
+        "Complete adult records are filtered and identity-deduplicated into seeded, disjoint splits; only the training split is fitted.",
+        "Goals and regex-derived constraint sentences remain synthetic hypotheses, not human relevance labels.",
+        "TF-IDF feature projection excludes known names and protected fields; selections retain the complete normalized source bundle.",
+    ])
+    if not known:
+        modifications.append("Some upstream attribution details are unavailable; no redistribution permission is inferred.")
+    attribution = SourceAttribution(
+        source=source.hf_repo_id, revision=source.revision, creator=creator, source_url=source_url,
+        license=license_name, license_reference_url=license_reference, license_notice=distribution.get("license_notes"),
+        modifications=modifications, metadata_status="verified_ingestion_metadata" if known else "unavailable",
+    )
+    values = ModelProvenance.from_records(records).model_dump(mode="json")
+    return ModelProvenance.model_validate({
+        **values, "source_attributions": [attribution.model_dump(mode="json")], "source_files": source.files,
+        "source_manifest_sha256": source.manifest_sha256, "preparation_sha256": preparation["preparation_sha256"],
+        "dataset_sha256": preparation["dataset_sha256"],
+    })
+
+
+def _fit_grid(
+    partitions: dict[str, list[TrainingRecord]], config: TrainingConfig,
+    provenance: ModelProvenance | None = None,
+) -> tuple[PersonaModel, list[dict[str, Any]]]:
     best_model, best_key, candidates = None, None, []
-    settings = [ModelConfig(**{**config.model.model_dump(), "n_topics": topics, "lexical_weight": weight})
-                for topics, weight in product(sorted(set(config.topics)), sorted(set(config.lexical_weights)))]
+    settings = [ModelConfig(**{**config.model.model_dump(), "strategy": "nmf",
+                              "n_topics": topics, "lexical_weight": weight})
+                for topics, weight in product(sorted(set(config.topics)), sorted(set(config.lexical_weights)))
+                if weight < 1.0]
+    if 1.0 in config.lexical_weights:
+        settings.append(ModelConfig(**{**config.model.model_dump(), "strategy": "lexical", "lexical_weight": 1.0}))
     with threadpool_limits(limits=config.threads):
         for setting in settings:
             with warnings.catch_warnings(record=True) as captured:
                 warnings.simplefilter("always", ConvergenceWarning)
                 started = perf_counter()
-                fitted = PersonaModel.fit(partitions["train"], setting)
+                fitted = PersonaModel.fit(partitions["train"], setting, provenance=provenance)
                 seconds = perf_counter() - started
                 metrics = evaluate_model(fitted, partitions["validation"], seed=setting.seed)
             candidate = {"config": setting.model_dump(), "model_version": fitted.version,
-                         "training_seconds": seconds, "iterations": int(fitted._nmf.n_iter_),
+                         "training_seconds": seconds,
+                         "iterations": int(fitted._nmf.n_iter_) if fitted._nmf is not None else None,
                          "convergence_warnings": list(dict.fromkeys(str(item.message) for item in captured
                                                                    if issubclass(item.category, ConvergenceWarning))),
                          "warnings": list(dict.fromkeys(str(item.message) for item in captured)), "validation": metrics}
@@ -310,20 +354,23 @@ def _fit_grid(partitions: dict[str, list[TrainingRecord]], config: TrainingConfi
 def train(
     root: Path, output: Path | None = None, *, config: TrainingConfig | None = None,
     model_path: Path | None = None, report_path: Path | None = None, force: bool = False,
+    experiment_dir: Path | None = None,
 ) -> dict[str, Any]:
     root = root.absolute()
     config = config or TrainingConfig()
     _check(isinstance(config, TrainingConfig), "Training configuration must be TrainingConfig")
     preparation, partitions = _load_prepared(root, output)
     directory = resolve_path(root, output or DEFAULT_OUTPUT)
-    model_path = protect_output(root, directory, model_path or directory / "model", preparation["source"])
-    latest = protect_output(root, directory, report_path or directory / "experiment.json", preparation["source"], model_path)
+    experiment_directory = _output_path(root, experiment_dir or directory)
+    model_path = protect_output(root, directory, model_path or experiment_directory / "model", preparation["source"])
+    latest = protect_output(root, directory, report_path or experiment_directory / "experiment.json", preparation["source"], model_path)
     _check(latest.suffix == ".json", "Experiment output must be JSON")
     _available([model_path, latest], force)
     for name in [*FILE_LIMITS, "metadata.json"]:
         protect_output(root, directory, model_path / name, preparation["source"])
-    selected, candidates = _fit_grid(partitions, config)
-    archive = protect_output(root, directory, directory / "experiments" / f"{selected.version}.json", preparation["source"], model_path)
+    provenance = _training_provenance(root, preparation, partitions["train"])
+    selected, candidates = _fit_grid(partitions, config, provenance)
+    archive = protect_output(root, directory, experiment_directory / "experiments" / f"{selected.version}.json", preparation["source"], model_path)
     _available([archive], force)
     report = {
         "schema_version": 1, "model_version": selected.version, "seed": selected.config.seed,
@@ -336,9 +383,11 @@ def train(
         "training_seconds": sum(candidate["training_seconds"] for candidate in candidates),
         "source": preparation["source"], "dataset_sha256": preparation["dataset_sha256"],
         "preparation_sha256": preparation["preparation_sha256"], "splits": preparation["splits"],
+        "provenance": selected.provenance.model_dump(mode="json"),
     }
-    report["experiment_sha256"] = fingerprint(report)
     selected.save(model_path)
+    report["artifact_manifest_sha256"] = _sha256(model_path / "metadata.json")
+    report["experiment_sha256"] = fingerprint(report)
     for target in dict.fromkeys([archive, latest]):
         _write(target, _json_bytes(report), force)
     return report
@@ -347,27 +396,40 @@ def train(
 def evaluate(
     root: Path, output: Path | None = None, *, model_path: Path | None = None,
     report_path: Path | None = None, seed: int = 42, threads: int = 2, force: bool = False,
+    experiment_dir: Path | None = None, split: Literal["validation", "test"] = "test",
 ) -> dict[str, Any]:
     root = root.absolute()
     TrainingConfig(model=ModelConfig(seed=seed), threads=threads)
+    _check(split in ("validation", "test"), "Evaluation split must be validation or test")
     preparation, partitions = _load_prepared(root, output)
     directory = resolve_path(root, output or DEFAULT_OUTPUT)
-    model_path = resolve_path(root, model_path or directory / "model")
-    target = protect_output(root, directory, report_path or directory / "evaluation.json", preparation["source"], model_path)
-    _check(target.suffix == ".json" and target != directory / "experiment.json"
-           and not target.is_relative_to(directory / "experiments"), "Evaluation output would overwrite experiment records")
+    experiment_directory = resolve_path(root, experiment_dir or directory)
+    model_path = resolve_path(root, model_path or experiment_directory / "model")
+    target = protect_output(root, directory, report_path or experiment_directory / "evaluation.json", preparation["source"], model_path)
+    _check(target.suffix == ".json" and all(target != scope / "experiment.json"
+           and not target.is_relative_to(scope / "experiments") for scope in (directory, experiment_directory)),
+           "Evaluation output would overwrite experiment records")
     _available([target], force)
     fitted = PersonaModel.load(model_path)
-    experiment = read_json(resolve_path(root, directory / "experiments" / f"{fitted.version}.json"))
+    experiment = read_json(resolve_path(root, experiment_directory / "experiments" / f"{fitted.version}.json"))
     _check(experiment["experiment_sha256"] == fingerprint({key: value for key, value in experiment.items() if key != "experiment_sha256"}),
            "Experiment fingerprint mismatch")
-    _check(experiment["model_version"] == fitted.version and experiment["selected_config"] == fitted.config.model_dump()
+    _check(experiment["model_version"] == fitted.version and ModelConfig.model_validate(experiment["selected_config"]) == fitted.config
            and experiment["preparation_sha256"] == preparation["preparation_sha256"]
            and fitted.records == partitions["train"], "Model was not selected on these train/validation splits")
+    if fitted.provenance is not None:
+        _check(experiment.get("artifact_manifest_sha256") == _sha256(model_path / "metadata.json"),
+               "Artifact manifest does not match the experiment")
+        _check(experiment.get("provenance") == fitted.provenance.model_dump(mode="json")
+               and fitted.provenance.source_files == preparation["source"]["files"]
+               and fitted.provenance.source_manifest_sha256 == preparation["source"]["manifest_sha256"]
+               and fitted.provenance.preparation_sha256 == preparation["preparation_sha256"]
+               and fitted.provenance.dataset_sha256 == preparation["dataset_sha256"],
+               "Artifact provenance does not match the verified preparation")
     with threadpool_limits(limits=threads), warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always", ConvergenceWarning)
-        metrics = evaluate_model(fitted, partitions["test"], seed=seed)
-    report = {"schema_version": 1, "model_version": fitted.version, "seed": seed, "split": "test", "metrics": metrics,
+        metrics = evaluate_model(fitted, partitions[split], seed=seed)
+    report = {"schema_version": 1, "model_version": fitted.version, "seed": seed, "split": split, "metrics": metrics,
               "limitation": "Synthetic heldout retrieval proxy; not population truth, customer demand, or measured business relevance.",
               "dataset_sha256": preparation["dataset_sha256"], "experiment_sha256": experiment["experiment_sha256"],
               "warnings": list(dict.fromkeys(str(item.message) for item in captured))}

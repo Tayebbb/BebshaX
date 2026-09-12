@@ -1,0 +1,70 @@
+{
+  "phase": "evaluate-lexical",
+  "run_id": "20260909T182549Z_24f7f87fdaa2",
+  "experiment": "data/processed/ml_persona/experiment-20260909-w1-w7-1823",
+  "command": [
+    ".venv\\Scripts\\python.exe",
+    "E:/BebshaX/ml_persona/tools/modernization_experiment.py",
+    "--experiment",
+    "experiment-20260909-w1-w7-1823",
+    "--phase",
+    "evaluate-lexical"
+  ],
+  "exit_code": 130,
+  "wall_seconds": 7.5090076999986195,
+  "python": "3.12.9",
+  "numerical_versions": {
+    "numpy": "2.5.2",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.0"
+  },
+  "numerical_threads": 2,
+  "memory_before_phase": {
+    "rss_bytes": 30928896,
+    "peak_rss_bytes": 30928896,
+    "method": "GetProcessMemoryInfo current-process working set"
+  },
+  "memory_after_phase": {
+    "rss_bytes": 178688000,
+    "peak_rss_bytes": 316354560,
+    "method": "GetProcessMemoryInfo current-process working set"
+  },
+  "frozen_files_before": {
+    "data/processed/ml_persona/evaluation.json": "07f17aa2829486aa0504564e01f214671c8fe198fb00da51a256230fc7a52b03",
+    "data/processed/ml_persona/example_personas.json": "fdc4aec80bb5148f6d322435c0470714e84c41a43084e895d93b6353054dca08",
+    "data/processed/ml_persona/experiment.json": "3a0edf11aa7707eb36110d3f02025440362c0c0c9f5b755764daf7535b86cc9b",
+    "data/processed/ml_persona/model/config.json": "bc8d9aa0dc1ad68f78992048397f31643cde3d03571c47bda2dcbb1b7f82a46f",
+    "data/processed/ml_persona/model/metadata.json": "21e7c8848215ae203913e8d0e9dcb240c8cac370279f89c7fedada5c30d2a440",
+    "data/processed/ml_persona/model/parameters.npz": "1497b3ae0b5ad4673e9ed3167dfb81a7822ad7f814ae6d4cc2e776dc11f662cf",
+    "data/processed/ml_persona/model/records.json": "7c2a6e0d5df6439c8621221fc591c833dce2a2e084c749d510b1ca9048248a71",
+    "data/processed/ml_persona/model/vocabulary.json": "5837b367963d7b9916e6d8f89087bcc521ab9f021cd5843f5e7854f37504eaf6",
+    "data/processed/ml_persona/preparation.json": "d90941f1e1f44a7896dd0e5b9b4811a8959d26f8104b57231760f2faff353361",
+    "data/processed/ml_persona/test.jsonl": "118dc51bc376a21466099ad8f1d5e08317c0682e5e033f1ebcc98086cbbd7f44",
+    "data/processed/ml_persona/train.jsonl": "2cdfad83fd5680ce160e546a9f857ae867a22b1150982a351dd6215a0cad88c8",
+    "data/processed/ml_persona/validation.jsonl": "355b9ad1d13bb5669ba543e8283ce847f56abc1674b4e3da9e5c4b0d69db5053"
+  },
+  "frozen_files_after": {
+    "data/processed/ml_persona/evaluation.json": "07f17aa2829486aa0504564e01f214671c8fe198fb00da51a256230fc7a52b03",
+    "data/processed/ml_persona/example_personas.json": "fdc4aec80bb5148f6d322435c0470714e84c41a43084e895d93b6353054dca08",
+    "data/processed/ml_persona/experiment.json": "3a0edf11aa7707eb36110d3f02025440362c0c0c9f5b755764daf7535b86cc9b",
+    "data/processed/ml_persona/model/config.json": "bc8d9aa0dc1ad68f78992048397f31643cde3d03571c47bda2dcbb1b7f82a46f",
+    "data/processed/ml_persona/model/metadata.json": "21e7c8848215ae203913e8d0e9dcb240c8cac370279f89c7fedada5c30d2a440",
+    "data/processed/ml_persona/model/parameters.npz": "1497b3ae0b5ad4673e9ed3167dfb81a7822ad7f814ae6d4cc2e776dc11f662cf",
+    "data/processed/ml_persona/model/records.json": "7c2a6e0d5df6439c8621221fc591c833dce2a2e084c749d510b1ca9048248a71",
+    "data/processed/ml_persona/model/vocabulary.json": "5837b367963d7b9916e6d8f89087bcc521ab9f021cd5843f5e7854f37504eaf6",
+    "data/processed/ml_persona/preparation.json": "d90941f1e1f44a7896dd0e5b9b4811a8959d26f8104b57231760f2faff353361",
+    "data/processed/ml_persona/test.jsonl": "118dc51bc376a21466099ad8f1d5e08317c0682e5e033f1ebcc98086cbbd7f44",
+    "data/processed/ml_persona/train.jsonl": "2cdfad83fd5680ce160e546a9f857ae867a22b1150982a351dd6215a0cad88c8",
+    "data/processed/ml_persona/validation.jsonl": "355b9ad1d13bb5669ba543e8283ce847f56abc1674b4e3da9e5c4b0d69db5053"
+  },
+  "frozen_files_unchanged": true,
+  "application_environment_overrides": [],
+  "result": null,
+  "error": {
+    "type": "KeyboardInterrupt",
+    "message": "Measurement interrupted; not successful evidence"
+  },
+  "test_split_evaluated": false,
+  "fresh_business_labels": 0,
+  "production_promoted": false
+}

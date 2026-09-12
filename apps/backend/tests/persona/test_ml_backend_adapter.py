@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import threading
 from pathlib import Path
@@ -7,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from bebshax_persona_ml.data import TrainingRecord
 from bebshax_persona_ml.model import BusinessContext, PersonaModel, Selection
+from bebshax_persona_ml.provenance import ExpectedArtifactManifest
 
 from bebshax.api.errors import APIError
 from bebshax.persona.schema import CLAIM_GROUPS, ProvenanceClass
@@ -30,6 +32,65 @@ async def test_missing_artifact_is_explicit_unavailable_without_local_path(tmp_p
 def test_invalid_inference_concurrency_is_rejected(tmp_path: Path, limit) -> None:
     with pytest.raises(ValueError, match="positive integer"):
         MLPersonaAdapter(tmp_path, max_concurrency=limit)
+
+
+@pytest.mark.parametrize("verify", [None, 1, "true"])
+def test_training_code_verification_requires_boolean(tmp_path: Path, verify: object) -> None:
+    with pytest.raises(ValueError, match="boolean"):
+        MLPersonaAdapter(tmp_path, verify_training_code=verify)
+
+
+async def test_training_code_verification_rejects_drift_before_inference(
+    ml_artifact: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bebshax_persona_ml import provenance
+
+    expected = ExpectedArtifactManifest(
+        metadata_sha256=hashlib.sha256((ml_artifact / "metadata.json").read_bytes()).hexdigest(),
+    )
+    context = BusinessContext(description="Food delivery for students")
+    verified = MLPersonaAdapter(ml_artifact, expected_manifest=expected, verify_training_code=True)
+    first = await verified.generate(context, 1, seed=42)
+    changed_code = {**provenance.training_code_snapshot(), "model.py": "0" * 64}
+    monkeypatch.setattr(provenance, "training_code_snapshot", lambda: changed_code)
+
+    assert await verified.generate(context, 1, seed=42) == first
+    rejected = MLPersonaAdapter(ml_artifact, expected_manifest=expected, verify_training_code=True)
+    with pytest.raises(APIError) as raised:
+        await rejected.generate(context, 1, seed=42)
+    assert raised.value.status_code == 503
+    assert raised.value.error_code == "ml_persona_unavailable"
+    assert str(ml_artifact) not in raised.value.detail
+    assert rejected._model is None
+    assert await MLPersonaAdapter(ml_artifact, expected_manifest=expected).generate(context, 1, seed=42) == first
+
+
+@pytest.mark.parametrize("fields,bounds", [
+    ({"description": "Food delivery for ages 21-24"}, (21, 24)),
+    ({"target_audience": "Students aged 21 to 24"}, (21, 24)),
+    ({"target_audience": "Adults 21\u201324 years old"}, (21, 24)),
+    ({"description": "Food for ages 21-30", "target_audience": "ages 24-27"}, (24, 27)),
+    ({"target_audience": "ages 21-30", "min_age": 24, "max_age": 27}, (24, 27)),
+])
+def test_explicit_api_age_ranges_are_intersected(fields: dict, bounds: tuple[int, int]) -> None:
+    from bebshax.personas.ml_adapter import build_business_context
+
+    context = build_business_context(**{"description": "Food delivery", **fields})
+    assert (context.min_age, context.max_age) == bounds
+
+
+@pytest.mark.parametrize("fields", [
+    {"target_audience": "ages 17-25"}, {"target_audience": "ages 30-21"},
+    {"description": "Food for ages 21-24", "target_audience": "ages 30-35"},
+    {"target_audience": "ages 21-24", "min_age": 30},
+])
+def test_invalid_or_disjoint_explicit_api_age_ranges_are_unsupported(fields: dict) -> None:
+    from bebshax.personas.ml_adapter import build_business_context
+
+    with pytest.raises(APIError) as raised:
+        build_business_context(**{"description": "Food delivery", **fields})
+    assert raised.value.status_code == 422
+    assert raised.value.error_code == "ml_persona_unsupported_context"
 
 
 def test_missing_source_attributes_are_preserved_and_explicitly_warned(ml_training_records) -> None:
@@ -205,6 +266,10 @@ def test_conversions_preserve_record_and_mark_every_claim_synthetic(
     expected_provenance = {
         "source": record.source, "revision": record.revision, "record_id": record.record_id,
         "model_version": "fixture-model", "selection_score": 0.75, "topic": 1,
+        "strategy": selection.strategy,
+        "source_attribution": selection.source_attribution.model_dump(mode="json"),
+        "source_corpus_sha256": selection.source_corpus_sha256,
+        "training_code_sha256": selection.training_code_sha256,
     }
     assert profile.detailed_attributes["ml_provenance"] == expected_provenance
     assert profile.detailed_attributes["source_documents"] == record.documents
@@ -250,10 +315,7 @@ def test_artifact_path_defaults_to_processed_root_and_accepts_admin_override(tmp
 
 
 @pytest.mark.parametrize("fields", [
-    {"description": "x" * 20001}, {"target_audience": "x" * 4001},
-    {"price_range": "x" * 513}, {"role": "x" * 513},
-    {"research": ["x" * 10001]}, {"features": ["x"] * 101},
-    {"min_age": 17}, {"min_age": 40, "max_age": 20},
+    {"features": ["x"] * 101}, {"min_age": 17}, {"min_age": 40, "max_age": 20},
 ])
 def test_context_limits_fail_explicitly_without_truncation(fields: dict) -> None:
     from bebshax.personas.ml_adapter import build_business_context
@@ -262,6 +324,51 @@ def test_context_limits_fail_explicitly_without_truncation(fields: dict) -> None
         build_business_context(**{"description": "Food delivery", **fields})
     assert raised.value.status_code == 422
     assert raised.value.error_code == "ml_persona_unsupported_context"
+    # The operator-facing detail names the real constraint instead of a generic refusal.
+    assert raised.value.detail.startswith("The local persona model cannot support the requested context or constraints. (")
+
+
+@pytest.mark.parametrize("field, value", [
+    ("description", "d" * 20_001), ("target_audience", "t" * 4_001),
+    ("price_range", "p" * 513), ("role", "r" * 513),
+])
+def test_oversize_scalar_context_overflows_into_research_without_loss(field: str, value: str) -> None:
+    from bebshax.personas.ml_adapter import build_business_context
+
+    context = build_business_context(**{"description": "Food delivery", field: value})
+    assert getattr(context, field) + "".join(context.research) == value
+    assert all(1 <= len(item) <= 10_000 for item in context.research)
+
+
+@pytest.mark.parametrize("research", [
+    ["a" * 10_001, "b" * 25_000],
+    [json.dumps({"copilot_messages": [{"role": "user", "content": "m" * 700}] * 40})],
+])
+def test_oversize_research_is_chunked_not_truncated(research: list[str]) -> None:
+    """A long copilot history must not make persona generation impossible (it did:
+    the study JSON outgrew the 10k research-item limit after a few turns)."""
+    from bebshax.personas.ml_adapter import build_business_context
+
+    context = build_business_context(description="Food delivery", research=research)
+    assert "".join(context.research) == "".join(research)
+    assert all(1 <= len(item) <= 10_000 for item in context.research)
+    assert len(context.research) <= 100
+
+
+def test_research_beyond_the_chunk_budget_is_dropped_loudly(caplog) -> None:
+    from bebshax.personas.ml_adapter import bounded_research
+
+    with caplog.at_level("WARNING", logger="bebshax.personas.ml_adapter"):
+        chunks = bounded_research(["x" * 10_000] * 101)
+    assert len(chunks) == 100
+    assert any("dropped 1 trailing chunk" in record.getMessage() for record in caplog.records)
+
+
+def test_blank_research_entries_are_skipped_instead_of_failing_validation() -> None:
+    from bebshax.personas.ml_adapter import build_business_context
+
+    context = build_business_context(description="Food delivery", research=["  ", "", "useful note"])
+    assert context.research == ["useful note"]
 
 
 async def test_segment_generation_keeps_full_context_quotas_and_distinct_sources(

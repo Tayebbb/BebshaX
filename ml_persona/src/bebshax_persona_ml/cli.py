@@ -60,6 +60,9 @@ def _parser() -> tuple[_Parser, dict[str, _Parser]]:
             subparser.add_argument("--test-fraction", type=float, default=0.15)
         if name in ("train", "evaluate"):
             subparser.add_argument("--report", type=Path, help="Output JSON report path relative to root")
+            subparser.add_argument("--experiment-dir", type=Path, help="Separate model and experiment output directory")
+        if name == "evaluate":
+            subparser.add_argument("--split", choices=("validation", "test"), default="test")
         if name == "train":
             subparser.add_argument("--config", type=Path, help="TrainingConfig JSON: model, topics, lexical_weights, threads")
             subparser.add_argument("--topics", type=int, nargs="+")
@@ -101,7 +104,8 @@ def _threads(arguments: argparse.Namespace) -> int:
 def _locations(arguments: argparse.Namespace) -> tuple[Path, Path, Path]:
     root = arguments.root.absolute()
     directory = pipeline.resolve_path(root, arguments.data_dir)
-    return root, directory, pipeline.resolve_path(root, arguments.model or directory / "model")
+    experiment_directory = pipeline.resolve_path(root, getattr(arguments, "experiment_dir", None) or directory)
+    return root, directory, pipeline.resolve_path(root, arguments.model or experiment_directory / "model")
 
 
 def _training_config(arguments: argparse.Namespace) -> pipeline.TrainingConfig:
@@ -136,10 +140,13 @@ def _persona(selection: Selection) -> dict[str, Any]:
         "identity": {"name": record.name or record.record_id, "description": record.description},
         "demographics": {field: getattr(record, field) for field in ("age", "occupation", "education", "location")
                          if getattr(record, field) not in (None, "")},
-        "source": {"repo_id": record.source, "revision": record.revision, "record_id": record.record_id, "documents": record.documents},
+        "source": {"repo_id": record.source, "revision": record.revision, "record_id": record.record_id,
+               "documents": record.documents, "attribution": selection.source_attribution.model_dump(mode="json")},
         "provenance": {"kind": "synthetic_training_prototype", "observed": False, "evidence_status": "NOT_OBSERVED",
-                       "record_sha256": fingerprint(record.model_dump(mode="json"))},
+                       "record_sha256": fingerprint(record.model_dump(mode="json")),
+                       "source_corpus_sha256": selection.source_corpus_sha256},
         "model": {"version": selection.model_version, "selection_score": selection.score, "topic": selection.topic,
+                   "strategy": selection.strategy, "training_code_sha256": selection.training_code_sha256,
                   "score_interpretation": "Retrieval similarity, not confidence, probability, or customer demand."},
         **{field: [{"text": text, "source_record_id": record.record_id, "evidence_status": "NOT_OBSERVED"}
                    for text in getattr(record, field)] for field in ("goals", "pain_points", "behaviors")},
@@ -186,7 +193,11 @@ def _check_backend_conversion(
     claims = {group: [{"value": value, "provenance": "SYNTHETIC", "evidence_ids": []}
                       for value in getattr(record, group)] for group, _, _ in groups}
     provenance = {"source": record.source, "revision": record.revision, "record_id": record.record_id,
-                  "model_version": selection.model_version, "selection_score": selection.score, "topic": selection.topic}
+                  "model_version": selection.model_version, "selection_score": selection.score, "topic": selection.topic,
+                  "strategy": selection.strategy,
+                  "source_attribution": selection.source_attribution.model_dump(mode="json"),
+                  "source_corpus_sha256": selection.source_corpus_sha256,
+                  "training_code_sha256": selection.training_code_sha256}
     generation_model = f"bebshax-persona-ml/{selection.model_version}"
     for converted in (generated, profile, workflow):
         pipeline._check({field: converted[field] for field in identity} == identity, "Backend changed source identity")
@@ -310,10 +321,12 @@ def _dispatch(arguments: argparse.Namespace) -> dict[str, Any]:
                             and (arguments.report is None or pipeline.resolve_path(root, arguments.report) != config_path),
                             "Outputs cannot overwrite the training configuration")
         return pipeline.train(root, directory, config=_training_config(arguments), model_path=model_path,
-                              report_path=arguments.report, force=arguments.force)
+                              report_path=arguments.report, force=arguments.force,
+                              experiment_dir=arguments.experiment_dir)
     if arguments.command == "evaluate":
         return pipeline.evaluate(root, directory, model_path=model_path, report_path=arguments.report,
-                                 seed=_seed(arguments), threads=_threads(arguments), force=arguments.force)
+                                 seed=_seed(arguments), threads=_threads(arguments), force=arguments.force,
+                                 experiment_dir=arguments.experiment_dir, split=arguments.split)
     if arguments.command == "generate":
         return _generate(arguments)
     return _smoke(arguments)

@@ -1,0 +1,309 @@
+{
+  "phase": "evaluate-lexical",
+  "run_id": "20260909T182850Z_ebab0d0c1432",
+  "experiment": "data/processed/ml_persona/experiment-20260909-w1-w7-1823",
+  "command": [
+    ".venv\\Scripts\\python.exe",
+    "E:/BebshaX/ml_persona/tools/modernization_experiment.py",
+    "--experiment",
+    "experiment-20260909-w1-w7-1823",
+    "--phase",
+    "evaluate-lexical"
+  ],
+  "exit_code": 0,
+  "wall_seconds": 18.468264200000704,
+  "python": "3.12.9",
+  "numerical_versions": {
+    "numpy": "2.5.2",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.0"
+  },
+  "numerical_threads": 2,
+  "memory_before_phase": {
+    "rss_bytes": 30994432,
+    "peak_rss_bytes": 30994432,
+    "method": "GetProcessMemoryInfo current-process working set"
+  },
+  "memory_after_phase": {
+    "rss_bytes": 212119552,
+    "peak_rss_bytes": 539258880,
+    "method": "GetProcessMemoryInfo current-process working set"
+  },
+  "frozen_files_before": {
+    "data/processed/ml_persona/evaluation.json": "07f17aa2829486aa0504564e01f214671c8fe198fb00da51a256230fc7a52b03",
+    "data/processed/ml_persona/example_personas.json": "fdc4aec80bb5148f6d322435c0470714e84c41a43084e895d93b6353054dca08",
+    "data/processed/ml_persona/experiment.json": "3a0edf11aa7707eb36110d3f02025440362c0c0c9f5b755764daf7535b86cc9b",
+    "data/processed/ml_persona/model/config.json": "bc8d9aa0dc1ad68f78992048397f31643cde3d03571c47bda2dcbb1b7f82a46f",
+    "data/processed/ml_persona/model/metadata.json": "21e7c8848215ae203913e8d0e9dcb240c8cac370279f89c7fedada5c30d2a440",
+    "data/processed/ml_persona/model/parameters.npz": "1497b3ae0b5ad4673e9ed3167dfb81a7822ad7f814ae6d4cc2e776dc11f662cf",
+    "data/processed/ml_persona/model/records.json": "7c2a6e0d5df6439c8621221fc591c833dce2a2e084c749d510b1ca9048248a71",
+    "data/processed/ml_persona/model/vocabulary.json": "5837b367963d7b9916e6d8f89087bcc521ab9f021cd5843f5e7854f37504eaf6",
+    "data/processed/ml_persona/preparation.json": "d90941f1e1f44a7896dd0e5b9b4811a8959d26f8104b57231760f2faff353361",
+    "data/processed/ml_persona/test.jsonl": "118dc51bc376a21466099ad8f1d5e08317c0682e5e033f1ebcc98086cbbd7f44",
+    "data/processed/ml_persona/train.jsonl": "2cdfad83fd5680ce160e546a9f857ae867a22b1150982a351dd6215a0cad88c8",
+    "data/processed/ml_persona/validation.jsonl": "355b9ad1d13bb5669ba543e8283ce847f56abc1674b4e3da9e5c4b0d69db5053"
+  },
+  "frozen_files_after": {
+    "data/processed/ml_persona/evaluation.json": "07f17aa2829486aa0504564e01f214671c8fe198fb00da51a256230fc7a52b03",
+    "data/processed/ml_persona/example_personas.json": "fdc4aec80bb5148f6d322435c0470714e84c41a43084e895d93b6353054dca08",
+    "data/processed/ml_persona/experiment.json": "3a0edf11aa7707eb36110d3f02025440362c0c0c9f5b755764daf7535b86cc9b",
+    "data/processed/ml_persona/model/config.json": "bc8d9aa0dc1ad68f78992048397f31643cde3d03571c47bda2dcbb1b7f82a46f",
+    "data/processed/ml_persona/model/metadata.json": "21e7c8848215ae203913e8d0e9dcb240c8cac370279f89c7fedada5c30d2a440",
+    "data/processed/ml_persona/model/parameters.npz": "1497b3ae0b5ad4673e9ed3167dfb81a7822ad7f814ae6d4cc2e776dc11f662cf",
+    "data/processed/ml_persona/model/records.json": "7c2a6e0d5df6439c8621221fc591c833dce2a2e084c749d510b1ca9048248a71",
+    "data/processed/ml_persona/model/vocabulary.json": "5837b367963d7b9916e6d8f89087bcc521ab9f021cd5843f5e7854f37504eaf6",
+    "data/processed/ml_persona/preparation.json": "d90941f1e1f44a7896dd0e5b9b4811a8959d26f8104b57231760f2faff353361",
+    "data/processed/ml_persona/test.jsonl": "118dc51bc376a21466099ad8f1d5e08317c0682e5e033f1ebcc98086cbbd7f44",
+    "data/processed/ml_persona/train.jsonl": "2cdfad83fd5680ce160e546a9f857ae867a22b1150982a351dd6215a0cad88c8",
+    "data/processed/ml_persona/validation.jsonl": "355b9ad1d13bb5669ba543e8283ce847f56abc1674b4e3da9e5c4b0d69db5053"
+  },
+  "frozen_files_unchanged": true,
+  "application_environment_overrides": [],
+  "result": {
+    "command": [
+      "python",
+      "-B",
+      "-m",
+      "bebshax_persona_ml",
+      "--root",
+      "E:\\BebshaX",
+      "evaluate",
+      "--experiment-dir",
+      "data/processed/ml_persona/experiment-20260909-w1-w7-1823",
+      "--split",
+      "validation",
+      "--threads",
+      "2"
+    ],
+    "exit_code": 0,
+    "wall_seconds": 15.32511969999905,
+    "response": {
+      "command": "evaluate",
+      "ok": true,
+      "result": {
+        "dataset_sha256": "d0e9d8f4e9c2af263aa2c8c5ee59710468a00f7bf0be08f02466e6aa663e71c1",
+        "experiment_sha256": "0be792534720e4da725ebff5a446b89dc56079d34ba9172e5f2cad98fdc1f450",
+        "limitation": "Synthetic heldout retrieval proxy; not population truth, customer demand, or measured business relevance.",
+        "metrics": {
+          "generation": {
+            "age_distribution": {
+              "bins": [
+                "18-24",
+                "25-34",
+                "35-44",
+                "45-54",
+                "55-64",
+                "65-95"
+              ],
+              "generated_counts": [
+                14,
+                33,
+                23,
+                18,
+                33,
+                39
+              ],
+              "generated_unknown": 0,
+              "js_divergence": 0.011137337356201746,
+              "protocol": "Base-2 Jensen-Shannon divergence; unknown/invalid ages excluded and counted, not imputed.",
+              "reference": "heldout_source_records",
+              "source_counts": [
+                57,
+                89,
+                100,
+                92,
+                92,
+                109
+              ],
+              "source_unknown": 0,
+              "unknown_includes_invalid": true
+            },
+            "coverage": {
+              "occupation_counts": {
+                "accountant_or_auditor": 2,
+                "animal_caretaker": 1,
+                "assembler_or_fabricator": 1,
+                "baker": 1,
+                "bartender": 1,
+                "carpenter": 4,
+                "cashier": 1,
+                "chef_or_head_cook": 1,
+                "chemical_technician": 1,
+                "childcare_worker": 1,
+                "clergy": 1,
+                "clinical_laboratory_technologist_or_technician": 1,
+                "computer_network_architect": 2,
+                "construction_laborer": 1,
+                "cook": 3,
+                "customer_service_representative": 1,
+                "dental_assistant": 1,
+                "dental_or_ophthalmic_laboratory_technician_or_medical_appliance_technician": 1,
+                "driver_sales_worker_or_truck_driver": 2,
+                "electrical_electronics_or_electromechanical_assembler": 1,
+                "electrical_or_electronic_engineering_technologist_or_technician": 1,
+                "electrician": 1,
+                "elementary_or_middle_school_teacher": 2,
+                "engineering_technologist_or_technician": 3,
+                "executive_secretary_or_executive_administrative_assistant": 1,
+                "financial_manager": 4,
+                "first_line_supervisor_of_office_or_administrative_support_worker": 1,
+                "first_line_supervisor_of_retail_sales_worker": 3,
+                "food_batchmaker": 1,
+                "general_or_operations_manager": 1,
+                "glazier": 1,
+                "hairdresser_hairstylist_or_cosmetologist": 2,
+                "hazardous_materials_removal_worker": 1,
+                "home_health_aide": 1,
+                "human_resources_worker": 1,
+                "industrial_engineer_including_health_or_safety": 1,
+                "industrial_or_refractory_machinery_mechanic": 1,
+                "inspector_tester_sorter_sampler_or_weigher": 1,
+                "janitor_or_building_cleaner": 4,
+                "laborer_or_freight_stock_or_material_mover": 1,
+                "landscaping_or_groundskeeping_worker": 1,
+                "maid_or_housekeeping_cleaner": 1,
+                "management_analyst": 3,
+                "manager": 3,
+                "materials_engineer": 1,
+                "mathematical_science_occupation": 1,
+                "mechanical_engineer": 2,
+                "metal_worker_or_plastic_worker": 2,
+                "miscellaneous_agricultural_worker": 1,
+                "no_occupation": 5,
+                "not_in_workforce": 47,
+                "nursing_assistant": 1,
+                "office_or_administrative_support_worker": 1,
+                "personal_care_or_service_worker": 1,
+                "physician": 1,
+                "postsecondary_teacher": 1,
+                "preschool_or_kindergarten_teacher": 1,
+                "print_binding_or_finishing_worker": 1,
+                "protective_service_worker": 1,
+                "public_safety_telecommunicator": 1,
+                "real_estate_broker_or_sales_agent": 2,
+                "recreation_worker": 1,
+                "retail_salesperson": 4,
+                "roofer": 2,
+                "security_guard_or_gambling_surveillance_officer": 1,
+                "software_quality_assurance_analyst_or_tester": 3,
+                "statistical_assistant": 1,
+                "stocker_or_order_filler": 2,
+                "teaching_assistant": 2,
+                "tutor": 1,
+                "waiter_or_waitress": 1,
+                "water_or_wastewater_treatment_plant_or_system_operator": 1,
+                "web_or_digital_interface_designer": 1,
+                "wholesale_or_retail_buyer": 1,
+                "writer_or_author": 1
+              },
+              "occupation_fraction": 0.21008403361344538,
+              "record_fraction": 0.06001589825119237,
+              "topic_counts": {},
+              "topic_fraction": null
+            },
+            "diversity": {
+              "mean_pairwise_cosine_distance": 0.9124937389541012,
+              "pair_count": 320,
+              "scope": "within_generated_batches",
+              "space": "training_tfidf_cosine",
+              "unscorable_profile_count": 0
+            },
+            "exact_source_reuse_rate": 1.0,
+            "failed_batches": 0,
+            "latency_ms": {
+              "mean": 29.999184374560173,
+              "p95": 31.86302999893087,
+              "total": 959.9738999859255
+            },
+            "requested_batches": 32,
+            "reuse_interpretation": "Exact source reuse is expected for coherent prototype selection; these are not newly synthesized identities.",
+            "sample_count": 160,
+            "sampled_out_queries": 507,
+            "sampling_protocol": "Up to 32 seeded scorable heldout query pairs, up to 5 training prototypes per query. Oversized contexts skipped, never truncated.",
+            "skipped_queries": 0,
+            "structural": {
+              "bundle_mismatch_count": 0,
+              "duplicate_id_count": 0,
+              "duplicate_name_count": 0,
+              "duplicate_persona_count": 0,
+              "incomplete_count": 0,
+              "location_rewrite_count": 0,
+              "underage_count": 0
+            },
+            "successful_batches": 32
+          },
+          "interpretation": "Heldout cross-view retrieval is a proxy, not measured business relevance or customer demand.",
+          "latency_ms": {
+            "generation": 1445.1080999970145,
+            "retrieval": 610.3264000012132,
+            "total": 4303.1267000005755,
+            "transform": 2247.6893000020937
+          },
+          "model_version": "27ad0911014cb01e8d6d891e43dc18edf75632ae919bf3413121dbbb6a404835",
+          "retrieval": {
+            "candidate_count": 539,
+            "invalid_view_counts": {
+              "missing_profile": 0,
+              "missing_query": 0,
+              "oov_profile": 0,
+              "oov_query": 0
+            },
+            "lexical_tfidf": {
+              "mrr": 0.7166454265071603,
+              "recall@1": 0.6196660482374768,
+              "recall@10": 0.8979591836734694,
+              "recall@5": 0.8367346938775511
+            },
+            "missing_view_policy": "Missing/OOV view pairs count as model/lexical misses, not dropped queries; text-free baselines can still rank.",
+            "model": {
+              "mrr": 0.7166454265071603,
+              "recall@1": 0.6196660482374768,
+              "recall@10": 0.8979591836734694,
+              "recall@5": 0.8367346938775511
+            },
+            "popular_occupation": {
+              "mrr": 0.01283765179182856,
+              "recall@1": 0.0018552875695732839,
+              "recall@10": 0.022263450834879406,
+              "recall@5": 0.0074211502782931356
+            },
+            "popular_occupation_protocol": "Training occupation frequencies; seeded random ties, no heldout fitting.",
+            "profile_fields": [
+              "professional_persona",
+              "sports_persona",
+              "arts_persona",
+              "travel_persona",
+              "skills_and_expertise",
+              "career_goals_and_ambitions"
+            ],
+            "query_count": 539,
+            "query_fields": [
+              "culinary_persona",
+              "hobbies_and_interests"
+            ],
+            "random": {
+              "mrr": 0.012741852676724338,
+              "recall@1": 0.0018552875695732839,
+              "recall@10": 0.01855287569573284,
+              "recall@5": 0.00927643784786642
+            },
+            "random_protocol": "Exact expected uniform random rank; no sampled baseline noise.",
+            "rank_scope": "evaluation_records_only",
+            "valid_query_count": 539
+          },
+          "schema_version": 1,
+          "seed": 42
+        },
+        "model_version": "27ad0911014cb01e8d6d891e43dc18edf75632ae919bf3413121dbbb6a404835",
+        "schema_version": 1,
+        "seed": 42,
+        "split": "validation",
+        "warnings": []
+      }
+    }
+  },
+  "error": null,
+  "test_split_evaluated": false,
+  "fresh_business_labels": 0,
+  "production_promoted": false
+}
