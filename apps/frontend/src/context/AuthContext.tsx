@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { User, GoogleAuthData, AuthResponse } from '../types/auth';
-import { api } from '../services/api';
-import { neonAuth } from '../services/neonAuth';
+import { api, SIGNOUT_BROADCAST_KEY } from '../services/api';
+import { advanceSession, getRefreshCredential, getSessionEpoch, hasCookieSession, SESSION_CHANGED } from '../services/session';
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  sessionEpoch: number;
   signin: (email: string, password: string) => Promise<void>;
   signup: (fullName: string, email: string, password: string) => Promise<AuthResponse>;
   googleAuth: (data?: GoogleAuthData) => Promise<void>;
@@ -15,7 +16,8 @@ interface AuthContextType {
   sendOtp: (email: string, type?: 'email-verification' | 'forget-password') => Promise<boolean>;
   verifyEmailOtp: (email: string, otp: string) => Promise<void>;
   resetPasswordWithOtp: (email: string, otp: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  authError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,100 +42,130 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return null;
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  // H9: credentials held in memory only until OTP verification commits the
-  // session (needed for the Neon sign-in that proves emailVerified).
-  const pendingCredsRef = useRef<{ email: string; password: string } | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [sessionEpoch, setSessionEpoch] = useState(getSessionEpoch);
+  const currentUserIdRef = useRef<string | null>(user?.id ?? null);
+  useEffect(() => {
+    currentUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
 
   useEffect(() => {
     let isMounted = true;
+    let initialization = 0;
 
     const initAuth = async () => {
+      const current = ++initialization;
+      const expectedSession = getSessionEpoch();
+      const isCurrent = () => isMounted && current === initialization && expectedSession === getSessionEpoch();
       try {
-        // 1. Check query params for token if redirected from OAuth callback
         if (typeof window !== 'undefined') {
           const urlParams = new URLSearchParams(window.location.search);
-          const urlToken = urlParams.get('token') || urlParams.get('access_token');
-          if (urlToken) {
-            api.setAuthToken(urlToken);
-            if (isMounted) setToken(urlToken);
-            window.history.replaceState({}, document.title, window.location.pathname);
+          if (urlParams.has('token') || urlParams.has('access_token')) {
+            urlParams.delete('token');
+            urlParams.delete('access_token');
+            const search = urlParams.toString();
+            window.history.replaceState(window.history.state, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`);
           }
         }
 
-        // 2. OAuth return: after Neon-hosted Google sign-in redirects back,
-        // there is no app token yet — only Neon's session cookie. Exchange it
-        // through server-verified /auth/sync (backend re-verifies the Neon
-        // token; identity never comes from client claims).
-        if (!api.isMockMode() && !api.getAuthToken()) {
-          const neonSession = await neonAuth.getSession(null);
-          if (neonSession?.token) {
-            const synced = await api.syncUser({ neon_token: neonSession.token });
-            if (!synced) {
-              // One-shot flag AuthPage reads to explain the failed Google
-              // return; boot itself stays resilient (no throw).
-              window.sessionStorage.setItem('bebshax_oauth_error', '1');
-            }
-          }
-        }
-
-        // 3. Query live Neon Auth session & backend /auth/me
         if (!api.isMockMode()) {
+          // Only a tab that actually held credentials may clear the shared identity:
+          // a bystander tab rewriting it would broadcast a sign-out back and forth.
+          const heldCredentials = api.hasSession() || getRefreshCredential() !== null;
+          await api.completeOAuthReturn();
           const profile = await api.getMe();
-          if (profile && isMounted) {
+          if (profile && isCurrent()) {
             setUser(profile);
             const activeToken = api.getAuthToken();
             if (activeToken) setToken(activeToken);
-          } else if (!profile && isMounted) {
+          } else if (!profile && isCurrent()) {
             setUser(null);
             setToken(null);
-            api.setStoredUser(null);
-            api.setAuthToken(null);
+            if (heldCredentials) {
+              api.setStoredUser(null);
+              api.setAuthToken(null);
+            }
           }
         }
-      } catch (err) {
-        console.error('Session initialization error:', err);
-        if (isMounted) {
+      } catch {
+        if (isCurrent()) {
           setUser(null);
           setToken(null);
-          api.setStoredUser(null);
-          api.setAuthToken(null);
+          setAuthError('Session verification is unavailable. Please sign in again.');
         }
       } finally {
-        if (isMounted) {
+        if (isCurrent()) {
           setIsLoading(false);
         }
       }
     };
 
-    initAuth();
+    const syncSession = () => {
+      if (!isMounted) return;
+      initialization += 1;
+      setSessionEpoch(getSessionEpoch());
+      setToken(api.getAuthToken());
+      setUser(api.getAuthToken() || hasCookieSession() ? api.getStoredUser() : null);
+      setIsLoading(false);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === 'bebshax_auth_token' || event.key === 'bebshax_auth_user' || event.key === 'bebshax_cookie_session'
+          || event.key === 'bebshax_session_generation' || event.key === SIGNOUT_BROADCAST_KEY) {
+        // The same account signing in from another tab is not a switch: this
+        // tab's credentials stay valid. (Dropping them here used to sign out the
+        // first tab, whose cleanup then broadcast a sign-out to the second.)
+        const broadcastId = api.getStoredUser()?.id ?? null;
+        if (!api.isMockMode() && event.key !== null && event.key !== 'bebshax_auth_token' && event.key !== SIGNOUT_BROADCAST_KEY
+            && broadcastId !== null && broadcastId === currentUserIdRef.current && api.hasSession()) {
+          return;
+        }
+        // Another tab *losing* its session (expired or rotated away) says nothing
+        // about ours, which is tab-scoped: verify it instead of dropping it. An
+        // explicit sign-out arrives on its own key and still ends every tab.
+        const lostElsewhere = event.key !== null && event.key !== SIGNOUT_BROADCAST_KEY && event.newValue === null
+          && (event.key === 'bebshax_auth_user' || event.key === 'bebshax_session_generation');
+        if (!api.isMockMode() && lostElsewhere && currentUserIdRef.current !== null
+            && (api.hasSession() || getRefreshCredential() !== null)) {
+          setIsLoading(true);
+          void initAuth();
+          return;
+        }
+        if (!api.isMockMode()) api.invalidateTabSession();
+        else advanceSession(false);
+        if (api.isMockMode() && (event.key === null || (event.key === 'bebshax_auth_user' && event.newValue === null) ||
+          (event.key === 'bebshax_session_generation' && event.newValue === null))) {
+          api.clearSession();
+        }
+        syncSession();
+        if (!api.isMockMode() && api.hasSession()) {
+          setUser(null);
+          setIsLoading(true);
+          void initAuth();
+        }
+      }
+    };
+    window.addEventListener(SESSION_CHANGED, syncSession);
+    window.addEventListener('storage', onStorage);
+    void initAuth();
 
     return () => {
       isMounted = false;
+      window.removeEventListener(SESSION_CHANGED, syncSession);
+      window.removeEventListener('storage', onStorage);
     };
   }, []);
 
   const signin = async (email: string, password: string) => {
-    try {
-      const res = await api.signin({ email, password });
-      setToken(res.access_token);
-      setUser(res.user);
-    } catch (err: any) {
-      if (err?.code === 'EMAIL_NOT_VERIFIED') {
-        pendingCredsRef.current = { email, password };
-      }
-      throw err;
-    }
+    const res = await api.signin({ email, password });
+    setToken(api.getAuthToken());
+    setUser(res.user);
   };
 
   const signup = async (fullName: string, email: string, password: string): Promise<AuthResponse> => {
     const res = await api.signup({ full_name: fullName, email, password });
-    // Keep credentials pending so a later verifyEmailOtp can complete the
-    // Neon sign-in + backend sync.
-    pendingCredsRef.current = { email, password };
-    if (res.access_token && res.user) {
-      api.setAuthToken(res.access_token);
-      api.setStoredUser(res.user);
-      setToken(res.access_token);
+    if (!res.verification_required && (res.access_token || res.csrf_token) && res.user) {
+      api.acceptAuthResponse(res);
+      setToken(api.getAuthToken());
       setUser(res.user);
     }
     return res;
@@ -157,52 +189,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const verifyEmailOtp = async (email: string, otp: string): Promise<void> => {
-    // 1. Prove the code against Neon (the real OTP authority).
     const res = await api.verifyEmailOtp(email, otp);
-
-    // 2. Obtain a Neon session token: the verify response may carry one;
-    // otherwise sign in with the pending credentials.
-    let neonToken = res.token || null;
-    if (!neonToken && pendingCredsRef.current?.email === email) {
-      try {
-        const neonRes = await neonAuth.signIn({
-          email,
-          password: pendingCredsRef.current.password,
-        });
-        neonToken = neonRes.token || null;
-      } catch {
-        neonToken = null;
-      }
-    }
-
-    // 3. Server-side sync: backend verifies the Neon token + emailVerified
-    // and mints the real app JWT. No sync → no session (honest failure).
-    if (neonToken) {
-      const synced = await api.syncUser({ neon_token: neonToken });
-      if (synced) {
-        pendingCredsRef.current = null;
-        setToken(synced.access_token);
-        setUser(synced.user);
-        return;
-      }
-    }
-
-    // 4. Fallback: retry the normal backend signin — works once /auth/sync
-    // (or a previous verification) has flipped is_verified.
-    if (pendingCredsRef.current?.email === email) {
-      const retry = await api.signin({
-        email,
-        password: pendingCredsRef.current.password,
-      });
-      pendingCredsRef.current = null;
-      setToken(retry.access_token);
-      setUser(retry.user);
-      return;
-    }
-
-    throw new Error(
-      'Email verified, but no session could be established. Please sign in.'
-    );
+    setToken(api.getAuthToken());
+    setUser(res.user);
   };
 
   const resetPasswordWithOtp = async (
@@ -213,10 +202,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return await api.resetPasswordWithOtp(email, otp, password);
   };
 
-  const logout = () => {
-    api.signout().catch(() => {});
+  const logout = async () => {
+    setAuthError(null);
     setToken(null);
     setUser(null);
+    try {
+      await api.signout();
+    } catch {
+      setAuthError('Signed out on this device. Server session revocation could not be confirmed.');
+    }
   };
 
   return (
@@ -226,6 +220,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         token,
         isAuthenticated: !!user,
         isLoading,
+        sessionEpoch,
         signin,
         signup,
         googleAuth,
@@ -234,6 +229,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         verifyEmailOtp,
         resetPasswordWithOtp,
         logout,
+        authError,
       }}
     >
       {children}

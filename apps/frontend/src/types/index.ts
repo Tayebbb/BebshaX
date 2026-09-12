@@ -141,9 +141,13 @@ export interface ProvenanceRecord {
 
 export interface ProviderStatus {
   name: string;
-  type: "keyless" | "free_tier_key" | "local_fallback";
-  status: "healthy" | "degraded" | "down";
-  available_models: number;
+  type: "keyless" | "free_tier_key" | "local_fallback" | "aggregator" | "remote_api" | "unknown";
+  status: "healthy" | "available" | "degraded" | "down" | "unknown" | "configured" | "unavailable";
+  available_models: number | null;
+  streaming_mode?: "native" | "buffered" | null;
+  configured?: boolean | null;
+  recent_success?: boolean;
+  last_observed_at?: string | null;
   /** Null when the backend has not measured it — render as "—", never 0. */
   active_cooldowns: number | null;
 }

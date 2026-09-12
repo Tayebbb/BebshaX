@@ -145,11 +145,15 @@ export interface StudyInterview {
 
 export interface Study {
   id: string;
+  revision?: number;
   user_id?: string;
   title: string;
   type: StudyType;
   goal?: ResearchGoal;
   prompt?: string;
+  /** Structured fields of the approved research goal card (server prompts read them). */
+  target_audience?: string | null;
+  pricing_hypothesis?: string | null;
   status: StudyStatus;
   persona_count: number;
   persona_ids: string[];

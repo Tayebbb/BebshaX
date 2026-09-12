@@ -130,7 +130,12 @@ export const neonAuth = {
 
   async signInWithGoogle(callbackURL?: string): Promise<void> {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-    const targetCallbackUrl = callbackURL || `${origin}/app`;
+    const callback = new URL(callbackURL || `${origin}/app`, origin);
+    if (callback.origin !== origin) throw new Error('Sign-in callback must stay on this site');
+    const state = crypto.randomUUID();
+    sessionStorage.setItem('bebshax_oauth_state', state);
+    callback.searchParams.set('oauth_state', state);
+    const targetCallbackUrl = callback.toString();
     const res = await fetch(`${NEON_AUTH_URL}/sign-in/social`, {
       method: 'POST',
       headers: {

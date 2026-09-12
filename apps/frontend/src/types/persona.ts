@@ -93,12 +93,21 @@ export interface PersonaEvidenceCitation {
   confidence?: number;
 }
 
+/** Either a dataset-variable constraint (`variable`/`value`) or an ML
+ * training-record attribution (`record_id`/`model_version`/…); the backend
+ * writes both shapes into the same column. */
 export interface PersonaDatasetRef {
   dataset_id?: string;
   content_hash?: string;
-  variable: string;
-  value: any;
+  variable?: string;
+  value?: any;
   source?: string;
+  record_id?: string;
+  revision?: string;
+  model_version?: string;
+  selection_score?: number;
+  strategy?: string;
+  [key: string]: unknown;
 }
 
 export interface SyntheticPersona {

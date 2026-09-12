@@ -68,16 +68,10 @@ export interface Interview {
   updated_at?: string;
 }
 
-export interface InterviewDetailResponse {
-  interview: Interview;
+export interface InterviewDetailResponse extends Interview {
   turns: InterviewTurn[];
-  insights: InterviewInsight[];
+  structured_insights: InterviewInsight[];
   suggested_questions: string[];
-  topics: {
-    id: string;
-    label: string;
-    status: "explored" | "not_explored";
-  }[];
 }
 
 export interface InterviewListResponse {
@@ -106,20 +100,50 @@ export interface SendInterviewMessagePayload {
 export interface SendInterviewMessageResponse {
   reply: string;
   turn_number: number;
-  total_turns: number;
-  max_turns: number;
+  turn_count?: number;
+  max_turns?: number | null;
   is_finished: boolean;
-  topic: string;
+  topic?: string;
   topics_explored: Record<string, string>;
   suggested_questions: string[];
-  served_by?: string;
-  latency_ms: number;
+  served_by?: string | null;
+  latency_ms?: number | null;
+  retrieved_memory_ids?: string[];
+  retrieved_memories?: string[];
+  identity_drift?: boolean;
+  drift_notes?: string[];
+  contradiction_detected?: boolean;
+  contradiction_details?: string | null;
+  llm_request_id?: string | null;
+  provenance?: unknown;
+  persona_reply?: {
+    retrieved_memories?: string[];
+    identity_drift?: boolean;
+    drift_notes?: string[];
+    contradiction_detected?: boolean;
+    contradiction_details?: string | null;
+  };
 }
 
+/** `POST .../complete`. The interview always closes; `summary` is `null` with
+ * `source: "unavailable"` when no model route could write the analysis —
+ * the researcher re-runs completion once routes recover (nothing is faked). */
 export interface CompleteInterviewResponse {
-  id: string;
-  status: "completed";
-  summary: string;
-  key_findings: string[];
-  structured_insights: InterviewInsight[];
+  id?: string;
+  status?: "completed";
+  summary: string | null;
+  key_findings?: string[];
+  structured_insights?: InterviewInsight[];
+  source?: "llm" | "unavailable";
+  served_by?: string | null;
+  error_code?: string | null;
+  insights_dropped?: number;
+}
+
+/** Persisted under `Interview.configuration.synthesis` by the backend. */
+export interface InterviewSynthesisMetadata {
+  source?: "llm" | "unavailable";
+  served_by?: string | null;
+  error_code?: string | null;
+  insights_dropped?: number;
 }

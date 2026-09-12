@@ -17,6 +17,8 @@ import {
   ResearchRun,
   SourceDetail,
 } from '../types';
+import { sessionFetch as fetch, sessionSignal } from './session';
+import { parseApiError, toApiErrorInstance } from '../utils/apiError';
 
 /** Lazily-loaded mock layer — mirrors api.ts. Static imports of mockStore
  * shipped the fixture tree in the production bundle; the memoized dynamic
@@ -59,7 +61,7 @@ export function createResearchApi(deps: ResearchApiDeps) {
     try {
       const res = await fetch(
         url,
-        opts?.timeoutMs ? { ...init, signal: AbortSignal.timeout(opts.timeoutMs) } : init,
+        { ...init, signal: sessionSignal(init.signal ?? undefined, opts?.timeoutMs ?? (init.method === 'POST' ? llmTimeoutMs : 30000)) },
       );
       if (res.ok) {
         setLastKnownLive(true);
@@ -70,7 +72,7 @@ export function createResearchApi(deps: ResearchApiDeps) {
       }
       setLastKnownLive(false);
       throw typeof error === 'string'
-        ? new Error(`${error} (HTTP ${res.status})`)
+        ? toApiErrorInstance(parseApiError(await res.json().catch(() => ({})), res.status, `${error} (HTTP ${res.status})`))
         : await error(res);
     } catch (err) {
       setLastKnownLive(false);
@@ -79,11 +81,11 @@ export function createResearchApi(deps: ResearchApiDeps) {
   };
 
   const research = {
-    async startResearch(studyId: string): Promise<ResearchRun> {
+    async startResearch(studyId: string, signal?: AbortSignal): Promise<ResearchRun> {
       if (!isMockMode()) {
         return fetchJson<ResearchRun>(
           `${apiBase}/studies/${studyId}/research`,
-          { method: 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }) },
+          { method: 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }), signal },
           async (res) => {
             const err = await res.json().catch(() => ({ detail: 'Research run failed' }));
             return new Error(err.detail || `Research run failed (HTTP ${res.status})`);
@@ -113,11 +115,11 @@ export function createResearchApi(deps: ResearchApiDeps) {
       return mockRun;
     },
 
-    async getResearchRuns(studyId: string): Promise<ResearchRun[]> {
+    async getResearchRuns(studyId: string, signal?: AbortSignal): Promise<ResearchRun[]> {
       if (!isMockMode()) {
         return fetchJson<ResearchRun[]>(
           `${apiBase}/studies/${studyId}/research`,
-          { headers: getAuthHeaders() },
+          { headers: getAuthHeaders(), signal },
           'Failed to fetch research runs',
         );
       }
@@ -125,11 +127,11 @@ export function createResearchApi(deps: ResearchApiDeps) {
       return mockStore.researchRuns.filter((r) => r.study_id === studyId || r.study_id === 'study_default');
     },
 
-    async getResearchRun(studyId: string, runId: string): Promise<ResearchRun> {
+    async getResearchRun(studyId: string, runId: string, signal?: AbortSignal): Promise<ResearchRun> {
       if (!isMockMode()) {
         return fetchJson<ResearchRun>(
           `${apiBase}/studies/${studyId}/research/${runId}`,
-          { headers: getAuthHeaders() },
+          { headers: getAuthHeaders(), signal },
           'Failed to fetch research run',
         );
       }
@@ -150,11 +152,11 @@ export function createResearchApi(deps: ResearchApiDeps) {
       };
     },
 
-    async getEvidenceSummary(studyId: string): Promise<EvidenceSummary> {
+    async getEvidenceSummary(studyId: string, signal?: AbortSignal): Promise<EvidenceSummary> {
       if (!isMockMode()) {
         return fetchJson<EvidenceSummary>(
           `${apiBase}/studies/${studyId}/evidence/summary`,
-          { headers: getAuthHeaders() },
+          { headers: getAuthHeaders(), signal },
           'Failed to fetch evidence summary',
         );
       }
@@ -192,7 +194,8 @@ export function createResearchApi(deps: ResearchApiDeps) {
 
     async getEvidenceSources(
       studyId: string,
-      params?: { source_type?: string; search?: string }
+      params?: { source_type?: string; search?: string },
+      signal?: AbortSignal,
     ): Promise<EvidenceSource[]> {
       if (!isMockMode()) {
         const queryParams = new URLSearchParams();
@@ -202,7 +205,7 @@ export function createResearchApi(deps: ResearchApiDeps) {
 
         return fetchJson<EvidenceSource[]>(
           `${apiBase}/studies/${studyId}/evidence/sources${qs}`,
-          { headers: getAuthHeaders() },
+          { headers: getAuthHeaders(), signal },
           'Failed to fetch evidence sources',
         );
       }
@@ -247,7 +250,8 @@ export function createResearchApi(deps: ResearchApiDeps) {
 
     async getEvidenceClaims(
       studyId: string,
-      params?: { status?: string; category?: string; search?: string }
+      params?: { status?: string; category?: string; search?: string },
+      signal?: AbortSignal,
     ): Promise<EvidenceClaim[]> {
       if (!isMockMode()) {
         const queryParams = new URLSearchParams();
@@ -258,7 +262,7 @@ export function createResearchApi(deps: ResearchApiDeps) {
 
         return fetchJson<EvidenceClaim[]>(
           `${apiBase}/studies/${studyId}/evidence/claims${qs}`,
-          { headers: getAuthHeaders() },
+          { headers: getAuthHeaders(), signal },
           'Failed to fetch evidence claims',
         );
       }
@@ -280,11 +284,11 @@ export function createResearchApi(deps: ResearchApiDeps) {
       return results;
     },
 
-    async getEvidenceClaimDetail(studyId: string, claimId: string): Promise<ClaimDetail> {
+    async getEvidenceClaimDetail(studyId: string, claimId: string, signal?: AbortSignal): Promise<ClaimDetail> {
       if (!isMockMode()) {
         return fetchJson<ClaimDetail>(
           `${apiBase}/studies/${studyId}/evidence/claims/${claimId}`,
-          { headers: getAuthHeaders() },
+          { headers: getAuthHeaders(), signal },
           'Failed to fetch claim detail',
         );
       }
@@ -341,31 +345,23 @@ export function createResearchApi(deps: ResearchApiDeps) {
 
     async getResearchPlan(studyId: string): Promise<ResearchPlan | null> {
       if (!isMockMode()) {
-        try {
           return await fetchJson<ResearchPlan | null>(
             `${apiBase}/studies/${studyId}/research/plan`,
             { headers: getAuthHeaders() },
             'Failed to fetch research plan',
             { nullStatuses: [404] },
           );
-        } catch {
-          // Optional read — any failure resolves to null (as before).
-        }
       }
       return null;
     },
 
     async listDatasetCandidates(studyId: string): Promise<DatasetCandidate[]> {
       if (!isMockMode()) {
-        try {
           return await fetchJson<DatasetCandidate[]>(
             `${apiBase}/studies/${studyId}/datasets/candidates`,
             { headers: getAuthHeaders() },
             'Failed to fetch dataset candidates',
           );
-        } catch {
-          // Optional read — any failure resolves to the empty list (as before).
-        }
       }
       // No mock fabrication per product requirement — return empty list
       return [];

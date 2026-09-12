@@ -18,7 +18,9 @@ export function useViewMotion<T extends HTMLElement = HTMLDivElement>(deps: unkn
     () => {
       const el = ref.current;
       if (!el || prefersReducedMotion()) return;
-      const children = Array.from(el.children).filter((c) => c instanceof HTMLElement);
+      const controls = 'button,input,textarea,select,a[href],[role="button"],[tabindex]';
+      const children = Array.from(el.children).filter((child) => child instanceof HTMLElement &&
+        !child.matches(controls) && !child.querySelector(controls));
       if (children.length === 0) return;
       gsap.fromTo(
         children,

@@ -36,11 +36,28 @@ import {
   DatasetPersonaRun,
   OpenRouterHealth,
 } from '../types/dataset';
-import { neonAuth } from './neonAuth';
 import { createResearchApi } from './researchApi';
 import { parseApiError, toApiErrorInstance, ApiErrorLike } from '../utils/apiError';
+import type { SendInterviewMessageResponse } from '../types/interview';
+import { decodeInterviewDelta, decodeInterviewDetail, decodeInterviewFrame, decodeInterviewReply, decodeInterviewSynthesis, decodeStudyReport, isRecord, MAX_INTERVIEW_FRAME_LENGTH } from './interviewProtocol';
+import type { InterviewDetailResponse, CompleteInterviewResponse } from '../types/interview';
+import { beginOperationTiming } from '../performance/routeTiming';
+import { advanceSession, assertSession, csrfHeaders, getRefreshCredential, getSessionEpoch, hasCookieSession, purgePrivateSnapshots, resetSessionSecrets, sessionFetch as fetch, sessionSignal, setCookieSession, setRefreshCredential, setUnauthorizedRecovery } from './session';
+import { adoptStudyRevision, discardStudyDraft, knownStudyRevision, pendingStudyDraft, queueStudyWrite, rememberStudyRevision, waitForStudyWrites } from './studyPersistence';
+import { pollSerial } from './polling';
+import { BoundedReadCache } from './readCache';
 
 const API_BASE = import.meta.env?.VITE_API_BASE || 'http://127.0.0.1:8000/api';
+
+function decodeUserProfile(value: unknown): User {
+  if (!isRecord(value) || typeof value.id !== 'string' || !value.id ||
+      typeof value.email !== 'string' || typeof value.full_name !== 'string' ||
+      value.is_active !== true || value.is_verified !== true ||
+      typeof value.auth_provider !== 'string' || typeof value.created_at !== 'string') {
+    throw new Error('Invalid server profile');
+  }
+  return value as unknown as User;
+}
 
 /** One role the backend could not turn into a persona (explicit, never faked). */
 export interface FailedPersonaRole {
@@ -55,6 +72,8 @@ export interface GeneratePersonasResult {
   personas: Persona[];
   failed_roles: FailedPersonaRole[];
   served_by: string[];
+  /** Study revision after the server saved the cohort (study-scoped runs only). */
+  study_revision?: number | null;
 }
 
 /** One finding of the independent AI review. */
@@ -101,6 +120,31 @@ const TIMEOUT_MS = {
 
 let forceMockMode: boolean | null = null;
 let lastKnownLive = false;
+let sessionBootstrap: { epoch: number; promise: Promise<User | null> } | null = null;
+let sessionRefresh: { epoch: number; promise: Promise<AuthResponse | null> } | null = null;
+/** Rotates the access credential shortly before it expires so a long session
+ * never trips over the 15-minute access lifetime mid-task. */
+let proactiveRefresh: ReturnType<typeof setTimeout> | null = null;
+const PROACTIVE_REFRESH_LEAD_MS = 60_000;
+const PROACTIVE_REFRESH_MIN_DELAY_MS = 15_000;
+
+const jwtExpiresInSeconds = (token: string): number | null => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload?.exp === 'number' ? payload.exp - Math.floor(Date.now() / 1000) : null;
+  } catch {
+    return null;
+  }
+};
+
+const cancelProactiveRefresh = () => {
+  if (proactiveRefresh !== null) {
+    clearTimeout(proactiveRefresh);
+    proactiveRefresh = null;
+  }
+};
 
 /** Study-list read coalescing.
  *
@@ -118,13 +162,31 @@ let studiesCache: { at: number; key: string; value: Study[] } | null = null;
 /** Bumped by every mutation so a read that was already in flight when the
  * mutation landed can never install its stale result into the cache. */
 let studiesGeneration = 0;
+const studyDetailCache = new BoundedReadCache<Study | null>();
+let studyDetailEpoch = -1;
 
 const invalidateStudiesCache = () => {
+  studyDetailCache.invalidate();
   studiesGeneration += 1;
   studiesCache = null;
   // Dropping the shared promise too: a caller arriving after a delete must not
   // be handed the pre-delete read and render the study that just went away.
   studiesInFlight = null;
+};
+
+/** Fired on window after every create/update/delete of the caller's studies
+ * (detail: the owner's study list as now known locally). Shells that only
+ * re-read on navigation subscribe to stay in step with the views. */
+export const STUDIES_CHANGED = 'bebshax:studies-changed';
+/** localStorage key written on a deliberate sign-out; other tabs end their own sessions on it. */
+export const SIGNOUT_BROADCAST_KEY = 'bebshax_signout_broadcast';
+const notifyStudiesChanged = (studies: Study[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent(STUDIES_CHANGED, { detail: { studies } }));
+  } catch {
+    // notification is best-effort
+  }
 };
 
 /** Auth failures the caller must surface verbatim. The `code` marks the error
@@ -216,8 +278,10 @@ export const api = {
       return mockHealth;
     }
     try {
-      const res = await fetch(`${API_BASE}/health`, {
-        headers: this.getAuthHeaders(),
+      // Liveness is not tenant data: it must survive the sign-in/out session
+      // boundary that aborts every session-scoped request during boot.
+      const res = await globalThis.fetch(`${API_BASE}/health`, {
+        headers: { 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(TIMEOUT_MS.HEALTH),
       });
       if (res.ok) {
@@ -240,14 +304,12 @@ export const api = {
           headers: this.getAuthHeaders(),
           signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        lastKnownLive = false;
-        throw new Error(`Failed to fetch routes status (HTTP ${res.status})`);
+        // Any HTTP answer proves the backend is up; a 403 is a permission answer, not an outage.
+        lastKnownLive = true;
+        if (res.ok) return await res.json();
+        throw await apiErrorFrom(res, 'Failed to fetch routes status');
       } catch (err) {
-        lastKnownLive = false;
+        if (err instanceof TypeError) lastKnownLive = false;
         throw err;
       }
     }
@@ -604,14 +666,11 @@ export const api = {
           headers: this.getAuthHeaders(),
           signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-        lastKnownLive = false;
-        throw new Error(`Failed to fetch evaluation metrics (HTTP ${res.status})`);
+        lastKnownLive = true;
+        if (res.ok) return await res.json();
+        throw await apiErrorFrom(res, 'Failed to fetch evaluation metrics');
       } catch (err) {
-        lastKnownLive = false;
+        if (err instanceof TypeError) lastKnownLive = false;
         throw err;
       }
     }
@@ -652,6 +711,115 @@ export const api = {
   },
 
   // 9. Authentication & User Management (JWT + Neon DB)
+  hasSession(): boolean {
+    return hasCookieSession() || Boolean(this.getAuthToken());
+  },
+
+  authRequestHeaders(): Record<string, string> {
+    const origin = new URL(API_BASE, window.location.origin);
+    return { 'Content-Type': 'application/json', 'X-Auth-Transport': origin.protocol === 'https:' ? 'cookie' : 'bearer' };
+  },
+
+  acceptAuthResponse(value: AuthResponse): AuthResponse {
+    if (!value || !isRecord(value.user) || typeof value.user.id !== 'string' || !value.user.id ||
+        typeof value.user.email !== 'string' || typeof value.user.full_name !== 'string' ||
+        typeof value.user.is_active !== 'boolean' || typeof value.access_token !== 'string') {
+      throw new Error('Invalid authentication response');
+    }
+    if (value.verification_required) return value;
+    if (!value.access_token && (!value.csrf_token || !/^[a-f0-9]{64}$/i.test(value.csrf_token))) {
+      throw new Error('Authentication response contains no session');
+    }
+    // Same account, fresh credentials: in-flight requests and other tabs keep
+    // working. Only an identity change (sign-in, switch) resets the session.
+    const rotation = this.getStoredUser()?.id === value.user.id
+      && (this.hasSession() || getRefreshCredential() !== null);
+    setCookieSession(value.access_token ? null : value.csrf_token ?? null);
+    setRefreshCredential(value.refresh_token ?? null);
+    this.setAuthToken(value.access_token || null);
+    this.setStoredUser(value.user);
+    if (!rotation) {
+      localStorage.setItem('bebshax_session_generation', crypto.randomUUID());
+      advanceSession();
+    }
+    this.scheduleProactiveRefresh(value);
+    return value;
+  },
+
+  scheduleProactiveRefresh(value: Pick<AuthResponse, 'access_token' | 'expires_in'>): void {
+    cancelProactiveRefresh();
+    if (this.isMockMode()) return;
+    const seconds = value.expires_in && value.expires_in > 0
+      ? value.expires_in
+      : value.access_token ? jwtExpiresInSeconds(value.access_token) : null;
+    if (seconds === null || (!getRefreshCredential() && !hasCookieSession())) return;
+    const delay = Math.max(PROACTIVE_REFRESH_MIN_DELAY_MS, seconds * 1000 - PROACTIVE_REFRESH_LEAD_MS);
+    proactiveRefresh = setTimeout(() => {
+      proactiveRefresh = null;
+      void this.refreshToken().catch(() => undefined);
+    }, delay);
+  },
+
+  clearSession(): void {
+    cancelProactiveRefresh();
+    localStorage.removeItem('bebshax_session_generation');
+    setCookieSession(null);
+    setRefreshCredential(null);
+    this.setAuthToken(null);
+    this.setStoredUser(null);
+    purgePrivateSnapshots();
+    advanceSession();
+  },
+
+  invalidateTabSession(): void {
+    sessionStorage.removeItem('bebshax_auth_token');
+    resetSessionSecrets();
+    invalidateStudiesCache();
+    purgePrivateSnapshots();
+    advanceSession(false);
+  },
+
+  async getBrowserSession(): Promise<User | null> {
+    const expected = getSessionEpoch();
+    if (sessionBootstrap?.epoch === expected) return sessionBootstrap.promise;
+    const load = async (): Promise<User | null> => {
+      assertSession(expected);
+      const response = await fetch(`${API_BASE}/auth/session`, {
+        headers: { 'X-Auth-Transport': 'cookie' }, signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
+      });
+      if (response.status === 401) { this.clearSession(); return null; }
+      if (!response.ok) throw await apiErrorFrom(response, 'Session verification unavailable');
+      const result = await response.json();
+      if (!isRecord(result) || !isRecord(result.user) || typeof result.user.id !== 'string' ||
+          typeof result.csrf_token !== 'string' || !/^[a-f0-9]{64}$/i.test(result.csrf_token) ||
+          typeof result.needs_refresh !== 'boolean') throw new Error('Invalid session response');
+        const user = decodeUserProfile(result.user);
+      setCookieSession(result.csrf_token);
+      if (result.needs_refresh) return (await this.refreshToken())?.user ?? null;
+      this.setStoredUser(user);
+      return user;
+    };
+    const promise: Promise<User | null> = Promise.resolve(navigator.locks ? navigator.locks.request('bebshax-browser-session', load) : load());
+    sessionBootstrap = { epoch: expected, promise };
+    try { return await promise; }
+    finally { if (sessionBootstrap?.promise === promise) sessionBootstrap = null; }
+  },
+
+  async completeOAuthReturn(): Promise<void> {
+    const parameters = new URLSearchParams(window.location.search);
+    const state = parameters.get('oauth_state');
+    if (!state) return;
+    const expected = sessionStorage.getItem('bebshax_oauth_state');
+    sessionStorage.removeItem('bebshax_oauth_state');
+    parameters.delete('oauth_state');
+    const search = parameters.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${search ? `?${search}` : ''}`);
+    if (state !== expected || this.hasSession()) throw new Error('Invalid or already used sign-in return');
+    const { neonAuth } = await import('./neonAuth');
+    const session = await neonAuth.getSession(null);
+    if (!session?.token || !await this.syncUser({ neon_token: session.token })) throw new Error('Google sign-in could not establish an app session');
+  },
+
   _isTokenExpired(token: string): boolean {
     try {
       const parts = token.split('.');
@@ -669,8 +837,11 @@ export const api = {
 
   getAuthToken(): string | null {
     try {
-      const token = localStorage.getItem('bebshax_auth_token');
+      const token = sessionStorage.getItem('bebshax_auth_token') || localStorage.getItem('bebshax_auth_token');
       if (token && this._isTokenExpired(token)) {
+        // Keep the session: the refresh credential rotates it (getMe() directly,
+        // other calls via the 401 replay in sessionFetch) instead of signing out mid-task.
+        if (!this.isMockMode() && getRefreshCredential()) return null;
         this.setAuthToken(null);
         this.setStoredUser(null);
         return null;
@@ -683,10 +854,16 @@ export const api = {
 
   setAuthToken(token: string | null) {
     try {
+      const previous = sessionStorage.getItem('bebshax_auth_token') || localStorage.getItem('bebshax_auth_token');
+      sessionStorage.removeItem('bebshax_auth_token');
+      localStorage.removeItem('bebshax_auth_token');
       if (token) {
-        localStorage.setItem('bebshax_auth_token', token);
-      } else {
-        localStorage.removeItem('bebshax_auth_token');
+        (this.isMockMode() ? localStorage : sessionStorage).setItem('bebshax_auth_token', token);
+      }
+      // Rotating a live token is not a session boundary; gaining or losing one is.
+      if ((previous === null) !== (token === null)) {
+        invalidateStudiesCache();
+        advanceSession();
       }
     } catch {
       // ignore
@@ -707,10 +884,15 @@ export const api = {
     // account switch) — anything still held is another account's data.
     invalidateStudiesCache();
     try {
+      const previousId = this.getStoredUser()?.id;
       if (user) {
         localStorage.setItem('bebshax_auth_user', JSON.stringify(user));
       } else {
         localStorage.removeItem('bebshax_auth_user');
+      }
+      if (previousId !== user?.id) {
+        purgePrivateSnapshots();
+        advanceSession();
       }
     } catch {
       // ignore
@@ -722,6 +904,7 @@ export const api = {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...customHeaders,
+      ...csrfHeaders(),
     };
     if (this.isMockMode()) {
       headers['X-BebshaX-Mock'] = '1';
@@ -732,29 +915,63 @@ export const api = {
     return headers;
   },
 
+  /** Auth headers for a `FormData` body: the browser must write the multipart
+   * Content-Type (with its boundary) itself, so none is set here. */
+  getMultipartAuthHeaders(): Record<string, string> {
+    const { 'Content-Type': _json, ...headers } = this.getAuthHeaders();
+    return headers;
+  },
+
   async refreshToken(): Promise<AuthResponse | null> {
     const token = this.getAuthToken();
-    if (!token) return null;
-    if (!this.isMockMode()) {
+    if (!token && !hasCookieSession() && !getRefreshCredential()) return null;
+    if (this.isMockMode()) return null;
+    const expected = getSessionEpoch();
+    if (sessionRefresh?.epoch === expected) return sessionRefresh.promise;
+    const rotate = async (): Promise<AuthResponse | null> => {
+      const presented = getRefreshCredential();
       try {
-        const res = await fetch(`${API_BASE}/auth/refresh`, {
+        // Not sessionFetch: a session-epoch abort mid-rotation would discard a
+        // response the server already committed, and the next attempt would
+        // replay a rotated token — which revokes the whole family.
+        const res = await globalThis.fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
           headers: this.getAuthHeaders(),
+          credentials: 'include',
+          ...(presented ? { body: JSON.stringify({ refresh_token: presented }) } : {}),
           signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
         });
         if (res.ok) {
           const result: AuthResponse = await res.json();
-          this.setAuthToken(result.access_token);
-          this.setStoredUser(result.user);
           lastKnownLive = true;
+          if (getSessionEpoch() !== expected) {
+            // The user signed out (or switched accounts) while this rotation was in
+            // flight: never resurrect the session; retire the fresh generation instead.
+            if (result.refresh_token) {
+              void globalThis.fetch(`${API_BASE}/auth/logout`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                body: JSON.stringify({ refresh_token: result.refresh_token }), keepalive: true,
+              }).catch(() => undefined);
+            }
+            return null;
+          }
+          this.acceptAuthResponse(result);
           return result;
         }
-        lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
+        if (res.status === 401 || res.status === 403) {
+          if (getSessionEpoch() === expected) this.clearSession();
+          return null;
+        }
+        throw await apiErrorFrom(res, 'Session refresh unavailable');
+      } catch (error) {
+        if (error instanceof TypeError) lastKnownLive = false;
+        throw error;
       }
-    }
-    return null;
+    };
+    const promise = rotate();
+    sessionRefresh = { epoch: expected, promise };
+    try { return await promise; }
+    finally { if (sessionRefresh?.promise === promise) sessionRefresh = null; }
   },
 
   async syncUser(data: {
@@ -765,7 +982,7 @@ export const api = {
     try {
       const res = await fetch(`${API_BASE}/auth/sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.authRequestHeaders(),
         body: JSON.stringify({
           neon_token: data.neon_token,
           auth_provider: data.auth_provider || 'neon',
@@ -774,8 +991,7 @@ export const api = {
       });
       if (res.ok) {
         const result: AuthResponse = await res.json();
-        this.setAuthToken(result.access_token);
-        this.setStoredUser(result.user);
+        this.acceptAuthResponse(result);
         lastKnownLive = true;
         return result;
       }
@@ -789,6 +1005,7 @@ export const api = {
   },
 
   async signup(data: SignUpData): Promise<AuthResponse> {
+    advanceSession(false);
     if (this.isMockMode()) {
       // Mock/test builds only — a fabricated session must never be reachable
       // from a live backend response.
@@ -812,7 +1029,7 @@ export const api = {
 
     const res = await fetch(`${API_BASE}/auth/signup`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.authRequestHeaders(),
       body: JSON.stringify(data),
       signal: AbortSignal.timeout(30000),
     });
@@ -832,6 +1049,7 @@ export const api = {
   },
 
   async signin(data: SignInData): Promise<AuthResponse> {
+    advanceSession(false);
     if (this.isMockMode()) {
       // Mock/test builds only — never reachable from a live backend response.
       const mockUser: User = {
@@ -859,14 +1077,13 @@ export const api = {
     try {
       const res = await fetch(`${API_BASE}/auth/signin`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.authRequestHeaders(),
         body: JSON.stringify(data),
         signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
       });
       if (res.ok) {
         const result: AuthResponse = await res.json();
-        this.setAuthToken(result.access_token);
-        this.setStoredUser(result.user);
+        this.acceptAuthResponse(result);
         lastKnownLive = true;
         return result;
       }
@@ -888,34 +1105,8 @@ export const api = {
       throw authError(
         errorData.detail || `Sign-in failed (server error ${res.status}). Please try again.`
       );
-    } catch (backendErr: any) {
-      // Only an unreachable backend justifies the Neon fallback; a server
-      // that answered has already given us the truth.
-      if (backendErr?.code === 'EMAIL_NOT_VERIFIED' || backendErr?.code === 'AUTH_SERVER_ERROR') {
-        throw backendErr;
-      }
-      if (backendErr?.message && (backendErr.message.includes('Invalid email') || backendErr.message.includes('disabled'))) {
-        throw backendErr;
-      }
-
-      // 2. Secondary: Neon Auth authentication fallback — a session only
-      // exists if Neon authenticates AND the server-side /auth/sync
-      // (which verifies the Neon token + emailVerified) mints a real JWT.
-      try {
-        const neonRes = await neonAuth.signIn({
-          email: data.email,
-          password: data.password,
-        });
-        if (neonRes.token) {
-          const synced = await this.syncUser({ neon_token: neonRes.token });
-          if (synced) return synced;
-        }
-        throw new Error(
-          'Signed in with Neon, but the BebshaX backend is unreachable to establish a session. Please try again.'
-        );
-      } catch (neonErr: any) {
-        throw neonErr || backendErr;
-      }
+    } catch (backendErr: unknown) {
+      throw backendErr;
     }
   },
 
@@ -961,8 +1152,12 @@ export const api = {
   },
 
   async getMe(): Promise<User | null> {
+    if (!this.isMockMode() && hasCookieSession()) return this.getBrowserSession();
     const token = this.getAuthToken();
-    if (!token) return null;
+    const expected = getSessionEpoch();
+    if (!token) {
+      return !this.isMockMode() && getRefreshCredential() ? (await this.refreshToken())?.user ?? null : null;
+    }
 
     if (!this.isMockMode()) {
       try {
@@ -972,21 +1167,22 @@ export const api = {
         });
         if (res.ok) {
           lastKnownLive = true;
-          const user = await res.json();
+          const user = decodeUserProfile(await res.json());
+          assertSession(expected);
           this.setStoredUser(user);
+          // A reload restores the session without acceptAuthResponse; re-arm the rotation timer.
+          this.scheduleProactiveRefresh({ access_token: token });
           return user;
         } else if (res.status === 401 || res.status === 403) {
           // Token is rejected or invalid
           lastKnownLive = true;
-          this.setAuthToken(null);
-          this.setStoredUser(null);
+          this.clearSession();
           return null;
         }
+        throw await apiErrorFrom(res, 'Session verification unavailable');
+      } catch (error) {
         lastKnownLive = false;
-      } catch {
-        lastKnownLive = false;
-        // On network failure with valid non-expired token, return stored user if present
-        return this.getStoredUser();
+        throw error;
       }
     }
 
@@ -1012,8 +1208,20 @@ export const api = {
 
   async sendOtp(
     email: string,
-    _type: 'email-verification' | 'forget-password' | 'sign-in' = 'email-verification'
+    type: 'email-verification' | 'forget-password' | 'sign-in' = 'email-verification'
   ): Promise<boolean> {
+    if (type === 'sign-in') throw new Error('Passwordless sign-in is not available');
+    if (type === 'forget-password') {
+      if (this.isMockMode()) return true;
+      const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), purpose: type }),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
+      });
+      if (!response.ok) throw await apiErrorFrom(response, 'Password recovery unavailable');
+      return true;
+    }
     return await this.resendVerificationEmail(email);
   },
 
@@ -1022,32 +1230,17 @@ export const api = {
     otp: string
   ): Promise<{ user: User; token?: string | null }> {
     if (!this.isMockMode()) {
-      try {
-        // The backend's user-binding gate only engages when email is posted.
-        const trimmedEmail = email.trim();
-        await fetch(`${API_BASE}/auth/verify-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token: otp.trim(),
-            ...(trimmedEmail ? { email: trimmedEmail } : {}),
-          }),
-          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
-        });
-      } catch {
-        // Proceed — AuthContext handles session creation via signin retry
-      }
-      const verifiedUser: User = {
-        id: '',
-        email,
-        full_name: email.split('@')[0],
-        avatar_url: null,
-        is_active: true,
-        is_verified: true,
-        auth_provider: 'email',
-        created_at: new Date().toISOString(),
-      };
-      return { user: verifiedUser, token: null };
+      if (!email.trim()) throw new Error('Email is required to verify this code');
+      const response = await fetch(`${API_BASE}/auth/verify-email`, {
+        method: 'POST', headers: this.authRequestHeaders(),
+        body: JSON.stringify({ token: otp.trim(), email: email.trim() }),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
+      });
+      if (!response.ok) throw await apiErrorFrom(response, 'Email verification failed');
+      const result: AuthResponse = await response.json();
+      if (!result?.user?.id || typeof result.access_token !== 'string') throw new Error('Invalid verification response');
+      this.acceptAuthResponse(result);
+      return { user: result.user, token: result.access_token || null };
     }
     const user: User = {
       id: `usr_${Date.now().toString(36)}`,
@@ -1070,17 +1263,40 @@ export const api = {
     password: string
   ): Promise<boolean> {
     if (!this.isMockMode()) {
-      return await neonAuth.resetPasswordWithOtp({ email, otp, password });
+      const response = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), otp: otp.trim(), password, purpose: 'forget-password' }),
+        signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
+      });
+      if (!response.ok) throw await apiErrorFrom(response, 'Password reset failed');
     }
+    this.clearSession();
     return true;
   },
 
   async signout(): Promise<void> {
-    invalidateStudiesCache();
-    this.setAuthToken(null);
-    this.setStoredUser(null);
-    if (!this.isMockMode()) {
-      await neonAuth.signOut();
+    const headers = this.getAuthHeaders();
+    const refresh = getRefreshCredential();
+    advanceSession(false);
+    const expected = getSessionEpoch();
+    // Deliberate sign-out: other tabs of this browser end their sessions too.
+    try {
+      localStorage.setItem(SIGNOUT_BROADCAST_KEY, String(Date.now()));
+    } catch {
+      // best-effort broadcast
+    }
+    try {
+      if (!this.isMockMode()) {
+        const response = await fetch(`${API_BASE}/auth/logout`, {
+          method: 'POST', headers, signal: AbortSignal.timeout(TIMEOUT_MS.CRUD),
+          ...(refresh ? { body: JSON.stringify({ refresh_token: refresh }) } : {}),
+        });
+        if (!response.ok && response.status !== 401) throw await apiErrorFrom(response, 'Server logout was not confirmed');
+      }
+    } finally {
+      if (getSessionEpoch() === expected) {
+        this.clearSession();
+      }
     }
   },
 
@@ -1138,6 +1354,7 @@ export const api = {
     // place the coalescing cache has to be dropped.
     invalidateStudiesCache();
     this.persistStoredUserStudies(studies);
+    notifyStudiesChanged(studies);
   },
 
   async getStudies(): Promise<Study[]> {
@@ -1148,10 +1365,10 @@ export const api = {
     if (studiesCache && studiesCache.key === key && Date.now() - studiesCache.at < STUDIES_CACHE_TTL_MS) {
       // Copy: the three dashboard consumers share this entry for the TTL
       // window, and one in-place sort would corrupt the other two views.
-      return studiesCache.value.slice();
+      return structuredClone(studiesCache.value);
     }
     if (studiesInFlight && studiesInFlight.key === key) {
-      return studiesInFlight.promise.then((value) => value.slice());
+      return studiesInFlight.promise.then((value) => structuredClone(value));
     }
     const generation = studiesGeneration;
     const promise = this.fetchStudies(storageKey)
@@ -1167,7 +1384,7 @@ export const api = {
         if (studiesInFlight?.promise === promise) studiesInFlight = null;
       });
     studiesInFlight = { key, promise };
-    return promise.then((value) => value.slice());
+    return promise.then((value) => structuredClone(value));
   },
 
   async fetchStudies(expectedKey?: string): Promise<Study[]> {
@@ -1203,6 +1420,11 @@ export const api = {
 
   async getStudyById(id: string): Promise<Study | null> {
     if (!this.isMockMode()) {
+      if (studyDetailEpoch !== getSessionEpoch()) {
+        studyDetailCache.invalidate();
+        studyDetailEpoch = getSessionEpoch();
+      }
+      return studyDetailCache.read(`${studyDetailEpoch}:${id}:${knownStudyRevision(id) ?? 'unknown'}`, async () => {
       try {
         const res = await fetch(`${API_BASE}/studies/${id}`, {
           headers: this.getAuthHeaders(),
@@ -1211,14 +1433,18 @@ export const api = {
         });
         if (res.ok) {
           lastKnownLive = true;
-          return await res.json();
+          const study: Study = await res.json();
+          if (!study || study.id !== id) throw new Error('Invalid study response');
+          rememberStudyRevision(study);
+          return study;
         }
         lastKnownLive = false;
-        throw new Error(`Failed to fetch study (HTTP ${res.status})`);
+        throw await apiErrorFrom(res, 'Failed to fetch study');
       } catch (err) {
         lastKnownLive = false;
         throw err;
       }
+      });
     }
     await loadMocks();
     const studies = this.getStoredUserStudies();
@@ -1249,6 +1475,7 @@ export const api = {
         if (res.ok) {
           lastKnownLive = true;
           const created = await res.json();
+          rememberStudyRevision(created);
           const current = this.getStoredUserStudies();
           const next = [created, ...current.filter((s) => s.id !== created.id)];
           this.saveStoredUserStudies(next);
@@ -1286,19 +1513,38 @@ export const api = {
     return newStudy;
   },
 
+  getPendingStudyDraft(id: string): Partial<Study> | undefined {
+    return pendingStudyDraft(this.getStoredUser()?.id ?? 'anonymous', id);
+  },
+
+  discardStudyDraft(id: string): void {
+    discardStudyDraft(this.getStoredUser()?.id ?? 'anonymous', id);
+  },
+
   async updateStudy(id: string, updates: Partial<Study>): Promise<Study> {
     if (!this.isMockMode()) {
+      invalidateStudiesCache();
+      // The loader must see the server's current revision (a cached detail read
+      // is keyed by the revision we already know, i.e. the stale one).
+      const loadFresh = () => {
+        studyDetailCache.invalidate();
+        return this.getStudy(id);
+      };
+      return queueStudyWrite(id, this.getStoredUser()?.id ?? 'anonymous', updates, loadFresh, async (draft, revision) => {
       try {
         const res = await fetch(`${API_BASE}/studies/${id}`, {
           method: 'PATCH',
-          headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify(updates),
+          headers: this.getAuthHeaders({ 'Content-Type': 'application/json', 'If-Match': `"${revision}"` }),
+          body: JSON.stringify({ ...draft, expected_revision: revision }),
           // Large JSON payloads (personas_data, chat history) but pure DB write.
           signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           lastKnownLive = true;
-          const updated = await res.json();
+          const updated: Study = await res.json();
+          if (!updated || updated.id !== id || !Number.isInteger(updated.revision) || !updated.revision || updated.revision <= revision) {
+            throw new Error('The server did not acknowledge a newer study revision');
+          }
           const current = this.getStoredUserStudies();
           const index = current.findIndex((s) => s.id === id);
           if (index !== -1) {
@@ -1315,6 +1561,7 @@ export const api = {
         lastKnownLive = false;
         throw err;
       }
+      });
     }
 
     await loadMocks();
@@ -1520,6 +1767,9 @@ export const api = {
     if (!this.isMockMode()) {
       // Live mode: no silent mock substitution. A generation failure must be
       // visible to the user — fabricated personas would poison their research.
+      // The server updates the study row (revision counter) while it saves the
+      // cohort; a queued step/draft PATCH landing mid-flight made that a 409/500.
+      if (studyId) await waitForStudyWrites(studyId);
       const res = await fetch(`${API_BASE}/study/generate-personas`, {
         method: 'POST',
         headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -1541,15 +1791,13 @@ export const api = {
       // tolerated for older servers.
       const envelope: GeneratePersonasResult = Array.isArray(data)
         ? { personas: data, failed_roles: [], served_by: [] }
-        : { personas: data.personas ?? [], failed_roles: data.failed_roles ?? [], served_by: data.served_by ?? [] };
+        : { personas: data.personas ?? [], failed_roles: data.failed_roles ?? [], served_by: data.served_by ?? [], study_revision: data.study_revision ?? null };
       if (envelope.personas.length === 0) {
         const reasons = envelope.failed_roles.map((f) => `${f.role}: ${f.detail}`).join('; ');
         throw new Error(reasons ? `No persona could be generated — ${reasons}` : 'Persona generation returned no personas');
       }
-      const { mockStore } = await loadMocks();
-      envelope.personas.forEach((p) => {
-        mockStore.personas[p.id] = p;
-      });
+      invalidateStudiesCache();
+      if (studyId) adoptStudyRevision(studyId, envelope.study_revision);
       return envelope;
     }
 
@@ -1778,8 +2026,9 @@ export const api = {
           : `${API_BASE}/datasets/upload`;
         const res = await fetch(endpoint, {
           method: 'POST',
-          headers: this.getAuthHeaders(),
+          headers: this.getMultipartAuthHeaders(),
           body: formData,
+          signal: sessionSignal(undefined, TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -2287,8 +2536,10 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
+        throw await apiErrorFrom(res, 'Failed to load market segments');
+      } catch (error) {
         lastKnownLive = false;
+        throw error;
       }
     }
     return [];
@@ -2850,51 +3101,88 @@ export const api = {
    * can distinguish "the backend honestly reported failure" from "the
    * network died". Transient poll errors are tolerated (the job keeps
    * running server-side); only a 404 — genuine job loss — fails fast. */
-  async pollGenerationJob<T>(pollUrl: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<T> {
-    const interval = opts?.intervalMs ?? 2500;
-    const deadline = Date.now() + (opts?.timeoutMs ?? 600000);
-    let transientFailures = 0;
-    for (;;) {
-      try {
-        const res = await fetch(pollUrl, {
-          headers: this.getAuthHeaders(),
-          signal: AbortSignal.timeout(TIMEOUT_MS.POLL),
-        });
-        if (res.status === 404) {
-          throw Object.assign(await apiErrorFrom(res, 'job not found'), { isJobFailure: true });
-        }
-        if (!res.ok) throw new Error(`poll ${res.status}`);
-        transientFailures = 0;
-        const job = await res.json();
-        if (job.status === 'completed') return job.result as T;
-        if (job.status === 'failed') {
-          throw Object.assign(new Error(job.error || 'generation job failed'), { isJobFailure: true });
-        }
-      } catch (e) {
-        if ((e as { isJobFailure?: boolean })?.isJobFailure) throw e;
-        // Transient blip — the job is still running server-side; a 10-minute
-        // wait must survive a dropped poll or two.
-        transientFailures += 1;
-        if (transientFailures >= 4) throw e;
-      }
-      if (Date.now() > deadline) {
-        // The backend is alive and the job may still be running — only the
-        // client stopped waiting. Propagate as a job-level outcome so callers
-        // never degrade this into fabricated mock success.
-        throw Object.assign(
-          new Error('generation is taking longer than expected — it continues in the background'),
-          { isJobFailure: true }
-        );
-      }
-      await new Promise((r) => setTimeout(r, interval));
-    }
+  jobStorageKey(studyId: string, kind: 'report' | 'batch' | 'personas'): string {
+    return `bebshax_job_${JSON.stringify([this.getStoredUser()?.id ?? 'anonymous', kind, studyId])}`;
+  },
+
+  getPendingJobHandle(studyId: string, kind: 'report' | 'batch' | 'personas'): string | null {
+    const value = localStorage.getItem(this.jobStorageKey(studyId, kind));
+    return value && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : null;
+  },
+
+  rememberJobHandle(studyId: string, kind: 'report' | 'batch' | 'personas', value: unknown): string {
+    if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new Error('Invalid accepted job handle');
+    localStorage.setItem(this.jobStorageKey(studyId, kind), value);
+    return value;
+  },
+
+  forgetJobHandle(studyId: string, kind: 'report' | 'batch' | 'personas'): void {
+    localStorage.removeItem(this.jobStorageKey(studyId, kind));
+  },
+
+  async resumeStudyReport(studyId: string, signal?: AbortSignal): Promise<StudyReport> {
+    const markTiming = beginOperationTiming();
+    const jobId = this.getPendingJobHandle(studyId, 'report');
+    if (!jobId) throw new Error('No pending report job');
+    const report = await this.pollGenerationJob<StudyReport>(
+      `${API_BASE}/studies/${studyId}/reports/generate/jobs/${jobId}`, { signal, timeoutMs: 600000, decode: decodeStudyReport },
+    );
+    markTiming('canonical-response');
+    if (!report.id) throw new Error('Completed report has no saved identifier');
+    const saved = await this.getStudyReport(studyId, report.id);
+    signal?.throwIfAborted();
+    if (saved.id !== report.id || saved.version !== report.version) throw new Error('Saved report version does not match completion');
+    markTiming('saved-completion');
+    invalidateStudiesCache();
+    if (this.getPendingJobHandle(studyId, 'report') === jobId) this.forgetJobHandle(studyId, 'report');
+    return saved;
+  },
+
+  async pollGenerationJob<T>(pollUrl: string, opts?: {
+    intervalMs?: number; timeoutMs?: number; idleTimeoutMs?: number; signal?: AbortSignal; decode?: (value: unknown) => T;
+  }): Promise<T> {
+    const base = new URL(API_BASE, window.location.origin);
+    const target = new URL(pollUrl, base);
+    if (target.origin !== base.origin || !target.pathname.startsWith(`${base.pathname}/`)) throw new Error('Invalid job polling destination');
+    const job = await pollSerial(async (signal) => {
+      const response = await fetch(pollUrl, { headers: this.getAuthHeaders(), signal });
+      if (!response.ok) throw await apiErrorFrom(response, 'Job updates unavailable');
+      const value: unknown = await response.json();
+      if (!isRecord(value) || typeof value.status !== 'string') throw Object.assign(new Error('Invalid job status response'), { isJobFailure: true });
+      return value;
+    }, {
+      ...opts,
+      progress: (value) => JSON.stringify([value.status, value.completed_count, value.failed_count, value.progress]),
+      complete: (value) => {
+        if (['completed', 'succeeded', 'completed_with_warnings'].includes(value.status as string)) return true;
+        if (['pending', 'queued', 'running', 'cancelling'].includes(value.status as string)) return false;
+        throw Object.assign(new Error(typeof value.error === 'string' ? value.error : `Job ended with status ${value.status}`), { isJobFailure: true });
+      },
+    });
+    if (opts?.decode) return opts.decode(job.result);
+    if (!isRecord(job.result) && !Array.isArray(job.result)) throw Object.assign(new Error('Invalid completed job result'), { isJobFailure: true });
+    return job.result as T;
   },
 
   async generateSyntheticPersonas(
     studyId: string,
-    payload: GeneratePersonasPayload
+    payload: GeneratePersonasPayload,
+    signal?: AbortSignal
   ): Promise<{ run: PersonaGenerationRun; personas: SyntheticPersona[] }> {
     if (!this.isMockMode()) {
+      const resume = async () => {
+        const jobId = this.getPendingJobHandle(studyId, 'personas');
+        const result = await this.pollGenerationJob<{ run: PersonaGenerationRun; personas: SyntheticPersona[] }>(
+          `${API_BASE}/studies/${studyId}/personas/generate/jobs/${jobId}`, { signal, decode: (value) => {
+            if (!isRecord(value) || !isRecord(value.run) || typeof value.run.id !== 'string' || !Array.isArray(value.personas)) throw new Error('Invalid persona generation result');
+            return value as unknown as { run: PersonaGenerationRun; personas: SyntheticPersona[] };
+          } },
+        );
+        this.forgetJobHandle(studyId, 'personas');
+        invalidateStudiesCache();
+        return result;
+      };
+      if (this.getPendingJobHandle(studyId, 'personas')) return resume();
       try {
         // Job endpoint first: generation runs for minutes at free-tier
         // latency — the POST returns 202 immediately and we poll.
@@ -2902,14 +3190,14 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload),
+          signal,
         });
         if (jobRes.status === 202) {
           const { job_id } = await jobRes.json();
+          this.rememberJobHandle(studyId, 'personas', job_id);
           lastKnownLive = true;
           try {
-            return await this.pollGenerationJob(
-              `${API_BASE}/studies/${studyId}/personas/generate/jobs/${job_id}`
-            );
+            return await resume();
           } catch (e) {
             // An honest backend-reported failure (e.g. "run segmentation
             // first") must reach the user — never be swallowed into a
@@ -3128,10 +3416,11 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
+        throw await apiErrorFrom(res, 'Failed to load study interviews');
+      } catch (error) {
         lastKnownLive = false;
+        throw error;
       }
-      return { interviews: [], total: 0 };
     }
     // Mock mode: surface the study fixture's pre-generated interviews.
     await loadMocks();
@@ -3206,18 +3495,23 @@ export const api = {
     };
   },
 
-  async getStudyInterviewDetail(studyId: string, interviewId: string): Promise<any> {
+  async getStudyInterviewDetail(studyId: string, interviewId: string, signal?: AbortSignal): Promise<InterviewDetailResponse> {
+    signal?.throwIfAborted();
+    signal = sessionSignal(signal, TIMEOUT_MS.CRUD_HEAVY);
     if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/interviews/${interviewId}`, {
           headers: this.getAuthHeaders(),
+          signal,
         });
-        if (res.ok) {
-          lastKnownLive = true;
-          return await res.json();
-        }
-      } catch {
+        if (!res.ok) throw await apiErrorFrom(res, 'Failed to load interview');
+        const detail = decodeInterviewDetail(await res.json(), studyId, interviewId);
+        signal?.throwIfAborted();
+        lastKnownLive = true;
+        return detail;
+      } catch (error) {
         lastKnownLive = false;
+        throw error;
       }
     }
     throw new Error('Interview not found');
@@ -3226,8 +3520,11 @@ export const api = {
   async sendInterviewMessage(
     studyId: string,
     interviewId: string,
-    payload: { content: string }
-  ): Promise<any> {
+    payload: { content: string },
+    signal?: AbortSignal
+  ): Promise<SendInterviewMessageResponse> {
+    signal?.throwIfAborted();
+    signal = sessionSignal(signal, TIMEOUT_MS.LLM);
     if (!this.isMockMode()) {
       try {
         const res = await fetch(
@@ -3236,11 +3533,14 @@ export const api = {
             method: 'POST',
             headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(payload),
+            signal,
           }
         );
         if (res.ok) {
+          const reply = decodeInterviewReply(await res.json());
+          signal?.throwIfAborted();
           lastKnownLive = true;
-          return await res.json();
+          return reply;
         }
         throw await apiErrorFrom(res, 'Failed to send message');
       } catch (e) {
@@ -3260,8 +3560,9 @@ export const api = {
     content: string,
     onDelta: (text: string) => void,
     signal?: AbortSignal
-  ): Promise<any> {
+  ): Promise<SendInterviewMessageResponse> {
     if (this.isMockMode()) throw new Error('Backend required for live persona interview');
+    signal = sessionSignal(signal, TIMEOUT_MS.LLM);
     signal?.throwIfAborted();
 
     const res = await fetch(
@@ -3280,10 +3581,9 @@ export const api = {
     }
 
     const reader = res.body.getReader();
-    const decoder = new TextDecoder();
+    const decoder = new TextDecoder('utf-8', { fatal: true });
     let buffer = '';
-    let done: unknown = null;
-    let completed = false;
+    let completedReply: SendInterviewMessageResponse | null = null;
     let cancelled = false;
     const cancelReader = () => {
       if (cancelled) return;
@@ -3294,6 +3594,7 @@ export const api = {
 
     const handleFrame = (frame: string) => {
       signal?.throwIfAborted();
+      if (frame.length > MAX_INTERVIEW_FRAME_LENGTH) throw new Error('Interview frame exceeds protocol limit');
       const lines = frame.split(/\r?\n/);
       const eventLine = lines.find((l) => l.startsWith('event:'));
       // Per the SSE spec, multiple data: lines concatenate with newlines.
@@ -3303,18 +3604,19 @@ export const api = {
         .join('\n');
       if (!eventLine || !dataPayload) return;
       const event = eventLine.slice(6).trim();
-      const data = JSON.parse(dataPayload);
-      if (event === 'delta') onDelta(data.text || '');
+      const data = decodeInterviewFrame(dataPayload);
+      if (event === 'delta') {
+        const text = decodeInterviewDelta(data);
+        if (text) onDelta(text);
+      }
       else if (event === 'done') {
-        if (!data) throw new Error('Stream ended without a final reply');
-        done = data;
-        completed = true;
+        completedReply = decodeInterviewReply(data);
       }
       else if (event === 'error') {
         // Stream errors carry the same envelope fields as HTTP errors plus the
         // backend failure `kind`; keep both so the workspace can classify.
         const e = toApiErrorInstance(parseApiError(data, 502, 'interview turn failed')) as ApiErrorLike & { kind?: string };
-        e.kind = data.kind;
+        e.kind = isRecord(data) && typeof data.kind === 'string' ? data.kind : undefined;
         throw e;
       }
     };
@@ -3332,12 +3634,13 @@ export const api = {
           const frame = buffer.slice(0, match.index);
           buffer = buffer.slice(match.index + match[0].length);
           handleFrame(frame);
-          if (completed) return done;
+          if (completedReply) return completedReply;
         }
+        if (buffer.length > MAX_INTERVIEW_FRAME_LENGTH) throw new Error('Interview frame exceeds protocol limit');
         if (eof) break;
       }
       if (buffer.trim()) handleFrame(buffer);
-      if (completed) return done;
+      if (completedReply) return completedReply;
       throw new Error('Stream ended without a final reply');
     } finally {
       signal?.removeEventListener('abort', cancelReader);
@@ -3346,7 +3649,9 @@ export const api = {
     }
   },
 
-  async completeStudyInterview(studyId: string, interviewId: string): Promise<any> {
+  async completeStudyInterview(studyId: string, interviewId: string, signal?: AbortSignal): Promise<CompleteInterviewResponse> {
+    signal?.throwIfAborted();
+    signal = sessionSignal(signal, TIMEOUT_MS.LLM);
     if (!this.isMockMode()) {
       try {
         const res = await fetch(
@@ -3354,11 +3659,14 @@ export const api = {
           {
             method: 'POST',
             headers: this.getAuthHeaders(),
+            signal,
           }
         );
         if (res.ok) {
+          const synthesis = decodeInterviewSynthesis(await res.json());
+          signal?.throwIfAborted();
           lastKnownLive = true;
-          return await res.json();
+          return synthesis;
         }
         throw await apiErrorFrom(res, 'Failed to complete interview');
       } catch (e) {
@@ -3429,8 +3737,10 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
+        throw await apiErrorFrom(res, 'Behavioral tests unavailable');
+      } catch (error) {
         lastKnownLive = false;
+        throw error;
       }
     }
     return [];
@@ -3465,11 +3775,12 @@ export const api = {
     };
   },
 
-  async getBehavioralTestDetail(studyId: string, testId: string): Promise<any> {
+  async getBehavioralTestDetail(studyId: string, testId: string, signal?: AbortSignal): Promise<any> {
     if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/${testId}`, {
           headers: this.getAuthHeaders(),
+          signal,
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -3524,13 +3835,14 @@ export const api = {
     return { success: true };
   },
 
-  async triggerBehavioralTestRun(studyId: string, testId: string, payload: any): Promise<any> {
+  async triggerBehavioralTestRun(studyId: string, testId: string, payload: any, signal?: AbortSignal): Promise<any> {
     if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/${testId}/runs`, {
           method: 'POST',
           headers: this.getAuthHeaders(),
           body: JSON.stringify(payload),
+          signal,
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -3545,28 +3857,32 @@ export const api = {
     throw new Error('Backend required for running simulation');
   },
 
-  async getBehavioralTestRuns(studyId: string, testId: string): Promise<any[]> {
+  async getBehavioralTestRuns(studyId: string, testId: string, signal?: AbortSignal): Promise<any[]> {
     if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/${testId}/runs`, {
           headers: this.getAuthHeaders(),
+          signal,
         });
         if (res.ok) {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
+        throw await apiErrorFrom(res, 'Simulation runs unavailable');
+      } catch (error) {
         lastKnownLive = false;
+        throw error;
       }
     }
     return [];
   },
 
-  async getBehavioralRunStatus(studyId: string, runId: string): Promise<any> {
+  async getBehavioralRunStatus(studyId: string, runId: string, signal?: AbortSignal): Promise<any> {
     if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/runs/${runId}`, {
           headers: this.getAuthHeaders(),
+          signal,
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -3581,16 +3897,17 @@ export const api = {
     throw new Error('Backend required for run status');
   },
 
-  async getBehavioralRunResults(studyId: string, runId: string): Promise<any> {
-    return this.getBehavioralRunStatus(studyId, runId);
+  async getBehavioralRunResults(studyId: string, runId: string, signal?: AbortSignal): Promise<any> {
+    return this.getBehavioralRunStatus(studyId, runId, signal);
   },
 
-  async retryFailedBehavioralRun(studyId: string, runId: string): Promise<any> {
+  async retryFailedBehavioralRun(studyId: string, runId: string, signal?: AbortSignal): Promise<any> {
     if (!this.isMockMode()) {
       try {
         const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/runs/${runId}/retry-failed`, {
           method: 'POST',
           headers: this.getAuthHeaders(),
+          signal,
         });
         if (res.ok) {
           lastKnownLive = true;
@@ -3618,8 +3935,10 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
-      } catch {
+        throw await apiErrorFrom(res, 'Run comparison unavailable');
+      } catch (error) {
         lastKnownLive = false;
+        throw error;
       }
     }
     return { study_id: studyId, compared_run_count: 0, runs: [] };
@@ -3638,13 +3957,16 @@ export const api = {
         });
         if (res.ok) {
           lastKnownLive = true;
-          return await res.json();
+          const reports: unknown = await res.json();
+          if (!Array.isArray(reports)) throw new Error('Invalid report list response');
+          return reports.map(decodeStudyReport);
         }
         lastKnownLive = false;
-      } catch {
+        throw await apiErrorFrom(res, 'Reports unavailable');
+      } catch (error) {
         lastKnownLive = false;
+        throw error;
       }
-      return [];
     }
     // Mock mode: a study fixture can carry its own pre-built report (demo study).
     await loadMocks();
@@ -3672,9 +3994,12 @@ export const api = {
           lastKnownLive = true;
           return await res.json();
         }
+        if (res.status === 404) return null;
         lastKnownLive = false;
-      } catch {
+        throw await apiErrorFrom(res, 'Latest report unavailable');
+      } catch (error) {
         lastKnownLive = false;
+        throw error;
       }
     }
     return null;
@@ -3689,7 +4014,7 @@ export const api = {
         });
         if (res.ok) {
           lastKnownLive = true;
-          return await res.json();
+          return decodeStudyReport(await res.json());
         }
         throw await apiErrorFrom(res, 'Failed to fetch report');
       } catch (e) {
@@ -3700,8 +4025,10 @@ export const api = {
     throw new Error('Report not found');
   },
 
-  async generateStudyReport(studyId: string, title?: string): Promise<StudyReport> {
+  async generateStudyReport(studyId: string, title?: string, signal?: AbortSignal): Promise<StudyReport> {
     if (!this.isMockMode()) {
+      if (this.getPendingJobHandle(studyId, 'report')) return this.resumeStudyReport(studyId, signal);
+      await waitForStudyWrites(studyId);
       try {
         // Job endpoint first: synthesis reads every interview + runs LLM
         // calls (150s budget) — 202 + poll instead of one long request.
@@ -3709,14 +4036,13 @@ export const api = {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ title }),
+          signal,
         });
         if (jobRes.status === 202) {
           const { job_id } = await jobRes.json();
+          this.rememberJobHandle(studyId, 'report', job_id);
           lastKnownLive = true;
-          return await this.pollGenerationJob<StudyReport>(
-            `${API_BASE}/studies/${studyId}/reports/generate/jobs/${job_id}`,
-            { timeoutMs: 300000 }
-          );
+          return await this.resumeStudyReport(studyId, signal);
         }
         // Older backend without job endpoints — fall back to the sync call.
         if (jobRes.status === 404 || jobRes.status === 405) {
@@ -3756,9 +4082,14 @@ export const api = {
     /** 'llm' = written for this study; 'fallback_static' = canned starter questions. */
     source?: 'llm' | 'fallback_static';
     fallback_reason?: string | null;
+    /** Revision after the server persisted the script (already saved; do not re-send). */
+    study_revision?: number | null;
   }> {
     if (!this.isMockMode()) {
       try {
+        // The server persists the script itself; a queued client save must not
+        // race its revision bump.
+        await waitForStudyWrites(studyId);
         const res = await fetch(`${API_BASE}/studies/${studyId}/script/generate`, {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -3767,7 +4098,12 @@ export const api = {
         });
         if (res.ok) {
           lastKnownLive = true;
-          return await res.json();
+          const result = await res.json();
+          if (Array.isArray(result?.questions)) {
+            invalidateStudiesCache();
+            adoptStudyRevision(studyId, result.study_revision, { script_questions: result.questions });
+          }
+          return result;
         }
         lastKnownLive = false;
         throw await apiErrorFrom(res, 'Script generation failed');
@@ -3795,20 +4131,26 @@ export const api = {
   async runBatchStudyInterviews(
     studyId: string,
     personaIds?: string[],
-    questions?: string[]
+    questions?: string[],
+    signal?: AbortSignal
   ): Promise<any> {
     if (!this.isMockMode()) {
+      const pending = this.getPendingJobHandle(studyId, 'batch');
+      if (pending) return this.getBatchRunStatus(studyId, pending, signal);
+      await waitForStudyWrites(studyId);
       try {
         // Starts a background job (202); progress comes from getBatchRunStatus.
         const res = await fetch(`${API_BASE}/studies/${studyId}/interviews/batch-run`, {
           method: 'POST',
           headers: this.getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ persona_ids: personaIds, questions }),
-          signal: AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
+          signal: signal ?? AbortSignal.timeout(TIMEOUT_MS.CRUD_HEAVY),
         });
         if (res.ok) {
           lastKnownLive = true;
-          return await res.json();
+          const job = await res.json();
+          this.rememberJobHandle(studyId, 'batch', job.job_id);
+          return job;
         }
         throw await apiErrorFrom(res, 'Batch interview run failed');
       } catch (e) {
@@ -3819,11 +4161,11 @@ export const api = {
     return { job_id: `bjob_mock_${Date.now()}`, study_id: studyId, status: 'running', total_personas: 3, personas: {} };
   },
 
-  async getBatchRunStatus(studyId: string, jobId: string): Promise<any> {
+  async getBatchRunStatus(studyId: string, jobId: string, signal?: AbortSignal): Promise<any> {
     if (!this.isMockMode()) {
       const res = await fetch(`${API_BASE}/studies/${studyId}/interviews/batch-run/${jobId}`, {
         headers: this.getAuthHeaders(),
-        signal: AbortSignal.timeout(TIMEOUT_MS.POLL),
+        signal: signal ?? AbortSignal.timeout(TIMEOUT_MS.POLL),
       });
       if (!res.ok) {
         throw await apiErrorFrom(res, 'Batch status failed');
@@ -3844,6 +4186,7 @@ export const api = {
     cancelUrl?: string,
   ): Promise<{ session_id: string; url: string; plan: string }> {
     if (!this.isMockMode()) {
+      if ((await this.getSubscription()).billing_enabled !== true) throw new Error('Payments are disabled');
       const res = await fetch(`${API_BASE}/payments/create-checkout-session`, {
         method: 'POST',
         headers: {
@@ -3859,11 +4202,7 @@ export const api = {
       }
       return await res.json();
     }
-    return {
-      session_id: `cs_mock_${Date.now()}`,
-      url: `/app?checkout=success&plan=${plan}`,
-      plan,
-    };
+    throw new Error('Payments are disabled in mock mode');
   },
 
   async getSubscription(): Promise<{
@@ -3872,6 +4211,7 @@ export const api = {
     is_paid: boolean;
     expires_at?: string | null;
     has_billing_account: boolean;
+    billing_enabled?: boolean;
   }> {
     if (!this.isMockMode()) {
       const res = await fetch(`${API_BASE}/payments/subscription`, {
@@ -3889,6 +4229,7 @@ export const api = {
       status: 'active',
       is_paid: false,
       has_billing_account: false,
+      billing_enabled: false,
     };
   },
 
@@ -3913,6 +4254,15 @@ export const api = {
   },
 };
 
+// A 401 on an authenticated call rotates the session once and replays the
+// request; only when no refresh path is left does the caller see the 401.
+setUnauthorizedRecovery(async (): Promise<Record<string, string> | null> => {
+  if (api.isMockMode()) return null;
+  const result = await api.refreshToken().catch(() => null);
+  if (!result) return null;
+  const token = api.getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+});
 
 
 
