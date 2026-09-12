@@ -4,20 +4,35 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    timeout-minutes: 35
     env:
       # B4 fail-fast requires a secret at import; CI-only value, ≥32 chars.
       BEBSHAX_JWT_SECRET: ci-only-jwt-secret-never-production-0123456789
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
-          python-version: "3.12"
-      - name: Install backend
-        run: pip install -e ml_persona -e "apps/backend[dev]"
+          python-version: "3.12.14"
+      - name: Check release dependency graph
+        run: python scripts/ops/dependencies.py check
+      - name: Download hash-checked platform wheelhouse
+        run: >-
+          python -m pip --isolated download --index-url https://pypi.org/simple
+          --require-hashes --only-binary=:all: -r apps/backend/requirements.lock -d .tmp/wheelhouse
+      - name: Install backend from offline wheelhouse
+        run: python scripts/ops/dependencies.py install --wheelhouse .tmp/wheelhouse
       - name: Lint (bug-tier rules — syntax errors, undefined names)
         run: python -m ruff check --config apps/backend/pyproject.toml apps/backend/bebshax apps/backend/tests ml_persona/src ml_persona/tests
       - name: Unit tests (no network) + coverage floor
@@ -25,53 +40,48 @@ jobs:
       - name: Isolated ML persona tests
         run: python -m pytest ml_persona/tests -q
       - name: Dependency vulnerability scan (pip-audit)
-        # Advisory for now: local baseline on 2026-09-06 was 0 known
-        # vulnerabilities (pip-audit 2.10.1; the editable `bebshax` package is
-        # skipped as not-on-PyPI, which is expected). Flip to blocking (drop
-        # continue-on-error) after this step has passed green in CI once — CI
-        # resolves fresh versions on Ubuntu, so the baseline must be confirmed
-        # here, not only on a dev machine.
-        continue-on-error: true
         run: python -m pip_audit --progress-spinner off --desc off
+      - name: Operations and recovery safety regressions
+        run: python -m unittest discover -s scripts/tests -p "test_ops_*.py" -v
 
   typecheck:
-    # Advisory until the pre-existing type debt is burned down (audit M11) —
-    # failures are surfaced in the job log but do not block the merge yet.
-    # Debt tracker: 79 errors / 0 warnings on 2026-09-06 (pyright 1.1.413,
-    # typeCheckingMode basic). Update this number when it moves; make the job
-    # blocking once it reaches 0.
-    runs-on: ubuntu-latest
-    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
-          python-version: "3.12"
-      - name: Install backend + pyright
+          python-version: "3.12.14"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.20.0"
+      - name: Install locked backend and type checker
         run: |
-          pip install -e ml_persona -e "apps/backend[dev]"
-          pip install pyright
+          python -m venv .venv
+          .venv/bin/python scripts/ops/dependencies.py install
       - name: Pyright
-        run: pyright --pythonpath "$(which python)" apps/backend/bebshax
+        run: .venv/bin/python scripts/ops/typecheck.py apps/backend/bebshax
 
   secret-scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0 # full history — leaked-then-deleted secrets still count
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   migration-drift:
     # H6 guard: the migration chain must apply cleanly from zero and the
     # running head must equal the script head.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     services:
       db:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
         env:
           POSTGRES_USER: bebshax
           POSTGRES_PASSWORD: bebshax
@@ -84,12 +94,12 @@ jobs:
       BEBSHAX_DATABASE_URL: postgresql+asyncpg://bebshax:bebshax@localhost:5432/bebshax
       BEBSHAX_JWT_SECRET: ci-only-jwt-secret-never-production-0123456789
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
-          python-version: "3.12"
+          python-version: "3.12.14"
       - name: Install backend
-        run: pip install -e ml_persona -e "apps/backend[dev]"
+        run: python scripts/ops/dependencies.py install
       - name: Apply all migrations from zero
         working-directory: apps/backend
         run: python -m alembic upgrade head
@@ -110,35 +120,38 @@ jobs:
         run: python -m pytest tests/memory/test_pg_integration.py -q -m integration
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          # Matches deploy/web.Dockerfile (node:24.11-alpine) — one Node major
-          # for CI and the shipped image.
-          node-version: "24"
+          node-version: "24.20.0"
       # M11: no --if-present — a vanished script must FAIL, not silently pass.
+      - name: Root workspace lock consistency
+        run: node scripts/ops/npm-graph.mjs
       - name: Install
-        working-directory: apps/frontend
-        run: npm ci
+        run: npm ci --workspaces --include-workspace-root
+      - name: Verify bundled npm
+        run: test "$(npm --version)" = "11.19.0"
       - name: Build
-        working-directory: apps/frontend
         run: npm run build
       - name: Theme-token drift gate
-        working-directory: apps/frontend
         run: npm run theme:check
       - name: Tests
-        working-directory: apps/frontend
-        run: npm test -- --run
+        run: npm run test:frontend
+      - name: Dependency vulnerability gate
+        run: npm audit --workspaces --include-workspace-root
+      - name: Operations web configuration tests
+        run: node --test --test-concurrency=1 scripts/tests/ops-*.test.mjs
 
   compose-config:
-    # The demo/exhibition profile is only exercised by hand before the venue;
-    # at least keep both compose graphs parseable on every push.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12.14"
       - name: Validate compose (default + full profile)
-        run: |
-          docker compose config --quiet
-          docker compose --profile full config --quiet
+        run: python scripts/ops/compose_check.py
