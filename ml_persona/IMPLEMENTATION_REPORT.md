@@ -1,6 +1,249 @@
 # Persona ML Implementation Report
 
-Date: 2026-09-09. Status: working research prototype with measured limitations.
+Date: 2026-09-10. Status: working research prototype with measured limitations.
+
+## Maintenance: Artifact Release Guards (2026-09-10)
+
+Current continuation completed within the exclusive ML scope. The configured
+lexical strategy was already implemented and passed the 42-test focused
+preflight. Two actual artifact-release gaps were then reproduced test-first:
+
+- Metadata-only readiness accepted impossible lexical/NMF topic combinations
+  and a lexical algorithm declared as schema 1. The shared metadata validator
+  now rejects these before claiming configured readiness, without loading weights.
+- Schema-2/3 loading accepted rehashed attribution for a different source or
+  revision and could silently export unknown attribution. The loader now requires
+  exact attribution coverage of loaded records, while allowing provenance for
+  incomplete source records filtered out during fitting.
+
+Eighteen regression cases were added. Manifest tests first had 4 failures/4
+passes, then 8 passes. Attribution tests first had 8 failures/9 passes, then 17
+passes. Both fixes preserve valid artifact fingerprints, source records and
+legacy schema-1 unknown provenance. No new training, threshold tuning, LLM call,
+private data, dataset download, dependency install, environment/default change,
+backend code edit, shared import fix, commit, push or deployment was performed.
+The root coordination log remains outside this exclusive ownership scope.
+
+### Changed Files
+
+- [src/bebshax_persona_ml/model.py](src/bebshax_persona_ml/model.py)
+- [tests/test_ml_model.py](tests/test_ml_model.py)
+- [README.md](README.md)
+- [EXPERIMENTS.md](EXPERIMENTS.md)
+- [DATASETS.md](DATASETS.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [MODEL_CARD.md](MODEL_CARD.md)
+- This [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md).
+
+### Commands And Results
+
+Run from `E:/BebshaX` with the explicit repository interpreter. Test/measurement
+children were launched sequentially with PowerShell `Start-Process -Wait` and
+dedicated ML-local logs because other workstreams shared the terminal. Counts
+come from matching completed reports/JUnit, not interleaved terminal output.
+Interrupted launches are not passing evidence. Test dotenv loading was disabled;
+temporary files and coverage remained under ignored `ml_persona/.verification/`.
+
+```powershell
+.venv/Scripts/python.exe -B ml_persona/tools/verify_modernization.py --scope model --keyword manifest_and_load_reject_inconsistent_strategy_dimensions
+.venv/Scripts/python.exe -B ml_persona/tools/verify_modernization.py --scope model --keyword attribution
+.venv/Scripts/python.exe -B ml_persona/tools/verify_modernization.py --scope ml --coverage
+.venv/Scripts/python.exe -B ml_persona/tools/verify_modernization.py --scope adapter
+.venv/Scripts/python.exe -B ml_persona/tools/verify_modernization.py --scope runtime
+.venv/Scripts/python.exe -B ml_persona/tools/modernization_experiment.py --experiment experiment-20260909-w1-w7-1823 --phase revalidate
+.venv/Scripts/python.exe -B -m bebshax_persona_ml --root E:/BebshaX smoke --backend --model data/processed/ml_persona/experiment-20260909-w1-w7-1823/model --input ml_persona/examples/business.json --threads 2
+.venv/Scripts/python.exe -B -m ruff check --no-cache --select E9,F63,F7,F82 ml_persona/src/bebshax_persona_ml/model.py ml_persona/tests/test_ml_model.py
+```
+
+| Gate | Actual Result | Evidence Under `.verification/` |
+| --- | --- | --- |
+| Preflight lexical/relevance/manifest/tokenizer | 42 passed | `20260910T103615Z_d7beb0631800/report.json` |
+| Manifest RED / GREEN | 4 failed, 4 passed / 8 passed | `20260910T103728Z_247e88306038` / `20260910T103909Z_f6b7acde099f` |
+| Attribution RED / GREEN | 8 failed, 9 passed / 17 passed | `20260910T104141Z_019a851333d1` / `20260910T104433Z_64ab8d30d81d` |
+| Complete ML suite, run once after code changes | 379 passed, 74.76 s pytest / 75.4332 s verifier wall, exit 0 | `20260910T104524Z_fdcafc0cb3cf/report.json` |
+| ML branch-inclusive coverage | 95.45%, 80% floor; 1,191 statements, 346 branches | `20260910T104524Z_fdcafc0cb3cf/coverage.json` |
+| Backend adapter | 39 passed, 2.17 s pytest, exit 0 | `20260910T105042Z_8ce943285e67/report.json` |
+| Runtime readiness/pins/admission | 21 passed, 6.11 s pytest, exit 0 | `20260910T105121Z_c340afb539ac/report.json` |
+| Existing-artifact revalidation | Exit 0, 128.3669590 s, all frozen bytes unchanged | `20260910T105318Z_00f185a74166/report.json` |
+| Fresh-process real lexical smoke | Five stages passed, five profiles; source/prepared/model/generation/backend | `continuation-candidate-smoke-20260910.json` |
+| Changed-Python bug-tier Ruff / editor diagnostics | Passed | Scoped direct checks |
+
+No like-for-like pre-edit coverage baseline was collected, so no coverage delta
+is claimed. The unchanged fresh-process provider/DB import guard passes in the
+full suite after the data owner's pure-embedding/lazy-service fix. It was not
+skipped, weakened or reimplemented here. No full backend, live HTTP/DB/LLM,
+cross-platform packaging or independent code/security review was performed.
+Independent reviewer tools were unavailable; these passes are not release sign-off.
+
+### Artifact And Remaining Gates
+
+The existing schema-3 candidate at
+`data/processed/ml_persona/experiment-20260909-w1-w7-1823/model` loads and serves
+with its recorded manifest expectation. Metadata SHA-256 is unchanged:
+`dd9d15d0088a3a7500ed52cf095acdef1a6c03b3903779bb20cd0ec7108de604`.
+Revision: `27ad0911014cb01e8d6d891e43dc18edf75632ae919bf3413121dbbb6a404835`.
+Its historical 2,516-record, zero-NMF fit is reused, not claimed as new training.
+Current validation MRR is 0.7166454265 versus frozen NMF 0.4181169683. Under the
+declared business-example input, warm five-record mean/p95 is 96.1488/124.0977 ms
+versus 118.2058/182.1433 ms; these are contended loaded-model timings, not an SLA.
+Full resource origins, unchanged reference hashes and limitations are in
+[EXPERIMENTS.md](EXPERIMENTS.md#continuation-verification-2026-09-10).
+
+Mandatory lexical/runtime consistency and attribution-retention fixes are tested
+complete at the scopes above. Promotion is separate: the NMF baseline stays at
+historical revision `7eb2fa6f748fac32b6e987e9057004d477a45e834a457b2701060360ca78b247`.
+No predeclared fresh relevance validation supports a default switch. The real
+remaining work is independent code/security review and trusted deployment-pin
+provisioning, fresh authorized business/abstention labels and an untouched
+holdout with bias/student/geography assessment, then an explicit promotion
+decision. MiniLM remains optional research until a parent-approved acquisition
+manifest and scheduled R8-reviewed runtime exist; full-token coverage, pooling,
+parity and quality must be tested before any claim. No labels were invented and
+the already-inspected historical test partition was not used for tuning/scoring.
+
+## Maintenance: Runtime Readiness (2026-09-10)
+
+Earlier maintenance record. Its import failure is resolved in the continuation
+above; the original results below remain historical evidence.
+
+Implemented within the exclusive ML/adapter ownership scope. No main/config,
+shared database, domain/API schema, other requirements, root docs, environment,
+deployed artifact or historical dataset/report changes were made. No install,
+download, LLM/database call, commit, push or deployment was performed.
+
+Concrete fixes:
+
+- Added typed, asynchronous, metadata-only adapter readiness. The startup
+  fallback rejected schema 3 while the true loader accepted it. The adapter
+  now uses the ML-owned schema validator; configured is not loaded/available.
+- Shared manifest checks between readiness and the loader; kept bounded files,
+  exact runtime/tokenizer checks, expected pins, original fingerprints and
+  full numerical/payload validation. Failed weight loads remain unavailable.
+- Fixed `from_settings` ignoring configured pins and feature state. Missing
+  hosted pins and disabled features fail closed without any LLM fallback.
+- Preserved cancellation-safe admission for readiness and inference, with
+  tests at one and two slots. No already-running worker is discarded to free
+  capacity prematurely; no cancelled waiter is sent to the worker pool.
+- Added no-refit measurement mode with validation-only scoring, immutable
+  experiment checks, current-code drift disclosure, honest timing origin and
+  ML-local non-overwriting reports. Test verifier disables dotenv loading and
+  isolates temporary/JUnit/coverage files within the owned ML directory.
+
+The existing schema-3 lexical fit is preserved and reused, not unnecessarily
+retrained. Its recorded 2,516-record fit took 8.7024609 seconds at two numerical
+CPU threads with zero NMF calls. Current real validation still measures
+MRR 0.7166454265 against frozen NMF 0.4181169683; source-preserving conversions,
+strict abstention, age/exclusions, readiness and pool checks passed. All 539
+old test identities remain historical/integrity-only, with no tuning or scoring.
+Exact artifact/run paths and performance qualifications are in
+[EXPERIMENTS.md](EXPERIMENTS.md#runtime-revalidation-2026-09-10).
+
+Final verification records (all `.verification/` paths are ignored local evidence):
+
+| Gate                                                     | Actual Result                                                                     | Run ID                            |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------- |
+| Pre-edit lexical/relevance/manifest                      | 29 passed                                                                         | `20260910T041539Z_bd5cd154540a`   |
+| Full ML, single process, branch coverage floor 80%       | 360 passed / 1 failed; 95.3887% combined coverage; process exit 1, 96.097 s JUnit | `20260910T044325Z_10d3542817ef`   |
+| Runtime readiness/admission                              | 21 passed                                                                         | `20260910T044037Z_60c99e735a00`   |
+| Backend adapter/conversions                              | 39 passed                                                                         | `20260910T044503Z_7e6bdb92008a`   |
+| Existing backend schema                                  | 5 passed                                                                          | `20260910T044508Z_3f8f7836c93d`   |
+| Existing adapter contracts                               | 6 passed                                                                          | `20260910T044512Z_159c03bc273f`   |
+| Real saved-artifact revalidation, no fit/test scoring    | Exit 0, 52.1223003 s; frozen bytes unchanged                                      | `20260910T044658Z_cb445cd35968`   |
+| Scoped bug-tier Ruff and fresh editor diagnostics        | Pass                                                                              | Direct scoped checks              |
+| Edited-doc local targets / scoped diff whitespace        | 78 valid targets, 0 broken; diff check exit 0                                     | Direct scoped checks              |
+| Offline package build (`python -m build --no-isolation`) | Blocked: `No module named build`; no packages installed                           | Explicit repository Python 3.12.9 |
+
+The readiness regressions were RED before the implementation (12 failures in
+`20260910T041858Z_c5631e072c00`), and the factory tests separately proved six
+RED failures before the hosted-pin fix (`20260910T042745Z_bf23dbf80f35`).
+An initial focused command failed because its temporary parent directory did
+not exist; the isolated verifier repaired that harness problem. Shared terminal
+output was interleaved with other workers, so counts above come from matching
+completed verifier reports/JUnit rather than unrelated output. All actual
+test/measurement children use the explicit repository Python 3.12.9, pinned
+numerical versions and two CPU threads. Checks finished; no required training
+or test job was left running.
+
+### Historical Import Gate (Resolved)
+
+`test_smoke_backend_fresh_process_avoids_settings_reads_and_external_services`
+failed in that earlier run because importing `bebshax.personas.ml_adapter` executed
+`personas/__init__.py -> personas/service.py -> db/models.py ->
+llm/adapters/embeddings.py -> freellmpool.client`. Importing an independent
+persona converter should not require a provider SDK. Those shared files are
+outside this workstream; the guard was preserved unchanged. The data owner fixed
+the eager dependency. The current 379-pass full ML run and actual fresh-process
+lexical smoke verify the fix without edits to those shared files. No full
+backend or live LLM/DB suite was run in this continuation.
+
+The coverage total is measured over 1,180 statements and 338 branches, with
+1,144 statements and 304 branches covered. Passing the coverage floor does
+not turn the one-failure ML suite into a pass. Wheel/distribution packaging
+was not verified because the build frontend (and local setuptools/wheel
+metadata) is absent; dependency setup belongs to the parent-scheduled window.
+
+No new main argument or domain schema is required for the fix: existing
+readiness introspection accepts `configured|available|unavailable`. The exact
+constructor/settings parameters and full typed status mapping are documented
+in [README.md](README.md#readiness-and-parent-integration). Startup currently
+projects status/reason only; preserving the other readiness fields is a
+parent-owned capability-reporting enhancement, not a changed claim here.
+
+Pretrained execution is blocked by absent runtimes and unapproved weight
+acquisition. The same MiniLM model is mapped to an immutable researched
+revision, with an exact minimal ONNX/tokenizer runtime candidate and no
+nonworking code stub. See the [R8 review](ARCHITECTURE.md#minimal-pretrained-candidate-2026-09-10).
+Fresh human business labels, geography/student membership, representativeness,
+and untouched-test/promotion approval remain pending. No production promise.
+
+## Maintenance: Batch 1E (2026-09-09)
+
+Implemented within `ml_persona/**` only: explicit no-NMF lexical fit/load/serve,
+typed strategy-aware artifacts, positive-score cohort support gate, verified
+source attribution and source/code digests, optional expected-manifest and
+installed-code verification, and isolated validation-only CLI experiments.
+Schema-1 NMF/default behavior and reference fingerprints remain supported.
+No production promotion, backend/shared adapter, setup manifest, environment,
+existing runtime-data, dependency, model download, service, or root-doc edit was made.
+The coordinator owns the root execution log and broader batch completion.
+
+TDD observations: strategy 3 RED -> 21 focused GREEN; relevance 10 RED -> 12
+GREEN; lexical evaluation 1 RED -> 1 GREEN; grid/CLI 3 RED -> 3 GREEN;
+provenance 8 RED -> 11 GREEN; source/export 5 RED -> 5 GREEN; final boundaries
+6 RED -> 11 GREEN. Serialization/indentation defects found during GREEN were
+fixed before proceeding. Existing unit fixtures that expected zero-score
+fillers were corrected to include relevant query text while retaining their
+age/exclusion/identity/diversity assertions. No saved test data or metrics were
+edited to tune the new selector. Interrupted terminal attempts are not passes.
+
+Completed ML suite: **344 passed, 52.76 s, 95.92% branch-inclusive coverage**,
+80% floor. Bug-tier Ruff and editor diagnostics passed. Coverage is measured,
+not estimated; no prior matching branch-coverage baseline was captured, so no
+coverage delta is claimed. There were no backend or full frontend test runs.
+Independent code/security reviewers were not available in this session; hand
+the ML changes and manifest trust boundary to their owners before promotion.
+
+Actual training used existing approved prepared data, Python 3.12.9 and exactly
+NumPy 2.5.2 / SciPy 1.18.1 / sklearn 1.9.0, CPU thread cap two, E: temporary
+storage. The original four NMF configurations plus one lexical candidate took
+46.7016760 s total fitting / 78.0080724 s training CLI wall time. Lexical won
+validation MRR 0.7166454265 vs 0.4181169683 for the best NMF; the unchanged saved
+NMF artifact independently reproduced 0.4181169683 on validation. No test split
+evaluation, new human labels, or fresh business-quality claim was made.
+
+New artifact: `data/processed/ml_persona/modernization-lexical/model`.
+Revision: `50ad6cf6998650f0594a234453954671b9aea0159f5ad29b1ae53b980f2f304c`.
+Metadata SHA-256: `6b84ddc79bb165e07fa994c4181170b46e89ae7f4eed470b83b4ba11da62d0ed`.
+The real artifact passed expected-manifest and installed-training-code checks;
+the real CLI export retained full synthetic source bundles, attribution and
+positive scores. Full metrics/fingerprints and limits are in
+[EXPERIMENTS.md](EXPERIMENTS.md#batch-1e-validation-only-benchmark); exact new
+public APIs and backend handoff are in [README.md](README.md#artifact-and-integration-apis).
+
+Real-business labels, population/student/geography validation, backend export
+mapping and trusted-pin provisioning remain external gates. Hashes are not
+signatures. No Git, deployment, or service actions were taken for this batch;
+the publication record below describes the historical implementation only.
 
 Publication confirmed through code commit `be92185` on `origin/main`.
 [GitHub Actions run 34299654884](https://github.com/Tayebbb/BebshaX/actions/runs/34299654884)

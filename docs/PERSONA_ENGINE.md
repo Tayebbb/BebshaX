@@ -5,6 +5,153 @@ runtime generation uses the isolated local non-LLM selector. The original
 Phase-8 LLM path remains for explicit compatibility callers; it is not fallback
 behavior for an unavailable model.
 
+## Data Integration Follow-Up (2026-09-10)
+
+The data integrator implemented the version-pinned `persona_source_selections`
+ledger and the forward migration `e7a9c1d3f205` after `d4e6f8a0b219`. There is one
+active source identity per private owner/parent scope, not a global source or
+persona uniqueness rule. An explicitly shared legacy persona can be selected by
+different authorized studies. Replacement and archive releases remain in the
+same transaction as versions and canonical state; released history is retained.
+
+Business/study/role writers use the canonical version/exclusion helpers. Typed
+dataset fields are `dataset_persona_run_id`, `dataset_version_id`, and
+`dataset_segment_key`; they pin actual run/version membership without reusing
+market-segment or study-generation foreign keys. The job agent has now landed
+the typed dataset writer, pinned-version guard, version/exclusion calls and
+canonical refresh; complete job-workflow verification remains its responsibility.
+Missing historical source namespaces, version IDs,
+and ambiguous aliases are not guessed. See
+[the exact integration contract and checks](DATABASE_MIGRATION.md#m4m5-integration-contract-2026-09-10).
+
+The owner-confirmed never-applied `c6f8a2d4e901` backfill now uses validated private
+conversation ownership and consistent persona/user/study/business links. Unknown
+rows remain NULL and unavailable to private retrieval. No applied historical
+revision or live database was modified. The earlier pass below remains historical
+evidence; its missing-ledger and unsafe-backfill findings are superseded by this
+follow-up, while its remaining cross-owner requirements still apply.
+
+## Owned Modernization Verification (2026-09-10)
+
+This is an implemented, locally verified application slice of the approved
+[82-item roadmap](POST_PRESENTATION_ROADMAP.md), not completion of that roadmap
+or a production/privacy release certification. Shared models, migrations,
+auth/routing/jobs infrastructure, the ML adapter, and frontend were not edited
+by this pass. No Git, dependency installation, deployment, or service operations
+were performed.
+
+### Delivered Behavior
+
+- Memory listing now requires authentication and uses the same exact memory
+  owner predicate as recall. Shared persona visibility does not expose another
+  tenant's memories, conversation-less private records, or null-owner legacy
+  records. Identity-memory writes supply the verified owner explicitly.
+- Blocking turns, native/buffered streams, synthesis, optional suggestions,
+  reflection, and actual batch execution carry verified private owner context.
+  Study IDs are retained where the operation has a study or conversation.
+  Conflicting inherited owner/study scopes fail before provider dispatch.
+  Stream context is scoped to each advance/close, never across a generator
+  yield; the HTTP deadline wrapper preserves FastAPI's same-task auth cleanup.
+- Interview composition includes the complete saved business description,
+  copilot history, findings, script, immutable persona/evidence, and transcript.
+  Context assembly releases its read transaction before recall/inference;
+  memory embedding remains outside the turn finalization lock. No context is
+  shortened to fit a model. Saved studies/transcripts remain LLM-free reads.
+- Study creation still requires authentication; PATCH/PUT of a missing study
+  never creates one. Anonymous listing now returns only explicit demos.
+  Canonical persona membership/counts remain server-owned. Legacy unversioned
+  copilot-history saves may retain or append history, but cannot shorten or
+  replace newer history. Revision-aware clients keep the existing 409/412
+  conflict contract and intentional replacement behavior.
+- Script generation closes its context read transaction before inference and
+  checks the captured study revision under a short finalization lock. A newer
+  study/script wins with a 409 response; no stale script overwrites it. Required
+  Request injection and typed access/result guards remove the reported study
+  diagnostics without casts or suppression.
+- Business/study version preservation is retained. Role generation now captures
+  outgoing versions before archival and new versions before commit. Existing
+  workflow labels and complete attribute provenance survive canonical study
+  hydration through an allowlisted projection in the existing rich JSON field.
+  Saved legacy profiles prefer their validated immutable current-version
+  snapshot, preserving grounding basis, evidence timestamps, and source fields;
+  pre-snapshot rows retain the normalized-table fallback.
+- Batch items keep their conversation ID as soon as creation returns. Cancelled,
+  timed-out, and failed conversations record the outcome and batch ID in their
+  existing status/configuration fields while keeping committed turns. An
+  incomplete streamed turn is not acknowledged as saved. Generated suggestions
+  remain off the primary acknowledgement path; opt-in background suggestions
+  retain their bounded, revision-owned lifecycle.
+
+### Local Gate
+
+All tests used the project Python 3.12.9 venv, synthetic fixtures, FakeAdapter or
+explicit fake LLM collaborators, and disposable SQLite. The existing
+[offline runner](../apps/backend/tests/memory/run_modernization_checks.py) blocks
+dotenv loading and launches a child with isolated test settings and one
+numerical-library thread. It does not override production processing policy.
+
+| Disjoint test scope | Result | Pytest time |
+| --- | --- | --- |
+| `tests/memory` and `tests/persona`, excluding the ML-agent-owned `test_ml_backend_adapter.py` | 222 passed, 2 integration tests deselected | 45.81 s |
+| `tests/interview` | 161 passed | 48.53 s |
+| Direct study/copilot/memory/batch API regressions and compatibility cases | 71 passed, 13 non-owned diagnostics/provenance cases deselected | 73.59 s |
+
+Total: **454 passed** across these disjoint gates. Changed-file bug-tier Ruff
+passed; editor diagnostics reported no errors in the nine changed production
+Python files. Each test process emitted the existing AnyIO pytest
+assertion-rewrite warning. The full backend suite, live providers, PostgreSQL,
+deployment, and cross-process contention were intentionally not run. An earlier
+mixed-file check found five non-owned routing-diagnostic expectation failures
+(401/403 versus old 200/404 expectations); those were left for the auth/routing
+owner, not hidden by changing production policy.
+
+### Required Integration
+
+- **SEC-01 / DB-08 / M2 / M7:** the inspected schema-parity migration
+  `c6f8a2d4e901` unconditionally derives null memory owners from mutable persona
+  ownership. Do not apply that backfill unchanged to shared-persona history.
+  Reconcile using demonstrable conversation/parent ownership, quarantine
+  ambiguity, and canonicalize hashes with
+  [content_hash](../apps/backend/bebshax/memory/service.py). The read-only
+  [infer_legacy_memory_owner](../apps/backend/bebshax/memory/legacy.py) helper and
+  its adversarial tests specify the conservative attribution checks. Reconcile
+  duplicates before enabling the owner/persona/hash unique constraint.
+- **DB-02 / WF-04 / M3:** the data owner must wire
+  `DatasetService._generate_personas_from_dataset` to capture outgoing
+  `observed_current` versions before archival, then call
+  `record_persona_version(session, persona)` for every new rich persona before
+  the same commit. Refresh a linked study with
+  `refresh_study_persona_state(session, study=..., owner_id=..., removed_ids=...)`
+  under its existing parent lock. These helpers do not commit. This pass wired
+  the business/study/role paths, not the separately owned dataset service.
+  Results/report input manifests and complete normalized-projection parity
+  remain cross-owner work; absent historical versions are not fabricated.
+- **WF-09 / DB-04 / M5:** cooperating business/study/role parent locking and
+  tenant-scoped exclusions are verified locally, but no active-source ledger
+  was found during this pass. The data owner still needs
+  `persona_source_selections` with owner, persona/version, source namespace and
+  record ID, exactly one study/business/dataset parent, and `released_at`, plus
+  per-owner/per-parent active uniqueness and version references. All writers
+  must acquire/release selections in the same persistence transaction. SQLite
+  and compiled PostgreSQL FOR UPDATE checks are not multiprocess proof.
+- **WF-01/02/03 / M8:** cancellation after conversation creation returns is
+  tested, but the crash/commit acknowledgement window, interrupted job recovery,
+  and research stage journaling require the job/data owners. The existing
+  research trigger still awaits its pipeline; it is not relabeled asynchronous.
+- **WF-05 / DB-09 / M6 / M9:** ordered canonical study-message records, audience
+  version membership, bounded legacy-profile loading, and measured PostgreSQL
+  memory-query plans are not supplied by this bounded pass.
+
+The integrated database must provide the already-declared
+`memory_items.owner_id` (nullable 64-character identity, ambiguous legacy rows
+remain null), `uq_memory_owner_persona_content(owner_id, persona_id, content_hash)`,
+`conversations.persona_snapshot` (nullable JSONB), and `studies.revision`
+(non-null integer, default 1). It also needs `persona_versions` keyed by
+`(persona_id, version)` with `owner_id`, `study_id`, `snapshot`, `legacy_profile`,
+`capture_kind`, and `captured_at`. No columns or migrations were added here;
+the data owner's additive migration and reconciliation must be rehearsed on
+PostgreSQL before integration is considered complete.
+
 ## Pipeline
 
 ```text
@@ -124,11 +271,15 @@ segments also exclude earlier selections in the same batch; exhaustion fails
 with 422 before saving a partial persona batch. Study `persona_count` counts all
 active owner-scoped rows, not just the latest run.
 
-Role-based generation still archives the old cohort on persistence and prevents
-sibling reuse within the request; it retains `failed_roles` when other roles
-succeed. Independent overlapping requests have no transactional uniqueness lock,
-so sequential exclusion is not a guarantee of cross-process uniqueness. There
-is no new DB migration, frontend, provider, or competing storage schema.
+Role-based generation archives the old cohort and prevents sibling reuse within
+the request; it retains `failed_roles` when other roles succeed. The current
+business/study/role writers keep their cooperating parent lock through local
+selection and persistence. Immutable snapshots are written in that transaction.
+The later data-integrator follow-up above adds the database-level active-source
+ledger, and the job agent has landed the typed dataset writer. Complete job-flow
+verification and a real PostgreSQL cross-process rehearsal remain required;
+parent-lock tests are not that guarantee. The original pass
+added no migration, frontend, provider, or competing storage schema.
 
 ## Memory (Phase 9)
 
@@ -158,7 +309,11 @@ Multi-turn interviews with a **stable identity** — the persona is composed per
 | `POST /api/businesses/{id}/personas` | select + store one synthetic persona              | 404 unknown business · 422 unsupported ML context/exhaustion · 503 unavailable local model |
 | `GET /api/personas/{id}`             | full profile incl. attributes, evidence, warnings | 404                                                                                        |
 
-App wiring (`main.py` lifespan) now also connects **Sazid's `ProvenanceSink` to the PoolRouter** — every LLM request lands in `llm_requests` (fail-soft; DB issues never fail a request).
+The original integration connected **Sazid's `ProvenanceSink` to the PoolRouter**.
+That historical wiring alone does not establish durable acknowledgement or
+correct tenant attribution. Current sink/egress policy and crash-recovery gates
+belong to the parent routing/data workstream; see the scoped integration notes
+above rather than interpreting the original fail-soft behavior as a guarantee.
 
 ## Verification
 

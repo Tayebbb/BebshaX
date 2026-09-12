@@ -1,7 +1,85 @@
 # Persona ML Model Card
 
-Last verified: 2026-09-09. Status: locally trained synthetic-prototype selector,
+Last verified: 2026-09-10. Status: locally trained synthetic-prototype selector,
 not a production-readiness or customer-fit certification.
+
+## Current Runtime Verification
+
+The saved schema-3 lexical challenger at
+`data/processed/ml_persona/experiment-20260909-w1-w7-1823/model` was already
+fitted on approved training data. This continuation reused it, verified its
+archived selection/manifest/preparation, and re-evaluated validation only. No
+new fit, test scoring, data/weight download, runtime install or deployment took
+place. Model revision is
+`27ad0911014cb01e8d6d891e43dc18edf75632ae919bf3413121dbbb6a404835`.
+Metadata SHA-256 remains
+`dd9d15d0088a3a7500ed52cf095acdef1a6c03b3903779bb20cd0ec7108de604`.
+
+Validation MRR remains 0.7166454265 (lexical) vs 0.4181169683 (frozen NMF),
+539/539 scorable pairs. Lexical equals its TF-IDF baseline. Full source records,
+NVIDIA attribution, CC-BY-4.0 notices and positive-relevance abstention are
+preserved; zero NMF construction is measured. The historical deployed NMF
+artifact and old 539-test records/reports are unchanged. Full measurements,
+metric origins and bias limits: [EXPERIMENTS.md](EXPERIMENTS.md#continuation-verification-2026-09-10).
+
+Adapter readiness now recognizes the real schema-3 tokenizer contract without
+loading weights or claiming availability prematurely. The settings factory
+honors trusted manifest pins, feature disabling and unpinned-hosted rejection.
+The optional installed-training-code check still rejects this frozen artifact
+after runtime source changes, rather than inventing a new training fingerprint.
+Default trusted-manifest loading retains its actual historical provenance.
+
+Current gates passed: 379 ML tests in 74.76 s, 95.45% branch-inclusive coverage;
+39 adapter tests and 21 runtime tests. The data owner's import fix passes the
+unchanged fresh-process regression, and the real candidate passed all five
+fresh-process smoke stages. Eighteen new regression cases protect strategy/topic
+metadata and source/revision attribution consistency. Full loading rejects
+missing schema-2/3 source attribution rather than silently downgrading it.
+
+Warm five-record generation measured mean/p95 96.1488/124.0977 ms for lexical
+and 118.2058/182.1433 ms for NMF with two CPU threads under contention. These are
+loaded-model timings after validation, not cold-process or API latency. The
+default NMF version is retained for historical reproducibility, not because it
+outperforms lexical. Neither repeated proxy validation nor passing integrity
+tests supplies a predeclared fresh business-quality gate for a default switch.
+No production certification is claimed. MiniLM remains researched but untested;
+its deferred minimal CPU runtime and full-text policy are recorded in the
+[R8 candidate review](ARCHITECTURE.md#minimal-pretrained-candidate-2026-09-10).
+
+## Batch 1E Experimental Lexical Model
+
+The saved NMF reference described below remains the production default. The
+new, unpromoted artifact is `data/processed/ml_persona/modernization-lexical/model`,
+revision `50ad6cf6998650f0594a234453954671b9aea0159f5ad29b1ae53b980f2f304c`,
+algorithm `tfidf-mmr-v1`, schema 2. It uses the same 2,516 approved training
+profiles and 8,000 TF-IDF features; no NMF is constructed, fitted or transformed.
+Its topic count is zero and exported topics are null. The generic config retains
+unused `n_topics=24` and `max_iter=300`; neither causes NMF work in lexical mode.
+
+The original four NMF candidates and one lexical candidate were compared only
+on the unchanged 539-record validation split. Lexical validation MRR is
+0.7166454265 versus 0.4181169683 for the saved NMF reference; Recall@1 is
+0.6196660482 versus 0.3320964750. The new model exactly matches lexical TF-IDF
+retrieval on this proxy. No new test evaluation or business-labelled quality
+claim is made. Full measurements and hashes: [EXPERIMENTS.md](EXPERIMENTS.md#batch-1e-validation-only-benchmark).
+
+Both strategies now require strictly positive retrieval scores after hard
+ages and source/name exclusions. Insufficient relevant records fail explicitly;
+randomness or diversity penalties cannot admit zero-score fillers. Positive
+cosine similarity is not calibrated confidence or proof of semantic/customer
+fit. Full source narratives, source age, occupation, location and identity remain
+unchanged. The 160-profile lexical probe passed its structural checks but still
+selected `not_in_workforce` 47 times; synthetic selection bias remains material.
+
+New manifests/CLI selections carry verified source creator, source/revision,
+CC-BY-4.0 notices and modification notices, source-file/record digests and a
+digest map of the ML package's Python code. Missing attribution is explicit
+null/unavailable, never inferred from a repository name. Schema-1 reference
+artifacts keep their original fingerprints and have no retroactively invented
+training-code digest. Optional trusted metadata-pinning and installed-code
+verification are documented in [README.md](README.md#artifact-and-integration-apis).
+Local hashes are not signatures. No default artifact, backend adapter, runtime
+configuration, original dataset, saved experiment or old test metric was replaced.
 
 ## Model And Intended Use
 

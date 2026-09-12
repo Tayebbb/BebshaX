@@ -1,5 +1,51 @@
 # BebshaX — Team Setup
 
+## Current Operations Contract (2026-09-10)
+
+Use [SETUP.md](SETUP.md) for the current root-workspace install, production path,
+explicit direct migrations, immutable model mount and recovery procedures.
+The detailed original setup below is retained as historical evidence, not an
+instruction to reinstall old dependencies, seed a database or start Ollama.
+
+- No local or cloud Ollama live-inference path remains in ops launchers. CPU
+	persona selection and labeled cached examples are not offline conversation.
+- The existing root npm lock is authoritative. Use `npm run build`,
+	`npm run test:frontend`, `npm run test:ops`, or sequential `npm test` from root.
+	Do not use nested `npm install`, regenerate with `pip freeze`, or modify a
+	shared environment while another agent is testing.
+- `npm run dev`, `npm run dev:frontend` and `npm run dev:backend` are loopback-only.
+	`npm start` runs the guarded single-worker production API, with no reload,
+	database startup or migrations; a supervisor and HTTPS/static delivery are
+	operator-owned prerequisites.
+- `BEBSHAX_REMOTE_PROCESSING_POLICY` accepts the JSON contract in
+	[SETUP.md](SETUP.md#remote-processing-is-denied-by-default). Default and example
+	approvals are empty. Provider keys are not consent; private providers and
+	OpenRouter upstreams require independent approval, never a copied example list.
+- Stage a trusted compatible bundle, configure its approved metadata SHA256 and
+	mount it read-only. Do not retrain, download weights or rewrite metadata on boot.
+- Supply migration credentials by process-variable name, not command-line URL.
+	`scripts/migrate_db.py` plans by default and requires exact target confirmation;
+	apply and remote access are separate explicit choices. No production migration
+	or recovery rehearsal was executed in this batch.
+
+After the concurrent-test batch, clean-checkout installs are exactly:
+
+```powershell
+.venv/Scripts/python.exe scripts/ops/dependencies.py install
+npm ci --workspaces --include-workspace-root
+npm run check:npm-graph
+npm run build
+npm test
+```
+
+The current matching environment needs no install for these ops code changes.
+[DEPENDENCY_REVIEWS.md](DEPENDENCY_REVIEWS.md) records verified versions and the
+blocked skill-required Vite/Vitest upgrade. Production remains blocked pending
+the external gates in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
+
+<details>
+<summary>Historical setup evidence (superseded; not current release instructions)</summary>
+
 Set up the application, offline tests, and local persona artifact. Download/training time is separate from environment setup. Read [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) and [RULES.md](../RULES.md) first.
 
 ## Prerequisites
@@ -135,3 +181,5 @@ npm run build      # Verifies TypeScript & builds production bundle
 3. If you added a dependency: write the review (R8).
 4. Keep affected docs with the change. ML work is maintenance: add a maintenance entry to [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), not phase 16, and preserve the original phase dates.
 5. Record actual gates after integrating remote changes; historical test counts and smoke observations are not a new CI/push result. Do not commit raw data, splits, model bundles, or secrets.
+
+</details>

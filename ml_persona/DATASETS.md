@@ -1,6 +1,6 @@
 # Persona ML Training Data
 
-Last verified: 2026-09-09.
+Last verified: 2026-09-10.
 
 ## Policy And Source Of Truth
 
@@ -18,17 +18,17 @@ researched-source table are in [../data/DATASETS.md](../data/DATASETS.md).
 
 ## Approved Dataset
 
-| Property | Value |
-| --- | --- |
-| Dataset | `nvidia/Nemotron-Personas-USA` |
-| Creator | NVIDIA Corporation |
-| Revision | `5b4cd35ab46490c1da1bd2b5a2324d6f871be180` |
-| Release | v1.1, 2025-10-28; repository updated 2025-12-16 |
-| License | CC-BY-4.0, checked from the pinned HF card at download time |
-| Upstream | 1,000,000 synthetic adult profiles; 11 parquet shards, about 2.69 GB total |
-| Download | Only `data/train-00000-of-00011.parquet`, about 245 MB, plus the pinned card |
-| Selection | Lowest 6,000 SHA-256 UUID ranks across the entire selected shard |
-| Role | `training`; never OBSERVED evidence, never an EvidenceStore diversity seed |
+| Property  | Value                                                                        |
+| --------- | ---------------------------------------------------------------------------- |
+| Dataset   | `nvidia/Nemotron-Personas-USA`                                               |
+| Creator   | NVIDIA Corporation                                                           |
+| Revision  | `5b4cd35ab46490c1da1bd2b5a2324d6f871be180`                                   |
+| Release   | v1.1, 2025-10-28; repository updated 2025-12-16                              |
+| License   | CC-BY-4.0, checked from the pinned HF card at download time                  |
+| Upstream  | 1,000,000 synthetic adult profiles; 11 parquet shards, about 2.69 GB total   |
+| Download  | Only `data/train-00000-of-00011.parquet`, about 245 MB, plus the pinned card |
+| Selection | Lowest 6,000 SHA-256 UUID ranks across the entire selected shard             |
+| Role      | `training`; never OBSERVED evidence, never an EvidenceStore diversity seed   |
 
 [Pinned source card](https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA/blob/5b4cd35ab46490c1da1bd2b5a2324d6f871be180/README.md)
 and [CC-BY-4.0 license](https://creativecommons.org/licenses/by/4.0/).
@@ -80,15 +80,15 @@ a clean checkout.
 
 ## Recorded Ingestion
 
-| Measurement | Saved Value |
-| --- | --- |
-| Shard scan | 90,910 rows, all 5 row groups |
-| Selected profiles | 6,000, hash-ranked across the shard |
-| Raw shard bytes | 244,151,718 |
-| Projected JSONL bytes | 30,146,176 |
-| Raw SHA-256 | `af5d3e1c0ca2ca9cd12b5bcfc6ca5a850cdc6b7d6c24eb89ce948b23bed9c7e7` |
-| Processed SHA-256 | `02e5db3063fa79c5cbcf61fbb3419dd3cf62c368cc98cbb8745495f8cb80b0a2` |
-| Projected fields | 17; no missing columns; scalar missing/invalid counters all zero |
+| Measurement           | Saved Value                                                        |
+| --------------------- | ------------------------------------------------------------------ |
+| Shard scan            | 90,910 rows, all 5 row groups                                      |
+| Selected profiles     | 6,000, hash-ranked across the shard                                |
+| Raw shard bytes       | 244,151,718                                                        |
+| Projected JSONL bytes | 30,146,176                                                         |
+| Raw SHA-256           | `af5d3e1c0ca2ca9cd12b5bcfc6ca5a850cdc6b7d6c24eb89ce948b23bed9c7e7` |
+| Processed SHA-256     | `02e5db3063fa79c5cbcf61fbb3419dd3cf62c368cc98cbb8745495f8cb80b0a2` |
+| Projected fields      | 17; no missing columns; scalar missing/invalid counters all zero   |
 
 The counters cover ingestion type/presence inspection across scanned rows.
 They are not the later `TrainingRecord` schema or candidate-completeness checks.
@@ -125,15 +125,15 @@ Use explicit `--force` to rebuild corrupted artifacts from the pinned source.
 
 The metadata contains all fields from the manifest entry plus:
 
-| Field | Meaning |
-| --- | --- |
-| `metadata_version`, `artifact_role` | `1`, `training` |
-| `actual_raw_sha256`, `upstream_raw_sha256` | Exact primary raw-file checksum verified against upstream LFS |
-| `actual_processed_sha256`, `actual_card_sha256` | SHA-256 of emitted JSONL and locally retained pinned README |
-| `metadata_sha256` | SHA-256 of canonical UTF-8 JSON excluding this field; sorted keys, compact separators |
-| `raw_size_bytes`, `processed_size_bytes`, `processed_record_count` | Observed artifact sizes and selected count |
-| `license_check` | `license`, `revision`, and `card_path` (`README.md`) |
-| `inspection` | Scanned/selected counts, row groups, selection recipe, available/excluded/missing columns, missing/invalid value counts, maximum string lengths |
+| Field                                                              | Meaning                                                                                                                                         |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metadata_version`, `artifact_role`                                | `1`, `training`                                                                                                                                 |
+| `actual_raw_sha256`, `upstream_raw_sha256`                         | Exact primary raw-file checksum verified against upstream LFS                                                                                   |
+| `actual_processed_sha256`, `actual_card_sha256`                    | SHA-256 of emitted JSONL and locally retained pinned README                                                                                     |
+| `metadata_sha256`                                                  | SHA-256 of canonical UTF-8 JSON excluding this field; sorted keys, compact separators                                                           |
+| `raw_size_bytes`, `processed_size_bytes`, `processed_record_count` | Observed artifact sizes and selected count                                                                                                      |
+| `license_check`                                                    | `license`, `revision`, and `card_path` (`README.md`)                                                                                            |
+| `inspection`                                                       | Scanned/selected counts, row groups, selection recipe, available/excluded/missing columns, missing/invalid value counts, maximum string lengths |
 
 Inspection counters cover all scanned rows, not only the selected subset.
 Missing values remain `null` or their original empty text; invalid non-UUID
@@ -151,14 +151,14 @@ cryptographically signed source attestation.
 [pipeline.py](src/bebshax_persona_ml/pipeline.py) owns completeness filtering,
 split persistence, and re-verification. Ingestion does not import either one.
 
-| Upstream Fields | Meaning At The Handoff |
-| --- | --- |
-| `uuid` | Stable synthetic source identity |
-| `age`, `occupation`, `education_level` | Source demographic and professional values; normalization validates complete types |
-| `city`, `state`, `country` | Source location; not a target population claim |
-| `persona`, `professional_persona`, `sports_persona`, `arts_persona`, `travel_persona`, `culinary_persona` | Complete synthetic narratives |
-| `cultural_background`, `skills_and_expertise`, `hobbies_and_interests` | Complete synthetic background and interest text |
-| `career_goals_and_ambitions` | Goal candidates, not measured customer objectives |
+| Upstream Fields                                                                                           | Meaning At The Handoff                                                             |
+| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `uuid`                                                                                                    | Stable synthetic source identity                                                   |
+| `age`, `occupation`, `education_level`                                                                    | Source demographic and professional values; normalization validates complete types |
+| `city`, `state`, `country`                                                                                | Source location; not a target population claim                                     |
+| `persona`, `professional_persona`, `sports_persona`, `arts_persona`, `travel_persona`, `culinary_persona` | Complete synthetic narratives                                                      |
+| `cultural_background`, `skills_and_expertise`, `hobbies_and_interests`                                    | Complete synthetic background and interest text                                    |
+| `career_goals_and_ambitions`                                                                              | Goal candidates, not measured customer objectives                                  |
 
 Explicit sex, zipcode, bachelors field, marital status, and the hobbies/skills
 list variants are not emitted. Cultural background is retained as source text;
@@ -176,16 +176,16 @@ detected email/URL contact text. Goals come from source career-goal text;
 behaviors retain source hobby/identity text; pain points are whole matching
 sentences. Missing values are not imputed and source locations are not rewritten.
 
-| Preparation Stage | Recorded Result |
-| --- | --- |
-| Projected input | 6,000 |
-| Normalization accepted | 4,694 |
-| Normalization rejected | 1,306, all labelled `invalid_schema` |
-| Initial ID/content duplicates | 0 |
-| Incomplete candidates removed | 1,078 |
-| Duplicate identities/names removed | 22 |
-| Usable candidates | 3,594 |
-| Train / validation / test | 2,516 / 539 / 539; seed 42, 70/15/15 |
+| Preparation Stage                  | Recorded Result                      |
+| ---------------------------------- | ------------------------------------ |
+| Projected input                    | 6,000                                |
+| Normalization accepted             | 4,694                                |
+| Normalization rejected             | 1,306, all labelled `invalid_schema` |
+| Initial ID/content duplicates      | 0                                    |
+| Incomplete candidates removed      | 1,078                                |
+| Duplicate identities/names removed | 22                                   |
+| Usable candidates                  | 3,594                                |
+| Train / validation / test          | 2,516 / 539 / 539; seed 42, 70/15/15 |
 
 `invalid_schema` is the `TrainingRecord` pydantic-validation branch, not a
 missing-input or scalar-ingestion error. In particular, age must be a strict
@@ -207,6 +207,55 @@ trust anchor against coordinated replacement of all source metadata.
 The model fits only training records, selects hyperparameters on validation,
 and evaluates the frozen model on test. See [EXPERIMENTS.md](EXPERIMENTS.md) for
 the recorded results and [MODEL_CARD.md](MODEL_CARD.md) for intended use/limits.
+
+## Batch 1E Attribution And Integrity
+
+The new lexical benchmark reuses this exact approved preparation and source;
+it does not prepare, download, replace, or extend any corpus. Validation-only
+selection/evaluation leaves the historical test results unchanged. No private
+data, real-person labels, invented human relevance labels, or LLM fine-tuning
+are authorized by this batch.
+
+New model manifests and exported ML selections retain structured attribution:
+`source`, `revision`, `creator`, `source_url`, `license`,
+`license_reference_url`, `license_notice`, `modifications`, and
+`metadata_status`. Pipeline training reads these values from the verified
+ingestion metadata; it does not infer a creator/license from a repository ID.
+The NVIDIA creator and CC-BY-4.0 source/card notices are retained, together with
+upstream subset/projection descriptions and the actually implemented NFKC,
+whitespace, completeness/deduplication, split and feature-projection notices.
+Missing fields in direct fixture fits or old artifacts are explicit unknowns,
+not invented attribution or permission to redistribute.
+
+`ModelProvenance` records verified source-file hashes (raw shard, card,
+projected JSONL and ingestion metadata), source-manifest/preparation/dataset
+hashes, training-record digest, and ML Python-code digest map. New model
+revisions cover these values; existing source and preparation formats remain
+unchanged. No second data allowlist or changes to the generated
+[SOURCES.json](SOURCES.json) or shared setup manifest were made. These hashes
+detect inconsistency; an optional separately trusted artifact-manifest pin is
+an integration interface, not a locally invented signature.
+
+## Continuation Integrity Verification (2026-09-10)
+
+The existing schema-3 lexical candidate and frozen NMF reference were reloaded
+against this approved preparation without any download, normalization, split
+replacement or fit. Validation used 539 records; the already-seen 539 test
+records were checked for integrity only. Revalidation confirms approved source
+integrity, unchanged frozen preparation/model/report bytes and exact canonical
+training-record correspondence. The actual lexical candidate also passed the
+source/prepared/model/generation/backend stages in a fresh process. Evidence is
+in [EXPERIMENTS.md](EXPERIMENTS.md#continuation-verification-2026-09-10).
+
+New loader regressions prove that schemas 2/3 cannot silently substitute unknown
+attribution for a loaded source/revision missing from the manifest, even after
+rehashing that inconsistent metadata. Attribution for records removed during
+completeness filtering is still retained and accepted. Complete record bundles,
+NVIDIA credit, CC-BY-4.0 notices and modification notices survive the real lexical
+conversion checks. Fixture and schema-1 unknown attribution remains honest;
+the historical NMF bundle was not retrofitted with invented license metadata.
+These are tested consistency/retention checks, not signed authenticity, new
+redistribution approval, demographic validation or evidence of consumer demand.
 
 ## Research Decisions And Limits
 

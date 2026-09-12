@@ -1,4 +1,49 @@
-# BebshaX — UI/UX Audit (2026-09-07)
+# BebshaX UI/UX Audit
+
+## Studio Redesign (2026-09-12)
+
+Scope: public site, authentication, shared shell and controls, study creation
+and management, personas, the five-step workflow, evidence, segments,
+interviews, behavioral tests, and developer routing diagnostics. Backend,
+model, provider, database and security-policy changes were not part of this
+design pass. Existing concurrent modernization work was preserved.
+
+The requested UI/UX Pro Max search was narrowed from an irrelevant academic
+site match to SaaS productivity. Its useful recommendations were a readable
+self-hosted font, flat hierarchy, fast interactions and explicit state. Taste
+guidance was applied to the public site; Impeccable's Operate guidance was used
+for the research workspace. Earlier independent implementation, code and
+browser reviews informed the fixes. The final continuation ran locally without
+new cloud-agent delegation after the user canceled that operation.
+
+| Finding | Resolution | Evidence |
+| --- | --- | --- |
+| Low-contrast secondary text and white text on bright teal | Opaque paired text tokens and a distinct accent-surface text token | [Theme regressions](../apps/frontend/tests/StudioTheme.test.ts) |
+| Long, repetitive public-page story | Seven purposeful sections, visible product identity, actual sample workspace image, working navigation and FAQ | [Public-site regressions](../apps/frontend/tests/StudioLanding.test.tsx) |
+| Changing study type submitted the entered idea | Native radios select only; explicit Start submits | [Study regressions](../apps/frontend/tests/StudioStudies.test.tsx) |
+| Deletion lacked a safe confirmation/recovery path | Confirmation, cancel, busy/error handling and retained rows on failure | [Study regressions](../apps/frontend/tests/StudioStudies.test.tsx) |
+| Persona inspector overflow and incomplete structured provenance | Responsive header/actions, wrapping tabs, complete source values and identifiers | [Persona regressions](../apps/frontend/tests/StudioPersonas.test.tsx) |
+| Library-to-evidence navigation lost the selected study | The library selection is passed to the canonical study URL | [Shell regressions](../apps/frontend/tests/ConsoleShell.test.tsx) |
+| Chat bubbles lacked consistent author/log semantics and accent contrast | Named logs/messages and accent-surface text; accessible send controls | [Step 1](../apps/frontend/src/components/dashboard/views/workflow/Step1Context.tsx), [Step 4](../apps/frontend/src/components/dashboard/views/workflow/Step4Interviews.tsx) |
+| Step 3 actions clipped on narrow phones | Wrapping action row with reachable Start interviews | Exact 375px and 390px browser captures |
+| Root-launched preview omitted Tailwind utilities | Configuration and content resolution anchored to the frontend directory | [PostCSS configuration](../apps/frontend/postcss.config.js), rendered evidence/segment grids |
+| Failed reports stranded users or confused operations | Separate load/generation/copy recovery; saved versions and read-only permissions retained | [Report view](../apps/frontend/src/components/dashboard/views/workflow/Step5Report.tsx) |
+| Inconsistent model-score units | Shared validated percentage formatter; unknown values are not fabricated | [Score regressions](../apps/frontend/tests/ReportScoreFormat.test.ts) |
+| Long routing metadata overflowed or lost text | Shrinkable columns and full wrapping in collapsed/expanded traces | [Routing regressions](../apps/frontend/tests/RoutingProvenance.test.tsx) |
+| Dialog focus trap included hidden/negative-tab-index controls | Explicit tabbability filtering and suspended lower-layer handlers | [Dialog regressions](../apps/frontend/tests/DialogA11y.test.tsx), 76 fresh browser checks |
+| Decorative side borders and layout-property transitions | Divided risk/opportunity rows; four width transitions removed | Impeccable confirmation: only six font advisories remain |
+
+Final verification: **744 tests in 64 files, zero failures/skips**, stable source
+fingerprint throughout the run, TypeScript/Vite build passed, and theme drift
+check reported zero files. See [UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md) for
+browser coverage and exclusions, and [TASTE_REVIEW.md](TASTE_REVIEW.md) for the
+deliberate visual decisions. This is a frontend verification result, not a
+production-readiness or full accessibility certification.
+
+## Historical Audit (2026-09-07)
+
+The remaining sections preserve the earlier baseline. Their proposed work,
+deferred items and line numbers describe September 7, not the current verdict.
 
 Phase-0 audit of the console frontend (`apps/frontend/src`, ~40k lines) before the premium product-experience pass. Findings come from three parallel read-only reviews (entry/dashboard/personas · study workflow · interview/routing/behavioral) plus a live inspection of the running app in mock mode at 1440, 1024 and 390 px, both themes. Line references were accurate at audit time.
 

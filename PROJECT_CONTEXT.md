@@ -5,7 +5,7 @@
 
 ## What we are building
 
-BebshaX is a synthetic-user / persona research system: a trained CPU-only model selects coherent **synthetic source personas** for a business/product context and lets those personas participate in **interviews and simulations**. Persona selection is independent of LLMs; conversation/research features use **legitimately accessed free LLM capacity** behind governed routing and failover, with local Ollama available as a fallback. Source profiles are hypotheses, not observed customers or validated demand.
+BebshaX is a synthetic-user / persona research system: a trained CPU-only model selects coherent **synthetic source personas** for a business/product context and lets those personas participate in **interviews and simulations**. Persona selection is independent of LLMs; conversation/research features use **legitimately accessed free LLM capacity** behind governed routing and failover. The owner-approved remote-only policy uses Freellmpool as the primary tier and independent OpenRouter as the secondary tier. Source profiles are hypotheses, not observed customers or validated demand.
 
 **Research question:** _Can intelligent multi-model routing aggregate free LLM capacity while preserving synthetic persona quality and user experience?_
 
@@ -34,12 +34,30 @@ bebshax.llm — existing LLM policy for copilot, interviews, research, reports
    pre-flight context budgeting · per-pool concurrency · full provenance per request
         │
 bebshax.llm.adapters — the ONLY code allowed to import provider SDKs
-   FreellmpoolAdapter → freellmpool (MIT) → 18 providers in the freellmpool 0.11.4 catalog (verified 2026-08-28) / keyless start
-   OllamaAdapter      → local Ollama (final reliability fallback)
+        FreellmpoolAdapter → policy-approved remote providers (primary)
+        OpenRouterAdapter → independently configured free remote models (secondary)
         │
 PostgreSQL 16 + pgvector (Docker, port 5433) — personas, evidence, memory,
    llm_requests (provenance), model_registry
 ```
+
+### Post-Presentation Modernization (2026-09-09)
+
+The owner approved the full [modernization roadmap](docs/POST_PRESENTATION_ROADMAP.md)
+and its quality-preserving latency contract. Implementation and integration are
+in progress; [the execution ledger](docs/MODERNIZATION_EXECUTION.md) records the
+actual verification scope. Older completion/readiness entries below remain
+historical evidence, not current production certification.
+
+Production pool tables now contain only Freellmpool then OpenRouter. Local and
+cloud Ollama are excluded from the target runtime, including embedding discovery;
+hash-based local embeddings are a separate non-Ollama component. Historical
+Ollama provenance and benchmark records are retained. Remaining tooling, docs,
+configuration and migration compatibility are part of the integration gates.
+There is no offline live-inference guarantee. No provider policy may evade
+quotas, truncate context, silently weaken output or disclose private content
+to unapproved destinations. Every page must be measured against the roadmap's
+latency budgets separately from genuine AI text and durably saved completion.
 
 ### Current ML Addendum (2026-09-09)
 

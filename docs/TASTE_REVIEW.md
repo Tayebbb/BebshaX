@@ -1,4 +1,73 @@
-# BebshaX Taste Review (2026-09-07)
+# BebshaX Taste Review
+
+## Studio Direction (2026-09-12)
+
+Reading: a synthetic-research product for founders and research teams. The
+public site helps visitors understand and choose; the workspace helps users
+complete studies. Apple-like precision and Notion-like clarity are references,
+not a reason to imitate their branding or turn operational views into marketing.
+
+The UI/UX Pro Max academic-site match was rejected as off-target. A narrowed
+SaaS productivity query supported flat hierarchy, self-hosted Plus Jakarta Sans,
+fast controls and both themes. The resulting world is neutral graphite and
+porcelain, with restrained teal/mint actions, a small gold accent on the public
+site, and meaningful status colors. Space Grotesk provides display hierarchy.
+
+## Shipped Decisions
+
+- Replace the fourteen-section public story with seven purposeful sections,
+	a literal brand/product headline and an actual rendered workspace image.
+- Keep the sample caption visible. Do not invent customer portraits,
+	testimonials, demand validation, uptime claims, or a successful backend result.
+- Use full-width section bands and typography to organize the public page.
+	Native FAQ disclosures, real navigation and available pricing remain usable.
+- Make the workspace quieter through opaque surfaces, readable text, compact
+	controls and unframed figure/filter rows. Keep research data and actions first.
+- Preserve the product's synthetic, inferred and observed distinctions. A
+	retrieved citation is not proof that a claim is true.
+- Keep the current React, Lucide, GSAP and self-hosted font stack. The design
+	pass did not install another component system, animation library or font.
+
+## Impeccable Confirmation
+
+The installed detector scanned the shipped component tree. It reported twelve
+warnings: four width animations, two thick side borders and six font advisories.
+The four width transitions were removed; risk/opportunity items now use simple
+divided rows instead of accented nested cards. The confirmation scan reports
+only the six `overused-font` advisories in
+[studio.css](../apps/frontend/src/components/landing/studio.css).
+
+**Intentional exception:** keep Plus Jakarta Sans and Space Grotesk. Both are
+already self-hosted, fit the adopted direction and preserve consistency across
+auth, public and research screens. Font popularity is an aesthetic advisory,
+not a contrast or interaction defect. No detector suppression was added, and
+this is not reported as a zero-warning scan.
+
+Reconfirmed locally on 2026-09-13: Impeccable scanned 65 component files and
+returned the same six font advisories, with no additional findings. The chosen
+typography and visual direction are unchanged. The fresh exact-size mobile
+dialog replay again passed all 76 checks in both themes and motion settings.
+
+Final rendered review used desktop/phone captures of the public page, sign-in,
+personas, script workflow, evidence, segmentation and routing, plus the fresh
+mobile dialog replay. The last synthesis was local and single-context after
+cloud-agent cancellation; earlier independent reviews supplied the original
+findings. This is a contextual taste/Impeccable polish pass, not a fresh formal
+dual-agent critique score. Questions were skipped as explicitly requested.
+
+The taste skill's marketing rules were not blindly applied to operational UI:
+real study progress, provenance labels and unknown-value markers remain.
+Existing Lucide icons were retained. Large typography is reserved for the public
+page; working views retain scanable task headings and responsive controls.
+
+Final gates and unverified live-service requirements are recorded in
+[UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md). No further visual-direction change
+is proposed by this review.
+
+## Historical Review (2026-09-07)
+
+The remainder preserves the earlier design review. Its old page composition,
+remaining compromises, numerical claims and verification totals are historical.
 
 Final creative-direction pass on top of the premium UX transformation ([UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md)). Method: run the app in mock mode, look at every route at 1440 and 390 px in both themes, then apply the ten passes (architecture, hierarchy, interaction, content, responsive, accessibility, motion, performance, subtraction, final taste). The design-taste rulebook used for the landing page (eyebrow restraint, hero stack discipline, dash ban, tell inventory) was applied to the console only as a critique lens: the console is product UI, which that rulebook explicitly scopes out.
 

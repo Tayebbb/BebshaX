@@ -20,15 +20,56 @@ ML generation. See [ML architecture](../ml_persona/ARCHITECTURE.md) and
 
 ## What is actually live
 
-`cooldown_until` is the one production column: `CooldownStore` (`db/capacity_state.py`) persists every router cooldown as wall-clock deadlines and `load_active()` restores them into `PoolRouter` at startup. That closes the restart gap — a provider that 429'd us seconds before a reboot stays quiet after it.
+`CooldownStore` persists router cooldowns as wall-clock deadlines and
+`load_active()` restores them into monotonic deadlines at startup. Provider-wide
+entries use model `*`; atomic maximum-deadline writes do not shorten longer
+recovery hints. The unique provider/model constraint is required. This is not
+live cross-worker refresh or distributed quota admission: PostgreSQL concurrency,
+restart/crash behavior and account reservation durability remain external gates.
 
 ## Where capability data really comes from today
 
-Live discovery, not the registry:
+Current metadata, not registry score columns, authorizes capabilities:
 
-- **freellmpool** ships its own provider/model inventory (configured via the repo's `providers.toml` through `FREELLMPOOL_CONFIG`) with per-route context windows and circuit breakers; the concrete serving route is written to provenance per call.
-- **Ollama** is discovered at request time: `GET /api/tags` (60 s TTL cache) for installed models, `POST /api/show` per model for `context_length`, capped at **16,384** tokens for the 4 GB VRAM dev GPU (fallback window 8,192), candidates ordered smallest-first because smaller models are faster on that hardware. The adapter refuses (`CONTEXT_WINDOW_EXCEEDED`) rather than let Ollama silently truncate (R2).
-- **Quality/latency ranking** happens through the router's ranker hook (`quota_aware_ranker`) fed by the `QuotaLedger` (re-seeded from `llm_requests` at boot) and freellmpool's fast-routing metrics warmed from recent route observations — none of it round-trips through the registry score columns.
+- **Freellmpool primary** merges its packaged catalog with the explicitly loaded
+	application [providers.toml](../providers.toml). Legacy environment/home/plugin
+	catalogs are not eligibility authorities. Only configured, approved remote
+	destinations with positive verified context may dispatch; JSON additionally
+	requires explicit `supports_json=true`. The virtual route reports the largest
+	verified request-appropriate context, not an assumed million-token window.
+- **Verified keyless metadata (2026-09-10):** the public
+	[Kilo model catalog](https://api.kilo.ai/api/gateway/models) reports
+	`stepfun/step-3.7-flash:free` at 262144 tokens and zero prompt/completion prices.
+	JSON-format capability is not declared, so it remains false. The absent
+	`poolside/laguna-xs.2:free` is disabled. Kilo's training-on-prompts flag prevents
+	treating free/configured status as a privacy approval. This was metadata-only
+	inspection, not an inference health or latency measurement.
+- **Independent OpenRouter secondary** retains all verified free catalog models
+	until request-specific filtering. Pins, aliases, stale metadata and unknown
+	limits never create capabilities. Upstream allowlists and no-paid-route
+	constraints apply to diagnostics as well as ordinary completion/streaming.
+- **Ollama history** remains historical and inactive. No local/cloud Ollama
+	discovery is executable through production composition. A legacy `ollama`
+	provider identifier alone does not prove whether a historical call was local
+	or cloud; do not rewrite it into a verified route kind.
+- **Ranking/accounting** uses `quota_aware_ranker`, the shared `QuotaLedger` and
+	concrete per-attempt observations. Requested aliases, reported identities,
+	unknown consumption and whole-adapter elapsed time remain distinct. Cached or
+	aborted work must not create a healthy endpoint-latency sample. Tier priority
+	remains Freellmpool then OpenRouter regardless of ranker scores.
+
+Configured, eligible, recently successful, unavailable and unknown are distinct
+states. Candidate presence or an HTTP 200 with an empty completion is not proof
+of inference health. Configuration GETs never spend inference quota; diagnostics
+that do invoke a model must use the governed service, explicit task and durable
+provenance contract described in [ROUTING.md](ROUTING.md).
+
+The 2026-09-10 API projection preserves this distinction: unresolved virtual
+model counts are null, all-cooling routes are unavailable, and historical Ollama
+label counts live in `historical_ollama_provider_rate`, not a measured local
+serving rate. Provenance exposes `requested_model` separately from
+`served_by_model`; absent reported identity remains `unknown`. No registry or
+historical request row is rewritten to supply missing evidence.
 
 ## Deliberately deferred
 

@@ -1,5 +1,268 @@
 # Fresh-Machine Setup
 
+## Current Release Foundations (2026-09-10)
+
+The approved target is remote-only conversation: Freellmpool primary and an
+independent OpenRouter secondary, subject to processing policy and quota.
+CPU persona selection and labeled cached examples are separate capabilities.
+There is **no offline live-inference guarantee** and no production sign-off.
+[PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) records current blockers.
+Historical setup instructions are archived at the end; do not execute their
+open-range installs, local preflight, automatic migrations or demo defaults.
+
+### Toolchain And Installation
+
+- Python 3.12; image/CI patch 3.12.14, existing Windows check interpreter 3.12.9.
+- Frozen artifact runtime: NumPy 2.5.2, SciPy 1.18.1, scikit-learn 1.9.0.
+	Do not upgrade, retrain, replace weights or edit metadata to make a model load.
+- Node 24.20.0 with bundled npm 11.19.0. The roadmap's 24.21.0 Docker tag was
+	absent; the selected published version is pinned by verified digest.
+- Docker/Compose and PG16 clients are operator-provisioned prerequisites, not
+	 automatically installed. [DEPENDENCY_REVIEW.md](DEPENDENCY_REVIEW.md) records R8.
+
+From the root, using an operator-provisioned Python 3.12 (Linux uses `.venv/bin/python`):
+
+```powershell
+python -m venv .venv
+.venv/Scripts/python.exe scripts/ops/dependencies.py install
+node scripts/ops/npm-graph.mjs
+npm ci --workspaces --include-workspace-root
+npm run build
+npm test
+```
+
+The Python installer consumes [requirements.lock](../apps/backend/requirements.lock)
+with hash verification and binary-only distributions, then installs both local
+packages with `--no-deps --no-build-isolation` and runs `pip check`.
+[requirements.txt](../apps/backend/requirements.txt) points only to that full lock.
+The full closure includes ML/dev/audit/build tools; the runtime subset in
+[deploy/python/runtime.lock](../deploy/python/runtime.lock) is constrained by it.
+Runtime containers do not install the audit/type tooling.
+
+Lock maintenance uses existing reviewed uv 0.11.19 via
+`python scripts/ops/dependencies.py lock`, then `check`. The recorded
+[baseline.constraints](../deploy/python/baseline.constraints) constrains existing
+versions; it is not an installation list. Never regenerate with `pip freeze`,
+remove numerical constraints or auto-fix major dependencies. Review new edges first.
+
+For a clean offline Windows rehearsal:
+
+```powershell
+.venv/Scripts/python.exe -m pip --isolated download --index-url https://pypi.org/simple --require-hashes --only-binary=:all: -r apps/backend/requirements.lock -d .tmp/ops/wheelhouse/windows
+.venv/Scripts/python.exe scripts/ops/reproduce.py --environment .tmp/ops/repro-new --wheelhouse .tmp/ops/wheelhouse/windows
+```
+
+The rehearsal refuses an existing environment and builds local wheels from
+temporary source copies. Windows success is not Linux proof; CI repeats clean
+installs on both platforms. CI/web/Vercel consume the root workspace lock only,
+with no nested-lock fallback. The older Vite/Vitest/esbuild graph remains a
+release blocker; its version/integrity checks and the required upgrade-skill
+handoff are in [DEPENDENCY_REVIEWS.md](DEPENDENCY_REVIEWS.md). No install or upgrade
+was performed in the 2026-09-10 concurrent-test batch. Do not run either installer
+until the supervising parent finishes every shared-environment test.
+
+### Configuration And Local Checks
+
+[.env.example](../.env.example) contains names with empty values. Supply values
+through operator-controlled process configuration; operations helpers never
+read/create credential files or rotate secrets. Do not put real URL credentials,
+tokens or passwords into logged commands. Setup installs only by default;
+`--start-database`, `--migrate`, `--profile` and `--verify` are explicit actions.
+
+The dev launcher `node scripts/dev.js` binds API/UI to loopback, forces Vite's
+strict port, refuses production/staging, and no longer starts a database or
+loads `.env`. Database startup/migrations are prerequisites. Set an explicit
+`BEBSHAX_POSTGRES_PASSWORD` and matching `BEBSHAX_DATABASE_URL` when intentionally
+using the local DB. Root `npm start` is now a production-only API entry point:
+it requires `BEBSHAX_ENVIRONMENT=production` or `staging`, runs the same production
+validator as the container, uses exactly one Uvicorn worker without reload, and
+binds `127.0.0.1:8000` behind an operator-managed HTTPS proxy. It requires the
+existing project virtual environment and never starts Docker or applies migrations.
+It is not a process supervisor or a static frontend server. Use the built web
+image or a separately reviewed static host for the frontend, never Vite dev/preview.
+
+Canonical commands from the root:
+
+| Command | Scope |
+| --- | --- |
+| `npm run dev` | Loopback API plus Vite; development only |
+| `npm run dev:backend` / `npm run dev:frontend` | Separate loopback development processes |
+| `npm start` | Validated production/staging API, no reload or automatic migrations |
+| `npm run build` / `npm run typecheck` | Root-workspace frontend TypeScript/build |
+| `npm test` | Ops, backend, ML, frontend, sequentially |
+| `npm run test:ops` | Node safety checks and Python ops suite |
+| `npm run test:backend` / `npm run test:ml` | Existing Python suites through project `.venv` |
+| `npm run test:frontend` | Existing Vitest suite, one worker, no file parallelism |
+| `npm run check:npm-graph` / `npm run check:python-lock` | Declared lock consistency; no install |
+
+### Remote Processing Is Denied By Default
+
+The parent-owned `remote_processing_policy: RemoteProcessingPolicy` setting is
+configured with `BEBSHAX_REMOTE_PROCESSING_POLICY`, a JSON object. Omission uses
+the deny-all default. This is the only example policy supplied by operations:
+
+```json
+{
+	"policy_id": "deny-unapproved",
+	"synthetic_providers": [],
+	"private_providers": [],
+	"synthetic_openrouter_upstreams": [],
+	"private_openrouter_upstreams": []
+}
+```
+
+Do not set the variable to an empty string; omit it or supply this valid JSON.
+Compose forwards an optional operator-supplied value with no built-in approvals.
+Provider keys, a provider catalog entry and `--allow-network` are not consent.
+Routing-owned [providers.toml](../providers.toml) is a separate configuration;
+operations does not approve providers, private clients, data or OpenRouter upstreams.
+
+Smoke/capacity/live cross-route scripts consume this policy without modification
+and scope only their built-in synthetic fixture prompts as synthetic. Empty or
+private-only approval fails before adapter construction. They close adapters on
+exit, do not write application provenance to the database, and are not evidence
+of fleet capacity, private-data approval or a completed customer journey.
+
+```powershell
+.venv/Scripts/python.exe scripts/release_preflight.py
+.venv/Scripts/python.exe scripts/ops/compose_check.py --standalone
+.venv/Scripts/python.exe -m unittest discover -s scripts/tests -p "test_ops_*.py" -v
+node --test scripts/tests/ops-*.test.mjs
+```
+
+Omit `--standalone` where `docker compose` is available normally. The checker
+runs only both profiles' `config --quiet`, with temporary empty input and
+synthetic settings. The preflight has no network/DB/model load by default; HTTP
+readiness requires `--api-url` plus `--allow-network`. Live smoke/capacity/route
+evaluation also require explicit network consent. No probe guarantees availability.
+
+The historical benchmark, smoke, demo preflight and local-interview-judge entry
+points now exit with retirement notices before provider/application imports.
+Existing historical artifacts are retained. Current operations checks do not
+certify offline live chat.
+
+### Production Path And Artifacts
+
+[images.json](../deploy/images.json) records verified Python/Node/nginx/pgvector
+index digests. Pinning is not a CVE attestation. CI builds/scans images and
+retains CycloneDX SBOMs without publishing them. The local Docker engine was
+unavailable, so actual Linux/nginx/container runtime checks remain unverified.
+
+The `full` profile is a single-process production foundation: API UID/GID 10001,
+web UID/GID 101, read-only root filesystems, dropped capabilities, bounded
+CPU/RAM/PIDs/tmpfs/logs, and restarts. DB network is private; DB host port 5433
+and web host port 8080 are loopback-only. No API host port is published.
+An approved HTTPS ingress is mandatory and is not provisioned here. Existing
+named volumes are retained; never delete/reset them during rollout.
+
+`bebshax_appdata` persists writable uploads, processed data and metadata at
+`/app/data`. Set `BEBSHAX_ARTIFACT_RELEASE_DIR` to an independently approved
+immutable release containing `ml_persona/model`; it is mounted read-only at
+`/app/artifacts`, with missing-source auto-creation disabled. Supply the approved
+`BEBSHAX_ML_PERSONA_MANIFEST_SHA256`. Stage/verify a new directory before changing
+the pointer and restarting; never overwrite a live release or download/train on
+startup. Integrity does not prove publisher trust or redistribution rights.
+Unknown pretrained rights remain excluded. Dataset/attribution and GSAP/product
+commercial acceptance are distinct release gates.
+
+Apply the parent's single Alembic head to an explicitly selected database as a
+separate reviewed release step; API boot no longer performs migrations.
+Use [migrate_db.py](../scripts/migrate_db.py), not the historical auto-initializer.
+Supply the direct URL through a process variable outside logged commands. For an
+explicitly selected local scratch target, this command validates only, with no
+connection or migration:
+
+```powershell
+.venv/Scripts/python.exe scripts/migrate_db.py --url-env BEBSHAX_MIGRATION_DATABASE_URL --confirm-target 127.0.0.1:5433/bebshax_rehearsal_test
+```
+
+Only append `--apply` after backup/recovery review and explicit target approval.
+Remote targets also require `--allow-remote-target` and `verify-full` TLS; known
+pooler hosts and ports 6432/6543 are rejected. Use an operator-confirmed direct
+endpoint; name-based pooler detection cannot prove an unknown endpoint's mode.
+No default application URL, URL command-line argument, `create_all`, stamp-only
+shortcut, demo seeding or readiness claim is supported. `setup.py --migrate`
+requires `--migration-url-env` and `--confirm-migration-target` before installation
+starts, plus separate `--allow-remote-migration` for a remote target.
+
+Readiness must reject stale schema or missing required models. Configured
+budgets: DB probe 8s, HTTP readiness 12s, container timeout 15s, startup grace
+180s; proxy idle 315s exceeds the current 300s router cap. API drain/server/
+container shutdown budgets are 15/25/45s. These are not measured SLOs.
+
+[runtime_probe.py](../deploy/runtime_probe.py) is the offline image probe used by
+release CI. It checks UID/GID 10001, exact numerical package versions, real writes
+to disposable files in `/tmp` and `/app/data`, and non-writable code/artifact
+roots. Its unit tests do not certify an actual container or approved model bundle;
+the parent must schedule the real image build/probe after concurrent tests finish.
+
+### Origins, Sessions And Vercel
+
+Release startup requires exact HTTPS `BEBSHAX_FRONTEND_BASE_URL`, matching CORS
+with no regex, no demo mode, and a required hash-pinned model. Web always uses
+same-origin `/api`. `VITE_NEON_AUTH_URL` supplies the same tenant to frontend and
+backend. CSP adds only that HTTPS origin, never `*.neon.tech` or another global
+wildcard; the exact Google avatar origin is added only with federation.
+
+Vercel hosts the SPA, not API/storage/models. Unconfigured root builds fail
+closed. With the same public build-time auth URL configured, generate a selected
+release configuration for an actual public API (example host below is not a deployment):
+
+```powershell
+node scripts/ops/web-config.mjs vercel https://api.example.test
+```
+
+The generated `deploy/vercel.generated.json` places the exact hosted API rewrite
+before SPA fallback and matches CSP to the selected tenant. The deployment owner
+must review/select this configuration; `build-vercel` validates it again. No
+deployment is performed. Automatic Git deployment stays blocked until a real
+reviewed configuration is selected.
+
+Parent gates remain: server-revocable sessions, Secure/HttpOnly/SameSite cookies,
+CSRF/Origin checks, callback origins, trusted proxy/IP/scheme handling, real HTTPS,
+DB TLS and mail/auth authority alignment. CSP is not proof of those behaviors.
+
+### Backup And Restore Rehearsal
+
+[recovery.py](../scripts/ops/recovery.py) requires PG16 clients, explicit URL
+**variable names**, and exact `host:port/database` confirmations. It never loads
+`.env`, uses no default URL, hides credentials/server errors, disables password
+prompts, and refuses existing output paths. Pause all DB/blob writers first.
+Supply a data-owner lineage index (schema version 1; dataset/persona-version/
+transcript coverage; portable `storage_key`/SHA256 references; no unresolved
+legacy paths). Parent M3 must export and verify this against real rows.
+
+```powershell
+.venv/Scripts/python.exe scripts/ops/recovery.py backup --source-url-env BEBSHAX_BACKUP_SOURCE_URL --confirm-source HOST:PORT/DATABASE --writers-paused --data-root deploy/recovery/source-data --artifact-root deploy/artifacts/APPROVED_RELEASE --lineage-index deploy/recovery/lineage.json --model-manifest-sha256 APPROVED_MODEL_SHA256 --output deploy/recovery/NEW_BUNDLE
+.venv/Scripts/python.exe scripts/ops/recovery.py verify --bundle deploy/recovery/NEW_BUNDLE --manifest-sha256 APPROVED_BUNDLE_SHA256
+.venv/Scripts/python.exe scripts/ops/recovery.py restore --target-url-env BEBSHAX_RESTORE_TARGET_URL --confirm-target 127.0.0.1:5544/bebshax_rehearsal_test --bundle deploy/recovery/NEW_BUNDLE --manifest-sha256 APPROVED_BUNDLE_SHA256 --output deploy/recovery/NEW_RESTORED_TREE
+```
+
+Place credentials in the selected process variables outside logged commands.
+Restore requires an empty `bebshax_rehearsal_*` DB, refuses the source fingerprint,
+and requires separate `--allow-remote-target` consent plus `verify-full` TLS for
+remote targets. There is no clean/drop/overwrite option. Default budget is 1 GiB;
+PG operations are timeout-bounded. Restrict filesystem ACLs and use encrypted
+storage/transport; bundles contain private data and must never enter public logs.
+
+The manifest covers dump, files, model metadata and supplied lineage. Restore
+checks hashes, PG16, one revision, pgvector and validated constraints; a receipt
+records elapsed time and scope. Portable keys reject Windows drive paths,
+backslashes, traversal, case collisions, symlinks/junctions and device names.
+Legacy-root mapping is inventory-only, never a silent DB rewrite. Synthetic
+file tests are not a live cross-host restore.
+
+Proposed targets: daily consistent backup (RPO <=24h), weekly different-host
+rehearsal, RTO <=60min. These are **not measured or scheduled**. The deployment
+owner must select authorized sources/targets, a lineage exporter, encrypted
+storage, retention/cost and a scheduler. No host scheduler or live DB was touched.
+
+<details>
+<summary>Historical setup evidence (superseded; not current release instructions)</summary>
+
+The material below is retained as dated evidence. Its local-provider/offline-
+venue, open-range installs and automatic migrations are obsolete.
+
 Everything needed to run BebshaX from a clean checkout. One-shot: `python scripts/setup.py` automates the base environment setup; the Persona ML lifecycle below is explicit and is not run automatically. Commands below use Windows executables; on macOS/Linux use `.venv/bin/python` and `.venv/bin/pip`, without `.exe`.
 
 ## 0. Prerequisites
@@ -217,7 +480,10 @@ Names only — values live in `.env` (gitignored); [.env.example](../.env.exampl
 - **503 `ml_persona_unavailable`**: installing the package alone is insufficient; check the artifact path, permissions, integrity, and exact numerical runtime versions, then build/reload a compatible bundle. There is no LLM fallback.
 - **422 `ml_persona_unsupported_context`**: check input schema, vocabulary overlap, explicit age bounds, and eligible identities remaining after active-source exclusions. Role/location hints are not hard customer-fit guarantees.
 - **Startup exits with a migration message** → run the alembic command from step 4; this is the drift guard doing its job (it only runs for local dev databases with demo mode off — the compose `full` profile migrates itself at start instead).
+- **Signing up locally never gets a verification code** → no mail transport (`BEBSHAX_SMTP_*` / `BEBSHAX_RESEND_API_KEY`) is configured, so nothing can deliver it. With `BEBSHAX_ENVIRONMENT=development` the backend log prints `DEVELOPMENT ONLY … the verification code just issued is NNNNNN` (recipient never logged); enter that code on the verification screen. Hosted environments never print codes — configure a transport there.
 - **`node scripts/dev.js` prints a red FATAL box and stops** → the backend exited non-zero (config `FATAL`, migration drift, port 8000 busy); the launcher now stops Vite too instead of serving a UI with no API. Read the `[Backend]` lines above the box.
 - **`vector` type errors** → your Postgres lacks pgvector; use the compose service (port 5433) or a pgvector-enabled cloud DB.
 - **Backend edits kill `node scripts/dev.js`** → uvicorn's reloader watches the repo root; finish backend edits, then restart the launcher.
 - **"local tier DOWN" warning at startup** → Ollama isn't running; only the offline drill and local pool need it (`ollama serve`).
+
+</details>

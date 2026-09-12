@@ -53,6 +53,271 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-09-13): Live end-to-end sweep — every view, break attempts, guardrails
+
+Drove the whole product in a real browser against a disposable stack (SQLite +
+demo seed, real free-tier routes; never the configured cloud database) and
+fixed each broken state with a regression test in the same change. Full
+detail and live evidence per item live in
+[MODERNIZATION_EXECUTION.md](MODERNIZATION_EXECUTION.md#completed-evidence).
+Highlights, in the order users hit them: signup could never be verified
+locally (no mail transport) — the backend now prints the one-time code in
+`development` only, never the recipient; a same-account tab *losing* its
+session signed out every tab, and a session-epoch abort mid-rotation could
+replay a rotated refresh token into the server's strict reuse detection —
+each tab now verifies its own tab-scoped credentials, only a deliberate
+sign-out broadcasts, and rotation is no longer abortable; an interview closed
+without synthesis crashed the decoder — the honest `source: "unavailable"`
+contract is decoded and offered a retry; a 202-accepted research run was
+declared complete (stale QUEUED forever) — it is polled to a terminal state
+with the recorded failure reason; dataset upload was unreachable from the UI
+and the client sent `application/json` with `FormData` (422) — an upload
+panel now feeds segmentation (live: 24 rows → 3 data-backed segments); study
+scope no longer drops after workspace-level views; the sidebar follows study
+create/delete; developer-only diagnostics show a notice instead of an outage;
+the behavioral-test wizard requires its scenario fields and no longer prefills
+an unrelated product. Isolation was re-verified with a second account (all
+foreign routes 403/404, no leaks). Gate: frontend typecheck 0 / build 0 /
+theme 0 / Vitest **1039 passed, 0 failed, 64 files**; backend targeted suites
+green; full backend suite result below. Cleanup: agent/test receipts
+(`.pytest_*.out`, `.test-artifacts/`, dot-prefixed run outputs under
+`apps/backend/tests/`, `.tsupgrader/`, …) are now gitignored; nothing tracked
+was shadowed. A concurrent UI session was editing `apps/frontend` during this
+pass; only type-level fixes were applied to its files. Nothing committed.
+
+- Full backend suite (`apps/backend/tests`, `--cov-fail-under=68`): **2938
+  passed, 0 failed, 1 skipped**, coverage 85.96% (18:41) — receipt
+  `.tmp/resume-20260910/receipts/full-backend-2.{log,exit}`.
+
+### Maintenance (2026-09-13): Studio redesign close-out reverified locally
+
+Continued the existing UI/UX handoff without cloud delegation or further
+application changes. Newer frontend timestamps prompted a fresh gate instead
+of relying only on the September 12 receipts. The final single-worker suite
+passed **744 tests in 64 files, zero failures/skips, 77.69 seconds**. Its
+181-file source/test/script/configuration and root-manifest fingerprint was
+unchanged before and after:
+`da3ee43a1a3d9d926bb2821c4e0e77ebcad5dada41c290fd283b295b7a36ce55`.
+TypeScript and Vite production build passed (2,422 modules); theme drift
+reported zero files. The two previously documented build advisories remain.
+
+An earlier close-out attempt had 743 passes and one Dashboard heading wait
+timeout. The later full run passed with no application or test repair; the
+failure is preserved and its cause remains undiagnosed, not declared fixed.
+Fresh Playwright menu verification passed **76/76**, both themes, normal and
+reduced motion, exact 390x844, zero page/console errors. The local Impeccable
+65-file scan reconfirmed only the six deliberately retained font advisories.
+
+Restarted the isolated fixture preview at `http://127.0.0.1:5194`, with live API
+calls and environment-file loading disabled. Public images loaded; the
+embedded browser's zero-sized viewport was excluded from responsive evidence.
+Current audit/design links resolve; four retired landing-file links exist only
+in append-only historical entries, which remain intact. Updated
+[UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md) and [TASTE_REVIEW.md](TASTE_REVIEW.md).
+Fresh machine-readable receipts use `resume-20260913-*` in the ignored frontend
+`.tmp/studio-review` directory; previous receipts are retained. No backend/ML,
+live auth/provider/payment/database verification, commit, push or CI is claimed.
+
+### Maintenance (2026-09-12): Studio UI/UX redesign and final local verification
+
+Completed the owner-requested UI/UX pass across the public site, shared theme,
+auth, study launcher/dashboard, personas, workflow, research views and routing
+diagnostics. The public page now has seven main sections and an actual labeled
+mock-workspace image. The app uses graphite/porcelain surfaces, readable paired
+text/CTA tokens, self-hosted typography and compact shared controls. No new
+dependency was installed for this design work; concurrent modernization and
+dependency changes were preserved rather than attributed to this pass.
+
+Interaction repairs include explicit study submission after native radio
+selection; delete confirmation/recovery; mobile inspector and script actions;
+selected-study evidence navigation; named chat logs/messages and accent text;
+operation-specific report recovery with saved-version/read-only protection;
+validated report-score percentages; complete wrapping provenance; and a focus
+trap that excludes hidden, disabled, inert and negative-tab-index controls.
+Root-launched PostCSS/Tailwind paths were fixed so preview utilities actually
+render. Ordinary-user/developer shell tests now respect the existing routing
+permission boundary. Impeccable's four width-animation and two side-border
+findings were corrected; six deliberate self-hosted-font advisories remain.
+
+Verification on the final stable frontend snapshot: **744 passed / 0 failed /
+0 skipped, 64 files, 83.61 seconds**, matching pre/post source fingerprint
+`8148c2dbc2f256854a586b97702c09dde51379de421e64097dbd763fb2b53109`.
+TypeScript/Vite build passed (2,422 modules); theme drift gate reported zero
+files. Build warnings about the future native config loader and static/dynamic
+New Study imports are advisory, not claimed fixed. A concurrent dataset-helper
+extraction temporarily caused two persona tests to fail; the final stable run
+includes the corrected imports and all three added helper tests.
+
+Earlier multi-agent reviews and exact-size Playwright captures covered the
+public site and core mock research journey at desktop/phone sizes with targeted
+375px/tablet checks. Fresh local menu confirmation: **76/76**, both themes,
+normal/reduced motion, 390x844, no page errors or hot updates. The prior mobile
+menu failure did not reproduce; no additional menu code change was needed.
+The separate persona-transition follow-up passed five checks and generated ten
+mock profiles with one normal click. Previous failing receipts were preserved.
+
+The user canceled cloud-agent delegation; final continuation and synthesis
+stayed local. No backend, ML, live provider, Google consent, OTP, payment,
+database/concurrency, Lighthouse or full-WCAG certification is claimed. No Git
+commit, push or CI run was performed. Mock preview: `http://127.0.0.1:5194`;
+machine-readable receipts and screenshots are in the ignored frontend
+`.tmp/studio-review` directory. Updated [UI_UX_AUDIT.md](UI_UX_AUDIT.md),
+[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), [TASTE_REVIEW.md](TASTE_REVIEW.md) and
+[UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md), retaining older reviews as history.
+
+### Maintenance (2026-09-12): Backend regression closure after modernization
+
+Resumed handle `BEBSHAX-MODERNIZATION-2026-09-10`. The earlier full backend
+run (112 failed / 2770 passed) was driven mostly by test cross-talk on the
+shared `app`: `app.state` caches stayed bound to a superseded
+`db_sessionmaker`. `api/jobs.py::job_runtime()` now rebuilds the durable job
+store/runtime when the factory changes (cancelling the stale runtime's tasks),
+and `api/datasets.py::_get_dataset_service()` rebuilds the `DatasetService`
+likewise — the stale service fenced job leases against the wrong database and
+surfaced as upload 400 (`LeaseLost`). Also: `initialize_jobs` runs before
+`core_ready`; persona generation gates on ownership before engine availability;
+batch interview jobs mark post-deadline cancellation as `timed_out`;
+`/api/evaluation/metrics` is developer-only (tournament test aligned).
+Receipts: 36-module retest 427/2 → after the dataset-service fix the IDOR
+sequence + `tests/jobs` + `tests/datasets` 332 passed (exit 0);
+`ml_persona/tests` 379 passed (exit 0); full backend suite result below.
+Frontend last owned run 513/513 (typecheck/build/theme exit 0); a concurrent
+session was editing `apps/frontend` during this pass, so the frontend gate is
+deferred until it settles. Evidence in
+[MODERNIZATION_EXECUTION.md](MODERNIZATION_EXECUTION.md). Nothing committed.
+
+- Full backend suite (`apps/backend/tests`, `--cov-fail-under=68`): PENDING —
+  receipt `.tmp/resume-20260910/receipts/full-backend.{log,exit}`.
+
+### Maintenance (2026-09-10): Modernization resumption handoff
+
+Created [MODERNIZATION_HANDOFF.md](MODERNIZATION_HANDOFF.md), handle
+`BEBSHAX-MODERNIZATION-2026-09-10`, with the current Git checkpoint, approved
+scope, preserved work, evidence links and ordered resume actions. Independent
+read-only agents checked parent job-lifecycle wiring and saved tooling receipts.
+The factory/policy mismatch is resolved; missing composed job initialization
+and cancellation-resistant teardown still need regressions. The latest saved
+frontend result is 472/473 on old tooling, not a current all-green run; the
+bounded tooling-upgrade blocker and failed no-op method are preserved.
+The execution ledger now points to this handoff and labels its old assignment
+table as historical. Only handoff documentation and repository memory changed;
+no application tests, code changes, database operations, installs, restarts,
+commits, pushes or deployments occurred in this handoff pass. Local links and
+required resume fields were checked; production verification remains open.
+
+### Maintenance (2026-09-10): Data integration, private memory backfill, and scoped source ledger
+
+Completed the assigned follow-up after the prior eight-agent batch. The existing
+ML smoke import guard was reproduced RED: DB vector metadata imported a provider
+adapter, and eager persona-package service imports also reached that adapter.
+Added the pure `llm/embedding_space.py` contract and retained the old adapter
+constant export; made the persona-service package export lazy. The unchanged ML
+guard passes without provider SDK imports or settings/network/DB access.
+
+Corrected only the owner-confirmed never-applied `c6f8a2d4e901` memory backfill:
+validate private conversation users and matching persona, secondary-user, study,
+and business relationships. Shared persona ownership is never used as the private
+memory owner. Ambiguous rows remain NULL; existing non-null attribution and text
+are preserved. Quarantine retrieval and shared-persona/private-conversation cases
+are covered. No historically applied revision was rewritten.
+
+Added the single forward `e7a9c1d3f205` revision after `d4e6f8a0b219`, plus
+`PersonaSourceSelections`, three typed dataset persona lineage fields, explicit
+parent/version owner keys, version-pinned FKs, scope checks, and three partial
+active-source uniqueness indexes. Source reservations acquire/release with persona
+versions and canonical archive refresh. Shared legacy persona reuse across
+authorized studies and released history remain valid; no historical source or
+version IDs are invented. Source/parent changes cannot overwrite a saved version.
+Current source inventory: 42 tables, 617 columns, 113 indexes, 34 revisions, one
+head. Exact fields, constraints, coordination and risks are in
+[DATABASE_MIGRATION.md](DATABASE_MIGRATION.md).
+
+Verification: owned DB/persona-version/embedding/boundary scope 268 passed,
+6 PostgreSQL integration cases deselected; final ML guard 1 passed; final
+attribution checks 16 passed after secondary-parent tightening. Overlapping
+runs are not summed. The final clean ledger/migration run passed 77 tests with
+83% branch-aware source-ledger coverage. Bug-tier Ruff and editor checks pass. Three review findings
+were reproduced and fixed; read-only follow-up approved the corrections without
+claiming runtime PostgreSQL verification. Interrupted shared-terminal runs are
+not treated as clean exits.
+
+Concurrent handoff: the job agent landed dataset typed writes, pinned-version
+guards, source-exclusion rechecks, version snapshots and canonical refresh.
+Its focused dataset persona lifecycle tests passed 13 cases against this ledger
+(24.92 seconds), without any job-agent source edits by this integrator.
+Complete job recovery/deletion/archival verification remains its responsibility.
+Live PostgreSQL constraint/reflection/concurrency/rollback rehearsal and wider
+M2/M3/M6/M7 work remain. No new dependencies, full-backend run, model change,
+environment/credential access, live database operation, Git operation, or service
+restart was performed by this integrator.
+
+### Maintenance (2026-09-09): Quality-preserving latency requirements
+
+The owner added near-instant page loading and premium responsiveness without
+AI output or quality loss. Added a cross-cutting latency/quality contract to
+[POST_PRESENTATION_ROADMAP.md](POST_PRESENTATION_ROADMAP.md), informed by
+independent page-performance and AI-latency reviews. Initial proposed targets
+are p95 feedback within 100 ms, valid cached navigation within 200 ms, fresh
+bounded non-AI views within one second, and bounded server CRUD within 300 ms
+under the defined lab profile. Cold-browser readiness, Web Vitals, genuine AI
+first text and durably saved completion have separate measurement boundaries.
+None are claimed achieved; free-provider first-text timing is aspirational.
+
+Performance gates start with instrumentation and deployment, then follow
+routing, jobs, database and every frontend route rather than waiting for the
+release wave. DB-09 and FE-13 are now high-priority measured work. Preserve
+full context, output limits, validation, tenant/cache boundaries and provenance;
+no weaker models, hidden answer caches, fabricated progress or partial-success
+claims may satisfy a latency target. Bounded optional work must not delay
+primary output, but mandatory validation and atomic persistence remain gated.
+Real-provider quality needs paired evaluation, not byte-equal LLM responses.
+
+Only planning documentation changed. No application optimization, latency
+benchmark, model training, dependency installation, database operation, service
+restart, commit or deployment occurred. Prior baseline results and their
+limitations are unchanged. The implementation map remains at its confirmation
+checkpoint.
+
+### Maintenance (2026-09-09): Post-presentation audit and modernization map
+
+Delivered [POST_PRESENTATION_ROADMAP.md](POST_PRESENTATION_ROADMAP.md) before
+application implementation, as requested by the owner. Seven specialist audits,
+independent challenge review, baseline verification, focused failure diagnosis,
+and architecture/test-engineering review produced 82 tracked change items.
+Each item identifies evidence, a fix, expected benefit and discriminating test.
+The map retains the modular monolith, specifies complete local/cloud Ollama
+removal with Freellmpool primary and independent OpenRouter secondary, and
+separates mandatory security/data/recovery repairs from optional ML experiments.
+No routing policy, schema, application code, model weights or dependency was
+changed by this planning delivery; no commit, push or deployment was performed.
+
+Current baseline: backend 1,723 passed, 2 failed, 3 integration deselected in
+653.94 seconds, with 83.004851% coverage against the actual 68% CI floor.
+The two failures were caused by the verifier's injected upload-directory
+override: an independent fresh-child comparison reproduced two failures with
+the override and two passes with isolated settings. This is test-isolation
+debt, not a demonstrated application path-precedence defect or a corrected
+full-suite pass. Frontend: 347 passed, 8 failed across 44 files in 81.20 seconds;
+failures expose missing cancellation, stale interview responses and incomplete
+synthesis locking. ML JUnit records 298 passing tests in 37.758 seconds; its
+launcher exit/warning evidence was unavailable. TypeScript/Vite, bug-tier Ruff,
+theme, installed dependency consistency and quiet Compose checks passed.
+The editor retains a TypeScript baseUrl deprecation diagnostic; Python CLI
+type checks were unavailable. No required baseline process remains running.
+
+Independent isolated probes confirmed tenant-memory leakage, weakened database
+certificate verification, a broken native vector comparator, duplicate legacy
+business source selection and soft routing deadlines. These are component
+reproductions, not deployed exploits or PostgreSQL multi-process certification.
+The roadmap includes additive migrations, accurate historical preservation,
+fresh business-relevance evaluation, model/license research, rollback and
+release gates. Existing-serving ML trust/attribution/safety fixes are mandatory
+even when new-model experiments are deferred. Real authentication delivery,
+provider policies/capacity, credential rotation, live PostgreSQL contention,
+proxy/browser workflows and backup restoration remain unverified. This is a
+reviewed plan and baseline, not production approval; implementation remains
+at the explicit map-confirmation checkpoint.
+
 ### Maintenance (2026-09-09): Batch interviews tolerate stale persona ids
 
 `POST /studies/{id}/interviews/batch-run` previously failed the entire batch

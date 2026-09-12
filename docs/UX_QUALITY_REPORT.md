@@ -1,4 +1,108 @@
-# BebshaX — UX Quality Report (2026-09-07)
+# BebshaX UX Quality Report
+
+## Current Verdict (2026-09-13)
+
+**Frontend verification passed, with scoped browser coverage and documented
+advisories.** No arbitrary studio-quality score or production certification is
+assigned. The older numerical ratings below are historical, not current claims.
+
+| Gate | Final result |
+| --- | --- |
+| Frontend regression suite | 744 passed, 0 failed, 0 skipped; 64 files; exit 0; 77.69 seconds |
+| Snapshot consistency | Source/test fingerprint unchanged before and after the final suite |
+| TypeScript and production build | PASS; Vite 8.2.2; 2,422 modules transformed |
+| Theme-token drift | PASS; 0 files requiring tokenization |
+| Fresh mobile dialog replay | 76 checks passed, 0 failed; 390x844; both themes; normal and reduced motion; zero page/console errors |
+| Impeccable detector | 12 initial warnings reduced to 6 intentional font advisories; no remaining width-animation or side-border findings in the scanned components |
+
+Final test fingerprint: `da3ee43a1a3d9d926bb2821c4e0e77ebcad5dada41c290fd283b295b7a36ce55`.
+The September 13 fingerprint covers 181 frontend source, test, script and
+configuration files plus root dependency manifests. It uses a different file
+selection from the September 12 receipt; compare each run's before/after pair,
+not hashes from different verification scripts.
+The production build still reports two nonblocking advisories: Vite's future
+native config loader and the static/dynamic New Study import overlap. A jsdom
+navigation diagnostic in the Google-auth test does not represent a real Google
+sign-in test. No separate frontend lint script or coverage gate is configured.
+
+An earlier close-out run reported 743 passes and one timeout waiting for the
+Studies heading in [Dashboard.test.tsx](../apps/frontend/tests/Dashboard.test.tsx).
+The subsequent full run passed without an application or test change. The
+earlier failure receipt remains preserved; its cause is not established, and
+the successful rerun is not proof that this intermittent test risk is resolved.
+
+## Browser Evidence
+
+Playwright 1.63 with locally installed Edge produced exact-size viewport and
+full-page captures. The broad confirmation covered desktop 1440x1000 and phone
+390x844 in both themes; targeted 375x812 and tablet 768x1024 captures checked the
+affected script, routing, evidence and segmentation layouts. Receipts checked
+actual viewport dimensions, image loading, horizontal overflow, and reachable
+controls rather than assuming that a requested viewport had taken effect.
+
+- Public page and auth forms: both themes, loaded imagery, labeled fields,
+	working navigation and sample-data disclosures.
+- Core mock journey: explicit study creation, copilot questions, role approval,
+	persona generation, script generation, and an interview message. Report
+	generation correctly exposes the mock environment's unavailable-backend
+	boundary and offers retry; it does not fabricate a completed report.
+- Personas and evidence: complete inspector values and source identifiers,
+	responsive actions/tabs, and canonical navigation using the selected study.
+- Layout repairs: root-started Tailwind utilities render; Step 3 actions fit at
+	375px/390px; expanded routing metadata wraps without dropping provenance.
+- Dialog confirmation: four fresh 390px contexts covered light/dark and normal/
+	reduced motion. Command, account and drawer surfaces close one at a time;
+	focus returns correctly; zero page errors or hot-reload events were observed.
+
+The broad confirmation's C-1 menu finding did not reproduce in the fresh
+76-check replay; no further menu implementation change was made. Its C-2
+persona-generation interruption was followed by a clean 390px light/normal-
+motion run: five checks passed and one normal click generated ten mock profiles,
+with no hot updates or page errors. Earlier failing receipts remain preserved;
+they have not been relabeled as successful runs.
+
+Local JSON receipts, PNGs and traces remain in the Git-ignored frontend
+`.tmp/studio-review` directory, including `final-unit-summary.json`,
+`confirmation-report.json`, `menu-confirmation-results.json` and
+`c2-persona-transition-probe-results.json`. The counts above are self-contained
+because those local artifacts are not distributed with a fresh checkout.
+
+The September 13 recheck is recorded in `resume-20260913-unit-summary.json`
+and `resume-20260913-menu-summary.json`; the previous menu JSON was preserved
+before replay. The local mock preview was restarted at `http://127.0.0.1:5194`.
+All three public-page images loaded. The embedded browser returned a zero-sized
+viewport, so that check supplies no responsive-layout evidence; exact-size
+Playwright receipts supply the responsive coverage above. Impeccable's repeat
+65-file scan again found only the six intentional font advisories.
+
+Current report links resolve. Four links to retired landing implementation
+files remain only in the append-only historical implementation log; those old
+entries have not been rewritten or presented as current file references.
+
+## Review Method
+
+Earlier independent implementation, code, usability and browser reviews were
+followed by targeted fixes. UI/UX Pro Max informed the direction; the taste
+skill was applied contextually to the public site; Impeccable inspected the
+actual component tree. Final synthesis and the last local checks were
+single-context after the user canceled cloud-agent delegation, not a new
+independent dual-agent certification. [TASTE_REVIEW.md](TASTE_REVIEW.md) records
+the six retained typography advisories.
+
+## Explicit Limits
+
+Live Google consent, OTP delivery, checkout, provider availability, successful
+backend report generation, durable database/concurrency behavior, and the
+backend/ML suites were not reverified by this frontend pass. No Lighthouse or
+field Core Web Vitals, exhaustive WCAG audit, or screen-reader certification is
+claimed. Older feature views still contain inline styling outside the migrated
+token foundation. No commits, pushes or CI results are claimed.
+
+## Historical Report (2026-09-07)
+
+Everything below records the previous design and its then-current scores,
+test totals, deferred work and bundle sizes. Use the sections above for the
+current state.
 
 Scored after the premium product-experience pass. Scores are 0–10 per dimension, judged against the bar in the transformation brief (Apple-level restraint, Notion-level IA, Linear-level interaction). They are honest, not aspirational — "what remains" lists what would move each number. A subsequent creative-direction pass is recorded in [TASTE_REVIEW.md](TASTE_REVIEW.md); it raises Persona Library and Routing & Provenance to 8.6 and moves the landing page into compliance with the eyebrow / hero-stack / dash rules.
 

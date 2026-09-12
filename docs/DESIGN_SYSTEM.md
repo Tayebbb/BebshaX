@@ -1,13 +1,15 @@
 # BebshaX Design System
 
-Source of truth for console UI work. Tokens live in [`apps/frontend/src/index.css`](../apps/frontend/src/index.css); primitives in [`apps/frontend/src/components/ui/`](../apps/frontend/src/components/ui/). The landing page (`components/landing`) has its own `lp-*` token set and is out of scope here.
+Updated 2026-09-12 for the studio redesign. Shared tokens live in [index.css](../apps/frontend/src/index.css); primitives live in [ui.css](../apps/frontend/src/components/ui/ui.css). The public site has a related, independently scoped `--studio-*` palette in [studio.css](../apps/frontend/src/components/landing/studio.css). Existing `--lp-*` aliases support its remaining shared consumers.
+
+These are implementation conventions, not an assertion that every legacy inline style has been migrated. The verification scope and remaining limitations are in [UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md).
 
 ## Principles
 
-0. **Visual language: iOS / macOS.** True near-black canvas in dark (`#000`), iOS grouped grey in light (`#f2f2f7`); surfaces step up in luminance (`#1c1c1e` → `#2c2c2e`) instead of being outlined. Separators are hairlines (`--border-soft`), never outlines. One accent (system teal) used for actions and selected-state icons only — not for decoration, eyebrows or heading gradients. No monospace kickers; section headers are small sans caps. Selected navigation is a filled pill, not a side bar.
-1. **Clarity over decoration.** Frosted glass is for chrome (sidebar, sticky toolbar, drawers, dialogs, command menu) — never for content cards. Content cards are flat grouped cells (`--bg-card` + top hairline reflect), so the compositor budget stays at ≤ 4 blurred surfaces.
-2. **Hierarchy over density.** One `h1` per view, one eyebrow, one lede. Cards mark grouping, not everything.
-3. **Evidence is first-class.** Grounding, provenance and routing are never hidden — they are progressively disclosed (`ProvenanceChip` → `EvidenceClaimPeek`; `RouteDisclosure`; `MemoryDisclosure`).
+0. **Visual language: graphite and porcelain.** Dark canvas `#171819`, light canvas `#f6f7f8`, opaque neutral surfaces, teal actions, and semantic cyan/amber/red accents. Borrow precision and predictable navigation from Apple and Notion without presenting this as either company's design system. Selection is a quiet fill, not a thick side border.
+1. **Clarity over decoration.** Legacy glass tokens now resolve to opaque surfaces; `--glass-blur` is `0px` and saturation is `100%`. Do not add decorative ambient orbs or translucent content panels. Keep genuine modal scrims distinct from the content surface.
+2. **Hierarchy over decoration.** One `h1` per view, a concise supporting line when useful, and unframed section headings. Do not add a mandatory eyebrow to every section. Reserve cards for independent repeated objects and genuinely framed tools.
+3. **Evidence is first-class.** Claims, sources, memory and synthetic provenance remain progressively disclosed. Routing diagnostics are a developer/admin surface, not a model picker or ordinary-user navigation destination.
 4. **Honest numbers.** Unmeasured values render `—` or "not measured", never `0` or a placeholder percentage. Sample/demo/mock data is always labelled.
 5. **Text carries state.** Colour never carries meaning alone: every dot, badge and bar has a label.
 6. **Restraint in motion.** Transform/opacity only; ≤ 0.5 s; `prefers-reduced-motion` disables all of it.
@@ -21,10 +23,16 @@ Source of truth for console UI work. Tokens live in [`apps/frontend/src/index.cs
 | Canvas / surfaces | `--bg-pure` `--bg-primary` `--bg-secondary` `--bg-card` `--bg-card-hover`                                                                    |
 | Borders           | `--border-subtle` `--border-medium` `--border-hover` `--border-soft`                                                                         |
 | Soft fills        | `--fill-soft` `--fill-soft-2`                                                                                                                |
-| Glass tiers       | `--glass-strong` `--glass-mid` `--glass-soft` (+ `--glass-blur` `--glass-saturate` `--reflect` `--scrim`)                                    |
+| Material aliases  | `--glass-strong` `--glass-mid` `--glass-soft` now resolve to opaque neutral surfaces; `--scrim` remains an overlay                         |
 | Text              | `--text-main` `--text-primary` `--text-secondary` `--text-muted` `--text-faint` `--text-label` `--text-on-accent`                            |
 | Accent            | `--accent-teal` `--accent-cyan` `--accent-teal-bright` `--accent-emerald` `--accent-amber` `--accent-rose` `--accent-subtle` `--accent-glow` |
 | **CTA fill**      | `--accent-gradient` — a flat accent fill with a whisper of top light; primary actions may also use plain `--accent-teal`                        |
+
+Primary labels and user-authored chat bubbles use `--text-on-accent`: deep ink
+(`#062f2c`) on bright dark-mode teal, white on the deeper light-mode teal.
+Do not substitute `--text-main` on an accent surface. [StudioTheme.test.ts](../apps/frontend/tests/StudioTheme.test.ts)
+checks root text roles on all four shared surfaces and accent labels on solid
+fills and both gradient endpoints in both themes, including alpha compositing.
 
 ### Semantic status (new)
 
@@ -43,16 +51,21 @@ Source of truth for console UI work. Tokens live in [`apps/frontend/src/index.cs
 
 | Token       | Size                         | Use                                          |
 | ----------- | ---------------------------- | -------------------------------------------- |
-| `--fs-xs`   | 0.72rem                      | metadata **floor** — nothing renders smaller |
+| `--fs-xs`   | 0.75rem                      | metadata floor for migrated components       |
 | `--fs-sm`   | 0.8rem                       | labels, secondary rows, badges               |
 | `--fs-base` | 0.875rem                     | body, buttons                                |
 | `--fs-md`   | 0.95rem                      | ledes, emphasised body                       |
 | `--fs-lg`   | 1.1rem                       | section titles, empty-state titles           |
 | `--fs-xl`   | 1.35rem                      | card headlines                               |
 | `--fs-2xl`  | 1.75rem                      | page titles, metric values                   |
-| `--fs-3xl`  | clamp(1.9rem, 3.4vw, 2.5rem) | display titles (Studies, New Study)          |
+| `--fs-3xl`  | 2.25rem                      | display titles (Studies, New Study)            |
 
-Weights: 400 body · 500 nav/labels · 600 titles, buttons · 700 display, metrics. Headings use `letter-spacing: -0.022em` (display `-0.03em`) and `text-wrap: balance`. Numbers use `font-variant-numeric: tabular-nums`. Fonts: `--font-sans` is system-UI first (`-apple-system, BlinkMacSystemFont, 'SF Pro Text'`) so Apple hardware renders SF; Plus Jakarta Sans (self-hosted via `@fontsource`) is the cross-platform fallback. `--font-mono` (`ui-monospace, 'SF Mono', 'JetBrains Mono'`) is for ids and request ids only — not for labels, kickers or kbd hints.
+Weights: 400 body, 500 navigation, 600 controls and titles, 700 emphasis. Shared
+headings use `letter-spacing: 0` and balanced wrapping. Do not scale text with
+viewport-width units. `--font-sans` leads with self-hosted Plus Jakarta Sans;
+`--font-display` leads with Space Grotesk; `--font-mono` leads with JetBrains Mono
+for identifiers and measured data. These existing fonts were deliberately
+retained after the Impeccable review; no new font dependency was installed.
 
 ### Spacing
 
@@ -60,7 +73,10 @@ Weights: 400 body · 500 nav/labels · 600 titles, buttons · 700 display, metri
 
 ### Radius
 
-iOS continuous-corner scale: `--r-xs 8` `--r-sm 10` `--r-md 14` `--r-lg 18` `--r-xl 24` `--r-pill 999`. Controls/inputs/nav rows `sm`; buttons/callouts `md`; cards/rows `lg`; dialogs, command menu, composer `xl`; badges, chips, pills `pill`.
+Compact scale: `--r-xs 4`, `--r-sm 6`, `--r-md 8`, `--r-lg 8`, `--r-xl 12`,
+`--r-pill 999` (pixels). Use 6px controls, up to 8px cards, and the 12px stop for
+dialogs. Pills are for small state badges, not general page sections. Older
+inline radius values are not evidence of a different approved scale.
 
 ### Elevation
 
@@ -92,13 +108,16 @@ are no longer exported or wired through unused application entry points.
 
 ## Interaction patterns
 
-- **Navigation:** three groups (Workspace / Study / System). Study-group items are muted until a study is open; the chip shows the study title and current step. Breadcrumb = group › page › study.
+- **Navigation:** Workspace and Study for regular users; System is visible only to developer/admin accounts. Study-group items retain their study context; persona-to-evidence navigation uses the library's selected study. The chip shows the active study and current step.
 - **Command menu:** Ctrl/⌘ K anywhere in the console; destinations, recent studies, theme, sign-out. Type to filter, ↑↓, Enter, Esc.
-- **Dialogs:** `useDialogA11y` — focus first control, Tab trap, Escape closes _only the topmost_ surface (capture phase + `defaultPrevented`), focus returns to the opener. Backdrop `.bx-backdrop` frosts the page; dialog `.bx-modal`.
+- **Dialogs:** `useDialogA11y` focuses the explicit initial target or first tabbable control, excludes negative-tab-index, disabled, hidden and inert controls, and returns focus on close. The mobile drawer suspends its handler while command/account menus are above it. Escape closes one surface at a time; a closed drawer stays inert.
 - **Buttons:** global spring (`hover brightness 1.06`, `active scale .975`), no layout shift.
 - **Forms:** inline validation next to the field, `role="alert"` on errors, entered data preserved on failure.
+- **Study creation:** native study-type radios change selection only. Starting a study requires the explicit Start action; selecting a mode never submits an entered idea.
+- **Deletion:** a study's options menu opens a confirmation dialog. A failed delete retains the study and exposes an error; cancel returns to the original context.
 - **Loading:** skeletons shaped like the result (persona cards, report cards) with real counts where known; spinners only inside buttons. Never fake progress — stages shown only when they map to real state.
 - **Errors:** plain-language title + what happened + what is safe + Retry, with `RequestIdTag` where an id exists. Never raw status text as the primary message.
+- **Reports:** recovery is operation-specific: reload saved versions, retry generation, or try copying again. A failure does not replace a saved report. Read-only studies cannot regenerate. Model-estimated scores remain explicitly non-observational; invalid/missing values remain unknown.
 - **Success:** subtle motion, one confirmation line, obvious next action. No confetti.
 
 ## Accessibility rules
@@ -106,7 +125,7 @@ are no longer exported or wired through unused application entry points.
 - Skip link first in DOM; one `<main id="bx-main">`; `<nav aria-label>` for every nav.
 - Every interactive element is a real `<button>`/`<a>`; icon-only controls carry `aria-label`.
 - Global `:focus-visible` ring (2 px solid teal-600, ≥ 3:1 in both themes) — inline `outline: none` is forbidden except inside the command input where the dialog itself is the focus indicator.
-- Contrast: body ≥ 4.5:1, secondary ≥ 3:1 in both themes (tokens chosen for this).
+- Contrast target: body, secondary and placeholder text at least 4.5:1; large text and meaningful control indicators at least 3:1. Root-token tests are not a whole-site WCAG certification: verify component overrides in the browser too.
 - Colour never alone: dots/badges/bars pair with text; provenance chips carry their word.
 - `prefers-reduced-motion` disables shimmer, reveals, sweeps, button springs, live dots.
 - `prefers-reduced-transparency` and no-`backdrop-filter` environments get opaque chrome.
@@ -124,7 +143,23 @@ Grids use `repeat(auto-fit|auto-fill, minmax(min(Npx, 100%), 1fr))` — never a 
 
 ## Motion principles
 
-One ease: `--bx-ease: cubic-bezier(0.32, 0.72, 0, 1)` (Apple's sheet/spring curve). View entrance 0.5 s rise 14 px; card stagger 45 ms/step capped 0.36 s total; modal 0.4 s rise+scale; chat bubble 0.3 s; button press `scale(0.97)`; CTA sheen sweep 0.6 s one-shot (landing only). GSAP (`src/motion/`) is used for count-ups and view staggers; everything else is CSS. Nothing animates infinitely except the skeleton shimmer and the health dot pulse (both off under reduced motion).
+Keep the existing GSAP view/count transitions and short transform/opacity
+feedback. Respect reduced motion. Do not animate width, height, padding or
+margin: sidebar collapse and progress values now update without width
+interpolation. Do not add perpetual decorative motion or an animation library.
+
+## Public site
+
+[LandingPage.tsx](../apps/frontend/src/components/landing/LandingPage.tsx) uses
+seven main sections: brand/product introduction, actual sample workspace,
+study sequence, research boundaries, available pricing, native FAQ disclosures,
+and a closing workspace action. The screenshot is a real rendered mock
+workspace, labeled SAMPLE and available at full size. No invented customer
+counts, testimonials, validated-demand claims or provider uptime guarantees.
+
+Public controls are at least 44px high. Its mobile navigation appears below
+60rem; the 40rem breakpoint stacks section layouts and actions. Its `--studio-*`
+colors preserve the same neutral/mint direction without leaking into the app.
 
 ## Adding UI — checklist
 
