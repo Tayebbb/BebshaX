@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   ArrowLeft,
   Sliders,
@@ -21,9 +21,14 @@ import {
   BehavioralTestRun,
   BehavioralTestResult,
   BehavioralTestType,
+  RunBehavioralTestPayload,
 } from '../../../types';
 import { api } from '../../../services/api';
 import { useDialogA11y } from '../../../utils/useDialogA11y';
+import { useRequestScope } from '../../../utils/useRequestScope';
+import { pollSerial } from '../../../services/polling';
+import { toUserMessage } from '../../../utils/apiError';
+import { useRouteReady } from '../../../performance/routeTiming';
 
 interface BehavioralTestDetailViewProps {
   studyId: string;
@@ -48,111 +53,171 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
   const [activeRun, setActiveRun] = useState<BehavioralTestRun | null>(null);
   const [selectedPersonaResult, setSelectedPersonaResult] = useState<BehavioralTestResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingRun, setIsLoadingRun] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [isTriggeringRun, setIsTriggeringRun] = useState(false);
 
-  const pollTimerRef = useRef<any>(null);
+  const scopeRef = useRequestScope([studyId, testId]);
+  const selectionRef = useRef(initialRunId || '');
+  const requestRef = useRef(0);
+  const actionRef = useRef(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  useRouteReady(!isLoading, loadError ? 'error' : test ? 'content' : 'empty');
   const resultDialogRef = useRef<HTMLDivElement | null>(null);
   useDialogA11y(resultDialogRef, !!selectedPersonaResult, () => setSelectedPersonaResult(null));
 
+  useLayoutEffect(() => {
+    selectionRef.current = initialRunId || '';
+    requestRef.current += 1;
+    actionRef.current = false;
+    setSelectedRunId(initialRunId || '');
+    setTest(null);
+    setRuns([]);
+    setActiveRun(null);
+    setSelectedPersonaResult(null);
+    setLoadError(null);
+    setActionError(null);
+    setIsLoadingRun(false);
+    setIsRetrying(false);
+    setIsTriggeringRun(false);
+  }, [studyId, testId]);
+
   const fetchDetailAndRuns = async (keepLoading = true) => {
+    const scope = scopeRef.current;
+    const request = ++requestRef.current;
+    const isCurrent = () => scope.active && request === requestRef.current;
     if (keepLoading) setIsLoading(true);
+    setLoadError(null);
     try {
       const [testData, runList] = await Promise.all([
-        api.getBehavioralTestDetail(studyId, testId),
-        api.getBehavioralTestRuns(studyId, testId),
+        api.getBehavioralTestDetail(studyId, testId, scope.controller.signal),
+        api.getBehavioralTestRuns(studyId, testId, scope.controller.signal),
       ]);
+      if (!isCurrent()) return;
       setTest(testData);
       setRuns(runList);
 
-      const targetRunId = selectedRunId || initialRunId || (runList.length > 0 ? runList[0].id : '');
+      const targetRunId = selectionRef.current || initialRunId || (runList.length > 0 ? runList[0].id : '');
       if (targetRunId) {
+        selectionRef.current = targetRunId;
         setSelectedRunId(targetRunId);
-        const runDetail = await api.getBehavioralRunResults(studyId, targetRunId);
-        setActiveRun(runDetail);
+        const runDetail = await api.getBehavioralRunResults(studyId, targetRunId, scope.controller.signal);
+        if (isCurrent()) setActiveRun(runDetail);
+      } else {
+        setActiveRun(null);
       }
-    } catch {
-      // Handle error
+    } catch (error) {
+      if (isCurrent()) setLoadError(toUserMessage(error));
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDetailAndRuns();
+    void fetchDetailAndRuns();
   }, [studyId, testId]);
 
   // Polling for active / running simulation runs
   useEffect(() => {
-    if (activeRun && (activeRun.status === 'pending' || activeRun.status === 'running')) {
-      pollTimerRef.current = setInterval(async () => {
-        // A background tab keeps hitting the API every 2.5s for a screen nobody
-        // is looking at; the next tick after refocus picks the state back up.
-        if (typeof document !== 'undefined' && document.hidden) return;
-        try {
-          const updated = await api.getBehavioralRunResults(studyId, activeRun.id);
-          setActiveRun(updated);
-          if (updated.status === 'completed' || updated.status === 'failed' || updated.status === 'completed_with_warnings') {
-            clearInterval(pollTimerRef.current);
-            fetchDetailAndRuns(false);
-          }
-        } catch {
-          clearInterval(pollTimerRef.current);
-        }
-      }, 2500);
-    }
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    };
+    if (!activeRun || !['pending', 'running'].includes(activeRun.status)) return;
+    const scope = scopeRef.current;
+    const controller = new AbortController();
+    const runId = activeRun.id;
+    const isCurrent = () => scope.active && !controller.signal.aborted && selectionRef.current === runId;
+    void pollSerial<BehavioralTestRun>((signal) => api.getBehavioralRunResults(studyId, runId, signal), {
+      signal: controller.signal, intervalMs: 2500, timeoutMs: 1800000, idleTimeoutMs: 300000, pauseWhenHidden: true,
+      complete: (run) => !['pending', 'running'].includes(run.status),
+      progress: (run) => `${run.status}:${run.completed_count}:${run.failed_count}`,
+      onUpdate: (run) => {
+        if (!isCurrent()) return;
+        setActiveRun(run);
+        setRuns((previous) => previous.map((candidate) => candidate.id === run.id ? run : candidate));
+      },
+    }).catch((error: unknown) => { if (isCurrent()) setLoadError(toUserMessage(error)); });
+    return () => controller.abort();
   }, [activeRun?.status, activeRun?.id, studyId]);
 
   const handleSelectRun = async (runId: string) => {
+    if (actionRef.current) return;
+    const scope = scopeRef.current;
+    const request = ++requestRef.current;
+    selectionRef.current = runId;
     setSelectedRunId(runId);
+    setSelectedPersonaResult(null);
+    setActiveRun(null);
+    setLoadError(null);
+    setActionError(null);
+    setIsLoadingRun(true);
     try {
-      const runDetail = await api.getBehavioralRunResults(studyId, runId);
-      setActiveRun(runDetail);
-    } catch {
-      // Soft fallback
+      const runDetail = await api.getBehavioralRunResults(studyId, runId, scope.controller.signal);
+      if (scope.active && request === requestRef.current) setActiveRun(runDetail);
+    } catch (error) {
+      if (scope.active && request === requestRef.current) setLoadError(toUserMessage(error));
+    } finally {
+      if (scope.active && request === requestRef.current) setIsLoadingRun(false);
     }
   };
 
   const handleTriggerNewRun = async () => {
-    if (!test) return;
+    const scope = scopeRef.current;
+    if (!test || !activeRun || !scope.active || actionRef.current || isLoadingRun || ['pending', 'running'].includes(activeRun.status)) return;
+    const snapshot = activeRun.scenario_snapshot;
+    const targetType = activeRun.target_population_type;
+    const validScenario = typeof snapshot?.scenario_text === 'string' && snapshot.scenario_text.trim()
+      && snapshot.structured_parameters != null && typeof snapshot.structured_parameters === 'object'
+      && !Array.isArray(snapshot.structured_parameters);
+    const validTarget = targetType === 'all'
+      || (targetType === 'segment' && typeof activeRun.target_segment_id === 'string' && activeRun.target_segment_id.trim())
+      || (targetType === 'selected_personas' && Array.isArray(activeRun.target_persona_ids)
+        && activeRun.target_persona_ids.length > 0
+        && activeRun.target_persona_ids.every((personaId) => typeof personaId === 'string' && personaId.trim()));
+    if (!validScenario || !validTarget) {
+      setActionError('The saved run configuration is incomplete. Return to Behavioral Tests to configure a new simulation with an explicit scenario and population.');
+      return;
+    }
+    const payload: RunBehavioralTestPayload = {
+      scenario_title: snapshot.title,
+      scenario_text: snapshot.scenario_text,
+      parameters: snapshot.structured_parameters,
+      target_population_type: targetType,
+      ...(targetType === 'segment' ? { target_segment_id: activeRun.target_segment_id! } : {}),
+      ...(targetType === 'selected_personas' ? { target_persona_ids: [...activeRun.target_persona_ids] } : {}),
+    };
+    actionRef.current = true;
     setIsTriggeringRun(true);
+    setActionError(null);
+    setLoadError(null);
     try {
-      // Only the researcher's own scenario is sent: the test's stored scenario,
-      // else its description. Nothing is invented — a test with neither is
-      // refused by the backend (scenario_required) rather than simulated on
-      // a made-up "Evaluation for <name>" prompt.
-      const storedScenario = test.scenarios?.[0];
-      const newRun = await api.triggerBehavioralTestRun(studyId, test.id, {
-        scenario_id: storedScenario?.id,
-        scenario_title: storedScenario?.title || test.name,
-        scenario_text: storedScenario?.scenario_text || test.description || undefined,
-        parameters: storedScenario?.structured_parameters || test.configuration || {},
-        target_population_type: 'all',
-      });
-      await fetchDetailAndRuns(false);
+      const newRun = await api.triggerBehavioralTestRun(studyId, test.id, payload, scope.controller.signal);
+      if (!scope.active) return;
+      selectionRef.current = newRun.id;
       setSelectedRunId(newRun.id);
       setActiveRun(newRun);
-    } catch {
-      // Error
+      await fetchDetailAndRuns(false);
+    } catch (error) {
+      if (scope.active) setActionError(toUserMessage(error));
     } finally {
-      setIsTriggeringRun(false);
+      if (scope.active) { actionRef.current = false; setIsTriggeringRun(false); }
     }
   };
 
   const handleRetryFailed = async () => {
-    if (!activeRun) return;
+    const scope = scopeRef.current;
+    if (!activeRun || !scope.active || actionRef.current || isLoadingRun || ['pending', 'running'].includes(activeRun.status)) return;
+    actionRef.current = true;
     setIsRetrying(true);
+    setActionError(null);
+    setLoadError(null);
     try {
-      const retried = await api.retryFailedBehavioralRun(studyId, activeRun.id);
+      const retried = await api.retryFailedBehavioralRun(studyId, activeRun.id, scope.controller.signal);
+      if (!scope.active) return;
       setActiveRun(retried);
       await fetchDetailAndRuns(false);
-    } catch {
-      // Handle error
+    } catch (error) {
+      if (scope.active) setActionError(toUserMessage(error));
     } finally {
-      setIsRetrying(false);
+      if (scope.active) { actionRef.current = false; setIsRetrying(false); }
     }
   };
 
@@ -181,7 +246,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
 
   if (isLoading) {
     return (
-      <div style={{ padding: '40px', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-secondary)' }}>
+      <div role="status" aria-label="Loading behavioral test" style={{ padding: '40px', maxWidth: '1400px', margin: '0 auto', color: 'var(--text-secondary)' }}>
         <div style={{ height: '30px', width: '200px', backgroundColor: 'var(--fill-soft)', borderRadius: '8px', marginBottom: '20px' }} />
         <div style={{ height: '140px', backgroundColor: 'var(--fill-soft)', borderRadius: '12px' }} />
       </div>
@@ -191,7 +256,9 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
   if (!test) {
     return (
       <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-        <h3>Test not found</h3>
+        <h3>{loadError ? 'Test unavailable' : 'Test not found'}</h3>
+        {loadError && <p role="alert">{loadError}</p>}
+        {loadError && <button type="button" className="bx-btn bx-btn-secondary" onClick={() => void fetchDetailAndRuns()}>Retry</button>}
         <button onClick={onBack} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: '8px', backgroundColor: '#14B8A6', color: 'var(--text-on-accent)', border: 'none', cursor: 'pointer' }}>
           Back to Tests
         </button>
@@ -201,9 +268,16 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
 
   const metrics = activeRun?.aggregate_metrics;
   const isRunning = activeRun?.status === 'running' || activeRun?.status === 'pending';
+  const actionPending = isTriggeringRun || isRetrying;
+  const rerunDisabled = actionPending || isRunning || isLoadingRun || !activeRun;
 
   return (
-    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', width: '100%', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', minWidth: 0, margin: '0 auto', width: '100%', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
+      {loadError && <div role="alert" className="bx-alert bx-alert--error">
+        <span>{loadError}</span>
+        <button type="button" className="bx-btn bx-btn-secondary" disabled={actionPending || isLoadingRun} onClick={() => void fetchDetailAndRuns()}>Retry</button>
+      </div>}
+      {actionError && <div role="alert" className="bx-alert bx-alert--error">{actionError}</div>}
       {/* Top Breadcrumb & Actions */}
       <div
         style={{
@@ -216,7 +290,9 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
         }}
       >
         <button
+          type="button"
           onClick={onBack}
+          className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -227,16 +303,20 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
             fontSize: '0.88rem',
             cursor: 'pointer',
             padding: 0,
+            minHeight: '44px',
           }}
         >
           <ArrowLeft size={16} />
           Back to Behavioral Tests
         </button>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           {runs.length > 1 && onCompareRuns && (
             <button
+              type="button"
               onClick={() => onCompareRuns(runs.map((r) => r.id))}
+              disabled={actionPending}
+              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -247,7 +327,9 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                 border: '1px solid var(--border-soft)',
                 color: 'var(--text-primary)',
                 fontSize: '0.85rem',
-                cursor: 'pointer',
+                cursor: actionPending ? 'not-allowed' : 'pointer',
+                minHeight: '44px',
+                opacity: actionPending ? 0.55 : 1,
               }}
             >
               Compare Runs ({runs.length})
@@ -255,8 +337,11 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
           )}
 
           <button
+            type="button"
             onClick={handleTriggerNewRun}
-            disabled={isTriggeringRun || isRunning}
+            disabled={rerunDisabled}
+            aria-busy={isTriggeringRun}
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -268,8 +353,9 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               color: 'var(--text-on-accent)',
               fontSize: '0.85rem',
               fontWeight: 700,
-              cursor: isRunning ? 'not-allowed' : 'pointer',
-              boxShadow: '0 0 15px var(--border-hover)',
+              minHeight: '44px',
+              cursor: rerunDisabled ? 'not-allowed' : 'pointer',
+              opacity: rerunDisabled ? 0.55 : 1,
             }}
           >
             <Play size={15} />
@@ -281,21 +367,18 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
       {/* Test Title Header */}
       <div
         style={{
-          padding: '24px',
-          borderRadius: '16px',
-          backgroundColor: 'var(--glass-mid)',
-          border: '1px solid var(--fill-soft-2)',
+          paddingBottom: '24px',
+          borderBottom: '1px solid var(--border-soft)',
           marginBottom: '24px',
-          background: 'linear-gradient(to right, rgba(30, 41, 59, 0.8), var(--glass-strong))',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
           <div
             style={{
               padding: '8px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--accent-subtle)',
-              border: '1px solid var(--border-hover)',
+              borderRadius: '8px',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-soft)',
             }}
           >
             {getTypeIcon(test.test_type)}
@@ -357,7 +440,11 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
             return (
               <button
                 key={r.id}
+                type="button"
                 onClick={() => handleSelectRun(r.id)}
+                disabled={actionPending}
+                aria-pressed={isSelected}
+                className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                 style={{
                   padding: '8px 16px',
                   borderRadius: '8px',
@@ -366,7 +453,9 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                   color: isSelected ? 'var(--accent-teal-bright)' : 'var(--text-secondary)',
                   fontSize: '0.82rem',
                   fontWeight: isSelected ? 600 : 400,
-                  cursor: 'pointer',
+                  minHeight: '44px',
+                  cursor: actionPending ? 'not-allowed' : 'pointer',
+                  opacity: actionPending ? 0.55 : 1,
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -377,18 +466,22 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
         </div>
       )}
 
+      {isLoadingRun && <p role="status">Loading run...</p>}
+      {!activeRun && !isLoadingRun && !loadError && <p>No saved runs. Return to Behavioral Tests to configure a new simulation.</p>}
+
       {/* Live Simulation Progress Banner */}
       {isRunning && (
         <div
+          role="status"
           style={{
             padding: '20px 24px',
-            borderRadius: '14px',
-            backgroundColor: 'rgba(13, 148, 136, 0.15)',
-            border: '1px solid var(--border-hover)',
+            borderRadius: '8px',
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-soft)',
             marginBottom: '24px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <RotateCw size={18} className="text-teal-400 animate-spin" />
               <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)' }}>
@@ -400,16 +493,30 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
             </span>
           </div>
 
-          <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(0, 0, 0, 0.4)', borderRadius: '999px', overflow: 'hidden' }}>
+          <div role="progressbar" aria-label="Personas evaluated" aria-valuemin={0} aria-valuemax={activeRun?.persona_count || 1} aria-valuenow={activeRun?.completed_count || 0} style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-card-hover)', borderRadius: '999px', overflow: 'hidden' }}>
             <div
               style={{
                 height: '100%',
                 backgroundColor: '#14B8A6',
                 width: `${activeRun ? (activeRun.completed_count / (activeRun.persona_count || 1)) * 100 : 0}%`,
-                transition: 'width 0.5s ease',
               }}
             />
           </div>
+        </div>
+      )}
+
+      {activeRun && !isRunning && activeRun.failed_count > 0 && (
+        <div style={{ padding: '20px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-soft)', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--status-error-text)', fontWeight: 600, marginBottom: '6px' }}>
+            <AlertTriangle size={18} />
+            <span>{activeRun.failed_count} Persona Evaluations Failed</span>
+          </div>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Some persona evaluations failed. Retry only those evaluations.</p>
+          <button type="button" onClick={handleRetryFailed} disabled={actionPending || isLoadingRun} aria-busy={isRetrying}
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+            style={{ marginTop: '12px', minHeight: '44px', padding: '8px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card-hover)', color: 'var(--status-error-text)', border: '1px solid var(--border-control)', fontSize: '0.85rem', fontWeight: 600, cursor: actionPending ? 'not-allowed' : 'pointer', opacity: actionPending ? 0.55 : 1 }}>
+            {isRetrying ? 'Retrying...' : 'Retry Failed Simulations'}
+          </button>
         </div>
       )}
 
@@ -487,47 +594,6 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               </div>
             </div>
 
-            {/* Run Failure State if any */}
-            {activeRun.failed_count > 0 && (
-              <div
-                style={{
-                  padding: '22px',
-                  borderRadius: '14px',
-                  backgroundColor: 'rgba(239, 68, 68, 0.12)',
-                  border: '1px solid rgba(239, 68, 68, 0.25)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--status-error-text)', fontWeight: 600, marginBottom: '6px' }}>
-                    <AlertTriangle size={18} />
-                    <span>{activeRun.failed_count} Persona Evaluations Failed</span>
-                  </div>
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--status-error-text)' }}>
-                    LLM timeouts or rate limits occurred for some personas. You can retry only failed simulations.
-                  </p>
-                </div>
-                <button
-                  onClick={handleRetryFailed}
-                  disabled={isRetrying}
-                  style={{
-                    marginTop: '12px',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    backgroundColor: '#EF4444',
-                    color: 'var(--text-main)',
-                    border: 'none',
-                    fontSize: '0.82rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {isRetrying ? 'Retrying...' : 'Retry Failed Simulations'}
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Risks & Opportunities Callouts */}
@@ -543,9 +609,9 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
             <div
               style={{
                 padding: '20px',
-                borderRadius: '14px',
-                backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '8px',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-soft)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', color: 'var(--status-error-text)' }}>
@@ -558,15 +624,13 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                     <div
                       key={idx}
                       style={{
-                        padding: '12px',
-                        backgroundColor: 'var(--glass-mid)',
-                        borderRadius: '8px',
-                        borderLeft: `3px solid ${risk.severity === 'high' ? '#EF4444' : '#F59E0B'}`,
+                        padding: '12px 0',
+                        borderTop: '1px solid var(--border-soft)',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '4px' }}>
                         <strong style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{risk.title}</strong>
-                        <span style={{ fontSize: '0.7rem', color: risk.severity === 'high' ? 'var(--status-error-text)' : '#FBBF24', textTransform: 'uppercase' }}>
+                        <span style={{ fontSize: 'var(--fs-xs)', color: risk.severity === 'high' ? 'var(--status-error-text)' : 'var(--status-warn-text)', textTransform: 'uppercase' }}>
                           {risk.severity}
                         </span>
                       </div>
@@ -587,9 +651,9 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
             <div
               style={{
                 padding: '20px',
-                borderRadius: '14px',
-                backgroundColor: 'var(--accent-subtle)',
-                border: '1px solid var(--accent-glow)',
+                borderRadius: '8px',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-soft)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', color: 'var(--accent-teal-bright)' }}>
@@ -602,15 +666,13 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                     <div
                       key={idx}
                       style={{
-                        padding: '12px',
-                        backgroundColor: 'var(--glass-mid)',
-                        borderRadius: '8px',
-                        borderLeft: '3px solid var(--accent-teal)',
+                        padding: '12px 0',
+                        borderTop: '1px solid var(--border-soft)',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '4px' }}>
                         <strong style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{opp.title}</strong>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--accent-teal-bright)', textTransform: 'uppercase' }}>
+                        <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--accent-teal-bright)', textTransform: 'uppercase' }}>
                           {opp.appeal}
                         </span>
                       </div>
@@ -704,24 +766,37 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                 const isPositive = res.decision.includes('positive') || res.decision.includes('buy');
                 const isNegative = res.decision.includes('negative') || res.decision.includes('not') || res.decision.includes('unlikely');
                 return (
-                  <div
+                  <button
                     key={res.id}
+                    type="button"
                     data-testid="persona-result-card"
-                    onClick={() => setSelectedPersonaResult(res)}
+                    aria-label={`Open reasoning for ${res.persona_name}`}
+                    aria-haspopup="dialog"
+                    className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                    onClick={(event) => {
+                      event.currentTarget.focus();
+                      setSelectedPersonaResult(res);
+                    }}
                     style={{
                       padding: '16px',
-                      borderRadius: '12px',
-                      backgroundColor: 'var(--glass-mid)',
-                      border: '1px solid var(--fill-soft-2)',
+                      minWidth: 0,
+                      width: '100%',
+                      textAlign: 'left',
+                      fontFamily: 'var(--font-sans)',
+                      color: 'var(--text-primary)',
+                      overflowWrap: 'anywhere',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--bg-card)',
+                      border: '1px solid var(--border-control)',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
+                      transition: 'border-color 0.2s ease',
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'space-between',
                     }}
                   >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ display: 'block', width: '100%', minWidth: 0 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
                         <span style={{ fontWeight: 600, fontSize: '0.92rem', color: 'var(--text-main)' }}>
                           {res.persona_name}
                         </span>
@@ -737,36 +812,37 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                         >
                           {res.decision_label || res.decision.replace('_', ' ')}
                         </span>
-                      </div>
+                      </span>
 
                       {res.segment_name && (
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                        <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
                           Segment: {res.segment_name}
-                        </div>
+                        </span>
                       )}
 
-                      <p style={{ margin: '0 0 10px 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                      <span style={{ display: 'block', margin: '0 0 10px 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
                         {res.reasoning_summary}
-                      </p>
-                    </div>
+                      </span>
+                    </span>
 
-                    <div>
+                    <span style={{ display: 'block', width: '100%', minWidth: 0 }}>
                       {/* Likelihood Bar */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '4px' }}>
                         <span style={{ color: 'var(--text-muted)' }}>Likelihood</span>
                         <strong style={{ color: 'var(--accent-teal-bright)' }}>{Math.round(res.probability * 100)}%</strong>
-                      </div>
-                      <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--bg-card-hover)', borderRadius: '999px', overflow: 'hidden' }}>
-                        <div
+                      </span>
+                      <span style={{ display: 'block', width: '100%', height: '4px', backgroundColor: 'var(--bg-card-hover)', borderRadius: '999px', overflow: 'hidden' }}>
+                        <span
                           style={{
+                            display: 'block',
                             height: '100%',
                             backgroundColor: '#14B8A6',
                             width: `${Math.round(res.probability * 100)}%`,
                           }}
                         />
-                      </div>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </button>
                 );
               })}
             </div>
@@ -803,7 +879,8 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               maxHeight: '85vh',
               backgroundColor: 'var(--bg-card)',
               border: '1px solid var(--border-hover)',
-              borderRadius: '16px',
+              borderRadius: '8px',
+              minWidth: 0,
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
@@ -819,7 +896,8 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                background: 'linear-gradient(to right, var(--bg-card), rgba(13, 148, 136, 0.15))',
+                backgroundColor: 'var(--bg-card)',
+                gap: '12px',
               }}
             >
               <div>
@@ -834,7 +912,8 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                 type="button"
                 onClick={() => setSelectedPersonaResult(null)}
                 aria-label="Close behavioral evaluation"
-                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                style={{ minWidth: '44px', minHeight: '44px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
               >
                 <X size={20} aria-hidden="true" />
               </button>
@@ -895,7 +974,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
 
               {/* Motivators vs Objections */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: '12px' }}>
-                <div style={{ padding: '12px', backgroundColor: 'rgba(16, 185, 129, 0.08)', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                <div style={{ padding: '12px', backgroundColor: 'var(--bg-card-hover)', borderRadius: '8px', border: '1px solid var(--border-soft)' }}>
                   <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--status-success-text)', marginBottom: '6px' }}>Motivators</div>
                   <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '0.8rem', color: 'var(--text-primary)' }}>
                     {selectedPersonaResult.motivators?.map((m, i) => (
@@ -904,7 +983,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                   </ul>
                 </div>
 
-                <div style={{ padding: '12px', backgroundColor: 'rgba(239, 68, 68, 0.08)', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                <div style={{ padding: '12px', backgroundColor: 'var(--bg-card-hover)', borderRadius: '8px', border: '1px solid var(--border-soft)' }}>
                   <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--status-error-text)', marginBottom: '6px' }}>Objections</div>
                   <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '0.8rem', color: 'var(--text-primary)' }}>
                     {selectedPersonaResult.objections?.map((o, i) => (

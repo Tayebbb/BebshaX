@@ -12,6 +12,10 @@ import { RequestIdTag } from '../../../common/RequestIdTag';
 interface Step2PersonasProps {
   personas: Persona[];
   personaGenError: string | null;
+  personaErrorKind?: 'generation' | 'save';
+  canRetryPersonaSave?: boolean;
+  isRetryingPersonaSave?: boolean;
+  handleRetryPersonaSave?: () => Promise<void>;
   /** Request id of the failed generation call, when the backend returned one. */
   personaGenRequestId?: string | null;
   /** Roles the last generation could NOT turn into a persona (explicit partial failure). */
@@ -34,6 +38,10 @@ interface Step2PersonasProps {
 export const Step2Personas: React.FC<Step2PersonasProps> = ({
   personas,
   personaGenError,
+  personaErrorKind = 'generation',
+  canRetryPersonaSave = false,
+  isRetryingPersonaSave = false,
+  handleRetryPersonaSave,
   personaGenRequestId = null,
   failedRoles = [],
   personaServedBy = [],
@@ -66,7 +74,25 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                   fontSize: '0.88rem',
                 }}
               >
-                Persona generation failed: {personaGenError} — no personas were fabricated. Retry when ready.
+                {personaErrorKind === 'save' ? (
+                  <>Study draft save failed: {personaGenError}. Personas were generated and remain available.</>
+                ) : (
+                  <>Persona generation failed: {personaGenError} — no personas were fabricated. Retry when ready.</>
+                )}
+                {personaErrorKind === 'save' && handleRetryPersonaSave && (
+                  <button
+                    type="button"
+                    className="bx-btn bx-btn--secondary"
+                    onClick={handleRetryPersonaSave}
+                    disabled={!canRetryPersonaSave || isRetryingPersonaSave || isReadOnly}
+                    aria-busy={isRetryingPersonaSave}
+                    title={!canRetryPersonaSave ? 'Keep this draft open, or reload the saved study to resolve a conflict.' : undefined}
+                    style={{ marginTop: '12px' }}
+                  >
+                    <RefreshCw size={14} aria-hidden="true" className={isRetryingPersonaSave ? 'animate-spin' : undefined} />
+                    {isRetryingPersonaSave ? 'Saving draft' : 'Retry save'}
+                  </button>
+                )}
                 {personaGenRequestId && (
                   <div style={{ marginTop: '6px' }}>
                     <RequestIdTag requestId={personaGenRequestId} />
@@ -133,7 +159,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 <button
                   type="button"
                   onClick={handleGeneratePersonas}
-                  disabled={isGeneratingPersonas || isReadOnly}
+                  disabled={isGeneratingPersonas || isRetryingPersonaSave || isReadOnly}
                   title={isReadOnly ? READ_ONLY_TITLE : undefined}
                   style={{
                     background: 'var(--bg-card)',
@@ -378,9 +404,10 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                     </div>
                     <button
                       type="button"
+                      aria-label={`Remove persona ${p.name}`}
                       onClick={(e) => handleRemovePersona(p.id, e)}
                       disabled={isReadOnly}
-                      title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                      title={isReadOnly ? `Remove persona ${p.name}. ${READ_ONLY_TITLE}` : `Remove persona ${p.name}`}
                       style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: isReadOnly ? 'not-allowed' : 'pointer', opacity: isReadOnly ? 0.5 : 1 }}
                     >
                       <Trash2 size={15} />

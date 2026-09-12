@@ -7,13 +7,12 @@ import { NavigationProvider, useNavigation } from './context/NavigationContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { initScrollReveal } from './utils/scrollReveal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { isDashboardPath } from './utils/dashboardRoute';
 
-// Route roots are split out of the first paint: a visitor on the landing page
-// should never download the dashboard bundle. Named exports are re-mapped
-// because React.lazy resolves the module's `default`.
-const DashboardLayout = React.lazy(() =>
-  import('./components/dashboard/DashboardLayout').then((m) => ({ default: m.DashboardLayout }))
-);
+// Named exports are re-mapped because React.lazy resolves the module's `default`.
+const loadDashboard = () =>
+  import('./components/dashboard/DashboardLayout').then((module) => ({ default: module.DashboardLayout }));
+const DashboardLayout = React.lazy(loadDashboard);
 const AuthPage = React.lazy(() =>
   import('./components/auth/AuthPage').then((m) => ({ default: m.AuthPage }))
 );
@@ -27,8 +26,24 @@ const RouteFallback: React.FC = () => (
 const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
 
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, sessionEpoch } = useAuth();
   const { currentPath, navigate } = useNavigation();
+
+  const isAuthRoute =
+    /^\/auth(?:\/|$)/.test(currentPath) ||
+    currentPath === '/signin' ||
+    currentPath === '/signup' ||
+    currentPath === '/login' ||
+    currentPath === '/register';
+  const isAppRoute = isDashboardPath(currentPath);
+
+  useEffect(() => {
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (connection?.saveData || connection?.effectiveType === '2g') return;
+    if (isAuthenticated || isAuthRoute || isAppRoute) {
+      void loadDashboard().catch(() => undefined);
+    }
+  }, [isAuthenticated, isAuthRoute, isAppRoute]);
 
   useEffect(() => {
     initScrollReveal();
@@ -64,49 +79,15 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // Check if current URL is a dedicated Auth page route
-  const isAuthRoute =
-    currentPath.startsWith('/auth') ||
-    currentPath === '/signin' ||
-    currentPath === '/signup' ||
-    currentPath === '/login' ||
-    currentPath === '/register';
-
   if (isAuthRoute) {
     // Verification is reachable while signed in: the backend already
     // authenticated this user, verifying is a follow-up, not a gate.
-    if (isAuthenticated && !currentPath.includes('/verify') && !currentPath.includes('/otp')) {
-      return (
-        <Suspense fallback={<RouteFallback />}>
-          <DashboardLayout onOpenLandingPage={() => navigate('/')} health={health} />
-        </Suspense>
-      );
-    }
     return (
       <Suspense fallback={<RouteFallback />}>
         <AuthPage />
       </Suspense>
     );
   }
-
-  // Check if current URL is an App / Dashboard route
-  const isAppRoute =
-    currentPath.startsWith('/app') ||
-    currentPath.startsWith('/dashboard') ||
-    currentPath.startsWith('/create-study') ||
-    currentPath.startsWith('/new-study') ||
-    currentPath.startsWith('/persona-library') ||
-    currentPath.startsWith('/personas') ||
-    currentPath.startsWith('/research') ||
-    currentPath.startsWith('/study') ||
-    currentPath.startsWith('/router') ||
-    currentPath.startsWith('/provenance') ||
-    // Study-scoped tabs opened without an active study render their own
-    // "pick a study" empty state inside the dashboard shell.
-    currentPath.startsWith('/interviews') ||
-    currentPath.startsWith('/behavioral-tests') ||
-    currentPath.startsWith('/evidence') ||
-    currentPath.startsWith('/segmentation');
 
   // Only the authenticated app waits on the session check — the landing and
   // auth pages must paint immediately, without blocking on a network call.
@@ -177,7 +158,7 @@ const AppContent: React.FC = () => {
 
         {/* Dashboard Shell Application */}
         <Suspense fallback={<RouteFallback />}>
-          <DashboardLayout onOpenLandingPage={() => navigate('/')} health={health} />
+          <DashboardLayout key={sessionEpoch} onOpenLandingPage={() => navigate('/')} health={health} />
         </Suspense>
       </>
     );

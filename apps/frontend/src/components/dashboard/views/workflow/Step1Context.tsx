@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ArrowRight, Check, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Sparkles } from 'lucide-react';
 import { PersonaRoleSuggestion } from '../../../../types';
 import { CopilotMessage, MAX_PERSONAS_PER_ROLE, READ_ONLY_TITLE } from './types';
 import { EvidenceProbe } from './evidenceProbe';
@@ -155,10 +155,15 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
             {/* Chat Transcript Area */}
             <div
               ref={copilotChatRef}
+              role="log"
+              aria-label="Study conversation"
+              aria-live="polite"
+              aria-relevant="additions text"
+              aria-busy={isCopilotTyping}
               style={{
-                background: 'var(--glass-soft)',
+                background: 'var(--bg-card)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: '22px',
+                borderRadius: '8px',
                 padding: 'clamp(14px, 3vw, 24px)',
                 minHeight: copilotMessages.length === 0 ? '220px' : '300px',
                 maxHeight: 'min(480px, 55dvh)',
@@ -182,20 +187,22 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
               )}
 
               {copilotMessages.map((msg) => (
-                <div
+                <article
                   key={msg.id}
                   className="bx-pop"
+                  aria-label={msg.role === 'user' ? 'Your message' : 'Research copilot message'}
                   style={{
                     alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                    maxWidth: 'min(85%, 640px)',
+                    maxWidth: 'min(92%, 640px)',
                     background: msg.role === 'user' ? 'var(--accent-gradient)' : 'var(--bg-card-hover)',
-                    color: 'var(--text-main)',
+                    color: msg.role === 'user' ? 'var(--text-on-accent)' : 'var(--text-main)',
                     padding: '12px 16px',
-                    borderRadius: msg.role === 'user' ? '18px 18px 6px 18px' : '18px 18px 18px 6px',
+                    borderRadius: msg.role === 'user' ? '8px 8px 2px 8px' : '8px 8px 8px 2px',
                     border: msg.role === 'user' ? 'none' : '1px solid var(--border-subtle)',
+                    overflowWrap: 'anywhere',
                   }}
                 >
-                  <div style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.content}</div>
+                  <div style={{ fontSize: '0.9rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{msg.content}</div>
 
                   {msg.role === 'assistant' && msg.isTemplate && (
                     <div
@@ -273,8 +280,8 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                       <button
                         type="button"
                         onClick={() => handleApproveGoal(msg.goalCardData?.summary)}
-                        disabled={isReadOnly || !!msg.isTemplate}
-                        aria-disabled={isReadOnly || !!msg.isTemplate}
+                        disabled={isReadOnly || !!msg.isTemplate || isCopilotTyping || isLoadingRoles || isGeneratingPersonas}
+                        aria-disabled={isReadOnly || !!msg.isTemplate || isCopilotTyping || isLoadingRoles || isGeneratingPersonas}
                         title={isReadOnly ? READ_ONLY_TITLE : msg.isTemplate ? TEMPLATE_APPROVAL_BLOCKED : undefined}
                         className={`bx-btn bx-btn--block ${showRoleSelection ? 'bx-btn--tinted' : 'bx-btn--primary'}`}
                         style={{ marginTop: '14px' }}
@@ -289,7 +296,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                       )}
                     </div>
                   )}
-                </div>
+                </article>
               ))}
 
               {isCopilotTyping && (
@@ -312,7 +319,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
               onValueChange={setStep1Prompt}
               onSend={(text) => handleSendCopilotMessage(text)}
               isLoading={isCopilotTyping}
-              disabled={isReadOnly}
+              disabled={isReadOnly || isLoadingRoles || isGeneratingPersonas}
               disabledReason={isReadOnly ? READ_ONLY_TITLE : undefined}
               maxHeight={160}
               placeholder={
@@ -399,7 +406,6 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                     return (
                       <div
                         key={role.id}
-                        onClick={() => handleToggleRole(role.id)}
                         className="bx-stagger"
                         style={{
                           ['--bx-i' as string]: Math.min(roleIdx, 12),
@@ -407,7 +413,6 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                           border: isSelected ? '1px solid var(--accent-teal)' : '1px solid var(--border-subtle)',
                           borderRadius: '12px',
                           padding: '14px 18px',
-                          cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
@@ -417,27 +422,34 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                         }}
                       >
                         {/* Left Info: Checkbox + Role Name + Description */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
-                          <div
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0, minHeight: 44, cursor: isReadOnly ? 'not-allowed' : 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={isReadOnly}
+                            aria-labelledby={`study-role-${role.id}`}
+                            title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                            onChange={() => handleToggleRole(role.id)}
+                            onKeyDown={(event) => {
+                              if (!isReadOnly && (event.key === 'Enter' || event.key === ' ')) {
+                                event.preventDefault();
+                                if (!event.repeat) event.currentTarget.click();
+                              }
+                            }}
                             style={{
                               width: '22px',
                               height: '22px',
-                              borderRadius: '6px',
-                              border: isSelected ? '1px solid var(--accent-teal)' : '1px solid var(--border-medium)',
-                              background: isSelected ? '#14B8A6' : 'var(--bg-card-hover)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
+                              margin: 0,
+                              accentColor: 'var(--accent-teal)',
                               flexShrink: 0,
-                              transition: 'all 0.2s ease',
+                              cursor: 'inherit',
                             }}
-                          >
-                            {isSelected && <Check size={14} color="var(--bg-pure)" strokeWidth={3} />}
-                          </div>
+                          />
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <span
+                                id={`study-role-${role.id}`}
                                 style={{
                                   fontSize: '0.86rem',
                                   fontWeight: 700,
@@ -473,7 +485,7 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                               {role.description}
                             </p>
                           </div>
-                        </div>
+                        </label>
 
                         {/* Right: Stepper Counter */}
                         <div onClick={(e) => e.stopPropagation()} className="bx-counter">
@@ -481,7 +493,8 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                             type="button"
                             aria-label={`Decrease ${role.role} count`}
                             onClick={(e) => handleDecrementRole(role.id, e)}
-                            disabled={role.count <= 0}
+                            disabled={role.count <= 0 || isReadOnly}
+                            title={isReadOnly ? READ_ONLY_TITLE : undefined}
                             className="bx-counter__btn"
                           >
                             <Minus size={13} aria-hidden="true" />
@@ -493,9 +506,9 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                             type="button"
                             aria-label={`Increase ${role.role} count`}
                             onClick={(e) => handleIncrementRole(role.id, e)}
-                            disabled={atCap}
-                            aria-disabled={atCap ? true : undefined}
-                            title={atCap ? `Up to ${MAX_PERSONAS_PER_ROLE} personas per role` : undefined}
+                            disabled={atCap || isReadOnly}
+                            aria-disabled={atCap || isReadOnly ? true : undefined}
+                            title={isReadOnly ? READ_ONLY_TITLE : atCap ? `Up to ${MAX_PERSONAS_PER_ROLE} personas per role` : undefined}
                             className="bx-counter__btn"
                           >
                             <Plus size={13} aria-hidden="true" />

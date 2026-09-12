@@ -5,93 +5,35 @@
    ========================================================================== */
 
 .iv-root {
-  /* Local tokens (surfaces darker than the dashboard chrome for depth) */
-  --iv-bg: #050707;
-  --iv-surface: var(--glass-mid);
+  --iv-bg: var(--bg-pure);
+  --iv-surface: var(--bg-card);
   --iv-surface-solid: var(--bg-secondary);
-  --iv-surface-raised: var(--glass-strong);
-  --iv-glass: rgba(10, 13, 13, 0.55);
-  --iv-line: rgba(32, 39, 39, 0.9);
-  --iv-line-soft: rgba(32, 39, 39, 0.5);
-  --iv-accent: #14b8a6;
-  --iv-accent-soft: var(--accent-subtle);
+  --iv-surface-raised: var(--bg-card-hover);
+  --iv-line: var(--border-medium);
+  --iv-line-soft: var(--border-subtle);
+  --iv-accent: var(--accent-teal);
+  --iv-accent-soft: var(--bg-card);
   --iv-accent-line: var(--border-hover);
   --iv-gold: var(--status-warn-text);
-  --iv-gold-soft: rgba(246, 200, 120, 0.12);
-  --iv-danger: #ef4444;
-  --iv-danger-soft: rgba(239, 68, 68, 0.08);
+  --iv-gold-soft: var(--bg-card);
+  --iv-danger: var(--status-error-text);
+  --iv-danger-soft: var(--bg-card);
   --iv-text: var(--text-primary);
   --iv-text-dim: var(--text-secondary);
   --iv-text-faint: var(--text-faint);
   --iv-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --iv-t-micro: 220ms;
   --iv-t-move: 480ms;
-  --iv-t-scene: 780ms;
 
   position: relative;
   display: flex;
   flex-direction: column;
   height: calc(100vh - 76px);
+  height: calc(100dvh - 76px);
   overflow: hidden;
   background: var(--iv-bg);
   color: var(--iv-text);
   isolation: isolate;
-}
-
-[data-theme='light'] .iv-root {
-  --iv-bg: #f2f5f5;
-  --iv-glass: var(--glass-soft);
-  --iv-line: rgba(15, 35, 33, 0.14);
-  --iv-line-soft: rgba(15, 35, 33, 0.09);
-  --iv-accent: #0d9488;
-  --iv-gold-soft: rgba(161, 98, 7, 0.1);
-}
-
-/* --------------------------------------------------------------------------
-   Ambient simulation backdrop — pure CSS, transform/opacity only.
-   -------------------------------------------------------------------------- */
-.iv-ambient {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.iv-ambient::before,
-.iv-ambient::after {
-  content: '';
-  position: absolute;
-  width: 60vmax;
-  height: 60vmax;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.16;
-  will-change: transform;
-}
-.iv-ambient::before {
-  background: radial-gradient(circle at center, rgba(20, 184, 166, 0.5), transparent 65%);
-  top: -28vmax;
-  right: -18vmax;
-  animation: iv-drift-a 46s var(--iv-ease) infinite alternate;
-}
-.iv-ambient::after {
-  background: radial-gradient(circle at center, rgba(34, 211, 238, 0.32), transparent 65%);
-  bottom: -30vmax;
-  left: -16vmax;
-  animation: iv-drift-b 58s var(--iv-ease) infinite alternate;
-}
-.iv-root.iv-paused .iv-ambient::before,
-.iv-root.iv-paused .iv-ambient::after {
-  animation-play-state: paused;
-}
-/* Translate only — see studies.css: scaling a blurred layer costs a re-raster. */
-@keyframes iv-drift-a {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(-9vmax, 7vmax, 0); }
-}
-@keyframes iv-drift-b {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(8vmax, -6vmax, 0); }
 }
 
 /* --------------------------------------------------------------------------
@@ -107,17 +49,17 @@
   gap: 18px;
   padding: 14px 26px;
   border-bottom: 1px solid var(--iv-line-soft);
-  background: var(--iv-glass);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: var(--iv-bg);
 }
 .iv-back {
   display: inline-flex;
   align-items: center;
+  min-height: 44px;
+  min-width: 44px;
   gap: 6px;
   padding: 8px 12px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--iv-text-dim);
   font: 600 0.78rem var(--font-sans);
@@ -142,30 +84,17 @@
   display: grid;
   place-items: center;
   font: 700 1rem 'Space Grotesk', var(--font-sans);
-  color: var(--text-on-accent);
-  background: linear-gradient(140deg, var(--accent-teal-bright), #0e7490);
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.35), 0 4px 18px rgba(13, 148, 136, 0.25);
-}
-.iv-orb::after {
-  content: '';
-  position: absolute;
-  inset: -5px;
-  border-radius: 50%;
-  border: 1px solid rgba(45, 212, 191, 0.28);
-  animation: iv-orb-breathe 4.5s var(--iv-ease) infinite;
-}
-.iv-root.iv-complete .iv-orb::after { animation: none; opacity: 0.35; }
-@keyframes iv-orb-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.9; }
-  50%      { transform: scale(1.12); opacity: 0.25; }
+  color: var(--iv-text);
+  background: var(--bg-card);
+  border: 1px solid var(--iv-line);
 }
 .iv-id-name {
+  margin: 0;
   font: 700 1.05rem 'Space Grotesk', var(--font-sans);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--iv-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .iv-id-role {
   font: 500 0.74rem var(--font-sans);
@@ -219,9 +148,13 @@
 .iv-ghost-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  min-width: 44px;
   gap: 6px;
   padding: 8px 13px;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--iv-line);
   background: transparent;
   color: var(--iv-text-dim);
@@ -237,7 +170,9 @@
   background: var(--iv-accent-soft);
   color: var(--accent-teal-bright);
 }
-.iv-ghost-btn.iv-primary:hover:not(:disabled) { background: var(--accent-glow); }
+.iv-ghost-btn.iv-primary:hover:not(:disabled) { background: var(--bg-card-hover); }
+.iv-header-actions .iv-primary { width: 12rem; max-width: 100%; }
+.iv-header-actions .iv-ghost-btn svg { flex-shrink: 0; }
 
 /* --------------------------------------------------------------------------
    Body — conversation stage + context rail
@@ -275,13 +210,6 @@
 }
 
 /* Transcript turns — typographic, not bubbles */
-.iv-turn {
-  animation: iv-enter var(--iv-t-move) var(--iv-ease) both;
-}
-@keyframes iv-enter {
-  from { opacity: 0; transform: translate3d(0, 14px, 0); }
-  to   { opacity: 1; transform: translate3d(0, 0, 0); }
-}
 .iv-turn-head {
   display: flex;
   align-items: baseline;
@@ -326,6 +254,8 @@
 .iv-turn:hover .iv-turn-actions,
 .iv-turn:focus-within .iv-turn-actions { opacity: 1; transform: translateY(0); }
 .iv-mini-btn {
+  min-height: 44px;
+  min-width: 44px;
   padding: 4px 9px;
   border-radius: 7px;
   border: 1px solid var(--iv-line-soft);
@@ -348,7 +278,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  animation: iv-enter var(--iv-t-move) var(--iv-ease) both;
 }
 .iv-thinking-line {
   display: inline-flex;
@@ -362,7 +291,7 @@
   width: 8px;
   height: 17px;
   border-radius: 2px;
-  background: linear-gradient(180deg, var(--accent-teal-bright), #0e7490);
+  background: var(--iv-accent);
   animation: iv-cursor-breathe 1.4s ease-in-out infinite;
 }
 @keyframes iv-cursor-breathe {
@@ -386,11 +315,6 @@
   text-align: center;
   gap: 10px;
   padding: 40px 24px;
-  animation: iv-scene-in var(--iv-t-scene) var(--iv-ease) both;
-}
-@keyframes iv-scene-in {
-  from { opacity: 0; transform: translate3d(0, 22px, 0); }
-  to   { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 .iv-empty-orb {
   width: 84px;
@@ -399,20 +323,17 @@
   display: grid;
   place-items: center;
   font: 700 1.8rem 'Space Grotesk', var(--font-sans);
-  color: var(--text-on-accent);
-  background: linear-gradient(140deg, var(--accent-teal-bright), #0e7490);
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.4), 0 0 60px var(--accent-glow);
+  color: var(--iv-text);
+  background: var(--bg-card);
+  border: 1px solid var(--iv-line);
   margin-bottom: 14px;
 }
-.iv-empty-kicker {
-  font: 600 0.72rem var(--font-mono);
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--iv-text-faint);
-}
 .iv-empty-title {
-  font: 800 clamp(1.9rem, 4.2vw, 3rem) 'Unbounded', 'Space Grotesk', var(--font-sans);
-  letter-spacing: -0.02em;
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font: 700 1.75rem var(--font-display);
+  letter-spacing: 0;
   line-height: 1.08;
   color: var(--iv-text);
   text-transform: uppercase;
@@ -431,12 +352,12 @@
   max-width: 640px;
 }
 .iv-suggestion {
+  min-height: 44px;
+  min-width: 44px;
   padding: 10px 16px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--iv-line);
   background: var(--iv-surface);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   color: var(--text-primary);
   font: 500 0.8rem/1.45 var(--font-sans);
   text-align: left;
@@ -469,10 +390,12 @@
 .iv-chips::-webkit-scrollbar { display: none; }
 .iv-chip {
   flex-shrink: 0;
+  min-height: 44px;
+  min-width: 44px;
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--iv-line-soft);
-  background: var(--glass-mid);
+  background: var(--bg-card);
   color: var(--iv-text-dim);
   font: 500 0.72rem var(--font-sans);
   cursor: pointer;
@@ -504,10 +427,10 @@
   width: 292px;
   flex-shrink: 0;
   border-left: 1px solid var(--iv-line-soft);
-  background: var(--iv-glass);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: var(--iv-bg);
   overflow-y: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--border-medium) transparent;
   padding: 22px 20px 30px;
@@ -516,13 +439,12 @@
   gap: 24px;
 }
 .iv-rail-section-title {
-  font: 700 0.72rem var(--font-mono);
-  letter-spacing: 0.18em;
+  font: 600 0.875rem var(--font-sans);
+  letter-spacing: 0;
   text-transform: uppercase;
   color: var(--iv-text-faint);
-  margin-bottom: 10px;
+  margin: 0 0 10px;
 }
-.iv-rail-block { animation: iv-enter var(--iv-t-move) var(--iv-ease) both; }
 .iv-kv { display: flex; flex-direction: column; gap: 9px; }
 .iv-kv-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .iv-kv-k { font: 500 0.72rem var(--font-sans); color: var(--iv-text-dim); }
@@ -538,8 +460,7 @@
 .iv-progress-fill {
   height: 100%;
   border-radius: 2px;
-  background: linear-gradient(90deg, #0d9488, var(--accent-teal-bright));
-  transition: width var(--iv-t-scene) var(--iv-ease);
+  background: var(--iv-accent);
 }
 .iv-topic-chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .iv-topic {
@@ -590,8 +511,8 @@
 /* Insights (synthesis) */
 .iv-insight {
   border: 1px solid var(--iv-line-soft);
-  border-radius: 14px;
-  background: var(--glass-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-card);
   padding: 13px 15px;
   display: flex;
   flex-direction: column;
@@ -609,6 +530,8 @@
 .iv-insight-desc { font: 400 0.76rem/1.55 var(--font-sans); color: var(--iv-text-dim); }
 .iv-insight-turns { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
 .iv-turn-ref {
+  min-height: 44px;
+  min-width: 44px;
   padding: 2px 8px;
   border-radius: 6px;
   border: 1px solid var(--iv-line-soft);
@@ -630,23 +553,20 @@
 .iv-error {
   max-width: 720px;
   margin: 0 auto 12px;
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  border-radius: 14px;
+  border: 1px solid var(--status-error-border);
+  border-radius: var(--r-md);
   background: var(--iv-danger-soft);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   padding: 14px 18px;
-  animation: iv-enter var(--iv-t-move) var(--iv-ease) both;
 }
 .iv-error-title {
   font: 700 0.72rem var(--font-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--status-error-text);
-  margin-bottom: 5px;
+  margin: 0 0 5px;
 }
-.iv-error-body { font: 400 0.8rem/1.55 var(--font-sans); color: #e5b3b3; }
-.iv-error-actions { display: flex; gap: 8px; margin-top: 10px; }
+.iv-error-body { font: 400 0.8rem/1.55 var(--font-sans); color: var(--text-primary); }
+.iv-error-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 
 /* Loading scene */
 .iv-loading {
@@ -656,7 +576,6 @@
   align-items: center;
   justify-content: center;
   gap: 18px;
-  animation: iv-scene-in var(--iv-t-scene) var(--iv-ease) both;
 }
 .iv-loading-ring {
   width: 42px;
@@ -686,7 +605,7 @@
     transform: translateX(103%);
     transition: transform var(--iv-t-move) var(--iv-ease);
     border-left: 1px solid var(--iv-line);
-    background: var(--glass-strong);
+    background: var(--bg-card);
     box-shadow: -24px 0 60px rgba(0, 0, 0, 0.5);
   }
   .iv-rail.iv-open { transform: translateX(0); }
@@ -703,10 +622,11 @@
   @keyframes iv-fade { from { opacity: 0; } to { opacity: 1; } }
 }
 @media (max-width: 720px) {
-  .iv-root { height: calc(100vh - 64px); }
+  .iv-root { height: calc(100vh - 64px); height: calc(100dvh - 64px); }
   .iv-header { padding: 10px 14px; gap: 10px; flex-wrap: wrap; }
   .iv-id { flex: 1 1 0; }
   .iv-header-actions { flex-basis: 100%; justify-content: flex-end; }
+  .iv-header-actions .iv-ghost-btn { width: 44px; height: 44px; padding: 0; }
   .iv-id-name { font-size: 0.92rem; }
   .iv-orb { width: 38px; height: 38px; font-size: 0.85rem; }
   .iv-scroll { padding: 22px 16px 8px; }
@@ -717,21 +637,17 @@
   .iv-header-actions .iv-label { display: none; }
 }
 
+@media (hover: none) {
+  .iv-turn-actions,
+  .iv-turn-meta { opacity: 1; transform: none; }
+}
+
 /* --------------------------------------------------------------------------
    Reduced motion — render final states, keep feedback instant
    -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  .iv-ambient::before,
-  .iv-ambient::after,
-  .iv-orb::after,
   .iv-sim-status .iv-dot,
   .iv-cursor { animation: none !important; }
-  .iv-turn,
-  .iv-thinking,
-  .iv-empty,
-  .iv-rail-block,
-  .iv-error,
-  .iv-loading { animation-duration: 1ms !important; }
   .iv-rail { transition-duration: 1ms; }
   .iv-loading-ring { animation-duration: 1.6s; }
 }

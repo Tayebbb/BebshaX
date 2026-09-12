@@ -106,7 +106,7 @@
 .bx-title {
   font-size: var(--fs-2xl);
   font-weight: 700;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
   line-height: 1.12;
   color: var(--text-main);
   margin: 0;
@@ -135,7 +135,7 @@
 .bx-section__title {
   font-size: var(--fs-lg);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   color: var(--text-main);
   margin: 0;
 }
@@ -152,14 +152,14 @@
   align-items: center;
   justify-content: center;
   gap: var(--sp-2);
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 var(--sp-5);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-sm);
   border: 1px solid transparent;
   font-family: inherit;
   font-size: var(--fs-base);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -180,33 +180,23 @@
   box-shadow: none;
 }
 .bx-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--accent-subtle), 0 0 0 1px var(--accent-teal);
+  outline: 2px solid var(--accent-teal);
+  outline-offset: 3px;
 }
 /* Filled — lit from the top, teal gradient, soft glow on hover */
 .bx-btn--primary {
-  background: linear-gradient(180deg, var(--accent-teal-bright) 0%, var(--accent-teal) 55%, #0d9488 100%);
+  background: var(--accent-gradient);
   color: var(--text-on-accent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 1px 2px rgba(0, 0, 0, 0.25),
-    0 6px 16px -6px var(--accent-glow);
+  box-shadow: inset 0 1px 0 var(--reflect);
 }
 .bx-btn--primary:not(:disabled):hover {
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    0 2px 4px rgba(0, 0, 0, 0.25),
-    0 10px 24px -6px var(--accent-glow);
+  background: var(--accent-hover);
 }
 /* Frosted secondary — glass pill with a hairline and top reflection */
 .bx-btn--secondary {
-  background: var(--fill-soft);
+  background: var(--bg-card);
   color: var(--text-main);
-  border-color: var(--border-soft);
-  box-shadow: inset 0 1px 0 var(--reflect);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  border-color: var(--border-medium);
 }
 .bx-btn--secondary:not(:disabled):hover {
   background: var(--fill-soft-2);
@@ -244,18 +234,18 @@
   font-size: var(--fs-md);
 }
 .bx-btn--icon {
-  width: 38px;
-  min-height: 38px;
+  width: 44px;
+  min-height: 44px;
   padding: 0;
 }
 .bx-btn--icon.bx-btn--sm {
-  width: 32px;
+  width: 44px;
 }
 .bx-btn--block {
   width: 100%;
 }
 [data-theme='light'] .bx-btn--primary {
-  background: linear-gradient(180deg, #14b8a6 0%, #0d9488 60%, #0f766e 100%);
+  background: var(--accent-gradient);
 }
 
 /* Segmented counter — iOS stepper: one pill, two round keys, a value */
@@ -519,7 +509,6 @@
   height: 100%;
   border-radius: inherit;
   background: var(--accent-teal);
-  transition: width 0.6s var(--bx-ease);
 }
 .bx-conf--success .bx-conf__fill { background: var(--accent-emerald); }
 .bx-conf--warn .bx-conf__fill { background: var(--accent-amber); }

@@ -4,12 +4,6 @@ import type { MemoryItem } from '../../../../types';
 import { api } from '../../../../services/api';
 import { toUserMessage } from '../../../../utils/apiError';
 
-const KIND_TONE: Record<string, { fg: string; bg: string }> = {
-  semantic: { fg: 'var(--accent-cyan)', bg: 'rgba(34, 211, 238, 0.12)' },
-  episodic: { fg: 'var(--accent-emerald)', bg: 'rgba(16, 185, 129, 0.12)' },
-  reflection: { fg: '#A855F7', bg: 'rgba(168, 85, 247, 0.12)' },
-};
-
 const formatDate = (iso: string | null | undefined): string => {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -48,26 +42,23 @@ export const PersonaMemoryPanel: React.FC<{ personaId: string }> = ({ personaId 
   }, [personaId]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
+    <section aria-label="Persona memory" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '10px' }}>
-          <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Brain size={18} color="var(--accent-teal)" aria-hidden="true" /> Memory
-          </h4>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Brain size={18} aria-hidden="true" style={{ flexShrink: 0 }} /> Memory
+          </h3>
           {items && (
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               {items.length} item{items.length === 1 ? '' : 's'} stored
             </span>
           )}
         </div>
-        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '0 0 14px' }}>
-          Statements this persona made during interviews, stored verbatim with kind and importance. Researcher
-          questions are kept separately as context and are never treated as the persona&apos;s own memory;
-          retrieval per turn is shown under the transcript as &quot;Recalled N memories&quot;.
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: '0 0 1rem', lineHeight: 1.5 }}>
+          Verbatim persona statements and researcher context. Researcher questions are not persona recollections.
         </p>
 
         {loading && (
-          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
+          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
             <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Loading memories…
           </div>
         )}
@@ -79,41 +70,37 @@ export const PersonaMemoryPanel: React.FC<{ personaId: string }> = ({ personaId 
         )}
 
         {!loading && !error && items && items.length === 0 && (
-          <div style={{ border: '1px dashed var(--border-subtle)', borderRadius: '10px', padding: '16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
+          <div role="status" style={{ padding: '1rem 0', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
             No memories recorded yet — they form as this persona is interviewed.
           </div>
         )}
 
         {!loading && !error && items && items.length > 0 && (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {items.map((m) => {
-              const tone = KIND_TONE[m.kind] || { fg: 'var(--text-secondary)', bg: 'var(--fill-soft-2)' };
-              return (
-                <li key={m.id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '10px 12px' }}>
+            {items.map((item) => (
+                <li key={item.id} style={{ minWidth: 0, borderTop: '1px solid var(--border-subtle)', padding: '0.75rem 0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', color: tone.fg, background: tone.bg, padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
-                      {m.kind}
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-main)', background: 'var(--bg-card)', padding: '1px 6px', borderRadius: '4px' }}>
+                      {item.kind}
                     </span>
-                    {m.source && m.source !== 'persona' && (
+                    {item.source && item.source !== 'persona' && (
                       <span
                         title="Text authored by the researcher, kept as context — not a persona recollection"
-                        style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--status-warning-text, #d97706)', background: 'rgba(217, 119, 6, 0.12)', padding: '1px 6px', borderRadius: '4px' }}
+                        style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--status-warn-text)', background: 'var(--status-warn-bg)', padding: '1px 6px', borderRadius: '4px' }}
                       >
                         asked by researcher
                       </span>
                     )}
                     <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
-                      importance {typeof m.importance === 'number' ? m.importance.toFixed(2) : '—'}
+                      importance {typeof item.importance === 'number' ? item.importance.toFixed(2) : '—'}
                     </span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{formatDate(m.created_at)}</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{formatDate(item.created_at)}</span>
                   </div>
-                  <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.45 }}>{m.text}</div>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-main)', lineHeight: 1.5, overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{item.text}</div>
                 </li>
-              );
-            })}
+            ))}
           </ul>
         )}
-      </div>
-    </div>
+    </section>
   );
 };

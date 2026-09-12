@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import {
   PieChart,
   Sparkles,
@@ -16,9 +16,15 @@ import {
   CheckSquare,
   Square,
   FileText,
+  Upload,
 } from 'lucide-react';
 import { api } from '../../../services/api';
+import { downloadText, serializeCsv } from '../../../utils/exports';
+import { fromUnknownError } from '../../../utils/apiError';
+import { DATASET_FILE_PATTERN, datasetUploadProblem } from '../../../utils/datasetUpload';
 import { useDialogA11y } from '../../../utils/useDialogA11y';
+import { useRequestScope } from '../../../utils/useRequestScope';
+import { useRouteReady } from '../../../performance/routeTiming';
 import {
   MarketSegment,
   ObservedDistribution,
@@ -73,13 +79,19 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 }) => {
   const [readiness, setReadiness] = useState<SegmentationReadiness | null>(null);
   const [segments, setSegments] = useState<MarketSegment[]>([]);
-  const [, setRuns] = useState<SegmentationRun[]>([]);
-  const [activeRun, setActiveRun] = useState<SegmentationRun | null>(null);
+  const [runs, setRuns] = useState<SegmentationRun[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [executionStep, setExecutionStep] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  useRouteReady(!isLoading, error ? 'error' : segments.length ? 'content' : 'empty');
   const segmentIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scopeRef = useRequestScope([studyId]);
+  const loadGenerationRef = useRef(0);
+  const compareGenerationRef = useRef(0);
+  const executionPendingRef = useRef(false);
 
   // Clear any in-flight interval on unmount
   useEffect(() => () => { if (segmentIntervalRef.current) clearInterval(segmentIntervalRef.current); }, []);
@@ -100,6 +112,37 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
   useDialogA11y(detailDialogRef, !!selectedSegment, () => setSelectedSegment(null));
   useDialogA11y(compareDialogRef, isComparing && !!comparisonResult, () => setIsComparing(false));
 
+  // Dataset upload (the only way a study gets a population to segment).
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadName, setUploadName] = useState<string>('');
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+  const uploadPendingRef = useRef(false);
+  useLayoutEffect(() => {
+    loadGenerationRef.current += 1;
+    compareGenerationRef.current += 1;
+    executionPendingRef.current = false;
+    setReadiness(null);
+    setReadinessError(null);
+    setHistoryError(null);
+    setSegments([]);
+    setRuns([]);
+    setSelectedSegment(null);
+    setComparedSegmentIds([]);
+    setComparisonResult(null);
+    setIsComparing(false);
+    setIsExecuting(false);
+    setUploadFile(null);
+    setUploadName('');
+    setUploadError(null);
+    setUploadNotice(null);
+    setIsUploading(false);
+    uploadPendingRef.current = false;
+    if (segmentIntervalRef.current) clearInterval(segmentIntervalRef.current);
+  }, [studyId]);
+
   const executionSteps = [
     'Analysing study datasets and profiles',
     'Selecting high-signal variables',
@@ -109,21 +152,34 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
   ];
 
   const loadData = async () => {
+    const scope = scopeRef.current;
+    const generation = ++loadGenerationRef.current;
+    const isCurrent = () => scope.active && generation === loadGenerationRef.current;
     setIsLoading(true);
     setError(null);
-    try {
-      const [readinessData, segmentsData, runsData] = await Promise.all([
-        api.getSegmentationReadiness(studyId),
-        api.listStudySegments(studyId),
-        api.listSegmentationRuns(studyId),
-      ]);
-      setReadiness(readinessData);
-      setSegments(segmentsData);
+    setReadiness(null);
+    setReadinessError(null);
+    setHistoryError(null);
+    void api.getSegmentationReadiness(studyId).then((readinessData) => {
+      if (isCurrent()) setReadiness(readinessData);
+    }).catch((failure: unknown) => {
+      if (isCurrent()) setReadinessError(fromUnknownError(failure).message ?? 'Data readiness unavailable.');
+    });
+    void api.listSegmentationRuns(studyId).then((runsData) => {
+      if (!isCurrent()) return;
       setRuns(runsData);
-      if (runsData.length > 0) {
-        setActiveRun(runsData[0]);
-      }
+    }).catch((failure: unknown) => {
+      if (isCurrent()) setHistoryError(fromUnknownError(failure).message ?? 'Segmentation history unavailable.');
+    });
+    try {
+      const segmentsData = await api.listStudySegments(studyId);
+      if (!isCurrent()) return;
+      setSegments(segmentsData);
+      setSelectedSegment((previous) => previous && segmentsData.some((segment) =>
+        segment.id === previous.id && segment.segmentation_run_id === previous.segmentation_run_id && segment.study_id === previous.study_id,
+      ) ? previous : null);
     } catch (err: any) {
+      if (!isCurrent()) return;
       // A raw "Failed to fetch" is a browser-level network error (server
       // unreachable / restarting), not a data problem — say so plainly.
       const isNetwork = err?.name === 'TypeError' || /failed to fetch|networkerror|load failed/i.test(err?.message || '');
@@ -133,7 +189,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           : err?.message || 'Failed to load segmentation data.',
       );
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
   };
 
@@ -142,28 +198,77 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
   }, [studyId]);
 
   const handleRunSegmentation = async () => {
+    const scope = scopeRef.current;
+    if (!scope.active || executionPendingRef.current || !readiness?.can_run) return;
+    executionPendingRef.current = true;
+    const generation = ++loadGenerationRef.current;
+    const isCurrent = () => scope.active && generation === loadGenerationRef.current;
     setIsExecuting(true);
     setError(null);
+    setHistoryError(null);
     setExecutionStep(0);
 
     const stepInterval = setInterval(() => {
-      setExecutionStep((prev) => (prev < 3 ? prev + 1 : prev));
+      if (scope.active) setExecutionStep((prev) => (prev < 3 ? prev + 1 : prev));
     }, 600);
     segmentIntervalRef.current = stepInterval;
 
     try {
       const result = await api.runSegmentation(studyId, { desired_clusters: desiredClusters });
       clearInterval(stepInterval);
+      if (!isCurrent()) return;
       setExecutionStep(4);
-      setActiveRun(result.run);
+      setRuns((previous) => [result.run, ...previous.filter((run) => run.id !== result.run.id)]);
       setSegments(result.segments);
-      const updatedRuns = await api.listSegmentationRuns(studyId);
-      setRuns(updatedRuns);
+      setSelectedSegment(null);
+      compareGenerationRef.current += 1;
+      setComparedSegmentIds([]);
+      setComparisonResult(null);
+      setIsComparing(false);
+      void api.listSegmentationRuns(studyId).then((updatedRuns) => {
+        if (isCurrent()) setRuns([result.run, ...updatedRuns.filter((run) => run.id !== result.run.id)]);
+      }).catch((failure: unknown) => {
+        if (isCurrent()) setHistoryError(fromUnknownError(failure).message ?? 'Segmentation history unavailable.');
+      });
     } catch (err: any) {
       clearInterval(stepInterval);
-      setError(err.message || 'Segmentation failed.');
+      if (isCurrent()) setError(err.message || 'Segmentation failed.');
     } finally {
-      setIsExecuting(false);
+      if (scope.active) { executionPendingRef.current = false; setIsExecuting(false); setIsLoading(false); }
+    }
+  };
+
+  const handleUploadDataset = async () => {
+    const scope = scopeRef.current;
+    if (!scope.active || uploadPendingRef.current) return;
+    const problem = datasetUploadProblem(uploadFile);
+    if (problem || !uploadFile) {
+      setUploadError(problem);
+      return;
+    }
+    uploadPendingRef.current = true;
+    setIsUploading(true);
+    setUploadError(null);
+    setUploadNotice(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      formData.append('name', uploadName.trim() || uploadFile.name.replace(DATASET_FILE_PATTERN, ''));
+      const dataset = await api.uploadDataset(formData, studyId);
+      if (!scope.active) return;
+      setUploadNotice(
+        `Attached “${dataset.name}” — ${dataset.row_count ?? 0} rows × ${dataset.column_count ?? 0} columns profiled. Readiness refreshed below.`,
+      );
+      setUploadFile(null);
+      setUploadName('');
+      if (uploadInputRef.current) uploadInputRef.current.value = '';
+      await loadData();
+    } catch (err: unknown) {
+      if (!scope.active) return;
+      const failure = fromUnknownError(err);
+      setUploadError(failure.message || 'The dataset could not be uploaded.');
+    } finally {
+      if (scope.active) { uploadPendingRef.current = false; setIsUploading(false); }
     }
   };
 
@@ -180,13 +285,16 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
   };
 
   const handleOpenComparisonModal = async () => {
+    const scope = scopeRef.current;
+    const generation = ++compareGenerationRef.current;
     if (comparedSegmentIds.length < 2) return;
     try {
       const comp = await api.compareSegments(studyId, comparedSegmentIds);
+      if (!scope.active || generation !== compareGenerationRef.current) return;
       setComparisonResult(comp);
       setIsComparing(true);
     } catch (err: any) {
-      setError(err.message || 'Failed to compare segments.');
+      if (scope.active && generation === compareGenerationRef.current) setError(err.message || 'Failed to compare segments.');
     }
   };
 
@@ -203,19 +311,15 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
     const headers = ['id', 'name', 'cluster_label', 'population_percentage', 'population_count', 'confidence_score', 'status', 'description'];
     const rows = segments.map((s) => [
       s.id,
-      `"${s.name.replace(/"/g, '""')}"`,
+      s.name,
       s.cluster_label,
       s.population_percentage,
       s.population_count,
       s.confidence_score,
       s.status,
-      `"${s.description.replace(/"/g, '""')}"`,
+      s.description,
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const dlAnchorElem = document.createElement('a');
-    dlAnchorElem.setAttribute('href', encodeURI(csvContent));
-    dlAnchorElem.setAttribute('download', `study_${studyId}_market_segments.csv`);
-    dlAnchorElem.click();
+    downloadText(serializeCsv([headers, ...rows]), `study_${studyId}_market_segments.csv`, 'text/csv;charset=utf-8');
   };
 
   const filteredSegments = useMemo(() => {
@@ -229,26 +333,28 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
     });
   }, [segments, searchQuery, statusFilter]);
 
+  const selectedRun = selectedSegment ? runs.find((run) =>
+    run.id === selectedSegment.segmentation_run_id && run.study_id === selectedSegment.study_id,
+  ) : undefined;
   const totalSurveyed = readiness?.total_records || segments.reduce((acc, s) => acc + s.population_count, 0);
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-16" data-testid="segmentation-view">
+    <div className="min-w-0 space-y-6 bg-[var(--bg-pure)] pb-16" data-testid="segmentation-view">
       {isLoading && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 24px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
           Loading segmentation data…
         </div>
       )}
       {/* Top Banner / Metrics Header */}
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-6 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+      <div className="border-b border-[var(--border-subtle)] py-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2.5 bg-teal-500/10 border border-teal-500/30 rounded-lg text-teal-400">
+              <div className="p-2.5 bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg text-teal-400">
                 <PieChart className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight">Market Segmentation</h1>
+                <h1 className="text-2xl font-bold text-[var(--text-primary)] tracking-normal">Market Segmentation</h1>
                 <p className="text-sm text-[var(--text-secondary)]">
                   Evidence + Dataset Profiles + Business Context → Market Segments
                 </p>
@@ -279,7 +385,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     : 'text-rose-400'
                 }`}
               >
-                {readiness?.status?.replace(/_/g, ' ') || 'Checking...'}
+                {readiness?.status?.replace(/_/g, ' ') || (readinessError ? 'Unavailable' : 'Checking...')}
               </span>
             </div>
             <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-lg">
@@ -294,7 +400,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
       {/* Error Alert */}
       {error && !isLoading && (
-        <div role="alert" className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl flex items-center justify-between gap-3 text-rose-300 text-sm">
+        <div role="alert" className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-4 rounded-lg flex flex-wrap items-center justify-between gap-3 text-rose-300 text-sm">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-400" />
             <span>{error}</span>
@@ -303,7 +409,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             <button
               type="button"
               onClick={loadData}
-              className="border border-current rounded-md px-3 py-1 font-semibold text-xs whitespace-nowrap hover:bg-rose-500/10"
+              className="border border-current rounded-md px-3 py-1 font-semibold text-xs whitespace-nowrap hover:bg-[var(--bg-card-hover)]"
             >
               Retry
             </button>
@@ -314,18 +420,29 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
         </div>
       )}
 
+      {(readinessError || historyError) && (
+        <div className="space-y-2 text-sm text-[var(--text-secondary)]">
+          {readinessError && <p role="alert">Data readiness unavailable: {readinessError}</p>}
+          {historyError && <p role="alert">Run history unavailable: {historyError}</p>}
+          <button type="button" onClick={loadData} className="inline-flex items-center gap-2 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2 text-xs text-[var(--text-primary)]">
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            Retry metadata
+          </button>
+        </div>
+      )}
+
       {/* Pre-Segmentation Readiness Card */}
-      {readiness && (
-        <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-5 shadow-lg">
+        <div className="border-b border-[var(--border-subtle)] pb-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            {readiness ? (
             <div className="flex items-start gap-3">
               <div
-                className={`p-2 rounded-lg mt-0.5 ${
+                className={`p-2 rounded-lg mt-0.5 bg-[var(--bg-card)] border border-[var(--border-subtle)] ${
                   readiness.status === 'ready'
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    ? 'text-emerald-400'
                     : readiness.status === 'insufficient_records'
-                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                    : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                    ? 'text-amber-400'
+                    : 'text-rose-400'
                 }`}
               >
                 {readiness.status === 'ready' ? (
@@ -340,12 +457,12 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-semibold text-[var(--text-primary)]">Pre-Segmentation Assessment</h2>
                   <span
-                    className={`text-xs px-2.5 py-0.5 rounded-full font-medium uppercase tracking-wider ${
+                    className={`text-xs px-2.5 py-0.5 rounded-full font-medium uppercase tracking-normal bg-[var(--bg-card)] border border-[var(--border-subtle)] ${
                       readiness.status === 'ready'
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                        ? 'text-emerald-400'
                         : readiness.status === 'insufficient_records'
-                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                        : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                        ? 'text-amber-400'
+                        : 'text-rose-400'
                     }`}
                   >
                     {readiness.status.replace(/_/g, ' ')}
@@ -354,6 +471,64 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-3xl leading-relaxed">
                   {readiness.guidance_message}
                 </p>
+
+                {readiness.status !== 'ready' && (
+                  <div
+                    className="mt-3 max-w-3xl rounded-lg border border-dashed border-[var(--border-medium)] bg-[var(--bg-card)] p-3"
+                    aria-label="Attach a dataset"
+                    role="group"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label htmlFor="segmentation-dataset-file" className="text-xs font-semibold text-[var(--text-primary)]">
+                        Attach a dataset (CSV or JSON, up to 25 MB)
+                      </label>
+                      <input
+                        ref={uploadInputRef}
+                        id="segmentation-dataset-file"
+                        type="file"
+                        accept=".csv,.json,text/csv,application/json"
+                        disabled={isUploading}
+                        className="text-xs text-[var(--text-secondary)]"
+                        onChange={(event) => {
+                          const picked = event.target.files?.[0] ?? null;
+                          setUploadFile(picked);
+                          setUploadError(picked ? datasetUploadProblem(picked) : null);
+                          setUploadNotice(null);
+                        }}
+                      />
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={uploadName}
+                        onChange={(event) => setUploadName(event.target.value)}
+                        placeholder="Dataset name (defaults to the file name)"
+                        aria-label="Dataset name"
+                        maxLength={256}
+                        disabled={isUploading}
+                        className="min-w-0 flex-1 rounded-md border border-[var(--border-subtle)] bg-[var(--bg-pure)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-teal-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleUploadDataset}
+                        disabled={isUploading || !uploadFile || datasetUploadProblem(uploadFile) !== null}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-medium)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isUploading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Upload className="w-3.5 h-3.5" aria-hidden="true" />}
+                        {isUploading ? 'Profiling…' : 'Upload & profile'}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[0.72rem] text-[var(--text-muted)]">
+                      Rows are profiled for segmentation variables only; the file stays private to this study.
+                    </p>
+                    {uploadError && (
+                      <p role="alert" className="mt-2 text-xs text-rose-300">{uploadError}</p>
+                    )}
+                    {uploadNotice && (
+                      <p role="status" className="mt-2 text-xs text-emerald-300">{uploadNotice}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Usable Variables Badges */}
                 {readiness.usable_variables.length > 0 && (
@@ -375,6 +550,11 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 )}
               </div>
             </div>
+            ) : (
+              <p role="status" className="text-sm text-[var(--text-secondary)]">
+                {readinessError ? 'Readiness must be available before running segmentation.' : 'Checking segmentation readiness...'}
+              </p>
+            )}
 
             {/* Run Controls */}
             <div className="flex items-center gap-3 self-end md:self-center flex-shrink-0">
@@ -382,6 +562,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                 <span className="text-xs text-[var(--text-secondary)] font-medium">Clusters:</span>
                 <select
                   value={desiredClusters}
+                  aria-label="Cluster count"
                   onChange={(e) => setDesiredClusters(Number(e.target.value))}
                   disabled={isExecuting}
                   className="bg-[var(--bg-pure)] border border-[var(--border-subtle)] rounded text-xs text-[var(--text-primary)] pl-2 pr-7 py-1 focus:outline-none focus:border-teal-500 font-mono"
@@ -395,12 +576,12 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
               <button
                 onClick={handleRunSegmentation}
-                disabled={isExecuting || !readiness.can_run}
+                disabled={isExecuting || !readiness?.can_run}
                 data-testid="run-segmentation-btn"
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-xs tracking-wide transition-all shadow-md ${
-                  isExecuting || !readiness.can_run
-                    ? 'bg-teal-500/30 text-teal-300/50 cursor-not-allowed border border-teal-500/20'
-                    : 'bg-teal-500 text-[var(--bg-pure)] hover:bg-teal-400 active:scale-95 shadow-teal-500/20'
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-xs bg-[var(--bg-card)] border border-[var(--border-medium)] ${
+                  isExecuting || !readiness?.can_run
+                    ? 'text-[var(--text-muted)] cursor-not-allowed'
+                    : 'text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)]'
                 }`}
               >
                 {isExecuting ? (
@@ -418,7 +599,6 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             </div>
           </div>
         </div>
-      )}
 
       {/* Execution Stepper */}
       {isExecuting && (
@@ -464,13 +644,14 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
       )}
 
       {/* Filter and Action Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] p-3.5 rounded-xl">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-3.5">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto min-w-0">
           {/* Search Box */}
-          <div className="relative flex-1 sm:w-64">
+          <div className="relative min-w-0 flex-1 sm:w-64">
             <Search className="w-4 h-4 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              aria-label="Search segments"
               placeholder="Search segments, needs..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -481,6 +662,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
           {/* Status Filter */}
           <select
+            aria-label="Segment status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg text-xs text-[var(--text-primary)] pl-3 pr-8 py-1.5 focus:outline-none focus:border-teal-500"
@@ -498,7 +680,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             <button
               onClick={handleOpenComparisonModal}
               data-testid="compare-selected-btn"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 text-xs font-semibold hover:bg-teal-500/30 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--bg-card)] text-teal-300 border border-[var(--border-medium)] text-xs font-semibold hover:bg-[var(--bg-card-hover)] transition-colors"
             >
               <Sliders className="w-3.5 h-3.5" />
               <span>Compare Selected ({comparedSegmentIds.length})</span>
@@ -531,8 +713,9 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
 
       {/* Segments Grid */}
       {filteredSegments.length === 0 ? (
+        !isLoading && !error && (
         <div
-          className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-xl p-12 text-center text-[var(--text-secondary)]"
+          className="py-12 text-center text-[var(--text-secondary)]"
           data-testid="no-segments-placeholder"
         >
           <PieChart className="w-12 h-12 text-[var(--text-secondary)]/40 mx-auto mb-3" />
@@ -551,6 +734,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             )}
           </div>
         </div>
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-testid="segments-grid">
           {filteredSegments.map((segment) => {
@@ -561,15 +745,16 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
               <div
                 key={segment.id}
                 data-testid={`segment-card-${segment.id}`}
-                className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] hover:border-teal-500/40 rounded-xl p-5 transition-all shadow-lg flex flex-col justify-between group relative overflow-hidden"
+                className="min-w-0 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] hover:border-teal-500/40 rounded-lg p-5 transition-colors flex flex-col justify-between group"
               >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/5 rounded-full blur-2xl pointer-events-none group-hover:bg-teal-500/10 transition-colors" />
-
                 <div>
                   {/* Card Header & Checkbox */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-2">
                       <button
+                        type="button"
+                        aria-label={`Compare ${segment.name}`}
+                        aria-pressed={isCompared}
                         onClick={() => handleToggleCompare(segment.id)}
                         className="text-[var(--text-secondary)] hover:text-teal-400 transition-colors"
                         title="Select for comparison"
@@ -587,10 +772,10 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     </div>
 
                     <span
-                      className={`text-[0.72rem] font-semibold px-2 py-0.5 rounded-full border ${
+                      className={`text-[0.72rem] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-card)] border border-[var(--border-subtle)] ${
                         segment.status === 'data_backed'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                          ? 'text-emerald-400'
+                          : 'text-amber-400'
                       }`}
                     >
                       {segment.status === 'data_backed' ? 'Data Backed' : 'Inference Assisted'}
@@ -598,7 +783,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                   </div>
 
                   {/* Title & Population Share */}
-                  <h3 className="text-base font-bold text-[var(--text-primary)] group-hover:text-teal-300 transition-colors line-clamp-1">
+                  <h3 className="text-base font-bold text-[var(--text-primary)] group-hover:text-teal-300 transition-colors break-words">
                     {segment.name}
                   </h3>
 
@@ -615,7 +800,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     </div>
                     <div className="h-1.5 w-full bg-[var(--bg-card)] rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-teal-500 to-cyan-400 rounded-full"
+                        className="h-full bg-[var(--accent-cyan)] rounded-full"
                         style={{ width: `${Math.min(100, segment.population_percentage)}%` }}
                       />
                     </div>
@@ -627,7 +812,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                   </p>
 
                   {/* Observed facts — only what the dataset measured for this cluster */}
-                  <div className="grid grid-cols-2 gap-2 bg-[var(--bg-card)] border border-[var(--border-subtle)] p-2.5 rounded-lg mb-4 text-xs">
+                  <div className="grid grid-cols-2 gap-3 border-y border-[var(--border-subtle)] py-3 mb-4 text-xs">
                     <div>
                       <span className="text-[0.72rem] text-[var(--text-secondary)] block">
                         {facts.partitionLabel}
@@ -679,7 +864,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
       {/* Floating Comparison Sticky Bar */}
       {comparedSegmentIds.length >= 2 && (
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[var(--bg-secondary)] border border-teal-500/50 rounded-xl px-5 py-3 shadow-2xl flex items-center gap-4 animate-slideUp backdrop-blur-md"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-xl bg-[var(--bg-secondary)] border border-[var(--border-medium)] rounded-lg px-5 py-3 flex flex-wrap items-center gap-4"
           data-testid="floating-compare-bar"
         >
           <span className="text-xs font-semibold text-[var(--text-primary)]">
@@ -694,7 +879,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             </button>
             <button
               onClick={handleOpenComparisonModal}
-              className="px-3.5 py-1.5 bg-teal-500 text-[var(--bg-pure)] font-bold text-xs rounded-lg hover:bg-teal-400 transition-colors shadow-lg"
+              className="px-3.5 py-1.5 bg-[var(--bg-card)] border border-[var(--border-medium)] text-[var(--text-primary)] font-bold text-xs rounded-lg hover:bg-[var(--bg-card-hover)] transition-colors"
             >
               Compare Now
             </button>
@@ -720,7 +905,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           >
             <div className="p-5 border-b border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-card)]">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-teal-500/10 text-teal-400 rounded-lg">
+                <div className="p-2 bg-[var(--bg-card)] text-teal-400 rounded-lg">
                   <Sliders className="w-5 h-5" />
                 </div>
                 <div>
@@ -862,7 +1047,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
             {/* Modal Header */}
             <div className="p-6 border-b border-[var(--border-subtle)] bg-[var(--bg-card)] flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-teal-500/10 text-teal-400 border border-teal-500/30 rounded-xl">
+                <div className="p-2.5 bg-[var(--bg-secondary)] text-teal-400 border border-[var(--border-subtle)] rounded-lg">
                   <PieChart className="w-6 h-6" />
                 </div>
                 <div>
@@ -1059,11 +1244,11 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     </div>
                   </div>
 
-                  {activeRun?.dataset_versions && activeRun.dataset_versions.length > 0 && (
+                  {selectedRun?.dataset_versions && selectedRun.dataset_versions.length > 0 ? (
                     <div>
                       <h5 className="text-[0.72rem] uppercase font-bold text-[var(--text-secondary)] mb-2">Connected Dataset Versions</h5>
                       <div className="space-y-2">
-                        {activeRun.dataset_versions.map((ds) => (
+                        {selectedRun.dataset_versions.map((ds) => (
                           <div
                             key={ds.dataset_id}
                             className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-3 rounded-lg flex items-center justify-between text-[0.72rem]"
@@ -1091,6 +1276,10 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                         ))}
                       </div>
                     </div>
+                  ) : (
+                    <p className="text-[var(--text-secondary)]">
+                      {selectedRun ? 'No dataset versions were recorded for this run.' : 'Dataset provenance is unavailable for this run.'}
+                    </p>
                   )}
                 </div>
               )}
@@ -1111,7 +1300,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     onProceedToPersonas(selectedSegment.id);
                     setSelectedSegment(null);
                   }}
-                  className="px-4 py-2 rounded-lg bg-teal-500 text-[var(--bg-pure)] font-bold text-xs hover:bg-teal-400 transition-colors flex items-center gap-1.5 shadow-lg"
+                  className="px-4 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-medium)] text-[var(--text-primary)] font-bold text-xs hover:bg-[var(--bg-card-hover)] transition-colors flex items-center gap-1.5"
                 >
                   <span>Build Personas for this Segment</span>
                   <ArrowRight className="w-3.5 h-3.5" />

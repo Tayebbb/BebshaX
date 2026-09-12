@@ -15,6 +15,8 @@ import {
 import { Interview, InterviewMetrics } from '../../../types';
 import { api } from '../../../services/api';
 import { CountUp } from '../../../motion/CountUp';
+import { useRouteReady } from '../../../performance/routeTiming';
+import { synthesisUnavailable } from '../../../utils/interviewSynthesis';
 
 interface InterviewsViewProps {
   studyId: string;
@@ -29,8 +31,16 @@ const OBJECTIVE_LABELS: Record<string, string> = {
   objections: 'Objections',
 };
 
-const objectiveLabel = (objective?: string, custom?: string) =>
-  custom || (objective ? OBJECTIVE_LABELS[objective] || objective.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'General Discovery');
+// Known keys get their label; a snake_case key is humanised; free text (a batch
+// script's own wording) is shown verbatim rather than re-cased into a headline.
+const objectiveLabel = (objective?: string, custom?: string) => {
+  if (custom) return custom;
+  if (!objective) return 'General Discovery';
+  if (OBJECTIVE_LABELS[objective]) return OBJECTIVE_LABELS[objective];
+  return /^[a-z0-9_]+$/.test(objective)
+    ? objective.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    : objective;
+};
 
 export const InterviewsView: React.FC<InterviewsViewProps> = ({
   studyId,
@@ -41,6 +51,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
   const [metrics, setMetrics] = useState<InterviewMetrics | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  useRouteReady(!isLoading, error ? 'error' : interviews.length ? 'content' : 'empty');
   const [metricsError, setMetricsError] = useState<string | null>(null);
   const requestGeneration = useRef(0);
 
@@ -140,7 +151,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
               Adaptive Persona Interviews
             </span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] tracking-normal">
             Customer Interview Lab
           </h1>
           <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-1">
@@ -206,6 +217,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
         <form onSubmit={handleSearchSubmit} className="flex-1 relative">
           <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
+                        aria-label="Search interviews"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -229,6 +241,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
           <div className="flex items-center gap-1.5 bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-xl px-3 py-1.5 text-xs">
             <Filter className="w-3.5 h-3.5 text-[var(--text-muted)]" />
             <select
+              aria-label="Interview status"
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="bg-transparent border-0 pr-6 text-[var(--text-label)] text-xs font-medium focus:outline-none cursor-pointer"
@@ -241,6 +254,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
 
           <div className="flex items-center gap-1.5 bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-xl px-3 py-1.5 text-xs">
             <select
+              aria-label="Interview objective"
               value={selectedObjective}
               onChange={(e) => setSelectedObjective(e.target.value)}
               className="bg-transparent border-0 pr-6 text-[var(--text-label)] text-xs font-medium focus:outline-none cursor-pointer"
@@ -285,9 +299,12 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredInterviews.map((item) => {
             const isCompleted = item.status === 'completed';
+            const awaitingSynthesis = synthesisUnavailable(item);
             const turnsCount = item.turn_count || 0;
             // A missing max_turns is unknown, not "14" — the bar and label say so.
             const maxTurns = typeof item.max_turns === 'number' && item.max_turns > 0 ? item.max_turns : null;
+            // Every turn is spent: the persona will not answer again, only the synthesis is left.
+            const turnCapReached = !isCompleted && maxTurns !== null && turnsCount >= maxTurns;
             const exploredCount = Object.values(item.topics_explored || {}).filter(
               (v) => v === 'explored'
             ).length;
@@ -296,6 +313,15 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             return (
               <div
                 key={item.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Open interview with ${item.persona_name || 'synthetic persona'}`}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openInterview(item.id);
+                  }
+                }}
                 onClick={() => openInterview(item.id)}
                 className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] hover:border-teal-500/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all duration-200 cursor-pointer shadow-md hover:shadow-teal-500/5 group"
               >
@@ -329,14 +355,16 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                     <span
                       className={`px-2 py-0.5 rounded-full text-[0.72rem] font-bold border shrink-0 ${
                         isCompleted
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          ? awaitingSynthesis
+                            ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                           : 'bg-teal-500/10 text-teal-400 border-teal-500/30 flex items-center gap-1'
                       }`}
                     >
-                      {!isCompleted && (
+                      {!isCompleted && !turnCapReached && (
                         <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
                       )}
-                      {isCompleted ? 'Completed' : 'Active'}
+                      {isCompleted ? (awaitingSynthesis ? 'Synthesis pending' : 'Completed') : turnCapReached ? 'Ready to synthesize' : 'Active'}
                     </span>
                   </div>
 
@@ -387,7 +415,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
 
                 {/* Card Bottom: Action CTA */}
                 <div className="pt-2 flex items-center justify-between text-xs font-semibold text-teal-400 group-hover:translate-x-0.5 transition-transform">
-                  <span>{isCompleted ? 'View Analysis & Transcript' : 'Continue Interview'}</span>
+                  <span>{isCompleted ? (awaitingSynthesis ? 'Retry synthesis & view transcript' : 'View Analysis & Transcript') : turnCapReached ? 'Generate synthesis' : 'Continue Interview'}</span>
                   <ChevronRight className="w-4 h-4" />
                 </div>
               </div>

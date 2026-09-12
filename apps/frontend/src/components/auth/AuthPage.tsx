@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Mail,
   Eye,
@@ -14,8 +14,11 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
+import { isDashboardPath } from '../../utils/dashboardRoute';
 import { useTheme } from '../../context/ThemeContext';
 import { api } from '../../services/api';
+import { safeReturnPath } from '../../utils/dashboardRoute';
+import { useRouteReady } from '../../performance/routeTiming';
 import { neonAuth, isNeonAuthConfigured } from '../../services/neonAuth';
 import { OtpInput } from './OtpInput';
 import { BebshaXLogo } from '../common/BebshaXLogo';
@@ -25,12 +28,12 @@ interface AuthPageProps {
   initialMode?: 'signin' | 'signup' | 'signup-email' | 'forgot-password' | 'verify-otp' | 'reset-password-otp';
 }
 
-// Dark-theme tokens matching the app shell (DashboardLayout / StudyWorkflowView).
 const headingStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-display)',
   fontSize: '1.45rem',
   fontWeight: 600,
   color: 'var(--text-main)',
-  letterSpacing: '-0.02em',
+  letterSpacing: 0,
   marginBottom: '6px',
 };
 const subtitleStyle: React.CSSProperties = { fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 };
@@ -43,42 +46,42 @@ const labelStyle: React.CSSProperties = {
 };
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  height: '42px',
+  height: '44px',
   padding: '0 12px',
-  borderRadius: '8px',
-  border: '1px solid var(--border-subtle)',
+  borderRadius: '6px',
+  border: '1px solid var(--border-control)',
   fontSize: '0.88rem',
   color: 'var(--text-main)',
-  background: 'var(--bg-secondary)',
-  outline: 'none',
+  background: 'var(--bg-card)',
   transition: 'border 0.2s, box-shadow 0.2s',
 };
-const passwordInputStyle: React.CSSProperties = { ...inputStyle, padding: '0 40px 0 12px' };
+const passwordInputStyle: React.CSSProperties = { ...inputStyle, padding: '0 56px 0 12px' };
 const focusInput = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--accent-teal)';
-  e.target.style.boxShadow = '0 0 0 3px var(--accent-glow)';
+  e.target.style.borderColor = 'var(--focus-ring)';
+  e.target.style.boxShadow = '0 0 0 2px var(--focus-ring)';
 };
 const blurInput = (e: React.FocusEvent<HTMLInputElement>) => {
-  e.target.style.borderColor = 'var(--border-subtle)';
+  e.target.style.borderColor = 'var(--border-control)';
   e.target.style.boxShadow = 'none';
 };
 const ctaStyle = (disabled: boolean): React.CSSProperties => ({
   width: '100%',
   height: '44px',
-  borderRadius: '10px',
-  background: 'var(--accent-gradient)',
+  borderRadius: '6px',
+  background: 'var(--accent-teal)',
   color: 'var(--text-on-accent)',
   border: 'none',
   fontSize: '0.9rem',
   fontWeight: 700,
   cursor: disabled ? 'not-allowed' : 'pointer',
   opacity: disabled ? 0.55 : 1,
-  transition: 'all 0.2s ease',
-  boxShadow: '0 2px 14px var(--accent-glow)',
+  transition: 'background-color 0.2s ease, opacity 0.2s ease',
 });
 const linkStyle: React.CSSProperties = {
   background: 'none',
   border: 'none',
+  minWidth: '44px',
+  minHeight: '44px',
   color: 'var(--accent-teal-bright)',
   fontWeight: 700,
   cursor: 'pointer',
@@ -88,6 +91,8 @@ const backLinkStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: '6px',
+  minWidth: '44px',
+  minHeight: '44px',
   background: 'none',
   border: 'none',
   color: 'var(--text-secondary)',
@@ -99,12 +104,15 @@ const backLinkStyle: React.CSSProperties = {
 };
 const eyeButtonStyle: React.CSSProperties = {
   position: 'absolute',
-  right: '12px',
+  right: '2px',
   top: '50%',
   transform: 'translateY(-50%)',
+  width: '44px',
+  height: '44px',
+  borderRadius: '6px',
   background: 'none',
   border: 'none',
-  color: 'var(--text-muted)',
+  color: 'var(--text-secondary)',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
@@ -116,15 +124,15 @@ const dividerTextStyle: React.CSSProperties = {
   fontSize: '0.72rem',
   fontWeight: 700,
   color: 'var(--text-muted)',
-  letterSpacing: '0.08em',
+  letterSpacing: 0,
 };
 const googleButtonStyle: React.CSSProperties = {
   width: '100%',
-  height: '42px',
-  borderRadius: '8px',
+  height: '44px',
+  borderRadius: '6px',
   background: 'var(--google-btn-bg)',
   color: 'var(--google-btn-fg)',
-  border: '1px solid var(--border-subtle)',
+  border: '1px solid var(--border-control)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -133,12 +141,14 @@ const googleButtonStyle: React.CSSProperties = {
   fontWeight: 600,
   cursor: 'pointer',
   transition: 'background 0.2s ease',
-  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.35)',
 };
 const footerSwitchTextStyle: React.CSSProperties = { fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 };
 
 export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) => {
-  const { currentPath, navigate } = useNavigation();
+  const { currentPath, currentSearch, navigate } = useNavigation();
+  useRouteReady(true, isDashboardPath(currentPath) ? 'error' : 'content');
+  const requestedReturn = new URLSearchParams(currentSearch).get('next');
+  const returnPath = safeReturnPath(requestedReturn || `${currentPath}${currentSearch}`);
   const { theme, toggleTheme } = useTheme();
   const {
     signin,
@@ -149,6 +159,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     resetPasswordWithOtp,
     isAuthenticated,
     user,
+    authError,
   } = useAuth();
 
   // Determine current view
@@ -180,13 +191,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   // screen, which an authenticated user is allowed to open deliberately.
   useEffect(() => {
     if (isAuthenticated && view !== 'verify-otp') {
-      navigate('/app');
+      navigate(returnPath);
     }
-  }, [isAuthenticated, navigate, view]);
+  }, [isAuthenticated, navigate, view, returnPath]);
 
   // Form fields
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState(user?.email || '');
+  const codeEmailRef = useRef<HTMLInputElement>(null);
+  const [isVerificationEmailDraft, setIsVerificationEmailDraft] = useState(false);
+  const [isResetEmailDraft, setIsResetEmailDraft] = useState(false);
+  useEffect(() => {
+    if (view !== 'verify-otp') setIsVerificationEmailDraft(false);
+    if (view !== 'reset-password-otp') setIsResetEmailDraft(false);
+  }, [view]);
   // Auth routes paint before the session resolves, so a cold load of /auth/verify
   // mounts with user === null — adopt the address once it arrives.
   useEffect(() => {
@@ -197,6 +215,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [otp, setOtp] = useState('');
+  const isOtpComplete = /^[0-9]{6}$/.test(otp);
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
 
   // Resend Countdown
@@ -214,6 +233,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   const [isResending, setIsResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  useEffect(() => { if (authError) setErrorMessage(authError); }, [authError]);
 
   // One-shot flag set by AuthContext when the OAuth-return /auth/sync
   // exchange fails — read once, cleared, shown in the standard error banner.
@@ -229,18 +249,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     setSuccessMessage(null);
   };
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    resetMessages();
-    if (!email || !password) {
-      setErrorMessage('Please enter both email and password.');
-      return;
-    }
-
+  const completeSignIn = async () => {
     try {
       setIsLoading(true);
       await signin(email, password);
-      navigate('/app');
+      navigate(returnPath);
     } catch (err: any) {
       if (err.code === 'EMAIL_NOT_VERIFIED' || err.message?.includes('Email not verified')) {
         const sent = await sendOtp(email, 'email-verification').catch(() => false);
@@ -259,6 +272,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    resetMessages();
+    if (!email || !password) {
+      setErrorMessage('Please enter both email and password.');
+      return;
+    }
+    await completeSignIn();
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -286,10 +309,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
       // The backend decides: when signup already returned a session, the user
       // is authenticated and must not be walled behind an OTP screen. The
       // code is still sent, and the dashboard carries a dismissible reminder.
-      const authenticated = !!res?.access_token && !!res?.user;
+      const authenticated = !res.verification_required && Boolean(res.access_token || res.csrf_token) && Boolean(res.user);
       if (authenticated) {
         void sendOtp(email, 'email-verification').catch(() => false);
-        navigate('/app');
+        navigate(returnPath);
         return;
       }
       // No session: verification really is required to continue.
@@ -330,7 +353,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
       setErrorMessage('Enter the email address you signed up with.');
       return;
     }
-    if (!otp || otp.length < 6) {
+    if (!isOtpComplete) {
       setErrorMessage('Please enter the full 6-digit verification code.');
       return;
     }
@@ -338,7 +361,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     try {
       setIsLoading(true);
       await verifyEmailOtp(email, otp);
-      navigate('/app');
+      navigate(returnPath);
     } catch (err: any) {
       setErrorMessage(err.message || 'Invalid verification code. Please check and try again.');
     } finally {
@@ -376,7 +399,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   const handleResetPasswordWithOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     resetMessages();
-    if (!otp || otp.length < 6) {
+    if (!email) {
+      setErrorMessage('Enter the email address for your password reset.');
+      return;
+    }
+    if (!isOtpComplete) {
       setErrorMessage('Please enter the 6-digit reset code.');
       return;
     }
@@ -397,19 +424,27 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
     try {
       setIsLoading(true);
-      await resetPasswordWithOtp(email, otp, password);
-      // Auto sign in with new password
-      await signin(email, password);
-      navigate('/app');
+      const wasReset = await resetPasswordWithOtp(email, otp, password);
+      if (!wasReset) throw new Error('Failed to reset password. Please check the OTP code.');
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to reset password. Please check the OTP code.');
-    } finally {
       setIsLoading(false);
+      return;
     }
+
+    setOtp('');
+    setConfirmPassword('');
+    setView('signin');
+    setSuccessMessage('Password updated. Sign in with your new password.');
+    await completeSignIn();
   };
 
   const handleResendOtp = async (type: 'email-verification' | 'forget-password') => {
     if (countdown > 0 || isResending || !email) return;
+    if (codeEmailRef.current && !codeEmailRef.current.reportValidity()) {
+      setErrorMessage('Enter a valid email address.');
+      return;
+    }
     try {
       setIsResending(true);
       resetMessages();
@@ -442,14 +477,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
       if (api.isMockMode()) {
         // Test/mock builds: clearly-mock local session (same gate as email signin).
         await googleAuth({});
-        navigate('/app');
+        navigate(returnPath);
         return;
       }
       // Real federated flow: Neon-hosted Google OAuth. This navigates away;
       // on return, AuthContext exchanges the verified Neon session for a
       // backend JWT via server-verified /auth/sync. No identity is ever
       // fabricated client-side.
-      await neonAuth.signInWithGoogle(`${window.location.origin}/app`);
+      await neonAuth.signInWithGoogle(`${window.location.origin}${returnPath}`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Google authentication failed.');
       setIsLoading(false);
@@ -459,19 +494,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   return (
     <div
       style={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         width: '100%',
         backgroundColor: 'var(--bg-pure)',
-        backgroundImage: `
-          radial-gradient(circle at 50% 35%, var(--accent-subtle) 0%, var(--accent-subtle) 45%, transparent 75%),
-          radial-gradient(circle, var(--fill-soft-2) 1.15px, transparent 1.15px)
-        `,
-        backgroundSize: '100% 100%, 18px 18px',
+        fontFamily: 'var(--font-sans)',
+        letterSpacing: 0,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '32px 16px',
+        padding: '88px 16px 32px',
         position: 'relative',
         color: 'var(--text-main)',
       }}
@@ -487,26 +519,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
-          background: 'var(--fill-soft-2)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid var(--border-soft)',
-          borderRadius: '10px',
+          minWidth: '44px',
+          minHeight: '44px',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-control)',
+          borderRadius: '6px',
           padding: '8px 14px',
           fontSize: '0.82rem',
           fontWeight: 600,
           color: 'var(--text-primary)',
           cursor: 'pointer',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
-          transition: 'all 0.2s ease',
+          transition: 'background-color 0.2s ease, color 0.2s ease',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--border-soft)';
-          e.currentTarget.style.borderColor = 'var(--border-soft)';
+          e.currentTarget.style.background = 'var(--bg-card-hover)';
           e.currentTarget.style.color = 'var(--text-main)';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'var(--fill-soft-2)';
-          e.currentTarget.style.borderColor = 'var(--border-soft)';
+          e.currentTarget.style.background = 'var(--bg-card)';
           e.currentTarget.style.color = 'var(--text-primary)';
         }}
       >
@@ -527,42 +557,42 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          width: '38px',
-          height: '38px',
-          background: 'var(--fill-soft-2)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid var(--border-soft)',
-          borderRadius: '10px',
+          width: '44px',
+          height: '44px',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-control)',
+          borderRadius: '6px',
           color: 'var(--text-primary)',
           cursor: 'pointer',
-          transition: 'all 0.2s ease',
+          transition: 'background-color 0.2s ease, color 0.2s ease',
         }}
       >
         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
       {/* Brand Header */}
-      <div style={{ marginBottom: '24px' }}>
+      <button
+        type="button"
+        aria-label="BebshaX home"
+        onClick={() => navigate('/')}
+        style={{ marginBottom: '24px', minWidth: '44px', minHeight: '44px', padding: 0, background: 'none', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+      >
         <BebshaXLogo
           size={36}
           textSize="1.85rem"
-          onClick={() => navigate('/')}
         />
-      </div>
+      </button>
 
-      {/* Centered Floating Card */}
+      {/* Auth panel */}
       <div
-        className="bx-modal"
+        className="bx-auth-panel"
         style={{
           width: '100%',
           maxWidth: '440px',
-          background: 'var(--glass-mid)',
-          backdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
-          WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
-          borderRadius: '24px',
+          background: 'var(--bg-secondary)',
+          borderRadius: '8px',
           border: '1px solid var(--border-soft)',
-          boxShadow: 'inset 0 1px 0 var(--reflect-strong), var(--shadow-lg)',
-          padding: '38px 32px',
+          padding: '38px clamp(0px, calc((100vw - 320px) / 2), 32px)',
           position: 'relative',
         }}
       >
@@ -572,9 +602,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
             role="alert"
             style={{
               padding: '12px 14px',
-              borderRadius: '10px',
-              background: 'rgba(239, 68, 68, 0.08)',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: '8px',
+              background: 'var(--status-error-bg)',
+              border: '1px solid var(--status-error-border)',
               color: 'var(--status-error-text)',
               fontSize: '0.82rem',
               marginBottom: '18px',
@@ -595,9 +625,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               alignItems: 'center',
               gap: '8px',
               padding: '10px 14px',
-              borderRadius: '10px',
-              background: 'rgba(16, 185, 129, 0.08)',
-              border: '1px solid rgba(16, 185, 129, 0.35)',
+              borderRadius: '8px',
+              background: 'var(--status-success-bg)',
+              border: '1px solid var(--status-success-border)',
               color: 'var(--status-success-text)',
               fontSize: '0.82rem',
               marginBottom: '18px',
@@ -618,7 +648,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 Welcome back
               </h1>
               <p style={subtitleStyle}>
-                Sign in to your account to continue
+                Sign in to continue.
               </p>
             </div>
 
@@ -716,6 +746,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     style={{
                       background: 'none',
                       border: 'none',
+                      minWidth: '44px',
+                      minHeight: '44px',
                       fontSize: '0.78rem',
                       color: 'var(--text-secondary)',
                       cursor: 'pointer',
@@ -790,7 +822,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 Create your account
               </h1>
               <p style={subtitleStyle}>
-                Start your first research study in under a minute.
+                Create an account for synthetic persona studies.
               </p>
             </div>
 
@@ -823,20 +855,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               <span>Continue with Google</span>
             </button>
 
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                marginTop: '8px',
-                color: 'var(--text-muted)',
-                fontSize: '0.72rem',
-              }}
-            >
-              <span>⚡ Fastest way in</span>
-            </div>
-
             {/* Divider */}
             <div
               style={{
@@ -862,24 +880,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               }}
               style={{
                 width: '100%',
+                minHeight: '44px',
                 padding: '14px 16px',
-                borderRadius: '12px',
-                border: '1px solid var(--border-subtle)',
-                background: 'var(--bg-secondary)',
+                borderRadius: '6px',
+                border: '1px solid var(--border-control)',
+                background: 'var(--bg-card)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'background-color 0.2s ease',
                 textAlign: 'left',
               }}
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLElement).style.background = 'var(--bg-card-hover)';
-                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-medium)';
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.background = 'var(--bg-secondary)';
-                (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)';
+                (e.currentTarget as HTMLElement).style.background = 'var(--bg-card)';
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -887,7 +904,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   style={{
                     width: '36px',
                     height: '36px',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     background: 'var(--accent-subtle)',
                     display: 'flex',
                     alignItems: 'center',
@@ -902,7 +919,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     Sign up with email
                   </div>
                   <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                    Use a work email and password with instant OTP
+                    Use your email and a password.
                   </div>
                 </div>
               </div>
@@ -1003,6 +1020,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     autoComplete="new-password"
+                    minLength={8}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -1021,7 +1039,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   </button>
                 </div>
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-                  At least 8 characters, alphanumeric.
+                  At least 8 characters, including a letter and a number.
                 </div>
               </div>
 
@@ -1076,7 +1094,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 style={{
                   width: '48px',
                   height: '48px',
-                  borderRadius: '12px',
+                  borderRadius: '8px',
                   background: 'var(--accent-subtle)',
                   color: 'var(--accent-teal-bright)',
                   display: 'flex',
@@ -1102,19 +1120,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
             </div>
 
             <form onSubmit={handleVerifyOtp}>
-              {!email && (
+              {(!email || isVerificationEmailDraft) && (
                 <div style={{ marginBottom: '20px' }}>
                   <label htmlFor="verify-email" style={labelStyle}>
                     Email address
                   </label>
                   <input
                     id="verify-email"
+                    ref={codeEmailRef}
                     type="email"
                     name="email"
                     autoComplete="email"
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setIsVerificationEmailDraft(true);
+                      setEmail(e.target.value);
+                    }}
                     placeholder="you@example.com"
                     style={inputStyle}
                     onFocus={focusInput}
@@ -1126,8 +1148,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
               <button
                 type="submit"
-                disabled={isLoading || otp.length < 6}
-                style={ctaStyle(isLoading || otp.length < 6)}
+                disabled={isLoading || !isOtpComplete}
+                style={ctaStyle(isLoading || !isOtpComplete)}
               >
                 {isLoading ? 'Verifying...' : 'Verify & Continue'}
               </button>
@@ -1232,7 +1254,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 style={{
                   width: '48px',
                   height: '48px',
-                  borderRadius: '12px',
+                  borderRadius: '8px',
                   background: 'var(--accent-subtle)',
                   color: 'var(--accent-teal-bright)',
                   display: 'flex',
@@ -1252,6 +1274,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
             </div>
 
             <form onSubmit={handleResetPasswordWithOtp}>
+              {(!email || isResetEmailDraft) && (
+                <div style={{ marginBottom: '20px' }}>
+                  <label htmlFor="reset-email" style={labelStyle}>Email address</label>
+                  <input
+                    id="reset-email"
+                    ref={codeEmailRef}
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(event) => {
+                      setIsResetEmailDraft(true);
+                      setEmail(event.target.value);
+                    }}
+                    placeholder="you@example.com"
+                    style={inputStyle}
+                    onFocus={focusInput}
+                    onBlur={blurInput}
+                  />
+                </div>
+              )}
               <div style={{ marginBottom: '12px' }}>
                 <label id="reset-otp-label" style={{ ...labelStyle, marginBottom: '4px', textAlign: 'center' }}>
                   6-digit reset code
@@ -1269,6 +1313,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     autoComplete="new-password"
+                    minLength={8}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -1298,6 +1343,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
                     autoComplete="new-password"
+                    minLength={8}
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
@@ -1319,8 +1365,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
               <button
                 type="submit"
-                disabled={isLoading || otp.length < 6}
-                style={ctaStyle(isLoading || otp.length < 6)}
+                disabled={isLoading || !isOtpComplete}
+                style={ctaStyle(isLoading || !isOtpComplete)}
               >
                 {isLoading ? 'Resetting...' : 'Reset Password & Sign In'}
               </button>
@@ -1331,12 +1377,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 Didn't receive the code?{' '}
                 <button
                   type="button"
-                  disabled={countdown > 0 || isResending}
+                  disabled={countdown > 0 || isResending || !email}
                   onClick={() => handleResendOtp('forget-password')}
                   style={{
                     ...linkStyle,
-                    color: countdown > 0 ? 'var(--text-muted)' : 'var(--accent-teal-bright)',
-                    cursor: countdown > 0 ? 'not-allowed' : 'pointer',
+                    color: countdown > 0 || !email ? 'var(--text-muted)' : 'var(--accent-teal-bright)',
+                    cursor: countdown > 0 || !email ? 'not-allowed' : 'pointer',
                   }}
                 >
                   {countdown > 0 ? `Resend in ${countdown}s` : isResending ? 'Sending...' : 'Resend code'}
@@ -1353,10 +1399,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           By creating an account, you agree to our{' '}
           <button
             type="button"
-            onClick={() => setLegalModal('terms')}
+            onClick={(event) => { event.currentTarget.focus(); setLegalModal('terms'); }}
             style={{
               background: 'none',
               border: 'none',
+              minWidth: '44px',
+              minHeight: '44px',
               color: 'var(--text-secondary)',
               textDecoration: 'underline',
               cursor: 'pointer',
@@ -1369,10 +1417,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           and{' '}
           <button
             type="button"
-            onClick={() => setLegalModal('privacy')}
+            onClick={(event) => { event.currentTarget.focus(); setLegalModal('privacy'); }}
             style={{
               background: 'none',
               border: 'none',
+              minWidth: '44px',
+              minHeight: '44px',
               color: 'var(--text-secondary)',
               textDecoration: 'underline',
               cursor: 'pointer',

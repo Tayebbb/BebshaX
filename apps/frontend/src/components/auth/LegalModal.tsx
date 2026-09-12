@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { X, ShieldCheck, FileText } from 'lucide-react';
+import { useDialogA11y } from '../../utils/useDialogA11y';
 
 interface LegalModalProps {
   isOpen: boolean;
@@ -8,12 +9,21 @@ interface LegalModalProps {
 }
 
 export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useDialogA11y(dialogRef, isOpen, onClose);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
       className="bx-backdrop"
       style={{
         position: 'fixed',
@@ -28,19 +38,23 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className="bx-modal"
         style={{
           width: '100%',
           maxWidth: '560px',
-          maxHeight: '80vh',
-          backgroundColor: '#121414',
+          maxHeight: 'calc(100dvh - 32px)',
+          backgroundColor: 'var(--bg-card)',
           border: '1px solid var(--border-soft)',
-          borderRadius: '16px',
+          borderRadius: '8px',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          color: '#E4E4E7',
+          color: 'var(--text-main)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -52,15 +66,17 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: '12px',
+            flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
             {type === 'terms' ? (
-              <FileText size={20} color="var(--status-warn-text)" />
+              <FileText size={20} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
             ) : (
-              <ShieldCheck size={20} color="var(--status-warn-text)" />
+              <ShieldCheck size={20} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
             )}
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#F4F4F5' }}>
+            <h2 id={titleId} style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--text-main)', overflowWrap: 'anywhere' }}>
               {type === 'terms' ? 'BebshaX Terms of Service' : 'BebshaX Privacy Policy'}
             </h2>
           </div>
@@ -68,10 +84,14 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
             type="button"
             onClick={onClose}
             aria-label="Close"
+            title="Close legal dialog"
             style={{
               background: 'none',
               border: 'none',
-              color: '#A1A1AA',
+              color: 'var(--text-secondary)',
+              width: '44px',
+              height: '44px',
+              flexShrink: 0,
               cursor: 'pointer',
               padding: '4px',
               display: 'flex',
@@ -89,9 +109,11 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
           style={{
             padding: '24px',
             overflowY: 'auto',
+            minHeight: 0,
+            overscrollBehavior: 'contain',
             fontSize: '0.88rem',
             lineHeight: 1.6,
-            color: '#D4D4D8',
+            color: 'var(--text-secondary)',
           }}
         >
           {type === 'terms' ? (
@@ -115,13 +137,13 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
                 <strong>1. Data Collection:</strong> BebshaX collects your account email, name, and the research study descriptions you provide to synthesize relevant target personas and simulate user interviews.
               </p>
               <p>
-                <strong>2. Dataset Provenance:</strong> Persona attributes are tagged with strict provenance classifications (<code style={{ color: 'var(--status-warn-text)' }}>OBSERVED</code>, <code style={{ color: 'var(--status-warn-text)' }}>INFERRED</code>, <code style={{ color: 'var(--status-warn-text)' }}>SYNTHETIC</code>), where OBSERVED means the attribute cites a retrieved record from an open behavioral corpus.
+                <strong>2. Synthetic Research:</strong> Generated source personas are synthetic. Their profiles and interview responses are exploratory research inputs, not observations of real customers or proof of market demand.
               </p>
               <p>
-                <strong>3. Privacy & Zero PII Leakage:</strong> We never share your proprietary study concepts with third-party advertisers. All LLM inferences are routed through stateless free model pools with complete 14-field provenance tracking.
+                <strong>3. Remote Model Processing:</strong> Interviews and other AI features may send research inputs to remote model providers. Those providers apply their own data handling, retention, and training policies. Do not submit real personal data, confidential information, or private customer records.
               </p>
               <p style={{ marginBottom: 0 }}>
-                <strong>4. Data Retention:</strong> You have full rights to export or delete your generated personas, research studies, and episodic interview memories at any time.
+                <strong>4. Stored Research:</strong> Studies, generated personas, and interview history can be stored to support ongoing research. Use the available workspace controls to manage saved research.
               </p>
             </div>
           )}
@@ -134,6 +156,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
             borderTop: '1px solid var(--fill-soft-2)',
             display: 'flex',
             justifyContent: 'flex-end',
+            flexShrink: 0,
           }}
         >
           <button
@@ -141,9 +164,11 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose, type })
             onClick={onClose}
             style={{
               padding: '8px 20px',
+              minWidth: '44px',
+              minHeight: '44px',
               borderRadius: '8px',
-              background: 'var(--status-warn-text)',
-              color: '#18181B',
+              background: 'var(--accent-teal)',
+              color: 'var(--text-on-accent)',
               border: 'none',
               fontWeight: 700,
               fontSize: '0.85rem',

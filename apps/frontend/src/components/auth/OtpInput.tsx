@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 
 interface OtpInputProps {
   value: string;
@@ -19,133 +19,121 @@ export const OtpInput: React.FC<OtpInputProps> = ({
   'aria-labelledby': ariaLabelledBy,
 }) => {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  // Split current value into array of single chars
-  const digits = Array.from({ length }, (_, i) => value[i] || '');
+  const readDigits = () => Array.from({ length }, (_, index) => (
+    /^[0-9]$/.test(value[index] ?? '') ? value[index] : ''
+  ));
+  const [entry, setEntry] = useState(() => ({ value, digits: readDigits() }));
+  let digits = entry.digits;
+  if (entry.value !== value || digits.length !== length) {
+    digits = readDigits();
+    setEntry({ value, digits });
+  }
 
   useEffect(() => {
-    if (autoFocus && inputRefs.current[0]) {
+    if (autoFocus && !disabled && inputRefs.current[0]) {
       inputRefs.current[0].focus();
     }
-  }, [autoFocus]);
+  }, [autoFocus, disabled]);
 
-  const handleChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    // Extract only digits
+  const updateDigits = (nextDigits: string[]) => {
+    const nextValue = nextDigits.join('');
+    setEntry({ value: nextValue, digits: nextDigits });
+    onChange(nextValue);
+  };
+
+  const enterDigits = (index: number, raw: string) => {
+    if (disabled) return;
     const cleaned = raw.replace(/\D/g, '');
-
+    if (cleaned.length > length) return;
     if (!cleaned) {
-      // Empty
-      const newDigits = [...digits];
-      newDigits[index] = '';
-      onChange(newDigits.join(''));
+      if (!raw) {
+        updateDigits(digits.map((digit, position) => position === index ? '' : digit));
+      }
       return;
     }
 
-    if (cleaned.length > 1) {
-      // Pasted or multiple digits entered in single box
-      const newDigits = [...digits];
-      for (let i = 0; i < cleaned.length && index + i < length; i++) {
-        newDigits[index + i] = cleaned[i];
-      }
-      const finalVal = newDigits.join('').slice(0, length);
-      onChange(finalVal);
-      const nextFocusIdx = Math.min(index + cleaned.length, length - 1);
-      inputRefs.current[nextFocusIdx]?.focus();
-      return;
-    }
+    const start = cleaned.length >= length ? 0 : index;
+    updateDigits(digits.map((digit, position) => (
+      position >= start && position < start + cleaned.length ? cleaned[position - start] : digit
+    )));
+    inputRefs.current[Math.min(start + cleaned.length, length - 1)]?.focus();
+  };
 
-    const newDigits = [...digits];
-    newDigits[index] = cleaned[0];
-    const finalVal = newDigits.join('');
-    onChange(finalVal);
-
-    // Auto-advance to next input
-    if (index < length - 1) {
-      inputRefs.current[index + 1]?.focus();
+  const handleKeyDown = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      event.preventDefault();
+      const position = event.key === 'Backspace' && !digits[index] && index > 0 ? index - 1 : index;
+      updateDigits(digits.map((digit, digitIndex) => digitIndex === position ? '' : digit));
+      inputRefs.current[position]?.focus();
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      const position = event.key === 'ArrowLeft' ? Math.max(0, index - 1) : Math.min(length - 1, index + 1);
+      inputRefs.current[position]?.focus();
     }
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      if (!digits[index] && index > 0) {
-        // Current is already empty, move to previous and clear it
-        const newDigits = [...digits];
-        newDigits[index - 1] = '';
-        onChange(newDigits.join(''));
-        inputRefs.current[index - 1]?.focus();
-      }
-    } else if (e.key === 'ArrowLeft' && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    } else if (e.key === 'ArrowRight' && index < length - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, length);
-    if (!pasted) return;
-
-    const newDigits = Array.from({ length }, (_, i) => pasted[i] || '');
-    onChange(newDigits.join(''));
-
-    const focusIdx = Math.min(pasted.length, length - 1);
-    inputRefs.current[focusIdx]?.focus();
+  const handlePaste = (index: number, event: React.ClipboardEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    const pasted = event.clipboardData.getData('text');
+    if (/\d/.test(pasted)) enterDigits(index, pasted);
   };
 
   return (
     <div
       role="group"
+      aria-label={ariaLabelledBy ? undefined : 'Verification code'}
       aria-labelledby={ariaLabelledBy}
       style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '8px',
+        gap: '4px',
         width: '100%',
         margin: '12px 0 20px 0',
       }}
-      onPaste={handlePaste}
     >
       {Array.from({ length }).map((_, index) => (
         <input
           key={index}
           ref={(el) => (inputRefs.current[index] = el)}
           type="text"
+          name={`otp-${index + 1}`}
           inputMode="numeric"
-          pattern="[0-9]*"
-          maxLength={1}
+          pattern="[0-9]"
+          required
+          autoComplete={index === 0 ? 'one-time-code' : 'off'}
+          maxLength={length}
           disabled={disabled}
           value={digits[index] || ''}
-          onChange={(e) => handleChange(index, e)}
-          onKeyDown={(e) => handleKeyDown(index, e)}
+          onChange={(event) => enterDigits(index, event.target.value)}
+          onKeyDown={(event) => handleKeyDown(index, event)}
+          onPaste={(event) => handlePaste(index, event)}
+          onClick={(event) => event.currentTarget.select()}
           aria-label={`Digit ${index + 1}`}
           style={{
-            width: '46px',
+            width: '44px',
+            minWidth: '44px',
+            flex: '0 0 44px',
+            boxSizing: 'border-box',
             height: '52px',
-            borderRadius: '10px',
-            border: digits[index]
-              ? '2px solid var(--accent-teal)'
-              : '1px solid var(--border-subtle)',
-            background: 'var(--bg-secondary)',
+            borderRadius: '6px',
+            border: '1px solid var(--border-control)',
+            background: 'var(--bg-card)',
             color: 'var(--text-main)',
             fontSize: '1.35rem',
             fontWeight: 700,
             textAlign: 'center',
-            outline: 'none',
-            transition: 'all 0.15s ease',
-            boxShadow: digits[index] ? '0 0 0 3px var(--accent-subtle)' : 'none',
+            transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
           }}
           onFocus={(e) => {
-            e.target.style.borderColor = 'var(--accent-teal)';
-            e.target.style.boxShadow = '0 0 0 3px var(--accent-glow)';
+            e.currentTarget.select();
+            e.target.style.borderColor = 'var(--focus-ring)';
+            e.target.style.boxShadow = '0 0 0 2px var(--focus-ring)';
           }}
           onBlur={(e) => {
-            if (!digits[index]) {
-              e.target.style.borderColor = 'var(--border-subtle)';
-              e.target.style.boxShadow = 'none';
-            }
+            e.target.style.borderColor = 'var(--border-control)';
+            e.target.style.boxShadow = 'none';
           }}
         />
       ))}

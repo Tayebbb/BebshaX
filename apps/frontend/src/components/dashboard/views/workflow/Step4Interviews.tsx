@@ -11,6 +11,7 @@ import { RequestIdTag } from '../../../common/RequestIdTag';
 interface Step4InterviewsProps {
   personas: Persona[];
   isBatchRunning: boolean;
+  batchStartBlockedReason?: string | null;
   handleRunBatchInterviews: () => Promise<void>;
   onCancelBatch: () => void;
   isGeneratingReport: boolean;
@@ -29,6 +30,8 @@ interface Step4InterviewsProps {
   chatMessages: ConversationTurn[];
   isSimulating: boolean;
   isRestoringInterview?: boolean;
+  restoreError?: string | null;
+  onRetryRestore?: () => void;
   handleSendInterviewMessage: (e: React.FormEvent) => Promise<void>;
   userInputMessage: string;
   setUserInputMessage: React.Dispatch<React.SetStateAction<string>>;
@@ -39,6 +42,7 @@ interface Step4InterviewsProps {
 export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
   personas,
   isBatchRunning,
+  batchStartBlockedReason = null,
   handleRunBatchInterviews,
   onCancelBatch,
   isGeneratingReport,
@@ -49,17 +53,18 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
   batchError = null,
   activeInterviewPersonaId,
   setActiveInterviewPersonaId,
-  setChatMessages,
-  setConversationId,
   interviewChatRef,
   chatMessages,
   isSimulating,
   isRestoringInterview = false,
+  restoreError = null,
+  onRetryRestore,
   handleSendInterviewMessage,
   userInputMessage,
   setUserInputMessage,
   isReadOnly = false,
 }) => {
+  const batchRunDisabled = isBatchRunning || isReadOnly || Boolean(batchStartBlockedReason);
   return (
     <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
@@ -72,13 +77,14 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                 </p>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-                <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end', minWidth: 0, maxWidth: '100%' }}>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={handleRunBatchInterviews}
-                    disabled={isBatchRunning || isReadOnly}
-                    title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                    disabled={batchRunDisabled}
+                    aria-describedby={batchStartBlockedReason ? 'batch-start-requirements' : undefined}
+                    title={isReadOnly ? READ_ONLY_TITLE : batchStartBlockedReason ?? undefined}
                     style={{
                       background: 'var(--accent-gradient)',
                       border: 'none',
@@ -87,8 +93,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                       color: 'var(--text-on-accent)',
                       fontWeight: 700,
                       fontSize: '0.88rem',
-                      cursor: isBatchRunning || isReadOnly ? 'not-allowed' : 'pointer',
-                      opacity: isBatchRunning || isReadOnly ? 0.6 : 1,
+                      cursor: batchRunDisabled ? 'not-allowed' : 'pointer',
+                      opacity: batchRunDisabled ? 0.6 : 1,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
@@ -112,7 +118,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                         cursor: 'pointer',
                       }}
                     >
-                      Cancel
+                      Pause updates
                     </button>
                   )}
                   <button
@@ -139,6 +145,15 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                     {isGeneratingReport ? 'Synthesizing Report...' : 'Generate Decision Report'}
                   </button>
                 </div>
+                {batchStartBlockedReason && (
+                  <div
+                    id="batch-start-requirements"
+                    role="status"
+                    style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'right', maxWidth: '100%', overflowWrap: 'anywhere' }}
+                  >
+                    {batchStartBlockedReason}
+                  </div>
+                )}
                 {isBatchRunning && (
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>
                     This can take 1–2 minutes on free providers. Cancelling stops polling but the backend job continues.
@@ -165,7 +180,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <AlertTriangle size={15} aria-hidden="true" />
-                  <span>Batch interviews failed: {batchError.message}</span>
+                  <span>Batch interview status: {batchError.message}</span>
                 </div>
                 <RequestIdTag requestId={batchError.requestId} />
               </div>
@@ -218,11 +233,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   <button
                     type="button"
                     title={failureReason ? `Failed: ${failureReason}` : undefined}
-                    onClick={() => {
-                      setActiveInterviewPersonaId(p.id);
-                      setChatMessages([]);
-                      setConversationId(null);
-                    }}
+                    onClick={() => setActiveInterviewPersonaId(p.id)}
                     style={{
                       background: isActive ? 'var(--accent-subtle)' : 'var(--bg-card)',
                       border: isActive ? '1px solid var(--accent-teal)' : '1px solid var(--border-subtle)',
@@ -290,8 +301,9 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                     <button
                       type="button"
                       onClick={handleRunBatchInterviews}
-                      disabled={isBatchRunning || isReadOnly}
-                      title={isReadOnly ? READ_ONLY_TITLE : `Re-runs the interviews for every persona — ${p.name}'s did not finish`}
+                      disabled={batchRunDisabled}
+                      aria-describedby={batchStartBlockedReason ? 'batch-start-requirements' : undefined}
+                      title={isReadOnly ? READ_ONLY_TITLE : batchStartBlockedReason ?? `Re-runs the interviews for every persona — ${p.name}'s did not finish`}
                       style={{
                         background: 'transparent',
                         border: '1px solid var(--border-subtle)',
@@ -300,8 +312,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                         padding: '5px 10px',
                         fontSize: '0.75rem',
                         fontWeight: 600,
-                        cursor: isBatchRunning || isReadOnly ? 'not-allowed' : 'pointer',
-                        opacity: isBatchRunning || isReadOnly ? 0.5 : 1,
+                        cursor: batchRunDisabled ? 'not-allowed' : 'pointer',
+                        opacity: batchRunDisabled ? 0.5 : 1,
                       }}
                     >
                       Re-run all
@@ -316,14 +328,18 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
             {/* Chat Transcript Area */}
             <div
               ref={interviewChatRef}
-              aria-busy={isRestoringInterview}
+              role="log"
+              aria-label="Interview transcript"
+              aria-live="polite"
+              aria-relevant="additions text"
+              aria-busy={isRestoringInterview || isSimulating}
               style={{
                 background: 'var(--bg-card)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: '16px',
-                padding: '24px',
-                minHeight: '380px',
-                maxHeight: '480px',
+                borderRadius: '8px',
+                padding: 'clamp(14px, 3vw, 24px)',
+                minHeight: '240px',
+                maxHeight: 'min(480px, 55dvh)',
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
@@ -335,7 +351,13 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   Loading saved transcript...
                 </div>
               )}
-              {chatMessages.length === 0 && !isRestoringInterview && (
+              {restoreError && (
+                <div role="alert" className="bx-alert bx-alert--error">
+                  <span>{restoreError}</span>
+                  <button type="button" className="bx-btn bx-btn--secondary" onClick={onRetryRestore}>Retry transcript</button>
+                </div>
+              )}
+              {chatMessages.length === 0 && !isRestoringInterview && !restoreError && (
                 <div style={{ textAlign: 'center', color: 'var(--text-secondary)', margin: 'auto', padding: '32px 0' }}>
                   <MessageSquare size={28} className="text-teal-400 mx-auto mb-2" />
                   <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-main)' }}>
@@ -350,21 +372,23 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
               {chatMessages.map((msg, idx) => {
                 const isErrorTurn = typeof msg.id === 'string' && msg.id.startsWith('turn_err_');
                 return (
-                <div
+                <article
                   key={msg.id || idx}
                   className="bx-pop"
                   role={isErrorTurn ? 'alert' : undefined}
+                  aria-label={isErrorTurn ? undefined : msg.role === 'user' ? 'Your question' : 'Synthetic persona response'}
                   style={{
                     alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                    maxWidth: '82%',
+                    maxWidth: 'min(92%, 640px)',
                     background: isErrorTurn
                       ? 'rgba(239, 68, 68, 0.08)'
                       : msg.role === 'user'
                       ? 'var(--accent-gradient)'
                       : 'var(--bg-card-hover)',
-                    color: isErrorTurn ? 'var(--status-error-text)' : 'var(--text-main)',
+                    color: isErrorTurn ? 'var(--status-error-text)' : msg.role === 'user' ? 'var(--text-on-accent)' : 'var(--text-main)',
                     padding: '14px 18px',
-                    borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                    borderRadius: msg.role === 'user' ? '8px 8px 2px 8px' : '8px 8px 8px 2px',
+                    overflowWrap: 'anywhere',
                     border: isErrorTurn
                       ? '1px solid rgba(239, 68, 68, 0.4)'
                       : msg.role === 'user'
@@ -372,14 +396,14 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                       : '1px solid var(--border-subtle)',
                   }}
                 >
-                  <div style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{msg.content}</div>
+                  <div style={{ fontSize: '0.9rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{msg.content}</div>
                   {msg.role !== 'user' && !isErrorTurn && (
                     <>
                       <MemoryDisclosure memories={msg.retrieved_memories} compact />
                       <RouteDisclosure servedBy={msg.served_by} latencyMs={msg.latency_ms} compact />
                     </>
                   )}
-                </div>
+                </article>
                 );
               })}
 
@@ -392,7 +416,7 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
             </div>
 
             {/* Prompt input for live interview turn */}
-            <form onSubmit={handleSendInterviewMessage} style={{ display: 'flex', gap: '10px' }}>
+            <form onSubmit={handleSendInterviewMessage} style={{ display: 'flex', gap: '10px', minWidth: 0 }}>
               <input
                 type="text"
                 value={userInputMessage}
@@ -403,36 +427,33 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                     : 'Ask a follow-up interview question...'
                 }
                 aria-label="Follow-up interview question"
-                disabled={isReadOnly || isRestoringInterview}
+                disabled={isReadOnly || isRestoringInterview || Boolean(restoreError) || isSimulating || isBatchRunning || isGeneratingReport}
                 title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
                   flex: 1,
+                  minWidth: 0,
                   background: 'var(--bg-card)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: '12px',
-                  padding: '12px 18px',
+                  borderRadius: '6px',
+                  padding: '12px 14px',
                   color: 'var(--text-main)',
                   fontSize: '0.88rem',
-                  outline: 'none',
                   opacity: isReadOnly ? 0.6 : 1,
                 }}
               />
               <button
                 type="submit"
-                disabled={isSimulating || isRestoringInterview || !userInputMessage.trim() || isReadOnly}
-                title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                className="bx-btn bx-btn--primary bx-btn--icon"
+                aria-label="Send question"
+                disabled={isSimulating || isRestoringInterview || Boolean(restoreError) || isBatchRunning || isGeneratingReport || !userInputMessage.trim() || isReadOnly}
+                title={isReadOnly ? READ_ONLY_TITLE : 'Send question'}
                 style={{
-                  background: 'var(--accent-gradient)',
-                  border: 'none',
-                  color: 'var(--text-on-accent)',
-                  borderRadius: '12px',
-                  padding: '0 20px',
-                  fontWeight: 700,
-                  cursor: isSimulating || isRestoringInterview || !userInputMessage.trim() || isReadOnly ? 'not-allowed' : 'pointer',
-                  opacity: isReadOnly ? 0.55 : 1,
+                  width: '44px',
+                  minHeight: '44px',
+                  flexShrink: 0,
                 }}
               >
-                <Send size={16} />
+                <Send size={16} aria-hidden="true" />
               </button>
             </form>
     </>

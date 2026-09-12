@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Activity,
   Shield,
@@ -12,10 +12,21 @@ import { ProvenanceTraceRow } from './router/ProvenanceTraceRow';
 import { EvaluationCard } from './router/EvaluationCard';
 import { JudgeLabPanel } from './router/JudgeLabPanel';
 import { fmtCount } from './router/routerFormat';
+import { fromUnknownError } from '../../../utils/apiError';
+import { useRequestScope } from '../../../utils/useRequestScope';
+import { useRouteReady } from '../../../performance/routeTiming';
+
+/** Fleet-wide provider status and evaluation metrics are developer diagnostics (SEC-09). */
+const DEVELOPER_ONLY_NOTICE =
+  'Developer diagnostics — fleet-wide provider status and evaluation metrics are only shown to developer accounts on this deployment. Your own request traces above are unaffected.';
+const isForbidden = (err: unknown): boolean => fromUnknownError(err).status === 403;
 
 /** Developer-facing routing & provenance dashboard (RULES R11: internals live
  * here only, clearly labelled). Every number is measured or rendered as "—". */
 export const ModelRouterView: React.FC = () => {
+  const scopeRef = useRequestScope([]);
+  const dataGenerationRef = useRef(0);
+  const evaluationGenerationRef = useRef(0);
   const [routesStatus, setRoutesStatus] = useState<RoutesStatusResponse | null>(null);
   const [provenance, setProvenance] = useState<ProvenanceRecord[]>([]);
   // Distinct "never loaded" state so the empty-traces copy cannot flash before
@@ -23,45 +34,66 @@ export const ModelRouterView: React.FC = () => {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [provenanceLoading, setProvenanceLoading] = useState(true);
+  const [provenanceError, setProvenanceError] = useState<string | null>(null);
+  useRouteReady(hasLoaded && !isLoading && !provenanceLoading, loadError || provenanceError ? 'error' : 'content');
   const [evaluation, setEvaluation] = useState<EvaluationMetrics | null>(null);
   const [evaluationLoading, setEvaluationLoading] = useState(true);
   const [evaluationError, setEvaluationError] = useState<string | null>(null);
+  const [developerOnly, setDeveloperOnly] = useState(false);
 
   const loadEvaluation = useCallback(async () => {
+    const scope = scopeRef.current;
+    const generation = ++evaluationGenerationRef.current;
+    const isCurrent = () => scope.active && generation === evaluationGenerationRef.current;
     setEvaluationLoading(true);
     setEvaluationError(null);
     try {
-      setEvaluation(await api.getEvaluationMetrics());
+      const result = await api.getEvaluationMetrics();
+      if (isCurrent()) setEvaluation(result);
     } catch (err: any) {
+      if (!isCurrent()) return;
       setEvaluation(null);
-      setEvaluationError(err?.message || 'metrics endpoint did not respond');
+      if (isForbidden(err)) {
+        setDeveloperOnly(true);
+        setEvaluationError('Available to developer accounts only.');
+      } else {
+        setEvaluationError(err?.message || 'metrics endpoint did not respond');
+      }
     } finally {
-      setEvaluationLoading(false);
+      if (isCurrent()) setEvaluationLoading(false);
     }
   }, []);
 
   const loadData = useCallback(async () => {
+    const scope = scopeRef.current;
+    const generation = ++dataGenerationRef.current;
+    const isCurrent = () => scope.active && generation === dataGenerationRef.current;
+    void loadEvaluation();
     setIsLoading(true);
     setLoadError(null);
-    try {
-      const [routes, prov] = await Promise.all([
-        api.getRoutesStatus(),
-        api.getProvenance(15),
-      ]);
-      setRoutesStatus(routes);
-      setProvenance(prov.items);
-    } catch (err: any) {
-      // The service throws — swallowing this rendered an empty matrix that
-      // looked like "no providers" instead of "we couldn't check".
-      setLoadError(err?.message || 'Provider status could not be loaded.');
-      setRoutesStatus(null);
-      setProvenance([]);
-    } finally {
-      setIsLoading(false);
-      setHasLoaded(true);
-    }
-    // Evaluation is independent: its failure must not blank the health matrix.
-    void loadEvaluation();
+    setDeveloperOnly(false);
+    setProvenanceLoading(true);
+    setProvenanceError(null);
+    await Promise.all([
+      api.getRoutesStatus().then((routes) => {
+        if (isCurrent()) setRoutesStatus(routes);
+      }).catch((error: unknown) => {
+        if (!isCurrent()) return;
+        setRoutesStatus(null);
+        if (isForbidden(error)) setDeveloperOnly(true);
+        else setLoadError(error instanceof Error ? error.message : 'Provider status could not be loaded.');
+      }).finally(() => {
+        if (isCurrent()) { setIsLoading(false); setHasLoaded(true); }
+      }),
+      api.getProvenance(15).then((result) => {
+        if (isCurrent()) setProvenance(result.items);
+      }).catch((error: unknown) => {
+        if (!isCurrent()) return;
+        setProvenanceError(error instanceof Error ? error.message : 'Provenance unavailable.');
+        setProvenance([]);
+      }).finally(() => { if (isCurrent()) setProvenanceLoading(false); }),
+    ]);
   }, [loadEvaluation]);
 
   useEffect(() => {
@@ -101,7 +133,7 @@ export const ModelRouterView: React.FC = () => {
             Routing &amp; Provenance
           </h1>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', margin: 0 }}>
-            Which AI providers are online, how each request was routed, and what the evaluation log measures.
+            Configured routes, observed request outcomes, and recorded evaluation results.
           </p>
         </div>
 
@@ -149,17 +181,17 @@ export const ModelRouterView: React.FC = () => {
         >
           <div>
             <dt style={{ color: 'var(--text-muted)' }}>Operational budget</dt>
-            <dd style={{ margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Zero API cost: free-tier aggregation across providers</dd>
+            <dd style={{ margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Legitimate free-tier quotas; availability and hosting costs are separate</dd>
           </div>
           <div>
             <dt style={{ color: 'var(--text-muted)' }}>Reliability fallback</dt>
-            <dd style={{ margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Local Ollama model at the end of every pool</dd>
+            <dd style={{ margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Freellmpool primary, independent OpenRouter secondary; explicit failure if neither is available</dd>
           </div>
           <div>
             <dt style={{ color: 'var(--text-muted)' }}>Task Pool Design</dt>
             <dd style={{ margin: 0, color: 'var(--text-main)' }}>
-              <span style={{ fontWeight: 600 }}>Reasoning</span> generates and checks personas · <span style={{ fontWeight: 600 }}>Conversation</span> runs interviews ·{' '}
-              <span style={{ fontWeight: 600 }}>Emergency</span> is local-first
+              <span style={{ fontWeight: 600 }}>CPU selection</span> chooses synthetic source personas; <span style={{ fontWeight: 600 }}>Conversation</span> runs interviews.{' '}
+              LLM pools are remote-only and never shorten persona context.
             </dd>
           </div>
           {routesStatus?.providers && (
@@ -182,14 +214,14 @@ export const ModelRouterView: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {!hasLoaded || isLoading ? (
+          {provenanceLoading ? (
             <div role="status" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
-              Loading provenance traces…
+              Loading provenance traces...
             </div>
           ) : provenance.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.86rem', border: '1px dashed var(--border-medium)', borderRadius: '12px' }}>
-              {loadError
-                ? 'Provenance traces could not be loaded.'
+              {provenanceError
+                ? `Provenance traces could not be loaded: ${provenanceError}`
                 : 'No recent provenance traces found. Run a research study or persona generation to generate traces.'}
             </div>
           ) : (
@@ -203,9 +235,30 @@ export const ModelRouterView: React.FC = () => {
         <div className="bx-section__head">
           <h2 className="bx-section__title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Activity size={18} color="var(--accent-teal)" aria-hidden="true" />
-            Live Provider Health Matrix
+            Reported Provider Status
           </h2>
         </div>
+
+        {developerOnly && !loadError && (
+          <div
+            role="note"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              background: 'var(--fill-soft)',
+              border: '1px solid var(--border-soft)',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              color: 'var(--text-secondary)',
+              fontSize: '0.85rem',
+            }}
+          >
+            <Shield size={16} aria-hidden="true" />
+            <span>{DEVELOPER_ONLY_NOTICE}</span>
+          </div>
+        )}
 
         {loadError && (
           <div
@@ -246,7 +299,7 @@ export const ModelRouterView: React.FC = () => {
           </div>
         )}
 
-        {!loadError && hasLoaded && !isLoading && (routesStatus?.providers?.length ?? 0) === 0 && (
+        {!loadError && !developerOnly && hasLoaded && !isLoading && (routesStatus?.providers?.length ?? 0) === 0 && (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.86rem', padding: '12px 0' }}>
             No providers reported yet.
           </div>
@@ -254,7 +307,7 @@ export const ModelRouterView: React.FC = () => {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(190px, 100%), 1fr))', gap: '14px' }}>
           {routesStatus?.providers.map((p) => {
-            const isHealthy = p.status === 'healthy';
+            const isHealthy = p.status === 'available' && p.recent_success === true;
             return (
               <div
                 key={p.name}
@@ -292,7 +345,10 @@ export const ModelRouterView: React.FC = () => {
                   Type: <span style={{ color: 'var(--text-primary)' }}>{p.type.replace(/_/g, ' ')}</span>
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  Models: <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{p.available_models} active</span>
+                  Models: <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{p.available_models == null ? 'Unknown' : p.available_models}</span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  {p.streaming_mode === 'native' ? 'Native response streaming' : p.streaming_mode === 'buffered' ? 'Buffered response delivery' : 'Delivery capability unknown'}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: p.active_cooldowns ? 'var(--status-warn-text)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   {p.active_cooldowns ? <AlertTriangle size={12} aria-hidden="true" /> : null}

@@ -1,10 +1,18 @@
 import React from 'react';
-import { Copy, Download, FileText } from 'lucide-react';
+import { Copy, Download, FileText, RefreshCw } from 'lucide-react';
 import { Persona, Study, StudyReport } from '../../../../types';
+import { Button } from '../../../ui';
 import { ProvenanceChip } from '../PersonaLibraryView';
 import { countEvidenceBacked } from '../../../../utils/personaEvidence';
 import { READ_ONLY_TITLE } from './types';
 import { AiReviewCard } from './AiReviewCard';
+
+export function formatScorePercent(value: unknown): string {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100) {
+    return '\u2014';
+  }
+  return `${Math.round(value <= 1 ? value * 100 : value)}%`;
+}
 
 /** Step 5 — final decision report. Pure JSX extraction from StudyWorkflowView;
  * `verificationAssumptions` is derived in the parent from persona provenance. */
@@ -14,10 +22,14 @@ interface Step5ReportProps {
   report: StudyReport | null;
   availableReports: StudyReport[];
   reportError: string | null;
+  reportErrorKind?: 'loading' | 'generation' | 'copy';
+  onReloadReports?: () => Promise<void>;
+  reportsLoading?: boolean;
   isGeneratingReport: boolean;
   copiedToast: boolean;
   copyReportMarkdown: () => void;
   exportReportMarkdown: () => void;
+  onSelectReport?: (report: StudyReport) => void;
   handleGenerateFinalReport: () => Promise<void>;
   verificationAssumptions: { value: string; provenance: string; personaName: string }[];
   /** Example (demo) studies are viewable but never mutable from here. */
@@ -30,31 +42,55 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
   report,
   availableReports,
   reportError,
+  reportErrorKind = 'generation',
+  onReloadReports,
+  reportsLoading = false,
   isGeneratingReport,
   copiedToast,
   copyReportMarkdown,
   exportReportMarkdown,
+  onSelectReport,
   handleGenerateFinalReport,
   verificationAssumptions,
   isReadOnly = false,
 }) => {
   const evidenceBackedCount = countEvidenceBacked(personas);
   const claimCount = report?.metrics?.total_claims ?? report?.evidence_findings?.length ?? 0;
+  const reportRecovery = {
+    loading: { title: 'Saved reports unavailable', label: 'Reload saved reports', action: onReloadReports },
+    generation: { title: 'Report generation failed', label: 'Retry report generation', action: handleGenerateFinalReport },
+    copy: { title: 'Report copy failed', label: 'Try copying again', action: copyReportMarkdown },
+  }[reportErrorKind];
   return (
     <>
             {reportError && (
               <div
                 role="alert"
                 style={{
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  background: 'var(--status-error-bg)',
+                  border: '1px solid var(--status-error-border)',
                   color: 'var(--status-error-text)',
                   borderRadius: '8px',
                   padding: '12px 16px',
                   fontSize: '0.88rem',
                 }}
               >
-                Report generation failed: {reportError}
+                <p>{reportRecovery.title}: {reportError}</p>
+                <p style={{ marginTop: '6px', color: 'var(--text-secondary)' }}>
+                  {report ? 'Your saved report is unchanged.' : 'Your study data is unchanged.'}
+                </p>
+                {reportRecovery.action && (
+                  <Button
+                    variant="secondary"
+                    onClick={reportRecovery.action}
+                    disabled={isGeneratingReport || reportsLoading || (isReadOnly && reportErrorKind === 'generation')}
+                    title={isReadOnly && reportErrorKind === 'generation' ? READ_ONLY_TITLE : undefined}
+                    style={{ marginTop: '12px' }}
+                  >
+                    <RefreshCw size={15} aria-hidden="true" />
+                    {reportRecovery.label}
+                  </Button>
+                )}
               </div>
             )}
             {/* Header & Export Actions */}
@@ -75,7 +111,7 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                 >
                   {report
                     ? `Decision Report Ready • Version ${report.version || 1} ${availableReports.length > 1 ? `(${availableReports.length} versions)` : ''}`
-                    : 'No report generated yet'}
+                    : reportsLoading ? 'Loading saved reports' : reportError ? 'Saved report status unavailable' : 'No report generated yet'}
                 </span>
                 <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '8px 0 4px 0' }}>
                   {report?.title || study?.title || 'Market Research & Validation Report'}
@@ -91,7 +127,15 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                 </p>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', minWidth: 0 }}>
+                {availableReports.length > 1 && onSelectReport && (
+                  <select aria-label="Saved report version" value={report?.id ?? ''} onChange={(event) => {
+                    const selected = availableReports.find((candidate) => candidate.id === event.target.value);
+                    if (selected) onSelectReport(selected);
+                  }}>
+                    {availableReports.map((saved, index) => <option key={saved.id ?? index} value={saved.id}>Version {saved.version ?? 'unknown'}</option>)}
+                  </select>
+                )}
                 <button
                   type="button"
                   onClick={copyReportMarkdown}
@@ -144,7 +188,7 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Demand Signal</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent-emerald)', marginTop: '4px' }}>
-                  {report?.metrics?.demand_score != null ? `${report.metrics.demand_score}%` : '—'}
+                  {formatScorePercent(report?.metrics?.demand_score)}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                   Model-estimated from the synthetic transcripts — not a measurement
@@ -162,9 +206,7 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Confidence Score</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent-teal)', marginTop: '4px' }}>
-                  {report?.metrics?.confidence_score != null
-                    ? `${Math.round(report.metrics.confidence_score * 100)}%`
-                    : '—'}
+                  {formatScorePercent(report?.metrics?.confidence_score)}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                   The model&apos;s own confidence in this synthesis — not a measurement
@@ -172,7 +214,7 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
               </div>
             </div>
 
-            {isGeneratingReport && !report ? (
+            {(isGeneratingReport || reportsLoading) && !report ? (
               /* Synthesis can take minutes on free routes — show the wait here
                  instead of on a disabled button back in step 4. */
               <div
@@ -187,12 +229,14 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                   gap: '14px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-teal-bright)', fontWeight: 600, fontSize: '0.92rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', color: 'var(--accent-teal-bright)', fontWeight: 600, fontSize: '0.92rem' }}>
                   <FileText size={16} />
-                  Synthesizing your decision report…
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.78rem' }}>
-                    Free providers may take up to 1–2 minutes
-                  </span>
+                  {reportsLoading ? 'Loading saved report versions...' : 'Synthesizing your decision report…'}
+                  {!reportsLoading && (
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.78rem' }}>
+                      You can leave this view and return while generation continues.
+                    </span>
+                  )}
                 </div>
                 <div className="bx-skeleton" style={{ height: '14px', width: '90%' }} />
                 <div className="bx-skeleton" style={{ height: '14px', width: '78%' }} />
@@ -238,8 +282,16 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                     ))}
                   </ul>
                 </div>
+                <section aria-label="Report limitations">
+                  <h2>Limitations</h2>
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{report.limitations || 'No limitations were recorded for this report version. Synthetic results are not observed customer evidence.'}</p>
+                </section>
+                <details>
+                  <summary>Evidence, source identities, and complete report record</summary>
+                  <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: '0.8rem' }}>{JSON.stringify(report, null, 2)}</pre>
+                </details>
               </>
-            ) : (
+            ) : reportError ? null : (
               /* Honest empty state — placeholder findings must never render. */
               <div
                 style={{

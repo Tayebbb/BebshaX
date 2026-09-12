@@ -27,6 +27,11 @@ import { Step4Interviews } from './workflow/Step4Interviews';
 import { Step5Report } from './workflow/Step5Report';
 import { PersonaDetailModal } from './workflow/PersonaDetailModal';
 import { EvidenceProbe, nextEvidenceProbe } from './workflow/evidenceProbe';
+import { getStudyDraftRetry, STUDY_SAVE_CHANGED, type StudySaveState } from '../../../services/studyPersistence';
+import { getSessionEpoch } from '../../../services/session';
+import { pollSerial } from '../../../services/polling';
+import { reportMarkdown } from '../../../utils/exports';
+import { useRouteReady } from '../../../performance/routeTiming';
 
 interface StudyWorkflowViewProps {
   studyId?: string;
@@ -39,18 +44,48 @@ interface StudyWorkflowViewProps {
 
 export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   studyId,
-  initialStep = 1,
+  initialStep,
   initialType = 'interviews',
   initialPrompt = '',
   onExit,
   onStepChange,
 }) => {
-  const [currentStep, setCurrentStep] = useState<number>(initialStep);
-  const { navigate } = useNavigation();
+  const [currentStep, setCurrentStep] = useState<number>(initialStep ?? 1);
+  const [saveState, setSaveState] = useState<StudySaveState | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { navigate, currentPath, currentSearch } = useNavigation();
   const studyEpochRef = useRef({ active: false });
+  const previousStudyIdRef = useRef(studyId);
+  useLayoutEffect(() => {
+    if (initialStep !== undefined) setCurrentStep(Math.max(1, Math.min(5, initialStep)));
+  }, [initialStep]);
   useLayoutEffect(() => {
     const epoch = { active: true };
     studyEpochRef.current = epoch;
+    if (previousStudyIdRef.current !== studyId) {
+    previousStudyIdRef.current = studyId;
+    setStudy(null);
+    setLoadError(null);
+    setSaveState(null);
+    setReport(null);
+    setAvailableReports([]);
+    setPersonas([]);
+    setSelectedPersonaIds([]);
+    setQuestions([]);
+    setSuggestedRoles([]);
+    setCopilotMessages([]);
+    copilotMessagesRef.current = [];
+    setIsCopilotTyping(false);
+    isFetchingCopilotRef.current = false;
+    initialPromptHandledRef.current = null;
+    pendingInitialPromptRef.current = null;
+    setPromptInput(initialPrompt);
+    setReportError(null);
+    setShowRoleSelection(false);
+    setScriptGenerated(false);
+    setScriptSource(null);
+    setCurrentStep(initialStep ?? 1);
+    }
     return () => { epoch.active = false; };
   }, [studyId]);
   const stepViewRef = useViewMotion<HTMLDivElement>([currentStep]);
@@ -80,10 +115,33 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
   const [isGeneratingPersonas, setIsGeneratingPersonas] = useState<boolean>(false);
   const [personaGenError, setPersonaGenError] = useState<string | null>(null);
+  const [personaErrorKind, setPersonaErrorKind] = useState<'generation' | 'save'>('generation');
+  const [personaSaveRetry, setPersonaSaveRetry] = useState<(() => Promise<Study>) | null>(null);
+  const [isRetryingPersonaSave, setIsRetryingPersonaSave] = useState(false);
+  const personaSaveControllerRef = useRef<AbortController | null>(null);
+  const personaSavePendingRef = useRef(false);
+  const sessionEpoch = getSessionEpoch();
   const [personaGenRequestId, setPersonaGenRequestId] = useState<string | null>(null);
   const [personaFailedRoles, setPersonaFailedRoles] = useState<FailedPersonaRole[]>([]);
   const [personaServedBy, setPersonaServedBy] = useState<string[]>([]);
   const [viewingPersona, setViewingPersona] = useState<Persona | null>(null);
+
+  useLayoutEffect(() => {
+    const controller = new AbortController();
+    personaSaveControllerRef.current = controller;
+    personaSavePendingRef.current = false;
+    setPersonaSaveRetry(null);
+    setIsRetryingPersonaSave(false);
+    return () => { controller.abort(); };
+  }, [studyId, currentStep, currentPath, currentSearch, sessionEpoch]);
+
+  useEffect(() => {
+    const controller = personaSaveControllerRef.current;
+    if (!studyId || currentStep !== 2 || isReadOnly || personaErrorKind !== 'save' || !personaGenError
+      || !controller || controller.signal.aborted || personaSavePendingRef.current) return;
+    const retry = getStudyDraftRetry(api.getStoredUser()?.id ?? 'anonymous', studyId, controller.signal);
+    setPersonaSaveRetry(() => retry ?? null);
+  }, [studyId, currentStep, currentPath, currentSearch, sessionEpoch, isReadOnly, personaErrorKind, personaGenError]);
 
   // Copilot Multi-turn Conversational States (Step 1)
   const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([]);
@@ -100,6 +158,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [chatMessages, setChatMessages] = useState<ConversationTurn[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isRestoringInterview, setIsRestoringInterview] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [isBatchRunning, setIsBatchRunning] = useState(false);
   const [userInputMessage, setUserInputMessage] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -113,8 +173,15 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [report, setReport] = useState<StudyReport | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [availableReports, setAvailableReports] = useState<StudyReport[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
   const [copiedToast, setCopiedToast] = useState(false);
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  useRouteReady(Boolean(loadError) || Boolean(study && study.id === studyId &&
+    (currentStep !== 2 || !isGeneratingPersonas) &&
+    (currentStep !== 3 || !isGeneratingScript) &&
+    (currentStep !== 4 || !isRestoringInterview) &&
+    (currentStep !== 5 || (!reportsLoading && (report || !isGeneratingReport)))),
+    loadError || (currentStep === 2 && personaGenError) || (currentStep === 3 && scriptError) || (currentStep === 4 && restoreError) ? 'error' : 'content');
 
   // Step 1: state of the supporting-evidence attempt for this study. Read from
   // the evidence summary the Evidence Laboratory already serves — no new
@@ -132,17 +199,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const step1InputRef = useRef<HTMLTextAreaElement | null>(null);
   const personaModalTriggerRef = useRef<HTMLElement | null>(null);
   const personaModalRef = useRef<HTMLDivElement | null>(null);
-  const interviewEpochRef = useRef({ active: false, pending: false, restoring: false, revision: 0 });
+  const interviewEpochRef = useRef({ active: false, pending: false, restoring: false, restoreFailed: false, revision: 0 });
 
   useLayoutEffect(() => {
     const epoch = {
-      active: true, pending: false, revision: 0,
+      active: true, pending: false, restoreFailed: false, revision: 0,
       restoring: Boolean(studyId && activeInterviewPersonaId && localStorage.getItem(
         `bebshax_conv_${studyId}_${activeInterviewPersonaId}`,
       )),
     };
     interviewEpochRef.current = epoch;
     setIsSimulating(false);
+    setRestoreError(null);
     setIsRestoringInterview(epoch.restoring);
     setUserInputMessage('');
     setConversationId(null);
@@ -181,21 +249,23 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       return;
     }
     epoch.restoring = true;
+    epoch.restoreFailed = false;
+    setRestoreError(null);
     setIsRestoringInterview(true);
     setConversationId(storedConvId);
     let cancelled = false;
     api
       .getConversation(storedConvId)
       .then((conv) => {
-        if (cancelled || !epoch.active || epoch.revision !== revision || !conv) return;
+        if (cancelled || !epoch.active || epoch.revision !== revision) return;
+        if (!conv) throw new Error('Saved conversation is unavailable.');
         setConversationId(conv.id);
         setChatMessages(conv.turns || []);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!cancelled && epoch.active && epoch.revision === revision) {
-          localStorage.removeItem(`bebshax_conv_${studyId}_${activeInterviewPersonaId}`);
-          setConversationId(null);
-          setChatMessages([]);
+          epoch.restoreFailed = true;
+          setRestoreError(toUserMessage(error));
         }
       })
       .finally(() => {
@@ -207,9 +277,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [studyId, activeInterviewPersonaId]);
+  }, [studyId, activeInterviewPersonaId, restoreAttempt]);
 
-  const handleStepChange = (newStep: number, opts?: { reportReady?: boolean }) => {
+  const handleStepChange = (newStep: number) => {
     const epoch = studyEpochRef.current;
     if (!epoch.active) return;
     const clamped = Math.max(1, Math.min(newStep, 5));
@@ -218,17 +288,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     // Read-only example studies never PATCH — the write gate would refuse.
     if (studyId && !isReadOnly && epoch.active) {
       // 'completed' is earned by a generated report — never by visiting step 5.
-      const reportExists = opts?.reportReady || report !== null || availableReports.length > 0;
       api
         .updateStudy(studyId, {
           step: clamped,
-          status: reportExists ? 'completed' : 'in_progress',
           prompt: promptInput || study?.prompt,
           copilot_messages: copilotMessagesRef.current as any,
           suggested_roles: suggestedRoles,
-          personas_data: personas as any,
-          persona_count: personas.length,
-          persona_ids: personas.map((p) => p.id),
           script_questions: questions,
         })
         .catch(() => {});
@@ -237,14 +302,31 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   // Restore full study state from DB on mount / refresh
   useEffect(() => {
+    const onSave = (event: Event) => {
+      const state = (event as CustomEvent<StudySaveState>).detail;
+      if (state.studyId === studyId && state.epoch === getSessionEpoch()) setSaveState(state);
+    };
+    window.addEventListener(STUDY_SAVE_CHANGED, onSave);
+    return () => window.removeEventListener(STUDY_SAVE_CHANGED, onSave);
+  }, [studyId]);
+
+  useEffect(() => {
     if (!studyId) return;
     const epoch = studyEpochRef.current;
     api
       .getStudy(studyId)
-      .then((s) => {
+      .then((loaded) => {
+        if (!epoch.active) return;
+        if (!loaded) {
+          setLoadError('This study is unavailable or could not be found.');
+          return;
+        }
+        const draft = studyId ? api.getPendingStudyDraft(studyId) : undefined;
+        const s = loaded ? { ...loaded, ...draft } : loaded;
         if (!epoch.active || !s) return;
+        if (draft) setSaveState({ studyId, epoch: getSessionEpoch(), state: 'unsaved', message: 'Recovered unsaved changes. The server version has not been overwritten.' });
         setStudy(s);
-        if (s.prompt && !promptInput) setPromptInput(s.prompt);
+        if (s.prompt) setPromptInput((current) => current || s.prompt || '');
         // Saved history wins whenever it is longer than what's in memory
         // (e.g. a stale initialPrompt seeded a single-message chat).
         const saved = (s.copilot_messages || []) as any[];
@@ -277,19 +359,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         }
         // Honor the URL step when it was explicitly provided (> 1);
         // otherwise restore the persisted step from the DB.
-        if (s.step && initialStep === 1) {
+        if (s.step && initialStep === undefined) {
           setCurrentStep(s.step);
         }
       })
-      .catch(() => {});
+      .catch((error: unknown) => { if (epoch.active) setLoadError(`The saved study could not be loaded: ${toUserMessage(error)}`); });
 
-    // Load reports if step 5
-    api.getStudyReports(studyId).then((reps) => {
-      if (epoch.active && reps && reps.length > 0) {
-        setAvailableReports(reps);
-        setReport(reps[0]);
-      }
-    }).catch(() => {});
+    void reloadReports();
+    const controller = new AbortController();
+    if (api.getPendingJobHandle(studyId, 'report')) {
+      setIsGeneratingReport(true);
+      void api.resumeStudyReport(studyId, controller.signal).then((saved) => {
+        if (!epoch.active) return;
+        setReport(saved);
+        setAvailableReports((previous) => [saved, ...previous.filter((candidate) => candidate.id !== saved.id)]);
+      }).catch((error: unknown) => {
+        if (epoch.active && !controller.signal.aborted) {
+          setReportErrorKind('generation');
+          setReportError(toUserMessage(error));
+        }
+      }).finally(() => { if (epoch.active) setIsGeneratingReport(false); });
+    }
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studyId]);
 
@@ -600,16 +691,15 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   const handleGeneratePersonas = async () => {
     const epoch = studyEpochRef.current;
-    if (!epoch.active || isGeneratingPersonas) return;
+    if (!epoch.active || isGeneratingPersonas || personaSavePendingRef.current) return;
     setPersonaGenError(null);
+    setPersonaErrorKind('generation');
+    setPersonaSaveRetry(null);
 
     const activeRoles = suggestedRoles.filter((r) => r.selected && r.count > 0);
     const totalCount = activeRoles.reduce((sum, r) => sum + r.count, 0) || DEFAULT_PERSONA_COUNT;
 
-    const allUserTexts = copilotMessagesRef.current
-      .filter((m) => m.role === 'user')
-      .map((m) => m.content)
-      .join(' ');
+    const userMessages = copilotMessagesRef.current.filter((m) => m.role === 'user').map((m) => m.content);
 
     // No literal fallback: a made-up idea would yield personas for a business
     // nobody described. Both guards run BEFORE the step change so the user is
@@ -620,7 +710,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       setRoleError(message);
       setPersonaGenError(message);
     };
-    const userPrompt = [allUserTexts, promptInput, study?.prompt ?? ''].find((t) => t.trim()) ?? '';
+    // The saved study prompt stays the canonical idea. Joining every chat turn
+    // into it ("...That is everything, please finalize") corrupted downstream
+    // script/persona prompts and outgrew the 8k limit after a long conversation;
+    // the server already reads the full copilot history from the study.
+    const userPrompt = [study?.prompt ?? '', promptInput, userMessages[0] ?? ''].find((t) => t.trim()) ?? '';
     if (!userPrompt) {
       refuse('Describe your business idea first — there is nothing to generate personas from.');
       return;
@@ -660,14 +754,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       if (generated[0]) setActiveInterviewPersonaId(generated[0].id);
 
       if (studyId) {
-        await api.updateStudy(studyId, {
-          title: studyTitle,
-          prompt: userPrompt,
-          persona_count: generated.length || totalCount,
-          persona_ids: generated.map((p) => p.id),
-          personas_data: generated as any,
-          step: 2,
-        });
+        try {
+          await api.updateStudy(studyId, {
+            title: studyTitle,
+            prompt: userPrompt,
+            persona_count: generated.length || totalCount,
+            persona_ids: generated.map((p) => p.id),
+            personas_data: generated as any,
+            step: 2,
+          });
+        } catch (saveErr: unknown) {
+          if (!epoch.active) return;
+          // The cohort exists on the server; only this tab's study snapshot save
+          // failed. Saying "generation failed" here made users regenerate.
+          const refusal = readOnlyRefusal(saveErr);
+          if (refusal) {
+            setReadOnlyNotice(refusal);
+          } else {
+            setPersonaErrorKind('save');
+            setPersonaGenError(toUserMessage(saveErr, { timeoutMs: 30000 }));
+            setPersonaGenRequestId(fromUnknownError(saveErr).requestId ?? null);
+          }
+        }
       }
     } catch (err: any) {
       if (!epoch.active) return;
@@ -680,6 +788,40 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       }
     } finally {
       if (epoch.active) setIsGeneratingPersonas(false);
+    }
+  };
+
+  const handleRetryPersonaSave = async () => {
+    const controller = personaSaveControllerRef.current;
+    const epoch = studyEpochRef.current;
+    if (!studyId || !epoch.active || !personaSaveRetry || isReadOnly || personaSavePendingRef.current
+      || !controller || controller.signal.aborted) return;
+    const owner = api.getStoredUser()?.id ?? 'anonymous';
+    const isCurrent = () => epoch.active && !controller.signal.aborted
+      && personaSaveControllerRef.current === controller;
+    personaSavePendingRef.current = true;
+    setIsRetryingPersonaSave(true);
+    try {
+      await personaSaveRetry();
+      if (!isCurrent()) return;
+      setPersonaGenError(null);
+      setPersonaGenRequestId(null);
+      setPersonaSaveRetry(null);
+    } catch (error: unknown) {
+      if (!isCurrent()) return;
+      const refusal = readOnlyRefusal(error);
+      if (refusal) setReadOnlyNotice(refusal);
+      else {
+        setPersonaGenError(toUserMessage(error, { timeoutMs: 30000 }));
+        setPersonaGenRequestId(fromUnknownError(error).requestId ?? null);
+      }
+      const retry = refusal ? undefined : getStudyDraftRetry(owner, studyId, controller.signal);
+      setPersonaSaveRetry(() => retry ?? null);
+    } finally {
+      if (isCurrent()) {
+        personaSavePendingRef.current = false;
+        setIsRetryingPersonaSave(false);
+      }
     }
   };
 
@@ -719,7 +861,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         } catch {
           // storage unavailable — the label just resets on the next reload
         }
-        api.updateStudy(studyId, { script_questions: res.questions }).catch(() => {});
+        // The server already persisted the script (and reported the new
+        // revision); re-sending it against the old revision produced a 412.
+        if (res.study_revision == null) api.updateStudy(studyId, { script_questions: res.questions }).catch(() => {});
       } else {
         setScriptError('The generator returned no questions. Your existing script is unchanged — try again.');
       }
@@ -741,10 +885,28 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   };
 
   // Step 4: Batch Interviews Execution (async job + polling)
+  const batchPrerequisiteError = personas.length === 0 || selectedPersonaIds.length === 0
+    ? 'Select at least one persona before running interviews.'
+    : questions.length === 0
+    ? 'Add at least one question in Script before running interviews.'
+    : questions.some((question) => !question.trim())
+    ? 'Fill in or remove empty script questions before running interviews.'
+    : null;
+  const batchStartBlockedReason = studyId && api.getPendingJobHandle(studyId, 'batch')
+    ? null
+    : batchPrerequisiteError;
   const batchPollCancelledRef = useRef(false);
+  const batchControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { batchControllerRef.current?.abort(); }, [studyId]);
   const handleRunBatchInterviews = async () => {
     const epoch = studyEpochRef.current;
-    if (!epoch.active || !studyId || isBatchRunning) return;
+    if (!epoch.active || !studyId || isReadOnly || isBatchRunning || batchControllerRef.current) return;
+    if (!api.getPendingJobHandle(studyId, 'batch') && batchPrerequisiteError) {
+      setBatchError({ message: batchPrerequisiteError, requestId: null });
+      return;
+    }
+    const controller = new AbortController();
+    batchControllerRef.current = controller;
     setIsBatchRunning(true);
     batchPollCancelledRef.current = false;
 
@@ -772,48 +934,29 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     };
 
     try {
-      const start = await api.runBatchStudyInterviews(studyId, selectedPersonaIds, questions);
+      const start = await api.runBatchStudyInterviews(studyId, selectedPersonaIds, questions, controller.signal);
       if (!epoch.active || batchPollCancelledRef.current) return;
       const jobId = start?.job_id;
       if (!jobId) throw new Error('Batch job did not start');
       applyJobStatuses(start);
 
-      // Poll until the job leaves "running" (real batches run for many minutes).
-      let job: any = start;
-      while (epoch.active && !batchPollCancelledRef.current && job?.status === 'running') {
-        await new Promise((r) => setTimeout(r, 5000));
-        if (!epoch.active || batchPollCancelledRef.current) return;
-        try {
-          job = await api.getBatchRunStatus(studyId, jobId);
-          if (!epoch.active || batchPollCancelledRef.current) return;
-          applyJobStatuses(job);
-        } catch (pollErr: any) {
-          if (!epoch.active || batchPollCancelledRef.current) return;
-          if (pollErr?.status === 404) {
-            // Job lost (e.g. backend restart) — everything unfinished is failed.
-            const lostReason = toUserMessage(pollErr);
-            setBatchError({ message: lostReason, requestId: fromUnknownError(pollErr).requestId ?? null });
-            setInterviewStatusMap((prev) => {
-              const map = { ...prev };
-              const reasons: Record<string, string> = {};
-              Object.keys(map).forEach((pid) => {
-                if (map[pid] === 'in_progress' || map[pid] === 'pending') {
-                  map[pid] = 'failed';
-                  reasons[pid] = lostReason;
-                }
-              });
-              setInterviewFailureReasons((prevReasons) => ({ ...prevReasons, ...reasons }));
-              return map;
-            });
-            break;
-          }
-          // Transient poll error: keep polling.
-        }
+      if (['pending', 'queued', 'running'].includes(start.status)) {
+        await pollSerial((signal) => api.getBatchRunStatus(studyId, jobId, signal), {
+          signal: controller.signal, intervalMs: 5000, timeoutMs: 1800000, idleTimeoutMs: 300000, pauseWhenHidden: true,
+          complete: (job) => !['pending', 'queued', 'running'].includes(job.status),
+          progress: (job) => JSON.stringify([job.status, job.completed_count, job.failed_count, job.personas]),
+          onUpdate: (job) => { if (epoch.active && !controller.signal.aborted) applyJobStatuses(job); },
+        });
       }
       if (!epoch.active || batchPollCancelledRef.current) return;
+      api.forgetJobHandle(studyId, 'batch');
       await api.listStudyInterviews(studyId).catch(() => []);
     } catch (err: any) {
       if (!epoch.active) return;
+      if (controller.signal.aborted || api.getPendingJobHandle(studyId, 'batch')) {
+        setBatchError({ message: 'Live updates paused. The accepted batch may still be running; resume to check its saved progress.', requestId: null });
+        return;
+      }
       const refusal = readOnlyRefusal(err);
       if (refusal) {
         setReadOnlyNotice(refusal);
@@ -833,6 +976,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setInterviewFailureReasons(reasons);
       }
     } finally {
+      if (batchControllerRef.current === controller) batchControllerRef.current = null;
       if (epoch.active) setIsBatchRunning(false);
     }
   };
@@ -841,7 +985,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     e.preventDefault();
     const epoch = interviewEpochRef.current;
     const text = userInputMessage.trim();
-    if (!epoch.active || epoch.pending || epoch.restoring || !text || isSimulating || !activeInterviewPersonaId) return;
+    if (!epoch.active || epoch.pending || epoch.restoring || epoch.restoreFailed || !text || isSimulating || isBatchRunning || isGeneratingReport || !activeInterviewPersonaId) return;
 
     epoch.pending = true;
     epoch.revision += 1;
@@ -897,6 +1041,25 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   // Step 5: Report Synthesis
   const [reportError, setReportError] = useState<string | null>(null);
+  const [reportErrorKind, setReportErrorKind] = useState<'loading' | 'generation' | 'copy'>('generation');
+  const reloadReports = async () => {
+    const epoch = studyEpochRef.current;
+    if (!epoch.active || !studyId) return;
+    setReportsLoading(true);
+    setReportError(null);
+    try {
+      const savedReports = await api.getStudyReports(studyId);
+      if (!epoch.active) return;
+      setAvailableReports(savedReports);
+      if (savedReports.length > 0) setReport(savedReports[0]);
+    } catch {
+      if (!epoch.active) return;
+      setReportErrorKind('loading');
+      setReportError('Saved reports could not be loaded. This does not mean the study has no reports.');
+    } finally {
+      if (epoch.active) setReportsLoading(false);
+    }
+  };
   const handleGenerateFinalReport = async () => {
     const epoch = studyEpochRef.current;
     if (!epoch.active || !studyId || isGeneratingReport) return;
@@ -911,7 +1074,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       setReport(rep);
       setAvailableReports((prev) => [rep, ...prev.filter((r) => r.id !== rep.id)]);
       // The freshly-generated report is what earns 'completed' status.
-      handleStepChange(5, { reportReady: true });
+      handleStepChange(5);
     } catch (err: any) {
       if (!epoch.active) return;
       const refusal = readOnlyRefusal(err);
@@ -919,6 +1082,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         setReadOnlyNotice(refusal);
       } else {
         // Honest failure: the error is shown on the report step with a retry.
+        setReportErrorKind('generation');
         setReportError(err?.message || 'Report generation failed. Please retry.');
       }
     } finally {
@@ -929,7 +1093,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const copyReportMarkdown = async () => {
     const epoch = studyEpochRef.current;
     if (!epoch.active || !report) return;
-    const md = `# ${report.title || 'Research Report'}\n\n## Executive Summary\n${report.executive_summary}\n\n## Key Findings\n${(report.key_findings || []).map((f) => `- ${f}`).join('\n')}\n\n## Recommendations\n${(report.recommendations || []).map((r) => `- ${r}`).join('\n')}`;
+    const md = reportMarkdown(report);
     try {
       await navigator.clipboard.writeText(md);
       if (!epoch.active) return;
@@ -938,13 +1102,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         if (epoch.active) setCopiedToast(false);
       }, 2500);
     } catch {
-      if (epoch.active) setReportError('Could not copy the report. Please try again.');
+      if (epoch.active) {
+        setReportErrorKind('copy');
+        setReportError('Could not copy the report. Please try again.');
+      }
     }
   };
 
   const exportReportMarkdown = () => {
     if (!studyEpochRef.current.active || !report) return;
-    const md = `# ${report.title || 'Research Report'}\n\n## Executive Summary\n${report.executive_summary}\n\n## Key Findings\n${(report.key_findings || []).map((f) => `- ${f}`).join('\n')}\n\n## Recommendations\n${(report.recommendations || []).map((r) => `- ${r}`).join('\n')}`;
+    const md = reportMarkdown(report);
     const blob = new Blob([md], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -957,6 +1124,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   useEffect(() => {
     const epoch = studyEpochRef.current;
     let cancelled = false;
+    if (studyId && (!study || study.id !== studyId)) return;
     const trimmedPrompt = initialPrompt.trim();
     if (!trimmedPrompt || initialPromptHandledRef.current === trimmedPrompt) return;
     let userMsg = pendingInitialPromptRef.current;
@@ -987,7 +1155,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPrompt, studyId]);
+  }, [initialPrompt, studyId, study]);
 
   const stepLabels = [
     { num: 1, label: 'Context', sub: 'Describe your idea' },
@@ -1093,6 +1261,17 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     return () => document.removeEventListener('keydown', onKeyDown, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingPersona]);
+
+  if (studyId && (!study || study.id !== studyId)) {
+    return (
+      <div className="bx-empty-state">
+        <p role={loadError ? 'alert' : 'status'}>{loadError || 'Loading saved study...'}</p>
+        <button type="button" className="bx-btn bx-btn--secondary" onClick={onExit}>
+          <ChevronLeft size={15} aria-hidden="true" /> Back to studies
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'transparent', color: 'var(--text-main)' }}>
@@ -1235,6 +1414,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
       {/* Main Workflow Container (the dashboard shell owns the <main> landmark) */}
       <div style={{ flex: 1, padding: '28px clamp(14px, 4vw, 40px)', maxWidth: '1280px', width: '100%', margin: '0 auto' }}>
+        {loadError && <div role="alert" className="bx-alert bx-alert--error">{loadError}</div>}
+        {saveState && saveState.state !== 'saved' && (
+          <div role={saveState.state === 'saving' ? 'status' : 'alert'} className="bx-alert">
+            <span>{saveState.state === 'saving' ? 'Saving changes...' : saveState.message}</span>
+            {saveState.state !== 'saving' && <button type="button" className="bx-btn bx-btn--secondary" onClick={() => {
+              if (studyId && window.confirm('Discard the unsaved draft and reload the saved server version?')) {
+                api.discardStudyDraft(studyId);
+                window.location.reload();
+              }
+            }}>Reload saved version</button>}
+          </div>
+        )}
         {readOnlyNotice && (
           <div
             role="status"
@@ -1297,6 +1488,10 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             <Step2Personas
               personas={personas}
               personaGenError={personaGenError}
+              personaErrorKind={personaErrorKind}
+              canRetryPersonaSave={Boolean(personaSaveRetry)}
+              isRetryingPersonaSave={isRetryingPersonaSave}
+              handleRetryPersonaSave={handleRetryPersonaSave}
               personaGenRequestId={personaGenRequestId}
               failedRoles={personaFailedRoles}
               personaServedBy={personaServedBy}
@@ -1344,8 +1539,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
             <Step4Interviews
               personas={personas}
               isBatchRunning={isBatchRunning}
+              batchStartBlockedReason={batchStartBlockedReason}
               handleRunBatchInterviews={handleRunBatchInterviews}
-              onCancelBatch={() => { batchPollCancelledRef.current = true; }}
+              onCancelBatch={() => { batchPollCancelledRef.current = true; batchControllerRef.current?.abort(); }}
               isGeneratingReport={isGeneratingReport}
               handleGenerateFinalReport={handleGenerateFinalReport}
               handleStepChange={handleStepChange}
@@ -1360,6 +1556,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               chatMessages={chatMessages}
               isSimulating={isSimulating}
               isRestoringInterview={isRestoringInterview}
+              restoreError={restoreError}
+              onRetryRestore={() => setRestoreAttempt((attempt) => attempt + 1)}
               handleSendInterviewMessage={handleSendInterviewMessage}
               userInputMessage={userInputMessage}
               setUserInputMessage={setUserInputMessage}
@@ -1379,10 +1577,14 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               report={report}
               availableReports={availableReports}
               reportError={reportError}
+              reportErrorKind={reportErrorKind}
+              onReloadReports={reloadReports}
+              reportsLoading={reportsLoading}
               isGeneratingReport={isGeneratingReport}
               copiedToast={copiedToast}
               copyReportMarkdown={copyReportMarkdown}
               exportReportMarkdown={exportReportMarkdown}
+              onSelectReport={setReport}
               handleGenerateFinalReport={handleGenerateFinalReport}
               verificationAssumptions={verificationAssumptions}
               isReadOnly={isReadOnly}

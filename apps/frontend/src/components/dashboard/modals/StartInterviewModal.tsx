@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   X,
   Sparkles,
@@ -66,7 +66,27 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
   const [isStarting, setIsStarting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  useDialogA11y(dialogRef, isOpen, onClose);
+  const modalEpochRef = useRef<symbol | null>(null);
+  const startingRef = useRef(false);
+
+  useEffect(() => {
+    modalEpochRef.current = isOpen ? Symbol() : null;
+    startingRef.current = false;
+    setIsStarting(false);
+    setError(null);
+    return () => {
+      modalEpochRef.current = null;
+      startingRef.current = false;
+    };
+  }, [isOpen, studyId, persona.id, persona.generation_run_id]);
+
+  const handleClose = () => {
+    modalEpochRef.current = null;
+    startingRef.current = false;
+    setIsStarting(false);
+    onClose();
+  };
+  useDialogA11y(dialogRef, isOpen, handleClose);
 
   // The grounding claim is only made when the persona actually carries one.
   const evidenceBacked = isEvidenceBacked(persona);
@@ -74,6 +94,9 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
   if (!isOpen) return null;
 
   const handleStart = async () => {
+    const modalEpoch = modalEpochRef.current;
+    if (!modalEpoch || startingRef.current || (selectedObjective === 'custom' && !customObjectiveText.trim())) return;
+    startingRef.current = true;
     try {
       setIsStarting(true);
       setError(null);
@@ -90,13 +113,17 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
       };
 
       const interview = await api.startPersonaInterview(studyId, persona.id, payload);
+      if (modalEpochRef.current !== modalEpoch) return;
       onInterviewStarted(interview.id);
-      onClose();
-    } catch (err: any) {
-      console.error('Failed to start interview:', err);
-      setError(err.message || 'Failed to start interview. Please try again.');
+      handleClose();
+    } catch (err: unknown) {
+      if (modalEpochRef.current !== modalEpoch) return;
+      setError(err instanceof Error ? err.message : 'Failed to start interview. Please try again.');
     } finally {
-      setIsStarting(false);
+      if (modalEpochRef.current === modalEpoch) {
+        startingRef.current = false;
+        setIsStarting(false);
+      }
     }
   };
 
@@ -117,30 +144,31 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="start-interview-title"
-        className="bg-[var(--bg-card)] border border-[var(--border-medium)] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] bx-modal"
+        className="bg-[var(--bg-card)] border border-[var(--border-control)] rounded-xl w-full min-w-0 max-w-2xl overflow-hidden flex flex-col max-h-[90vh] bx-modal"
+        style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-primary)' }}
       >
         {/* Modal Header */}
-        <div className="p-6 border-b border-[var(--border-medium)] flex items-center justify-between bg-[var(--bg-secondary)]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 font-bold text-lg">
+        <div className="p-6 border-b border-[var(--border-medium)] flex items-start justify-between gap-3 bg-[var(--bg-secondary)]">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="w-10 h-10 shrink-0 rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent-glow)] flex items-center justify-center text-[var(--accent-teal)] font-semibold text-lg">
               {persona.avatar_url ? (
                 <img
                   src={persona.avatar_url}
                   alt={persona.name}
                   loading="lazy"
                   decoding="async"
-                  className="w-full h-full rounded-xl object-cover"
+                  className="w-full h-full rounded-lg object-cover"
                 />
               ) : (
                 persona.name.charAt(0)
               )}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 id="start-interview-title" className="text-xl font-bold text-white tracking-tight">
+            <div className="min-w-0 flex-1 break-words">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 id="start-interview-title" className="text-lg font-semibold text-[var(--text-main)] tracking-normal">
                   Interview {persona.name}
                 </h2>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                   <Bot className="w-3 h-3" />
                   Synthetic Persona
                 </span>
@@ -154,18 +182,18 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Close interview setup dialog"
-            className="text-[var(--text-secondary)] hover:text-[var(--text-main)] p-2 rounded-lg hover:bg-[var(--bg-card-hover)] transition-colors"
+            className="min-h-11 min-w-11 shrink-0 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-main)] p-2 rounded-md hover:bg-[var(--bg-card-hover)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
           >
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-sm text-[var(--text-secondary)]">
+        <div className="p-6 min-w-0 overflow-y-auto space-y-6 flex-1 text-sm text-[var(--text-secondary)]">
           {/* Grounding Context Alert */}
-          <div className="bg-[var(--bg-card-hover)] border border-teal-500/20 rounded-xl p-4 flex items-start gap-3">
+          <div className="bg-[var(--bg-card-hover)] border border-teal-500/20 rounded-lg p-4 flex items-start gap-3">
             <Sparkles className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
             <div className="text-xs leading-relaxed text-[var(--text-label)]">
               <span className="font-semibold text-[var(--text-main)]">Adaptive Anti-Sycophantic Agent: </span>
@@ -186,39 +214,50 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3 text-red-400 text-xs">
+            <div role="alert" className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-3 text-[var(--status-error-text)] text-xs">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Objective Selection */}
-          <div className="space-y-3">
-            <label className="block text-xs font-bold text-white uppercase tracking-wider">
+          <fieldset disabled={isStarting} className="min-w-0 space-y-3 border-0 p-0">
+            <legend className="block text-sm font-semibold text-[var(--text-main)]">
               1. Select Interview Objective
-            </label>
+            </legend>
             <div className="grid grid-cols-1 gap-2.5">
               {OBJECTIVE_PRESETS.map((obj) => {
                 const isSelected = selectedObjective === obj.id;
                 return (
-                  <div
+                  <label
                     key={obj.id}
-                    onClick={() => {
-                      setSelectedObjective(obj.id);
-                      setLengthTier(obj.recommendedTier);
-                    }}
-                    className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    className={`flex min-h-11 min-w-0 items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus-ring)] ${
                       isSelected
-                        ? 'bg-teal-500/10 border-teal-500 text-white'
-                        : 'bg-[var(--bg-card-hover)] border-[var(--border-medium)] hover:border-[var(--border-hover)] text-[var(--text-label)]'
+                        ? 'bg-[var(--accent-subtle)] border-[var(--accent-teal)] text-[var(--text-main)]'
+                        : 'bg-[var(--bg-card-hover)] border-[var(--border-control)] hover:border-[var(--border-hover)] text-[var(--text-label)]'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-sm">{obj.title}</span>
-                      {isSelected && <CheckCircle2 className="w-4 h-4 text-teal-400" />}
-                    </div>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">{obj.description}</p>
-                  </div>
+                    <input
+                      type="radio"
+                      name="interview-objective"
+                      value={obj.id}
+                      checked={isSelected}
+                      aria-labelledby={`interview-objective-${obj.id}`}
+                      aria-describedby={`interview-objective-${obj.id}-description`}
+                      onChange={() => {
+                        setSelectedObjective(obj.id);
+                        setLengthTier(obj.recommendedTier);
+                      }}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent-teal)]"
+                    />
+                    <span className="block min-w-0 flex-1 break-words">
+                      <span className="flex items-start justify-between gap-2">
+                        <span id={`interview-objective-${obj.id}`} className="font-semibold text-sm">{obj.title}</span>
+                        {isSelected && <CheckCircle2 aria-hidden="true" className="w-4 h-4 shrink-0 text-[var(--accent-teal)]" />}
+                      </span>
+                      <span id={`interview-objective-${obj.id}-description`} className="block text-xs text-[var(--text-secondary)] mt-1">{obj.description}</span>
+                    </span>
+                  </label>
                 );
               })}
             </div>
@@ -226,22 +265,23 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
             {selectedObjective === 'custom' && (
               <div className="mt-3">
                 <textarea
+                  aria-label="Custom research objective"
                   value={customObjectiveText}
                   onChange={(e) => setCustomObjectiveText(e.target.value)}
                   placeholder="e.g. Ask about how they manage weekly budgeting and whether a ৳150 weekly fee works..."
                   rows={3}
-                  className="w-full bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-xl p-3 text-white text-xs placeholder-[var(--text-muted)] focus:outline-none focus:border-teal-500"
+                  className="w-full min-h-11 min-w-0 bg-[var(--bg-card-hover)] border border-[var(--border-control)] rounded-md p-3 text-[var(--text-main)] text-base placeholder-[var(--text-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                 />
               </div>
             )}
-          </div>
+          </fieldset>
 
           {/* Length & Turn Limit Selection */}
-          <div className="space-y-3">
-            <label className="block text-xs font-bold text-white uppercase tracking-wider">
+          <fieldset disabled={isStarting} className="min-w-0 space-y-3 border-0 p-0">
+            <legend className="block text-sm font-semibold text-[var(--text-main)]">
               2. Interview Depth & Length
-            </label>
-            <div className="grid grid-cols-3 gap-3">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
                 {
                   id: 'short' as InterviewLengthTier,
@@ -264,48 +304,64 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
               ].map((tier) => {
                 const isSelected = lengthTier === tier.id;
                 return (
-                  <div
+                  <label
                     key={tier.id}
-                    onClick={() => setLengthTier(tier.id)}
-                    className={`p-3 rounded-xl border text-center cursor-pointer transition-all ${
+                    className={`flex min-h-11 min-w-0 items-start gap-2 p-3 rounded-lg border cursor-pointer transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus-ring)] ${
                       isSelected
-                        ? 'bg-teal-500/10 border-teal-500 text-white'
-                        : 'bg-[var(--bg-card-hover)] border-[var(--border-medium)] hover:border-[var(--border-hover)] text-[var(--text-label)]'
+                        ? 'bg-[var(--accent-subtle)] border-[var(--accent-teal)] text-[var(--text-main)]'
+                        : 'bg-[var(--bg-card-hover)] border-[var(--border-control)] hover:border-[var(--border-hover)] text-[var(--text-label)]'
                     }`}
                   >
-                    <div className="font-semibold text-xs text-white">{tier.label}</div>
-                    <div className="text-teal-400 font-bold text-xs mt-0.5">{tier.turns}</div>
-                    <div className="text-[0.72rem] text-[var(--text-secondary)] mt-1">{tier.desc}</div>
-                  </div>
+                    <input
+                      type="radio"
+                      name="interview-depth"
+                      value={tier.id}
+                      checked={isSelected}
+                      aria-labelledby={`interview-depth-${tier.id}`}
+                      aria-describedby={`interview-depth-${tier.id}-description`}
+                      onChange={() => setLengthTier(tier.id)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent-teal)]"
+                    />
+                    <span className="block min-w-0 flex-1 break-words">
+                      <span id={`interview-depth-${tier.id}`} className="block font-semibold text-xs text-[var(--text-main)]">{tier.label}</span>
+                      <span id={`interview-depth-${tier.id}-description`} className="block">
+                        <span className="block text-[var(--accent-teal)] font-semibold text-xs mt-0.5">{tier.turns}</span>
+                        <span className="block text-[0.72rem] text-[var(--text-secondary)] mt-1">{tier.desc}</span>
+                      </span>
+                    </span>
+                  </label>
                 );
               })}
             </div>
-          </div>
+          </fieldset>
         </div>
 
         {/* Modal Footer */}
-        <div className="p-5 border-t border-[var(--border-medium)] bg-[var(--bg-secondary)] flex items-center justify-between">
+        <div className="p-5 min-w-0 border-t border-[var(--border-medium)] bg-[var(--bg-secondary)] flex flex-wrap items-center justify-between gap-3">
           <button
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-[var(--border-medium)] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-card-hover)] text-xs font-medium transition-colors"
+            type="button"
+            onClick={handleClose}
+            className="min-h-11 px-4 py-2.5 rounded-md border border-[var(--border-control)] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-card-hover)] text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleStart}
+            aria-busy={isStarting}
             disabled={
               isStarting || (selectedObjective === 'custom' && !customObjectiveText.trim())
             }
-            className="px-6 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 disabled:opacity-50 text-black font-bold text-xs flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all cursor-pointer"
+            className="min-h-11 min-w-0 max-w-full px-6 py-2.5 rounded-md bg-[var(--accent-teal)] disabled:opacity-50 disabled:cursor-not-allowed text-[var(--text-on-accent)] font-semibold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
           >
             {isStarting ? (
               <>
-                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 shrink-0 border-2 border-[var(--text-on-accent)] border-t-transparent rounded-full animate-spin" />
                 <span>Initializing Interview...</span>
               </>
             ) : (
               <>
-                <MessageSquare className="w-4 h-4" />
+                <MessageSquare className="w-4 h-4 shrink-0" />
                 <span>Start Adaptive Interview</span>
               </>
             )}

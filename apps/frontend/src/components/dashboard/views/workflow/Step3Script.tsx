@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, ArrowRight, Trash2 } from 'lucide-react';
 import { api } from '../../../../services/api';
+import { Button } from '../../../ui/Button';
 import { READ_ONLY_TITLE } from './types';
 
 /** Step 3 — interview script & questions. Pure JSX extraction from
@@ -48,17 +49,20 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
-                  background: 'rgba(245, 158, 11, 0.1)',
-                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
+                  background: 'var(--status-warn-bg)',
+                  border: '1px solid var(--status-warn-border)',
                   borderRadius: '10px',
                   padding: '10px 14px',
-                  color: '#F59E0B',
+                  color: 'var(--status-warn-text)',
                   fontSize: '0.84rem',
                   fontWeight: 600,
                 }}
               >
-                <AlertTriangle size={15} aria-hidden="true" />
-                <span>
+                <AlertTriangle size={15} aria-hidden="true" style={{ flexShrink: 0 }} />
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                   Starter script (not AI-generated for this study) — the AI providers did not answer, so
                   these are generic questions. Edit them or regenerate later.
                 </span>
@@ -69,20 +73,27 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 role="alert"
                 style={{
                   display: 'flex',
+                  flexWrap: 'wrap',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: '12px',
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
+                  background: 'var(--status-error-bg)',
+                  border: '1px solid var(--status-error-border)',
                   borderRadius: '10px',
                   padding: '12px 16px',
                   color: 'var(--status-error-text)',
                   fontSize: '0.86rem',
                 }}
               >
-                <span>Question generation failed: {scriptError}</span>
-                <button
+                <span style={{ flex: '1 1 240px', minWidth: 0, overflowWrap: 'anywhere' }}>
+                  Question generation failed: {scriptError}
+                </span>
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={handleGenerateScript}
                   disabled={isGeneratingScript || isReadOnly}
                   title={isReadOnly ? READ_ONLY_TITLE : undefined}
@@ -96,14 +107,17 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                     fontWeight: 600,
                     fontSize: '0.82rem',
                     whiteSpace: 'nowrap',
+                    minHeight: 44,
+                    maxWidth: '100%',
+                    flexShrink: 0,
                   }}
                 >
                   Retry
-                </button>
+                </Button>
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px', minWidth: 0, maxWidth: '100%' }}>
+              <div style={{ flex: '1 1 320px', minWidth: 0, maxWidth: '100%' }}>
                 <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
                   Interview Script & Probing Rules
                 </h1>
@@ -116,58 +130,49 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 </p>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', minWidth: 0, maxWidth: '100%' }}>
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={handleGenerateScript}
                   disabled={isGeneratingScript || isReadOnly}
+                  loading={isGeneratingScript}
                   title={isReadOnly ? READ_ONLY_TITLE : undefined}
                   style={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-subtle)',
-                    color: 'var(--accent-cyan)',
-                    borderRadius: '8px',
                     padding: '8px 16px',
                     fontSize: '0.84rem',
-                    fontWeight: 600,
-                    cursor: isGeneratingScript || isReadOnly ? 'not-allowed' : 'pointer',
-                    opacity: isGeneratingScript || isReadOnly ? 0.6 : 1,
-                    display: 'flex',
-                    alignItems: 'center',
                     gap: '6px',
+                    minHeight: 44,
+                    maxWidth: '100%',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
                   }}
                 >
-                  {isGeneratingScript && (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'authSpin 0.7s linear infinite' }} aria-hidden="true">
-                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                    </svg>
-                  )}
                   {isGeneratingScript
                     ? 'Generating...'
                     : scriptGenerated
                     ? 'Regenerate Questions'
                     : 'Generate Questions'}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="primary"
+                  aria-label="Approve Script & Start Interviews"
                   onClick={() => handleStepChange(4)}
+                  trailingIcon={<ArrowRight size={15} aria-hidden="true" />}
                   style={{
-                    background: 'var(--accent-gradient)',
-                    border: 'none',
-                    color: 'var(--text-on-accent)',
-                    borderRadius: '8px',
                     padding: '8px 20px',
                     fontSize: '0.84rem',
                     fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
                     gap: '6px',
+                    minHeight: 44,
+                    maxWidth: '100%',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
                   }}
                 >
-                  Approve Script & Start Interviews
-                  <ArrowRight size={15} />
-                </button>
+                  Start interviews
+                </Button>
               </div>
             </div>
 
@@ -176,8 +181,12 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 role="status"
                 style={{
                   display: 'flex',
+                  flexWrap: 'wrap',
                   alignItems: 'center',
                   gap: '10px',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
                   background: 'var(--accent-subtle)',
                   border: '1px solid var(--accent-glow)',
                   borderRadius: '12px',
@@ -226,13 +235,17 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     gap: '14px',
+                    minWidth: 0,
+                    maxWidth: '100%',
+                    boxSizing: 'border-box',
                   }}
                 >
-                  <span style={{ color: 'var(--accent-teal)', fontWeight: 700, fontSize: '0.88rem' }}>
+                  <span style={{ color: 'var(--accent-teal)', fontWeight: 700, fontSize: '0.88rem', flexShrink: 0 }}>
                     Q{idx + 1}
                   </span>
                   <input
                     type="text"
+                    aria-label={`Question ${idx + 1}`}
                     value={q}
                     disabled={isReadOnly}
                     title={isReadOnly ? READ_ONLY_TITLE : undefined}
@@ -244,6 +257,8 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                     }}
                     style={{
                       flex: 1,
+                      minWidth: 0,
+                      maxWidth: '100%',
                       background: 'transparent',
                       border: 'none',
                       color: 'var(--text-main)',
@@ -254,34 +269,42 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                     onFocus={(e) => { (e.currentTarget as HTMLInputElement).style.boxShadow = '0 0 0 2px var(--accent-teal)'; }}
                     onBlur={(e) => { (e.currentTarget as HTMLInputElement).style.boxShadow = 'none'; }}
                   />
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    icon
+                    aria-label={`Delete question ${idx + 1}`}
                     onClick={() => {
                       const nextQ = questions.filter((_, i) => i !== idx);
                       setQuestions(nextQ);
                       if (studyId) api.updateStudy(studyId, { script_questions: nextQ }).catch(() => {});
                     }}
                     disabled={isReadOnly}
-                    title={isReadOnly ? READ_ONLY_TITLE : undefined}
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: isReadOnly ? 'not-allowed' : 'pointer', opacity: isReadOnly ? 0.5 : 1 }}
+                    title={isReadOnly ? READ_ONLY_TITLE : `Delete question ${idx + 1}`}
+                    style={{ color: 'var(--text-faint)', minWidth: 44, minHeight: 44, flexShrink: 0 }}
                   >
-                    <Trash2 size={15} />
-                  </button>
+                    <Trash2 size={15} aria-hidden="true" />
+                  </Button>
                 </div>
               ))}
             </div>
 
             {/* Add Question input */}
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', minWidth: 0, maxWidth: '100%' }}>
               <input
                 type="text"
+                aria-label="New interview question"
                 value={newQuestion}
                 onChange={(e) => setNewQuestion(e.target.value)}
                 placeholder="Add another interview question..."
                 disabled={isReadOnly}
                 title={isReadOnly ? READ_ONLY_TITLE : undefined}
                 style={{
-                  flex: 1,
+                  flex: '1 1 240px',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  minHeight: 44,
+                  boxSizing: 'border-box',
                   background: 'var(--bg-card)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: '10px',
@@ -292,8 +315,9 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                   opacity: isReadOnly ? 0.6 : 1,
                 }}
               />
-              <button
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => {
                   if (newQuestion.trim()) {
                     const nextQ = [...questions, newQuestion.trim()];
@@ -309,6 +333,9 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                   border: '1px solid var(--border-hover)',
                   color: 'var(--accent-cyan)',
                   borderRadius: '10px',
+                  minHeight: 44,
+                  maxWidth: '100%',
+                  flexShrink: 0,
                   padding: '0 20px',
                   fontWeight: 600,
                   fontSize: '0.88rem',
@@ -317,7 +344,7 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                 }}
               >
                 Add Question
-              </button>
+              </Button>
             </div>
     </>
   );

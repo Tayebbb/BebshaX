@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect, useId } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
   Search,
   Plus,
@@ -6,10 +7,14 @@ import {
   ArrowUpRight,
   FileText,
   Trash2,
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { Study } from '../../../types';
 import { api } from '../../../services/api';
+import { useRouteReady } from '../../../performance/routeTiming';
 import { findExampleStudy, EXAMPLE_STUDY_STEP } from '../../../utils/exampleStudy';
+import { Button } from '../../ui/Button';
 import './studies.css';
 
 interface StudiesDashboardViewProps {
@@ -18,10 +23,10 @@ interface StudiesDashboardViewProps {
 }
 
 const TYPE_LABELS: Record<string, string> = {
-  landing_page_test: 'Landing Page Test',
+  landing_page_test: 'Concept & Demand',
   message_testing: 'Message Testing',
-  ab_test: 'A/B Test',
-  interviews: 'Interviews',
+  ab_test: 'Pricing & WTP',
+  interviews: 'User Interviews',
 };
 
 export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
@@ -31,74 +36,113 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   const [studies, setStudies] = useState<Study[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  useRouteReady(!isLoading, loadError ? 'error' : studies.length ? 'content' : 'empty');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'completed' | 'in_progress'>('all');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Study | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const menuId = useId();
   const listRef = useRef<HTMLDivElement>(null);
-  // Only one kebab menu is open at a time, so a single ref tracks it.
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuInitialFocus = useRef<'first' | 'last'>('first');
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const requestRef = useRef({ active: false, loadId: 0, deleting: false });
+
+  useLayoutEffect(() => {
+    const epoch = { active: true, loadId: 0, deleting: false };
+    requestRef.current = epoch;
+    return () => { epoch.active = false; };
+  }, []);
 
   const loadStudies = useCallback(async () => {
+    const epoch = requestRef.current;
+    const loadId = ++epoch.loadId;
     setIsLoading(true);
     try {
       const data = await api.getStudies();
+      if (!epoch.active || epoch.loadId !== loadId) return;
       setStudies(data);
       setLoadError(null);
-    } catch (err: any) {
-      // A failed fetch is not "you have no studies" — saying so would invite
-      // the user to recreate work they already have.
-      setLoadError(err?.message || 'Could not load your studies.');
+    } catch (error) {
+      if (epoch.active && epoch.loadId === loadId) {
+        setLoadError(error instanceof Error ? error.message : 'Could not load your studies.');
+      }
     } finally {
-      setIsLoading(false);
+      if (epoch.active && epoch.loadId === loadId) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadStudies();
+    void loadStudies();
   }, [loadStudies]);
 
-  // An open kebab menu closes on Escape or any outside pointer press;
-  // ArrowUp/ArrowDown cycle focus through its items (mirrors the user
-  // popover in DashboardLayout).
   useEffect(() => {
     if (!activeMenuId) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
-      if (e.key === 'Escape') {
-        e.preventDefault();
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
+    items[menuInitialFocus.current === 'last' ? items.length - 1 : 0]?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
         setActiveMenuId(null);
+        menuTriggerRef.current?.focus();
         return;
       }
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        const items = Array.from(
-          menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
-        );
-        if (items.length === 0) return;
-        e.preventDefault();
-        const idx = items.indexOf(document.activeElement as HTMLElement);
-        const step = e.key === 'ArrowDown' ? 1 : -1;
-        items[(idx + step + items.length) % items.length].focus();
+      if (!menuRef.current?.contains(document.activeElement)) return;
+      if (event.key === 'Tab') {
+        setActiveMenuId(null);
+        menuTriggerRef.current?.focus();
+        return;
+      }
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && items.length) {
+        event.preventDefault();
+        const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+        const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+          : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items[nextIndex]?.focus();
       }
     };
-    const onPress = () => setActiveMenuId(null);
-    document.addEventListener('keydown', onKey);
+    const onPress = (event: PointerEvent) => {
+      if (event.target instanceof Node && !menuRef.current?.contains(event.target)
+        && !menuTriggerRef.current?.contains(event.target)) setActiveMenuId(null);
+    };
+    document.addEventListener('keydown', onKey, true);
     document.addEventListener('pointerdown', onPress);
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('pointerdown', onPress);
     };
   }, [activeMenuId]);
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const closeDelete = () => {
+    if (requestRef.current.deleting) return;
+    setPendingDelete(null);
+    setDeleteError(null);
+  };
+
+  const handleDelete = async () => {
+    const epoch = requestRef.current;
+    if (!pendingDelete || !epoch.active || epoch.deleting) return;
+    epoch.deleting = true;
+    setIsDeleting(true);
+    setDeleteError(null);
     try {
-      await api.deleteStudy(id);
-      setStudies((prev) => prev.filter((s) => s.id !== id));
-      setActiveMenuId(null);
-      // the focused row unmounts — keep keyboard users anchored in the list
-      listRef.current?.focus();
-    } catch {
-      // ignore
+      const deleted = await api.deleteStudy(pendingDelete.id);
+      if (!epoch.active) return;
+      if (!deleted) throw new Error('Deletion was not confirmed. Please try again.');
+      setStudies((previous) => previous.filter((study) => study.id !== pendingDelete.id));
+      setPendingDelete(null);
+    } catch (error) {
+      if (epoch.active) {
+        const detail = error instanceof Error ? error.message : 'Please try again.';
+        setDeleteError(`Could not delete this study. ${detail}`);
+      }
+    } finally {
+      epoch.deleting = false;
+      if (epoch.active) setIsDeleting(false);
     }
   };
 
@@ -116,20 +160,15 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
   const demoStudy = findExampleStudy(studies);
   const regularStudies = filteredStudies.filter((s) => !s.is_demo);
 
-  // The blurb may only name what the demo study actually carries: the report is
-  // guaranteed by findExampleStudy, personas are not. (The study list never
-  // serializes interviews, so they are never advertised.)
   const demoOffers = demoStudy
     ? [
         'a finished decision report',
         demoStudy.persona_count > 0
-          ? `${demoStudy.persona_count} persona${demoStudy.persona_count === 1 ? '' : 's'}`
+          ? `${demoStudy.persona_count} synthetic persona${demoStudy.persona_count === 1 ? '' : 's'}`
           : null,
       ].filter(Boolean)
     : [];
 
-  // Honest totals derived from the loaded list only. "In flight" matches the
-  // In Progress tab bucket (drafts included) so the two never disagree.
   const own = studies.filter((s) => !s.is_demo);
   const completedCount = own.filter((s) => s.status === 'completed').length;
   const inFlightCount = own.filter((s) => s.status === 'in_progress' || s.status === 'draft').length;
@@ -137,15 +176,14 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
 
   const rowStatus = (study: Study) => {
     if (study.status === 'completed') {
-      return <span className="sd-status sd-status--completed"><span className="sd-status-dot" />COMPLETED</span>;
+      return <span className="sd-status sd-status--completed">Completed</span>;
     }
     if (study.status === 'in_progress') {
-      return <span className="sd-status sd-status--live"><span className="sd-status-dot" />IN FLIGHT</span>;
+      return <span className="sd-status sd-status--live">In progress</span>;
     }
-    return <span className="sd-status sd-status--draft"><span className="sd-status-dot" />DRAFT</span>;
+    return <span className="sd-status sd-status--draft">Draft</span>;
   };
 
-  // Reopening a study drops the user where they left off (demo lands on its report).
   const openRow = (id: string) => {
     const study = studies.find((s) => s.id === id);
     onOpenStudy(id, study?.step || 1);
@@ -153,38 +191,33 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
 
   return (
     <div className="sd-root">
-      <div className="sd-ambient" aria-hidden="true" />
       <div className="sd-content">
         <header>
-          <div className="sd-kicker">Research Console</div>
-          <div className="sd-hero-row">
-            <h1 className="sd-display">
-              Studies<span className="sd-dot" aria-hidden="true">.</span>
-            </h1>
-            <button type="button" className="sd-cta" onClick={onCreateStudy}>
-              <Plus size={16} strokeWidth={2.5} />
+          <div className="sd-header-row">
+            <div>
+              <h1 className="sd-display">Studies</h1>
+              <p className="sd-sub">Your synthetic research workspace.</p>
+            </div>
+            <Button variant="primary" className="sd-cta" onClick={onCreateStudy} leadingIcon={<Plus size={16} aria-hidden="true" />}>
               Create Study
-            </button>
+            </Button>
           </div>
 
-          <div className="sd-metrics" role="group" aria-label="Research totals">
-            <div>
-              <div className="sd-metric-num">{own.length}</div>
-              <div className="sd-metric-label">Studies</div>
-            </div>
-            <div>
-              <div className="sd-metric-num"><em>{inFlightCount}</em></div>
-              <div className="sd-metric-label">In Flight</div>
-            </div>
-            <div>
-              <div className="sd-metric-num">{completedCount}</div>
-              <div className="sd-metric-label">Completed</div>
-            </div>
-            <div>
-              <div className="sd-metric-num">{personaCount}</div>
-              <div className="sd-metric-label">Personas</div>
-            </div>
-          </div>
+          <dl className="sd-metrics" aria-label="Research totals">
+            {[
+              { label: 'Studies', value: own.length },
+              { label: 'In progress', value: inFlightCount },
+              { label: 'Completed', value: completedCount },
+              { label: 'Synthetic personas', value: personaCount },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <dt className="sd-metric-label">{label}</dt>
+                <dd className="sd-metric-num" aria-label={isLoading ? 'Loading' : loadError ? 'Unavailable' : undefined}>
+                  {isLoading || loadError ? '-' : value}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </header>
 
         <div className="sd-toolbar">
@@ -193,7 +226,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(event) => { setSearchQuery(event.target.value); setActiveMenuId(null); }}
               placeholder="Search your studies..."
               aria-label="Search your studies"
             />
@@ -208,7 +241,7 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                   type="button"
                   className="sd-tab"
                   aria-pressed={selectedFilter === tab}
-                  onClick={() => setSelectedFilter(tab)}
+                  onClick={() => { setSelectedFilter(tab); setActiveMenuId(null); }}
                 >
                   {label}
                 </button>
@@ -218,151 +251,133 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
         </div>
 
         {demoStudy && (
-          <div
+          <button
+            type="button"
             className="sd-demo"
-            role="button"
-            tabIndex={0}
             onClick={() => onOpenStudy(demoStudy.id, EXAMPLE_STUDY_STEP)}
-            onKeyDown={(e) => {
-              if (e.target !== e.currentTarget) return;
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onOpenStudy(demoStudy.id, EXAMPLE_STUDY_STEP);
-              }
-            }}
           >
-            <div>
-              <div className="sd-demo-title">
+            <span>
+              <span className="sd-demo-title">
                 {demoStudy.title}
                 <span className="sd-demo-badge">DEMO STUDY</span>
-              </div>
-              <div className="sd-demo-sub">
-                Sample study — explore {demoOffers.join(', ')}
-              </div>
-            </div>
-            <div className="sd-demo-open">
+              </span>
+              <span className="sd-demo-sub">Public example with {demoOffers.join(', ')}</span>
+            </span>
+            <span className="sd-demo-open">
               Explore Report
-              <ArrowUpRight size={16} />
-            </div>
-          </div>
+              <ArrowUpRight size={16} aria-hidden="true" />
+            </span>
+          </button>
         )}
 
-        <div className="sd-label">Your Studies</div>
+        <h2 className="sd-label">Your Studies</h2>
 
-        {/* Loading and error states live outside the list: a role="list"
-            only admits listitem children, so an alert or busy region placed
-            inside it is pruned from the accessibility tree. */}
         {isLoading ? (
-          // Showing "start your first study" to someone who already has
-          // studies is a lie, so the skeleton owns the pre-fetch frame.
           <div className="sd-loading" role="status" aria-busy="true" aria-live="polite" aria-label="Loading your studies">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="bx-skeleton sd-loading-row" />
-            ))}
+            <span>Loading your studies...</span>
+            {[0, 1, 2].map((index) => <div key={index} className="sd-loading-row" aria-hidden="true" />)}
           </div>
         ) : loadError ? (
           <div className="sd-empty" role="alert">
-            <div className="sd-empty-kicker">Could Not Load Studies</div>
-            <div className="sd-empty-line">Your studies are still there — this view could not reach them.</div>
-            <div className="sd-empty-sub">{loadError}</div>
-            <button type="button" className="sd-empty-cta" onClick={loadStudies}>
-              Retry
-            </button>
+            <AlertCircle size={22} aria-hidden="true" />
+            <h3 className="sd-empty-line">Could not load studies</h3>
+            <p className="sd-empty-sub">{loadError}</p>
+            <Button className="sd-empty-cta" onClick={() => { void loadStudies(); }} leadingIcon={<RotateCcw size={15} aria-hidden="true" />}>Retry</Button>
           </div>
         ) : (
-          <div className="sd-list" role="list" ref={listRef} tabIndex={-1}>
-            {regularStudies.length === 0 ? (
+          <div className="sd-workarea" ref={listRef} tabIndex={-1}>
+          {regularStudies.length === 0 ? (
             <div className="sd-empty">
-              <div className="sd-empty-kicker">Nothing In Flight</div>
-              <div className="sd-empty-line">
+              <FileText size={24} aria-hidden="true" />
+              <h3 className="sd-empty-line">
                 {searchQuery || selectedFilter !== 'all'
                   ? 'No studies match your filter.'
                   : 'Your first study starts with a question.'}
-              </div>
-              <div className="sd-empty-sub">
+              </h3>
+              <p className="sd-empty-sub">
                 {searchQuery || selectedFilter !== 'all'
-                  ? 'Try a different name or status, or clear the filters.'
-                  : 'Describe a business idea and interview synthetic personas about it.'}
-              </div>
-              <button type="button" className="sd-empty-cta" onClick={onCreateStudy}>
-                <Plus size={15} strokeWidth={2.5} />
-                Start your first study
-              </button>
+                  ? 'No results for the current search and status.'
+                  : 'No saved studies yet.'}
+              </p>
+              {searchQuery || selectedFilter !== 'all' ? (
+                <Button className="sd-empty-cta" onClick={() => { setSearchQuery(''); setSelectedFilter('all'); }} leadingIcon={<RotateCcw size={15} aria-hidden="true" />}>Clear filters</Button>
+              ) : (
+                <Button className="sd-empty-cta" onClick={onCreateStudy} leadingIcon={<Plus size={15} aria-hidden="true" />}>Start your first study</Button>
+              )}
             </div>
           ) : (
-            regularStudies.map((study, index) => {
+            <div className="sd-list" role="list" aria-label="Your studies">
+            {regularStudies.map((study) => {
               const isMenuOpen = activeMenuId === study.id;
               return (
-                <div
-                  key={study.id}
-                  className="sd-row"
-                  style={{ '--sd-i': Math.min(index, 12) } as React.CSSProperties}
-                  role="listitem"
-                  onClick={() => openRow(study.id)}
-                >
-                  <div>
-                    {/* The title is the row's real keyboard control — the row
-                        click is a pointer-only enhancement. */}
-                    <button
-                      type="button"
-                      className="sd-row-titlebtn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openRow(study.id);
-                      }}
-                    >
+                <div key={study.id} className="sd-row" role="listitem">
+                  <div className="sd-row-main">
+                    <button type="button" className="sd-row-titlebtn" onClick={() => openRow(study.id)}>
                       {study.title}
+                      <ArrowUpRight size={15} aria-hidden="true" />
                     </button>
                     <div className="sd-row-meta">
                       {study.duration_text ||
                         (study.persona_count > 0
-                          ? `${study.persona_count} personas`
-                          : 'Just created • No personas yet')}
+                          ? `${study.persona_count} synthetic persona${study.persona_count === 1 ? '' : 's'}`
+                          : 'No personas yet')}
+                      {study.step ? <span>Step {study.step}</span> : null}
                     </div>
                   </div>
 
                   <div className="sd-row-right">
                     {rowStatus(study)}
                     <div className="sd-row-type">{TYPE_LABELS[study.type] ?? study.type}</div>
-                    <span className="sd-row-open" aria-hidden="true">
-                      Open
-                      <ArrowUpRight size={14} />
-                    </span>
 
-                    <div className="sd-menu-wrap" onPointerDown={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
+                    <div className="sd-menu-wrap">
+                      <Button
+                        icon
+                        variant="ghost"
                         className="sd-menu-btn"
                         aria-label="Study options"
+                        title="Study options"
+                        aria-haspopup="menu"
+                        aria-controls={isMenuOpen ? menuId : undefined}
                         aria-expanded={isMenuOpen}
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={(event) => {
+                          menuTriggerRef.current = event.currentTarget;
+                          menuInitialFocus.current = 'first';
                           setActiveMenuId(isMenuOpen ? null : study.id);
                         }}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                          event.preventDefault();
+                          menuTriggerRef.current = event.currentTarget;
+                          menuInitialFocus.current = event.key === 'ArrowUp' ? 'last' : 'first';
+                          setActiveMenuId(study.id);
+                        }}
                       >
-                        <MoreVertical size={16} />
-                      </button>
+                        <MoreVertical size={17} aria-hidden="true" />
+                      </Button>
 
                       {isMenuOpen && (
-                        <div className="sd-menu" role="menu" aria-label="Study options" ref={menuRef}>
+                        <div id={menuId} className="sd-menu" role="menu" aria-label="Study options" ref={menuRef}>
                           <button
                             type="button"
                             role="menuitem"
+                            tabIndex={-1}
                             className="sd-menu-item"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openRow(study.id);
-                            }}
+                            onClick={() => { setActiveMenuId(null); openRow(study.id); }}
                           >
-                            <FileText size={14} /> View Study
+                            <FileText size={15} aria-hidden="true" /> View Study
                           </button>
                           <button
                             type="button"
                             role="menuitem"
+                            tabIndex={-1}
                             className="sd-menu-item sd-menu-item--danger"
-                            onClick={(e) => handleDelete(e, study.id)}
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              setDeleteError(null);
+                              setPendingDelete(study);
+                            }}
                           >
-                            <Trash2 size={14} /> Delete
+                            <Trash2 size={15} aria-hidden="true" /> Delete
                           </button>
                         </div>
                       )}
@@ -370,11 +385,41 @@ export const StudiesDashboardView: React.FC<StudiesDashboardViewProps> = ({
                   </div>
                 </div>
               );
-            })
-            )}
+            })}
+            </div>
+          )}
           </div>
         )}
       </div>
+      <Dialog.Root open={!!pendingDelete} onOpenChange={(open) => { if (!open) closeDelete(); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="sd-dialog-overlay" />
+          <Dialog.Content
+            className="sd-dialog"
+            aria-modal="true"
+            onOpenAutoFocus={(event) => { event.preventDefault(); cancelRef.current?.focus(); }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              if (menuTriggerRef.current?.isConnected) menuTriggerRef.current.focus();
+              else listRef.current?.focus();
+            }}
+            onEscapeKeyDown={(event) => { if (requestRef.current.deleting) event.preventDefault(); }}
+            onInteractOutside={(event) => { if (requestRef.current.deleting) event.preventDefault(); }}
+          >
+            <Dialog.Title className="sd-dialog-title">Delete study?</Dialog.Title>
+            <Dialog.Description className="sd-dialog-description">
+              <strong>{pendingDelete?.title}</strong> will be permanently deleted. This cannot be undone.
+            </Dialog.Description>
+            {deleteError && <p className="sd-delete-error" role="alert"><AlertCircle size={17} aria-hidden="true" /><span>{deleteError}</span></p>}
+            <div className="sd-dialog-actions">
+              <Button ref={cancelRef} onClick={closeDelete} disabled={isDeleting}>Cancel</Button>
+              <Button variant="danger" loading={isDeleting} aria-label="Delete study" onClick={() => { void handleDelete(); }} leadingIcon={<Trash2 size={16} aria-hidden="true" />}>
+                {isDeleting ? 'Deleting...' : 'Delete study'}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 };

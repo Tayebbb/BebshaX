@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 
 /** Small monospace "Request ID: …" tag with a copy button. Renders nothing when
@@ -7,16 +7,47 @@ export const RequestIdTag: React.FC<{ requestId?: string | null; style?: React.C
   requestId,
   style,
 }) => {
-  const [copied, setCopied] = useState(false);
-  if (!requestId) return null;
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const copyAttempt = useRef(0);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const copy = async () => {
+  useEffect(() => {
+    setCopyState('idle');
+    return () => {
+      copyAttempt.current += 1;
+      if (copyTimer.current !== null) clearTimeout(copyTimer.current);
+      copyTimer.current = null;
+    };
+  }, [requestId]);
+
+  if (!requestId) return null;
+  const copied = copyState === 'copied';
+
+  const copy = () => {
+    const attempt = ++copyAttempt.current;
+    if (copyTimer.current !== null) clearTimeout(copyTimer.current);
+    copyTimer.current = null;
+    setCopyState('idle');
+    const fail = () => {
+      if (copyAttempt.current === attempt) setCopyState('failed');
+    };
+
     try {
-      await navigator.clipboard?.writeText(requestId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      const clipboard = navigator.clipboard;
+      if (typeof clipboard?.writeText !== 'function') {
+        fail();
+        return;
+      }
+      clipboard.writeText(requestId).then(() => {
+        if (copyAttempt.current !== attempt) return;
+        setCopyState('copied');
+        copyTimer.current = setTimeout(() => {
+          copyTimer.current = null;
+          setCopyState('idle');
+        }, 1500);
+      }).catch(fail);
     } catch {
-      // Clipboard blocked — the id is still visible to select by hand.
+      fail();
     }
   };
 
@@ -25,10 +56,12 @@ export const RequestIdTag: React.FC<{ requestId?: string | null; style?: React.C
       style={{
         display: 'inline-flex',
         alignItems: 'center',
+        flexWrap: 'wrap',
         gap: '6px',
         fontFamily: 'var(--font-mono, monospace)',
-        fontSize: '0.72rem',
+        fontSize: 'var(--fs-xs)',
         color: 'var(--text-muted)',
+        overflowWrap: 'anywhere',
         ...style,
       }}
     >
@@ -37,12 +70,12 @@ export const RequestIdTag: React.FC<{ requestId?: string | null; style?: React.C
       </span>
       <button
         type="button"
+        className="bx-request-id-copy"
         onClick={copy}
         aria-label={copied ? 'Request ID copied' : 'Copy request ID'}
         title={copied ? 'Copied' : 'Copy request ID'}
         style={{
           background: 'transparent',
-          border: '1px solid var(--border-subtle)',
           borderRadius: '4px',
           padding: '1px 4px',
           color: 'inherit',
@@ -53,6 +86,11 @@ export const RequestIdTag: React.FC<{ requestId?: string | null; style?: React.C
       >
         {copied ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
       </button>
+      {copyState === 'failed' && (
+        <span role="status" style={{ fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)' }}>
+          Copy unavailable. Select and copy the request ID manually.
+        </span>
+      )}
     </span>
   );
 };

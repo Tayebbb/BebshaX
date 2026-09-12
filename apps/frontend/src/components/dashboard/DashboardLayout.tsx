@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import { useDialogA11y } from '../../utils/useDialogA11y';
+import React, { Suspense, lazy, useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 // Dashboard-only assets: kept out of the landing critical path and loaded
 // with this (lazy) chunk. Space Grotesk and Unbounded are used by the
 // new-study and interview stylesheets; ui.css by the bx-* component kit.
@@ -35,41 +36,33 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '../../context/NavigationContext';
 import { useTheme } from '../../context/ThemeContext';
-import { CommandMenu, type CommandItem, EmptyState, Button } from '../ui';
+import { CommandMenu, type CommandItem } from '../ui/CommandMenu';
+import { EmptyState } from '../ui/EmptyState';
+import { Button } from '../ui/Button';
 import { NewStudyView } from './views/NewStudyView';
-import { StudiesDashboardView } from './views/StudiesDashboardView';
-import { PersonaLibraryView } from './views/PersonaLibraryView';
-import { StudyWorkflowView } from './views/StudyWorkflowView';
-import { ModelRouterView } from './views/ModelRouterView';
-import { EvidenceLaboratoryView } from './views/EvidenceLaboratoryView';
-import { SegmentationView } from './views/SegmentationView';
-import { InterviewsView } from './views/InterviewsView';
-import { InterviewWorkspace } from '../interview/InterviewWorkspace';
-import { BehavioralTestingView } from './views/BehavioralTestingView';
-import { BehavioralTestDetailView } from './views/BehavioralTestDetailView';
-import { BehavioralComparisonView } from './views/BehavioralComparisonView';
-import { StartInterviewModal } from './modals/StartInterviewModal';
-import { CreateBehavioralTestModal } from './modals/CreateBehavioralTestModal';
+import { prefetchDashboardRoute, routeModules } from './routeModules';
 import { HealthResponse, StudyType, Study, SyntheticPersona } from '../../types';
 import { findExampleStudy, EXAMPLE_STUDY_STEP } from '../../utils/exampleStudy';
-import { api } from '../../services/api';
+import { api, STUDIES_CHANGED } from '../../services/api';
+import { fromUnknownError } from '../../utils/apiError';
 import { BebshaXLogo } from '../common/BebshaXLogo';
+import { parseDashboardPath, type DashboardTab } from '../../utils/dashboardRoute';
+export { parseDashboardPath, type DashboardTab } from '../../utils/dashboardRoute';
 
-export type DashboardTab =
-  | 'new-study'
-  | 'dashboard'
-  | 'personas'
-  | 'interviews'
-  | 'interview-workspace'
-  | 'behavioral-tests'
-  | 'behavioral-test-detail'
-  | 'behavioral-compare'
-  | 'router'
-  | 'study-workflow'
-  | 'evidence'
-  | 'segmentation';
+const StudiesDashboardView = lazy(routeModules.dashboard);
+const PersonaLibraryView = lazy(routeModules.personas);
+const StudyWorkflowView = lazy(routeModules['study-workflow']);
+const ModelRouterView = lazy(routeModules.router);
+const EvidenceLaboratoryView = lazy(routeModules.evidence);
+const SegmentationView = lazy(routeModules.segmentation);
+const InterviewsView = lazy(routeModules.interviews);
+const InterviewWorkspace = lazy(routeModules['interview-workspace']);
+const BehavioralTestingView = lazy(routeModules['behavioral-tests']);
+const BehavioralTestDetailView = lazy(routeModules['behavioral-test-detail']);
+const BehavioralComparisonView = lazy(routeModules['behavioral-compare']);
+const StartInterviewModal = lazy(() => import('./modals/StartInterviewModal').then((module) => ({ default: module.StartInterviewModal })));
+const CreateBehavioralTestModal = lazy(() => import('./modals/CreateBehavioralTestModal').then((module) => ({ default: module.CreateBehavioralTestModal })));
 
-/** Bottom-centre honesty pill shared by the backend-down / mock / demo banners. */
 const honestPillStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -118,106 +111,10 @@ const NoStudySelected: React.FC<{
   </div>
 );
 
-const parseDashboardPath = (path: string): {
-  tab: DashboardTab;
-  studyId?: string;
-  interviewId?: string;
-  testId?: string;
-  runId?: string;
-  compareRunIds?: string[];
-  step?: number;
-} => {
-  if (path.includes('/behavioral-tests/compare')) {
-    const parts = path.split('?');
-    const queryParams = new URLSearchParams(parts[1] || '');
-    const runIds = queryParams.get('run_ids')?.split(',').filter(Boolean) || [];
-    const pathParts = parts[0].split('/').filter(Boolean);
-    const studyId = pathParts[1];
-    return { tab: 'behavioral-compare', studyId, compareRunIds: runIds };
-  }
-  if (path.includes('/behavioral-tests/') && !path.endsWith('/behavioral-tests')) {
-    const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1];
-    const testId = parts[3] || parts[2] || '';
-    const runId = parts[5] || undefined;
-    return { tab: 'behavioral-test-detail', studyId, testId, runId };
-  }
-  if (path.includes('/behavioral-tests') || path.startsWith('/behavioral-tests')) {
-    const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1];
-    return { tab: 'behavioral-tests', studyId };
-  }
-  if (path.includes('/interviews/') || path.startsWith('/interviews/')) {
-    const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1];
-    const interviewId = parts[3] || parts[2] || '';
-    return { tab: 'interview-workspace', studyId, interviewId };
-  }
-  if (path.includes('/interviews') || path.startsWith('/interviews')) {
-    const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1];
-    return { tab: 'interviews', studyId };
-  }
-  if (path.includes('/segmentation') || path.startsWith('/segmentation')) {
-    const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1];
-    return { tab: 'segmentation', studyId };
-  }
-  if (path.includes('/evidence') || path.startsWith('/evidence')) {
-    const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1];
-    return { tab: 'evidence', studyId };
-  }
-  if (path.startsWith('/dataset') || path.startsWith('/data-sources')) {
-    return { tab: 'dashboard' };
-  }
-  if (path.startsWith('/persona-library') || path.startsWith('/personas')) {
-    return { tab: 'personas' };
-  }
-  if (path.startsWith('/router') || path.startsWith('/provenance') || path.startsWith('/routes') || path.startsWith('/models')) {
-    return { tab: 'router' };
-  }
-  if (path.startsWith('/dashboard')) {
-    return { tab: 'dashboard' };
-  }
-  if (path.startsWith('/create-study') || path.startsWith('/new-study') || path === '/app') {
-    return { tab: 'new-study' };
-  }
-  if (path.startsWith('/research') || path.startsWith('/study')) {
-    const parts = path.split('/').filter(Boolean);
-    const studyId = parts[1];
-    if (parts[2] === 'behavioral-tests' && parts[3] === 'compare') {
-      const queryParams = new URLSearchParams(path.split('?')[1] || '');
-      const runIds = queryParams.get('run_ids')?.split(',').filter(Boolean) || [];
-      return { tab: 'behavioral-compare', studyId, compareRunIds: runIds };
-    }
-    if (parts[2] === 'behavioral-tests' && parts[3]) {
-      return { tab: 'behavioral-test-detail', studyId, testId: parts[3], runId: parts[5] };
-    }
-    if (parts[2] === 'behavioral-tests') {
-      return { tab: 'behavioral-tests', studyId };
-    }
-    if (parts[2] === 'interviews' && parts[3]) {
-      return { tab: 'interview-workspace', studyId, interviewId: parts[3] };
-    }
-    if (parts[2] === 'interviews') {
-      return { tab: 'interviews', studyId };
-    }
-    let step = 1;
-    if (parts[2] && parts[2].startsWith('step')) {
-      const parsed = parseInt(parts[2].replace('step', ''), 10);
-      if (!isNaN(parsed) && parsed >= 1 && parsed <= 5) {
-        step = parsed;
-      }
-    }
-    return { tab: 'study-workflow', studyId, step };
-  }
-  return { tab: 'new-study' };
-};
-
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingPage, health = null }) => {
   const { user, logout } = useAuth();
-  const { currentPath, navigate } = useNavigation();
+  const { currentPath, currentSearch, navigate } = useNavigation();
+  const currentRoute = `${currentPath}${currentSearch}`;
   const { theme, toggleTheme } = useTheme();
   const routeEpochRef = useRef({ active: false, personaRequest: 0 });
 
@@ -225,13 +122,43 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     const epoch = { active: true, personaRequest: 0 };
     routeEpochRef.current = epoch;
     return () => { epoch.active = false; };
-  }, [currentPath]);
+  }, [currentRoute]);
 
-  const initialParsed = parseDashboardPath(currentPath);
+  const initialParsed = parseDashboardPath(currentRoute);
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialParsed.tab);
   const [activeStudyId, setActiveStudyId] = useState<string | undefined>(initialParsed.studyId);
+  // Workspace-level views (Dashboard, Persona Library, Router) carry no study in
+  // their route; the last study worked in stays the scope for the Study tabs so
+  // a detour through the library never strands the user on "No study selected".
+  const studyScopeKey = user?.id ? `bebshax_study_scope_${user.id}` : null;
+  const [rememberedStudyId, setRememberedStudyId] = useState<string | undefined>(() => {
+    try {
+      return (studyScopeKey && sessionStorage.getItem(studyScopeKey)) || undefined;
+    } catch {
+      return undefined;
+    }
+  });
+  useEffect(() => {
+    if (!activeStudyId) return;
+    setRememberedStudyId(activeStudyId);
+    if (!studyScopeKey) return;
+    try {
+      sessionStorage.setItem(studyScopeKey, activeStudyId);
+    } catch {
+      // storage is best-effort
+    }
+  }, [activeStudyId, studyScopeKey]);
+  const forgetRememberedStudy = () => {
+    setRememberedStudyId(undefined);
+    try {
+      if (studyScopeKey) sessionStorage.removeItem(studyScopeKey);
+    } catch {
+      // ignore
+    }
+  };
+  const scopedStudyId = activeStudyId ?? rememberedStudyId;
   const [activeInterviewId, setActiveInterviewId] = useState<string | undefined>(initialParsed.interviewId);
-  const [activeStep, setActiveStep] = useState<number>(initialParsed.step || 1);
+  const [activeStep, setActiveStep] = useState<number | undefined>(initialParsed.step);
 
   const [activeTestId, setActiveTestId] = useState<string | undefined>(initialParsed.testId);
   const [activeRunId, setActiveRunId] = useState<string | undefined>(initialParsed.runId);
@@ -256,9 +183,19 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [initialWorkflowType, setInitialWorkflowType] = useState<StudyType>('interviews');
   const [initialWorkflowPrompt, setInitialWorkflowPrompt] = useState<string | undefined>(undefined);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [cmdOpen, setCmdOpen] = useState(false);
   const userMenuAreaRef = useRef<HTMLDivElement | null>(null);
   const userChipRef = useRef<HTMLButtonElement | null>(null);
   const mobileNavTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
+  useDialogA11y(sidebarRef, isMobile && isMobileNavOpen, () => setIsMobileNavOpen(false), {
+    suspended: cmdOpen || showUserMenu,
+  });
+  useLayoutEffect(() => {
+    if (sidebarRef.current) sidebarRef.current.inert = isMobile && !isMobileNavOpen;
+    if (mainRef.current) mainRef.current.inert = isMobile && isMobileNavOpen;
+  }, [isMobile, isMobileNavOpen]);
   const [showTourHint, setShowTourHint] = useState<boolean>(
     () => localStorage.getItem('bebshax_tour_dismissed') !== '1'
   );
@@ -270,32 +207,20 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [initialBehavioralPersonaId, setInitialBehavioralPersonaId] = useState<string | undefined>(undefined);
   const renderedRouteEpoch = routeEpochRef.current;
 
-  useEffect(() => {
-    const parsed = parseDashboardPath(currentPath);
+  useLayoutEffect(() => {
+    const parsed = parseDashboardPath(currentRoute);
     setShowStartInterviewModal(false);
     setModalPersona(null);
     setShowCreateBehavioralModal(false);
     setInitialBehavioralPersonaId(undefined);
     setActiveTab(parsed.tab);
-    if (parsed.studyId) {
-      setActiveStudyId(parsed.studyId);
-    }
-    if (parsed.interviewId) {
-      setActiveInterviewId(parsed.interviewId);
-    }
-    if (parsed.testId) {
-      setActiveTestId(parsed.testId);
-    }
-    if (parsed.runId) {
-      setActiveRunId(parsed.runId);
-    }
-    if (parsed.compareRunIds) {
-      setActiveCompareRunIds(parsed.compareRunIds);
-    }
-    if (parsed.step) {
-      setActiveStep(parsed.step);
-    }
-  }, [currentPath]);
+    setActiveStudyId(parsed.studyId);
+    setActiveInterviewId(parsed.interviewId);
+    setActiveTestId(parsed.testId);
+    setActiveRunId(parsed.runId);
+    setActiveCompareRunIds(parsed.compareRunIds ?? []);
+    setActiveStep(parsed.step);
+  }, [currentRoute]);
 
   useEffect(() => {
     const epoch = routeEpochRef.current;
@@ -327,7 +252,25 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       }
     };
     loadRecent();
-    return () => { cancelled = true; };
+    // A study created or deleted from any view must leave the sidebar too; an
+    // update only refreshes the rows already shown (no extra round trip).
+    const onStudiesChanged = (event: Event) => {
+      const changed = (event as CustomEvent<{ studies?: Study[] }>).detail?.studies;
+      if (!Array.isArray(changed)) { void loadRecent(); return; }
+      const owned = api.isMockMode() ? changed : changed.filter((study) => ownerId && study.user_id === ownerId);
+      const known = new Set(owned.map((study) => study.id));
+      const newest = owned.reduce<Study | null>((latest, study) => (
+        !latest || String(study.created_at) > String(latest.created_at) ? study : latest
+      ), null);
+      setRecentStudies((previous) => {
+        const removed = previous.some((study) => !known.has(study.id));
+        const created = newest !== null && !previous.some((study) => study.id === newest.id);
+        if (removed || created) { void loadRecent(); return previous; }
+        return previous.map((study) => owned.find((candidate) => candidate.id === study.id) ?? study);
+      });
+    };
+    window.addEventListener(STUDIES_CHANGED, onStudiesChanged);
+    return () => { cancelled = true; window.removeEventListener(STUDIES_CHANGED, onStudiesChanged); };
   }, [currentPath, user?.id]);
 
   // Dynamic greeting based on time of day
@@ -356,7 +299,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   // + preventDefault: the popover outranks the drawer (topmost surface wins),
   // and one Escape press never closes more than one surface.
   useEffect(() => {
-    if (!showUserMenu) return;
+    if (!showUserMenu || cmdOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       if (e.key === 'Escape') {
@@ -387,7 +330,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('mousedown', onPointerDown);
     };
-  }, [showUserMenu]);
+  }, [showUserMenu, cmdOpen]);
 
   // Escape closes the mobile nav drawer (backdrop click already does). Bubble
   // phase + defaultPrevented check: the drawer is the lowest-priority surface.
@@ -410,11 +353,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     setShowTourHint(false);
   };
 
-  /** Study-scoped destinations. Without an active study we stay on the plain
+  /** Study-scoped destinations. Without a study in scope we stay on the plain
    * tab route, which renders the "pick a study" empty state — inventing a
    * study id here used to 404 every fresh account. */
   const studyScopedPath = (suffix: string): string =>
-    activeStudyId ? `/research/${activeStudyId}/${suffix}` : `/${suffix}`;
+    scopedStudyId ? `/research/${scopedStudyId}/${suffix}` : `/${suffix}`;
 
   const handleTabClick = (tab: DashboardTab) => {
     setIsMobileNavOpen(false);
@@ -428,11 +371,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     else if (tab === 'router') navigate('/router');
     else if (tab === 'study-workflow') {
       setInitialWorkflowPrompt(undefined);
-      if (!activeStudyId) {
+      if (!scopedStudyId) {
         navigate('/create-study');
         return;
       }
-      navigate(`/research/${activeStudyId}/step1`);
+      navigate(`/research/${scopedStudyId}/step1`);
     }
   };
 
@@ -488,6 +431,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     navigate(`/research/${activeStudyId}/step${step}`);
   };
 
+  // Routing diagnostics are a developer surface: the endpoints behind it answer
+  // 403 to ordinary accounts, so the entry point is hidden rather than broken.
+  const isDeveloper = user?.role === 'developer' || user?.role === 'admin';
   const navItems = [
     {
       id: 'new-study' as DashboardTab,
@@ -537,7 +483,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       icon: <Cpu size={16} />,
       group: 'system' as const,
     },
-  ];
+  ].filter((item) => item.id !== 'router' || isDeveloper);
   const NAV_GROUPS: { id: 'workspace' | 'study' | 'system'; label: string }[] = [
     { id: 'workspace', label: 'Workspace' },
     { id: 'study', label: 'Study' },
@@ -557,32 +503,38 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   // deep links to older studies fetch once.
   const [activeStudyTitle, setActiveStudyTitle] = useState<string | undefined>(undefined);
   useEffect(() => {
-    if (!activeStudyId) {
+    if (!scopedStudyId) {
       setActiveStudyTitle(undefined);
       return;
     }
-    const known = recentStudies.find((s) => s.id === activeStudyId);
+    const known = recentStudies.find((s) => s.id === scopedStudyId);
     if (known) {
       setActiveStudyTitle(known.title);
       return;
     }
     let cancelled = false;
     const epoch = routeEpochRef.current;
+    const remembered = !activeStudyId;
     api
-      .getStudyById(activeStudyId)
+      .getStudyById(scopedStudyId)
       .then((s) => {
-        if (!cancelled && epoch.active) setActiveStudyTitle(s?.title ?? undefined);
+        if (cancelled || !epoch.active) return;
+        setActiveStudyTitle(s?.title ?? undefined);
+        // A remembered study that no longer exists must not keep scoping the tabs.
+        if (remembered && !s) forgetRememberedStudy();
       })
-      .catch(() => {
-        if (!cancelled && epoch.active) setActiveStudyTitle(undefined);
+      .catch((error: unknown) => {
+        if (cancelled || !epoch.active) return;
+        setActiveStudyTitle(undefined);
+        const status = fromUnknownError(error).status;
+        if (remembered && (status === 404 || status === 403)) forgetRememberedStudy();
       });
     return () => {
       cancelled = true;
     };
-  }, [activeStudyId, recentStudies, currentPath]);
+  }, [activeStudyId, scopedStudyId, recentStudies, currentPath]);
 
   // Ctrl/⌘ K jump menu
-  const [cmdOpen, setCmdOpen] = useState(false);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
@@ -600,7 +552,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       label: n.label,
       group: n.group === 'study' ? 'Study' : n.group === 'system' ? 'System' : 'Workspace',
       icon: n.icon,
-      hint: n.group === 'study' && !activeStudyId ? 'pick a study' : undefined,
+      hint: n.group === 'study' && !scopedStudyId ? 'pick a study' : undefined,
       keywords: n.id === 'router' ? ['ai', 'models', 'provenance', 'routing', 'health'] : undefined,
       onSelect: () => handleTabClick(n.id),
     }));
@@ -647,7 +599,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     ];
     return [...nav, ...studies, ...actions];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recentStudies, activeStudyId, theme, onOpenLandingPage]);
+  }, [recentStudies, scopedStudyId, theme, onOpenLandingPage]);
 
   const healthLabel = backendDown
     ? 'Backend unreachable'
@@ -695,6 +647,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           LEFT SIDEBAR (Matches Screenshots 1, 2, 3, 4)
          ============================================================ */}
       <aside
+        ref={sidebarRef}
+        role={isMobile ? 'dialog' : undefined}
+        aria-label={isMobile ? 'Workspace navigation' : undefined}
+        aria-modal={isMobile && isMobileNavOpen ? true : undefined}
+        aria-hidden={isMobile && !isMobileNavOpen ? true : undefined}
         style={{
           width: isSidebarCollapsed ? '72px' : isMobile ? '280px' : '256px',
           background: isMobile ? 'var(--glass-strong)' : 'var(--bg-glass)',
@@ -719,7 +676,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               }
             : {
                 position: 'sticky',
-                transition: 'width 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
                 zIndex: 40,
               }),
         }}
@@ -787,6 +743,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             {NAV_GROUPS.map((group) => {
               const items = navItems.filter((n) => n.group === group.id);
               const isStudyGroup = group.id === 'study';
+              if (items.length === 0 && !isStudyGroup) return null;
               return (
                 <div key={group.id} className="bx-nav-group">
                   {!isSidebarCollapsed && (
@@ -795,12 +752,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                     </div>
                   )}
                   {isStudyGroup && !isSidebarCollapsed && (
-                    activeStudyId ? (
+                    scopedStudyId ? (
                       <button
                         type="button"
                         className="bx-study-chip"
                         aria-current={activeTab === 'study-workflow' ? 'page' : undefined}
-                        onClick={() => handleOpenStudy(activeStudyId, activeStep || 1)}
+                        onClick={() => handleOpenStudy(scopedStudyId, activeStep || 1)}
                         title={`Open “${activeStudyTitle || 'this study'}” workflow`}
                       >
                         <FolderOpen size={13} color="var(--accent-teal)" aria-hidden="true" />
@@ -815,12 +772,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
                   )}
                   {items.map((item) => {
                     const isActive = activeNavId === item.id;
-                    const needsStudy = isStudyGroup && !activeStudyId;
+                    const needsStudy = isStudyGroup && !scopedStudyId;
                     return (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => handleTabClick(item.id)}
+                        onPointerEnter={() => prefetchDashboardRoute(item.id)}
+                        onFocus={() => prefetchDashboardRoute(item.id)}
                         aria-current={isActive ? 'page' : undefined}
                         className={`bx-nav-item${isSidebarCollapsed ? ' bx-nav-item--collapsed' : ''}${needsStudy && !isActive ? ' bx-nav-item--muted' : ''}`}
                         title={isSidebarCollapsed ? item.label : needsStudy ? `${item.label} — pick a study first` : undefined}
@@ -1341,7 +1300,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       {/* ============================================================
           MAIN VIEW AREA
          ============================================================ */}
-      <main id="bx-main" tabIndex={-1} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative', zIndex: 1, outline: 'none' }}>
+      <main ref={mainRef} id="bx-main" tabIndex={-1} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative', zIndex: 1, outline: 'none' }}>
         {/* Mobile top bar — opens the nav drawer */}
         {isMobile && (
           <div
@@ -1563,12 +1522,43 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           </div>
         )}
 
+        {(backendDown || api.isMockMode() || health?.demo_mode) && (
+          <div
+            style={{
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px var(--page-x)',
+              flexShrink: 0,
+            }}
+          >
+            {backendDown && (
+              <div role="status" style={honestPillStyle}>
+                Backend unreachable — your studies can&apos;t be loaded right now. Nothing shown here is missing data; it simply hasn&apos;t loaded.
+              </div>
+            )}
+            {api.isMockMode() && (
+              <div role="status" data-testid="mock-mode-banner" style={honestPillStyle}>
+                Showing sample data (mock mode) — nothing here is live research output.
+              </div>
+            )}
+            {health?.demo_mode && (
+              <div role="status" data-testid="demo-mode-banner" style={{ ...honestPillStyle, color: 'var(--accent-cyan)', background: 'rgba(34, 211, 238, 0.12)', border: '1px solid rgba(34, 211, 238, 0.4)' }}>
+                Demo mode — cached results are labeled CACHED wherever they appear.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Tab View Switcher — keyed so each view replays its entrance */}
         <div
           key={activeTab}
           className="bx-view"
           style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}
         >
+        <Suspense fallback={<div role="status" className="bx-loading" style={{ padding: 24 }}>Loading view...</div>}>
         {activeTab === 'new-study' && (
           <NewStudyView
             onStartStudy={handleStartStudy}
@@ -1618,7 +1608,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               setInitialBehavioralPersonaId(pId);
               setShowCreateBehavioralModal(true);
             }}
-            onNavigateToEvidence={() => navigate(studyScopedPath('evidence'))}
+            onNavigateToEvidence={(fromStudyId) => navigate(`/research/${fromStudyId}/evidence`)}
             onNavigateToSegmentation={() => navigate(studyScopedPath('segmentation'))}
           />
         )}
@@ -1758,44 +1748,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               onCreateStudy={() => navigate('/create-study')}
             />
           ))}
+        </Suspense>
         </div>
       </main>
 
-      {/* Honest-state banners: fixtures / cached demo results must never pass as live research data */}
-      {(backendDown || api.isMockMode() || health?.demo_mode) && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '16px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 90,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '8px',
-            pointerEvents: 'none',
-          }}
-        >
-          {backendDown && (
-            <div role="status" style={{ ...honestPillStyle, pointerEvents: 'auto' }}>
-              Backend unreachable — your studies can&apos;t be loaded right now. Nothing shown here is missing data; it simply hasn&apos;t loaded.
-            </div>
-          )}
-          {api.isMockMode() && (
-            <div role="status" data-testid="mock-mode-banner" style={{ ...honestPillStyle, pointerEvents: 'auto' }}>
-              Showing sample data (mock mode) — nothing here is live research output.
-            </div>
-          )}
-          {health?.demo_mode && (
-            <div role="status" data-testid="demo-mode-banner" style={{ ...honestPillStyle, pointerEvents: 'auto', color: 'var(--accent-cyan)', background: 'rgba(34, 211, 238, 0.12)', border: '1px solid rgba(34, 211, 238, 0.4)' }}>
-              Demo mode — cached results are labeled CACHED wherever they appear.
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Start Adaptive Interview Modal */}
+      <Suspense fallback={<div role="status">Loading dialog...</div>}>
       {showStartInterviewModal && modalPersona && activeStudyId && (
         <StartInterviewModal
           isOpen={showStartInterviewModal}
@@ -1838,6 +1796,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           }}
         />
       )}
+      </Suspense>
 
     </div>
   );

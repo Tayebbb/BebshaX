@@ -16,7 +16,7 @@ import {
   Sliders,
   ShieldCheck,
 } from 'lucide-react';
-import { BehavioralTestType, SyntheticPersona, MarketSegment } from '../../../types';
+import { BehavioralTest, BehavioralTestType, SyntheticPersona, MarketSegment } from '../../../types';
 import { api } from '../../../services/api';
 import { useDialogA11y } from '../../../utils/useDialogA11y';
 
@@ -35,6 +35,18 @@ interface TestTypeOption {
   icon: React.ReactNode;
   tag: string;
   example: string;
+}
+
+interface SavedSimulation {
+  test: BehavioralTest;
+  payload: {
+    scenario_title: string;
+    scenario_text: string;
+    parameters: Record<string, unknown>;
+    target_population_type: 'all' | 'segment' | 'selected_personas';
+    target_segment_id?: string;
+    target_persona_ids?: string[];
+  };
 }
 
 const TEST_TYPE_OPTIONS: TestTypeOption[] = [
@@ -116,15 +128,16 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
-  // Dynamic configuration form fields
-  const [price, setPrice] = useState('৳299');
+  // Dynamic configuration form fields. Deliberately blank: a prefilled meal-prep
+  // scenario used to run unnoticed against studies about anything else.
+  const [price, setPrice] = useState('');
   const [billingPeriod, setBillingPeriod] = useState('monthly');
-  const [alternative, setAlternative] = useState('Free YouTube recipes & manual mess arrangements');
+  const [alternative, setAlternative] = useState('');
   const offer = 'Standard pricing';
-  const [featureName, setFeatureName] = useState('AI Automated Weekly Meal Plan');
-  const [benefit, setBenefit] = useState('Saves 45 minutes of decision fatigue every day');
-  const [headline, setHeadline] = useState('Plan your entire week of nutritious meals in 30 seconds');
-  const [cta, setCta] = useState('Start Free Trial');
+  const [featureName, setFeatureName] = useState('');
+  const [benefit, setBenefit] = useState('');
+  const [headline, setHeadline] = useState('');
+  const [cta, setCta] = useState('');
   const [customScenarioText, setCustomScenarioText] = useState('');
 
   // Population selection
@@ -133,42 +146,82 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
   const [selectedPersonaIds, setSelectedPersonaIds] = useState<string[]>([]);
   const [personas, setPersonas] = useState<SyntheticPersona[]>([]);
   const [segments, setSegments] = useState<MarketSegment[]>([]);
-  const [_isLoadingContext, setIsLoadingContext] = useState(false);
+  const [isLoadingContext, setIsLoadingContext] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [savedSimulation, setSavedSimulation] = useState<SavedSimulation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  useDialogA11y(dialogRef, isOpen, onClose);
+  const modalEpochRef = useRef<symbol | null>(null);
+  const contextRequestRef = useRef(0);
+  const submittingRef = useRef(false);
+
+  const handleClose = () => {
+    modalEpochRef.current = null;
+    contextRequestRef.current += 1;
+    submittingRef.current = false;
+    setIsSubmitting(false);
+    onClose();
+  };
+  useDialogA11y(dialogRef, isOpen, handleClose);
+
+  const loadContext = async (modalEpoch: symbol) => {
+    const request = ++contextRequestRef.current;
+    const isCurrent = () => modalEpochRef.current === modalEpoch && contextRequestRef.current === request;
+    setIsLoadingContext(true);
+    setContextError(null);
+    try {
+      const [personaList, segmentList] = await Promise.all([
+        api.getStudyPersonas(studyId),
+        api.listStudySegments(studyId),
+      ]);
+      if (!isCurrent()) return;
+      const validPersonas = personaList.personas || [];
+      setPersonas(validPersonas);
+      setSegments(segmentList);
+      setSelectedPersonaIds(initialPersonaId
+        ? validPersonas.filter((persona) => persona.id === initialPersonaId).map((persona) => persona.id)
+        : validPersonas.map((persona) => persona.id));
+      setSelectedSegmentId(segmentList[0]?.id || '');
+    } catch (failure: unknown) {
+      if (isCurrent()) setContextError(failure instanceof Error ? failure.message : 'Population could not be loaded.');
+    } finally {
+      if (isCurrent()) setIsLoadingContext(false);
+    }
+  };
 
   useEffect(() => {
-    if (!isOpen) return;
-    const loadContext = async () => {
-      setIsLoadingContext(true);
-      try {
-        const [pList, sList] = await Promise.all([
-          api.getStudyPersonas(studyId).catch(() => ({ personas: [] })),
-          api.listStudySegments(studyId).catch(() => []),
-        ]);
-        const validPersonas = pList.personas || [];
-        setPersonas(validPersonas);
-        setSegments(sList || []);
-
-        if (initialPersonaId && validPersonas.some((p: SyntheticPersona) => p.id === initialPersonaId)) {
-          setSelectedPersonaIds([initialPersonaId]);
-          setPopulationType('selected_personas');
-        } else if (validPersonas.length > 0) {
-          setSelectedPersonaIds(validPersonas.map((p: SyntheticPersona) => p.id));
-        }
-
-        if (sList && sList.length > 0) {
-          setSelectedSegmentId(sList[0].id);
-        }
-      } catch {
-        // Soft fallback
-      } finally {
-        setIsLoadingContext(false);
-      }
+    const modalEpoch = isOpen ? Symbol() : null;
+    modalEpochRef.current = modalEpoch;
+    submittingRef.current = false;
+    setIsSubmitting(false);
+    setSavedSimulation(null);
+    setError(null);
+    setContextError(null);
+    setStep(1);
+    setSelectedType('pricing_test');
+    setName(`${TEST_TYPE_OPTIONS[0].title} Simulation`);
+    setDescription(TEST_TYPE_OPTIONS[0].description);
+    setPrice('');
+    setBillingPeriod('monthly');
+    setAlternative('');
+    setFeatureName('');
+    setBenefit('');
+    setHeadline('');
+    setCta('');
+    setCustomScenarioText('');
+    setPopulationType(initialPersonaId ? 'selected_personas' : 'all');
+    setSelectedPersonaIds([]);
+    setSelectedSegmentId('');
+    setPersonas([]);
+    setSegments([]);
+    setIsLoadingContext(false);
+    if (modalEpoch) void loadContext(modalEpoch);
+    return () => {
+      modalEpochRef.current = null;
+      contextRequestRef.current += 1;
+      submittingRef.current = false;
     };
-    loadContext();
   }, [isOpen, studyId, initialPersonaId]);
 
   // Set default names based on test type
@@ -195,13 +248,29 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
   const getActivePersonaCount = () => {
     if (populationType === 'all') return personas.length;
     if (populationType === 'segment') {
-      return personas.filter((p) => p.segment_id === selectedSegmentId).length || personas.length;
+      return personas.filter((persona) => persona.segment_id === selectedSegmentId).length;
     }
-    return selectedPersonaIds.length;
+    return personas.filter((persona) => selectedPersonaIds.includes(persona.id)).length;
   };
 
-  const buildStructuredConfig = (): Record<string, any> => {
-    const config: Record<string, any> = { test_type: selectedType };
+  /** What step 2 still needs before the scenario can be simulated; null when complete. */
+  const scenarioMissing: string | null = (() => {
+    if (!name.trim()) return 'a test name';
+    if (selectedType === 'pricing_test' && !price.trim()) return 'a proposed price';
+    if (selectedType === 'feature_test' && !featureName.trim()) return 'a feature name';
+    if (selectedType === 'message_test' && !headline.trim()) return 'a headline';
+    if (!['pricing_test', 'feature_test', 'message_test'].includes(selectedType) && !customScenarioText.trim()) {
+      return 'a scenario description';
+    }
+    return null;
+  })();
+  const scenarioContextRequired = !['pricing_test', 'feature_test', 'message_test'].includes(selectedType);
+  const populationReady = !isLoadingContext && !contextError && getActivePersonaCount() > 0
+    && (populationType !== 'segment' || segments.some((segment) => segment.id === selectedSegmentId));
+  const continueBlocked = (step === 2 && scenarioMissing !== null) || (step === 3 && !populationReady);
+
+  const buildStructuredConfig = (): Record<string, unknown> => {
+    const config: Record<string, unknown> = { test_type: selectedType };
     if (selectedType === 'pricing_test') {
       config.price = price;
       config.billing_period = billingPeriod;
@@ -227,40 +296,62 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
   };
 
   const handleRunSimulation = async () => {
+    const modalEpoch = modalEpochRef.current;
+    if (!modalEpoch || submittingRef.current) return;
+    if (!savedSimulation && scenarioMissing) {
+      setStep(2);
+      setError(`Add ${scenarioMissing} before running the simulation.`);
+      return;
+    }
+    if (!savedSimulation && !populationReady) {
+      setStep(3);
+      setError('Select an available population before running the simulation.');
+      return;
+    }
+    submittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
+    let submission = savedSimulation;
     try {
-      const config = buildStructuredConfig();
-      const scenarioText =
-        customScenarioText ||
-        `${name}: ${description}. Parameters: ${JSON.stringify(config)}`;
+      if (!submission) {
+        const config = buildStructuredConfig();
+        const scenarioText = customScenarioText || `${name}: ${description}. Parameters: ${JSON.stringify(config)}`;
+        const payload: SavedSimulation['payload'] = {
+          scenario_title: name,
+          scenario_text: scenarioText,
+          parameters: config,
+          target_population_type: populationType,
+          target_segment_id: populationType === 'segment' ? selectedSegmentId : undefined,
+          target_persona_ids: populationType === 'selected_personas' ? [...selectedPersonaIds] : undefined,
+        };
+        const test: BehavioralTest = await api.createBehavioralTest(studyId, {
+          name,
+          description,
+          test_type: selectedType,
+          configuration: config,
+          scenario_title: name,
+          scenario_text: scenarioText,
+        });
+        if (modalEpochRef.current !== modalEpoch) return;
+        submission = { test, payload };
+        setSavedSimulation(submission);
+      }
 
-      // 1. Create Test
-      const test = await api.createBehavioralTest(studyId, {
-        name: name || `${selectedType} Test`,
-        description: description,
-        test_type: selectedType,
-        configuration: config,
-        scenario_title: name,
-        scenario_text: scenarioText,
-      });
-
-      // 2. Trigger Run
-      const run = await api.triggerBehavioralTestRun(studyId, test.id, {
-        scenario_title: name,
-        scenario_text: scenarioText,
-        parameters: config,
-        target_population_type: populationType,
-        target_segment_id: populationType === 'segment' ? selectedSegmentId : undefined,
-        target_persona_ids: populationType === 'selected_personas' ? selectedPersonaIds : undefined,
-      });
-
-      onTestCreated(test.id, run.id);
-      onClose();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to start behavioral simulation');
+      const run = await api.triggerBehavioralTestRun(studyId, submission.test.id, submission.payload);
+      if (modalEpochRef.current !== modalEpoch) return;
+      onTestCreated(submission.test.id, run.id);
+      handleClose();
+    } catch (failure: unknown) {
+      if (modalEpochRef.current !== modalEpoch) return;
+      const message = failure instanceof Error ? failure.message : 'The request could not be completed.';
+      setError(submission
+        ? `Test saved, but the simulation run failed to start. ${message} Retry the run with the saved configuration or open the saved test.`
+        : `Test was not confirmed saved. ${message} Check Behavioral Tests if the response was lost before retrying.`);
     } finally {
-      setIsSubmitting(false);
+      if (modalEpochRef.current === modalEpoch) {
+        submittingRef.current = false;
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -283,7 +374,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
         justifyContent: 'center',
         padding: '16px',
       }}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         ref={dialogRef}
@@ -296,9 +387,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
           maxWidth: '780px',
           maxHeight: '90vh',
           backgroundColor: 'var(--bg-card)',
-          border: '1px solid var(--accent-glow)',
-          borderRadius: '16px',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px var(--accent-subtle)',
+          border: '1px solid var(--border-control)',
+          borderRadius: '8px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -314,17 +405,19 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'linear-gradient(to right, var(--glass-strong), rgba(13, 148, 136, 0.15))',
+            backgroundColor: 'var(--bg-card)',
+            gap: '12px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
             <div
               style={{
                 width: '38px',
                 height: '38px',
-                borderRadius: '10px',
-                backgroundColor: 'var(--accent-subtle)',
-                border: '1px solid var(--border-hover)',
+                flexShrink: 0,
+                borderRadius: '8px',
+                backgroundColor: 'var(--bg-card-hover)',
+                border: '1px solid var(--border-control)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -334,7 +427,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               <Sliders size={20} />
             </div>
             <div>
-              <h2 id="create-behavioral-test-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-main)' }}>
+              <h2 id="create-behavioral-test-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, letterSpacing: 0, color: 'var(--text-main)', overflowWrap: 'anywhere' }}>
                 New Behavioral Simulation
               </h2>
               <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -344,8 +437,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Close new behavioral simulation dialog"
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             style={{
               background: 'transparent',
               border: 'none',
@@ -353,6 +447,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               cursor: 'pointer',
               padding: '6px',
               borderRadius: '8px',
+              minWidth: '44px',
+              minHeight: '44px',
+              flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -378,11 +475,22 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
 
         {/* Body Content */}
         <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+          {isLoadingContext && <p role="status">Loading population...</p>}
+          {contextError && (
+            <div role="alert" className="bx-alert bx-alert--error">
+              <p>{contextError}</p>
+              <button type="button" disabled={isLoadingContext || isSubmitting || !!savedSimulation} onClick={() => {
+                const modalEpoch = modalEpochRef.current;
+                if (modalEpoch) void loadContext(modalEpoch);
+              }} className="bx-btn bx-btn-secondary">Retry Population</button>
+            </div>
+          )}
           {error && (
             <div
+              role="alert"
               style={{
                 padding: '12px 16px',
-                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                backgroundColor: 'var(--bg-card-hover)',
                 border: '1px solid rgba(239, 68, 68, 0.3)',
                 borderRadius: '8px',
                 color: 'var(--status-error-text)',
@@ -407,6 +515,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               </div>
 
               <div
+                role="radiogroup"
+                aria-label="Test type"
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))',
@@ -418,7 +528,17 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   return (
                     <div
                       key={opt.type}
+                      role="radio"
+                      aria-checked={isSelected}
+                      aria-label={opt.title}
+                      tabIndex={0}
                       onClick={() => handleTypeSelect(opt.type)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleTypeSelect(opt.type);
+                        }
+                      }}
                       style={{
                         padding: '16px',
                         borderRadius: '12px',
@@ -477,6 +597,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 <input
                   id="bt-name"
                   type="text"
+                  className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Student Meal App Monthly Pricing"
@@ -488,7 +609,6 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     border: '1px solid var(--border-soft)',
                     color: 'var(--text-primary)',
                     fontSize: '0.9rem',
-                    outline: 'none',
                     boxSizing: 'border-box',
                   }}
                 />
@@ -669,13 +789,14 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
 
               <div>
                 <label htmlFor="bt-scenario" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
-                  Detailed Scenario Context (Optional)
+                  Detailed Scenario Context {scenarioContextRequired ? '(Required for this test type)' : '(Optional)'}
                 </label>
                 <textarea
                   id="bt-scenario"
                   rows={3}
                   value={customScenarioText}
                   onChange={(e) => setCustomScenarioText(e.target.value)}
+                  aria-required={scenarioContextRequired}
                   placeholder="Describe specific conditions (e.g. During semester final exams, student receives a bKash prompt offering ৳299/mo for automated grocery ordering...)"
                   style={{
                     width: '100%',
@@ -695,7 +816,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
 
           {/* STEP 3: Target Population */}
           {step === 3 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <fieldset disabled={isLoadingContext || !!contextError} aria-label="Target population" style={{ border: 0, margin: 0, padding: 0, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div>
                 <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                   Select Target Population
@@ -704,6 +825,14 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   Run this behavioral scenario against your synthetic customer population.
                 </p>
               </div>
+
+              {!isLoadingContext && !contextError && getActivePersonaCount() === 0 && (
+                <p role="status">
+                  {personas.length === 0 ? 'No personas are available in this study. Return to the study to add personas.'
+                    : populationType === 'segment' ? 'No personas belong to the selected segment. Choose another population.'
+                      : 'Select at least one available persona to continue.'}
+                </p>
+              )}
 
               {/* Radio Group */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -861,7 +990,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   })}
                 </div>
               )}
-            </div>
+            </fieldset>
           )}
 
           {/* STEP 4: Preview & Verification */}
@@ -935,9 +1064,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '12px 16px',
-                  backgroundColor: 'var(--accent-subtle)',
-                  borderRadius: '10px',
-                  border: '1px solid var(--accent-glow)',
+                  backgroundColor: 'var(--bg-card-hover)',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-soft)',
+                  flexWrap: 'wrap',
+                  gap: '12px',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -974,13 +1105,17 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: 'var(--glass-strong)',
+            backgroundColor: 'var(--bg-card)',
+            flexWrap: 'wrap',
+            gap: '12px',
           }}
         >
           {step > 1 ? (
             <button
-              onClick={() => setStep((s) => (s - 1) as any)}
-              disabled={isSubmitting}
+              type="button"
+              onClick={() => setStep((previous) => (previous - 1) as 1 | 2 | 3 | 4)}
+              disabled={isSubmitting || !!savedSimulation}
+              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -992,7 +1127,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 color: 'var(--text-primary)',
                 fontSize: '0.85rem',
                 fontWeight: 500,
-                cursor: 'pointer',
+                cursor: isSubmitting || savedSimulation ? 'not-allowed' : 'pointer',
+                opacity: isSubmitting || savedSimulation ? 0.55 : 1,
               }}
             >
               <ArrowLeft size={16} />
@@ -1002,10 +1138,18 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
             <div />
           )}
 
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            {savedSimulation && (
+              <button type="button" disabled={isSubmitting} className="bx-btn bx-btn-secondary" onClick={() => {
+                if (!modalEpochRef.current) return;
+                onTestCreated(savedSimulation.test.id);
+                handleClose();
+              }}>Open Saved Test</button>
+            )}
             <button
-              onClick={onClose}
-              disabled={isSubmitting}
+              type="button"
+              onClick={handleClose}
+              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               style={{
                 padding: '10px 18px',
                 borderRadius: '8px',
@@ -1021,7 +1165,12 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
 
             {step < 4 ? (
               <button
-                onClick={() => setStep((s) => (s + 1) as any)}
+                type="button"
+                onClick={() => setStep((previous) => (previous + 1) as 1 | 2 | 3 | 4)}
+                disabled={continueBlocked}
+                aria-disabled={continueBlocked}
+                title={continueBlocked ? step === 2 ? `Add ${scenarioMissing} to continue` : 'Choose an available population to continue' : undefined}
+                className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1033,8 +1182,8 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   color: 'var(--text-main)',
                   fontSize: '0.85rem',
                   fontWeight: 600,
-                  cursor: 'pointer',
-                  boxShadow: '0 0 15px rgba(13, 148, 136, 0.3)',
+                  cursor: continueBlocked ? 'not-allowed' : 'pointer',
+                  opacity: continueBlocked ? 0.55 : 1,
                 }}
               >
                 Continue
@@ -1042,8 +1191,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               </button>
             ) : (
               <button
+                type="button"
                 onClick={handleRunSimulation}
-                disabled={isSubmitting || (populationType === 'selected_personas' && selectedPersonaIds.length === 0)}
+                disabled={isSubmitting || (!savedSimulation && (!populationReady || scenarioMissing !== null))}
+                aria-busy={isSubmitting}
+                className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1056,11 +1208,11 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   fontSize: '0.88rem',
                   fontWeight: 700,
                   cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 0 20px rgba(20, 184, 166, 0.4)',
+                  opacity: isSubmitting ? 0.55 : 1,
                 }}
               >
                 <Sparkles size={16} />
-                {isSubmitting ? 'Starting Simulation...' : 'Run Simulation'}
+                {isSubmitting ? 'Starting Simulation...' : savedSimulation ? 'Retry Run' : 'Run Simulation'}
               </button>
             )}
           </div>

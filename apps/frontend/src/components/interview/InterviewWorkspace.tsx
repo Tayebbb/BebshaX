@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   ChevronLeft,
@@ -6,6 +6,7 @@ import {
   Download,
   PanelRight,
   Sparkles,
+  X,
 } from 'lucide-react';
 import {
   Interview,
@@ -14,7 +15,11 @@ import {
   SyntheticPersona,
 } from '../../types';
 import { api } from '../../services/api';
+import type { SendInterviewMessageResponse } from '../../types/interview';
+import { beginOperationTiming, useRouteReady } from '../../performance/routeTiming';
 import { fromUnknownError } from '../../utils/apiError';
+import { synthesisUnavailable } from '../../utils/interviewSynthesis';
+import { useDialogA11y } from '../../utils/useDialogA11y';
 import { ConsistencyFlags, MemoryDisclosure, RouteDisclosure } from '../common/MemoryDisclosure';
 import { RequestIdTag } from '../common/RequestIdTag';
 import { PromptInputBox } from '../ui/PromptInputBox';
@@ -28,9 +33,10 @@ interface InterviewWorkspaceProps {
 }
 
 /** Failure classes surfaced by the backend (RULES R2/R6: never blur them). */
-type FailureKindUI = 'context_window' | 'no_route' | 'finished' | 'not_found' | 'generic';
+type FailureKindUI = 'context_window' | 'no_route' | 'finished' | 'not_found' | 'synthesis_unavailable' | 'generic';
 
-function classifyFailure(message: string, status?: number): FailureKindUI {
+function classifyFailure(message: string, status?: number, errorCode?: string): FailureKindUI {
+  if (errorCode === 'database_unavailable') return 'generic';
   if (status === 413 || /context/i.test(message)) return 'context_window';
   if (status === 503 || /no llm route/i.test(message)) return 'no_route';
   if (status === 400 && /finish/i.test(message)) return 'finished';
@@ -59,6 +65,12 @@ const FAILURE_COPY: Record<FailureKindUI, { title: string; body: string }> = {
     title: 'Interview unavailable',
     body: 'This interview or its persona could not be found — it may have been removed. Nothing was answered.',
   },
+  synthesis_unavailable: {
+    title: 'Interview closed — synthesis not written',
+    body:
+      'Every turn is saved and the interview is complete, but no model route could write the analysis right now. ' +
+      'Nothing was invented in its place — retry the synthesis once routes recover.',
+  },
   generic: {
     title: 'Turn failed',
     body: 'The persona did not answer this question. You can retry — your question is preserved below.',
@@ -68,31 +80,6 @@ const FAILURE_COPY: Record<FailureKindUI, { title: string; body: string }> = {
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-/** Progressive word reveal of an ALREADY-received reply (presentation only). */
-const RevealText: React.FC<{ text: string; animate: boolean }> = ({ text, animate }) => {
-  const words = useMemo(() => text.split(/(\s+)/), [text]);
-  const [count, setCount] = useState(animate ? 0 : words.length);
-  useEffect(() => {
-    if (!animate || prefersReducedMotion()) {
-      setCount(words.length);
-      return;
-    }
-    setCount(0);
-    const step = Math.max(1, Math.ceil(words.length / 26)); // ~600ms total
-    const timer = setInterval(() => {
-      setCount((c) => {
-        if (c >= words.length) {
-          clearInterval(timer);
-          return words.length;
-        }
-        return c + step;
-      });
-    }, 24);
-    return () => clearInterval(timer);
-  }, [text, animate, words.length]);
-  return <>{words.slice(0, count).join('')}</>;
-};
 
 const initialsOf = (name?: string) =>
   (name || 'P')
@@ -117,22 +104,42 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  useRouteReady(!isLoading, loadError ? 'error' : 'content');
   const [isSending, setIsSending] = useState(false);
   const [elapsedS, setElapsedS] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
-  const [sendError, setSendError] = useState<{ kind: FailureKindUI; detail: string; requestId?: string | null } | null>(null);
+  const [sendError, setSendError] = useState<{
+    operation: 'question' | 'synthesis';
+    kind: FailureKindUI;
+    detail: string;
+    requestId?: string | null;
+  } | null>(null);
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
   const [flashTurn, setFlashTurn] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
-  const [hidden, setHidden] = useState(false);
-  const [lastRevealId, setLastRevealId] = useState<string | null>(null);
+  const [compactRail, setCompactRail] = useState(() => window.matchMedia('(max-width: 1120px)').matches);
   const [streamText, setStreamText] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const railRef = useRef<HTMLElement>(null);
+  const railId = useId();
+  useDialogA11y(railRef, compactRail && railOpen, () => setRailOpen(false));
+  useLayoutEffect(() => {
+    if (railRef.current) railRef.current.inert = compactRail && !railOpen;
+  }, [compactRail, railOpen, isLoading]);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1120px)');
+    const sync = () => setCompactRail(query.matches);
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
   const turnRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const pendingQuestionRef = useRef<string>('');
+  const requestEpochRef = useRef(0);
+  const loadControllerRef = useRef<AbortController | null>(null);
+  const streamControllerRef = useRef<AbortController | null>(null);
   // A streamed answer arrives as dozens of small SSE chunks. Committing each one
   // to state re-renders the entire workspace (every turn, both rails) per token,
   // so chunks are buffered and flushed at most once per frame.
@@ -146,22 +153,15 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     }
   }, []);
 
-  const pushStreamChunk = useCallback((chunk: string) => {
+  const pushStreamChunk = useCallback((chunk: string, isCurrent: () => boolean) => {
+    if (!isCurrent()) return;
     streamBufferRef.current += chunk;
     if (streamRafRef.current !== null) return;
     streamRafRef.current = requestAnimationFrame(() => {
+      if (!isCurrent()) return;
       streamRafRef.current = null;
       setStreamText(streamBufferRef.current);
     });
-  }, []);
-
-  useEffect(() => cancelStreamFlush, [cancelStreamFlush]);
-
-  // Pause ambient motion when the tab is hidden (performance §33).
-  useEffect(() => {
-    const onVis = () => setHidden(document.hidden);
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
   // Elapsed-time counter: free-tier turns honestly take 60–190s.
@@ -175,31 +175,59 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   }, [isSending]);
 
   const load = useCallback(async () => {
+    const requestEpoch = ++requestEpochRef.current;
+    loadControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
+    const isCurrent = () => requestEpochRef.current === requestEpoch && !controller.signal.aborted;
+    streamControllerRef.current?.abort();
+    streamControllerRef.current = null;
+    cancelStreamFlush();
+    streamBufferRef.current = '';
+    pendingQuestionRef.current = '';
+    setStreamText(null);
+    setIsSending(false);
+    setIsCompleting(false);
+    setSendError(null);
+    setInput('');
+    setPersona(null);
+    setRailOpen(false);
     setIsLoading(true);
     setLoadError(null);
     try {
       // Backend returns the interview FLAT (id/status/turns at top level).
-      const data = await api.getStudyInterviewDetail(studyId, interviewId);
-      setInterview(data as Interview);
+      const data = await api.getStudyInterviewDetail(studyId, interviewId, controller.signal);
+      if (!isCurrent()) return;
+      setInterview(data);
       setTurns(data.turns || []);
       setInsights(data.structured_insights || []);
       setSuggested(data.suggested_questions || []);
       if (data.persona_id) {
         api
           .getStudyPersonaDetail(studyId, data.persona_id)
-          .then(setPersona)
+          .then((profile) => {
+            if (isCurrent()) setPersona(profile);
+          })
           .catch(() => {}); // profile rail is optional enrichment
       }
-    } catch (err: any) {
-      setLoadError(err?.message || 'Failed to load this interview.');
+    } catch (err: unknown) {
+      if (isCurrent()) setLoadError(fromUnknownError(err).message || 'Failed to load this interview.');
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
-  }, [studyId, interviewId]);
+  }, [studyId, interviewId, cancelStreamFlush]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    void load();
+    return () => {
+      requestEpochRef.current += 1;
+      loadControllerRef.current?.abort();
+      streamControllerRef.current?.abort();
+      streamControllerRef.current = null;
+      cancelStreamFlush();
+      streamBufferRef.current = '';
+    };
+  }, [load, cancelStreamFlush]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
@@ -215,14 +243,26 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   const personaName = interview?.persona_name || persona?.name || 'Synthetic Persona';
   const personaRole =
     persona?.archetype ||
-    (persona?.demographics as any)?.occupation ||
+    persona?.demographics?.occupation ||
     interview?.persona_occupation ||
     'Customer persona';
   const isCompleted = interview?.status === 'completed';
+  const awaitingSynthesis = synthesisUnavailable(interview);
+  const synthesisActionLabel = isCompleting
+    ? 'Synthesizing interview'
+    : isCompleted ? 'Retry synthesis' : 'Complete & synthesize';
 
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
-    if (!text || isSending || !interview || isCompleted) return;
+    if (!text || isSending || isCompleting || isLoading || !interview || isCompleted || streamControllerRef.current) return;
+    const requestEpoch = requestEpochRef.current;
+    const controller = new AbortController();
+    const markTiming = beginOperationTiming();
+    streamControllerRef.current = controller;
+    const isCurrent = () =>
+      requestEpochRef.current === requestEpoch &&
+      streamControllerRef.current === controller &&
+      !controller.signal.aborted;
     setSendError(null);
     setInput('');
     pendingQuestionRef.current = text;
@@ -240,15 +280,17 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     };
     setTurns((prev) => [...prev, optimistic]);
 
-    const applyDone = (res: any, streamed: boolean) => {
+    const applyDone = (res: SendInterviewMessageResponse) => {
+      if (!isCurrent()) return;
+      markTiming('canonical-response');
       const personaTurn: InterviewTurn = {
         id: `turn_${res.turn_number}_${Date.now()}`,
         turn_number: res.turn_number,
         role: 'persona',
         content: res.reply,
         topic: res.topic,
-        latency_ms: res.latency_ms,
-        served_by: res.served_by,
+        latency_ms: res.latency_ms ?? undefined,
+        served_by: res.served_by ?? undefined,
         retrieved_memories: res.retrieved_memories || res.persona_reply?.retrieved_memories || [],
         identity_drift: Boolean(res.identity_drift ?? res.persona_reply?.identity_drift),
         drift_notes: res.drift_notes ?? res.persona_reply?.drift_notes ?? [],
@@ -256,8 +298,6 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
         contradiction_details: res.contradiction_details ?? res.persona_reply?.contradiction_details ?? null,
         created_at: new Date().toISOString(),
       };
-      // Streamed text was already read live — don't re-animate the canonical swap.
-      setLastRevealId(streamed ? null : personaTurn.id);
       setTurns((prev) => [...prev, personaTurn]);
       setSuggested(res.suggested_questions || []);
       setInterview((prev) =>
@@ -277,62 +317,104 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     try {
       let streamedAny = false;
       try {
-        const res = await api.sendInterviewMessageStream(studyId, interviewId, text, (chunk) => {
-          streamedAny = true;
-          pushStreamChunk(chunk);
-        });
-        applyDone(res, streamedAny);
-      } catch (streamErr: any) {
+        const res = await api.sendInterviewMessageStream(
+          studyId,
+          interviewId,
+          text,
+          (chunk) => {
+            if (!isCurrent()) return;
+            if (chunk) markTiming('ai-first-text');
+            streamedAny = true;
+            pushStreamChunk(chunk, isCurrent);
+          },
+          controller.signal
+        );
+        applyDone(res);
+      } catch (streamErr: unknown) {
+        if (!isCurrent()) return;
         // Older backend without the stream route — or transport-level failure
         // before anything streamed — falls back to the blocking endpoint.
-        if (!streamedAny && (streamErr?.status === 404 || streamErr?.status === 405)) {
-          const res = await api.sendInterviewMessage(studyId, interviewId, { content: text });
-          applyDone(res, false);
+        const streamFailure = fromUnknownError(streamErr);
+        if (!streamedAny && (streamFailure.status === 404 || streamFailure.status === 405)) {
+          const res = await api.sendInterviewMessage(studyId, interviewId, { content: text }, controller.signal);
+          applyDone(res);
         } else {
           throw streamErr;
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      if (!isCurrent()) return;
       // Honest failure: remove the unanswered question from the transcript,
       // return it to the composer, and classify the failure.
       setTurns((prev) => prev.filter((t) => t.id !== optimistic.id));
       setInput(text);
       // Backend-emitted kinds are only trusted when we have copy for them.
+      const failure = fromUnknownError(err);
+      const emittedKind = err && typeof err === 'object' && 'kind' in err ? err.kind : undefined;
       const kind: FailureKindUI =
-        err?.kind && err.kind in FAILURE_COPY
-          ? (err.kind as FailureKindUI)
-          : classifyFailure(err?.message || '', err?.status);
-      setSendError({ kind, detail: err?.message || 'Unknown failure', requestId: fromUnknownError(err).requestId ?? null });
+        typeof emittedKind === 'string' && Object.prototype.hasOwnProperty.call(FAILURE_COPY, emittedKind)
+          ? (emittedKind as FailureKindUI)
+          : classifyFailure(failure.message || '', failure.status, failure.errorCode);
+      setSendError({ operation: 'question', kind, detail: failure.message || 'Unknown failure', requestId: failure.requestId ?? null });
     } finally {
-      cancelStreamFlush();
-      streamBufferRef.current = '';
-      setStreamText(null);
-      setIsSending(false);
+      if (isCurrent()) {
+        cancelStreamFlush();
+        streamBufferRef.current = '';
+        setStreamText(null);
+        setIsSending(false);
+        streamControllerRef.current = null;
+      }
     }
   };
 
   const completeInterview = async () => {
-    if (isCompleting || !interview) return;
+    if (isCompleting || isSending || isLoading || !interview || streamControllerRef.current) return;
+    const requestEpoch = requestEpochRef.current;
+    const controller = new AbortController();
+    streamControllerRef.current = controller;
+    const isCurrent = () => requestEpochRef.current === requestEpoch &&
+      streamControllerRef.current === controller && !controller.signal.aborted;
     setIsCompleting(true);
     setSendError(null);
     try {
-      const res = await api.completeStudyInterview(studyId, interviewId);
+      const res = await api.completeStudyInterview(studyId, interviewId, controller.signal);
+      if (!isCurrent()) return;
+      const closedWithoutSynthesis = res.source === 'unavailable' || !res.summary;
       setInterview((prev) =>
         prev
           ? {
               ...prev,
               status: 'completed',
-              summary: res.summary ?? prev.summary,
+              summary: res.summary ?? (closedWithoutSynthesis ? undefined : prev.summary),
               key_findings: res.key_findings ?? prev.key_findings,
+              configuration: {
+                ...prev.configuration,
+                synthesis: {
+                  source: res.source ?? (closedWithoutSynthesis ? 'unavailable' : 'llm'),
+                  served_by: res.served_by ?? null,
+                  error_code: res.error_code ?? null,
+                  insights_dropped: res.insights_dropped ?? 0,
+                },
+              },
             }
           : prev
       );
       if (Array.isArray(res.structured_insights)) setInsights(res.structured_insights);
-      setRailOpen(true);
-    } catch (err: any) {
-      setSendError({ kind: 'generic', detail: err?.message || 'Synthesis failed', requestId: fromUnknownError(err).requestId ?? null });
+      if (closedWithoutSynthesis) {
+        setSendError({ operation: 'synthesis', kind: 'synthesis_unavailable', detail: res.error_code || 'synthesis_unavailable', requestId: null });
+      } else {
+        setRailOpen(true);
+      }
+    } catch (err: unknown) {
+      if (isCurrent()) {
+        const failure = fromUnknownError(err);
+        setSendError({ operation: 'synthesis', kind: 'generic', detail: failure.message || 'Synthesis failed', requestId: failure.requestId ?? null });
+      }
     } finally {
-      setIsCompleting(false);
+      if (isCurrent()) {
+        setIsCompleting(false);
+        streamControllerRef.current = null;
+      }
     }
   };
 
@@ -388,7 +470,6 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   if (isLoading) {
     return (
       <div className="iv-root">
-        <div className="iv-ambient" aria-hidden="true" />
         <div className="iv-loading" role="status">
           <div className="iv-loading-ring" aria-hidden="true" />
           <span className="iv-loading-text">Preparing the simulation…</span>
@@ -400,10 +481,9 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   if (loadError || !interview) {
     return (
       <div className="iv-root">
-        <div className="iv-ambient" aria-hidden="true" />
         <div className="iv-loading">
-          <div className="iv-error" style={{ maxWidth: 460 }}>
-            <div className="iv-error-title">Interview unavailable</div>
+          <div className="iv-error" role="alert" style={{ maxWidth: 460 }}>
+            <h1 className="iv-error-title">Interview unavailable</h1>
             <div className="iv-error-body">
               {loadError || 'This interview could not be loaded, or you do not have access to it.'}
             </div>
@@ -422,11 +502,15 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   }
 
   const hasTurns = turns.length > 0;
+  const failureCopy = sendError?.operation === 'synthesis' && sendError.kind !== 'synthesis_unavailable'
+    ? {
+        title: 'Synthesis failed',
+        body: 'The synthesis could not be written. Your saved transcript is unchanged. You can retry the synthesis.',
+      }
+    : FAILURE_COPY[sendError?.kind ?? 'generic'];
 
   return (
-    <div className={`iv-root${hidden ? ' iv-paused' : ''}${isCompleted ? ' iv-complete' : ''}`}>
-      <div className="iv-ambient" aria-hidden="true" />
-
+    <div className={`iv-root${isCompleted ? ' iv-complete' : ''}`}>
       {/* ---------------------------------------------------------------- */}
       <header className="iv-header">
         <button type="button" className="iv-back" onClick={onBackToInterviews}>
@@ -439,7 +523,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
             {initialsOf(personaName)}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div className="iv-id-name">{personaName}</div>
+            <h1 className="iv-id-name">{personaName}</h1>
             <div className="iv-id-role">{personaRole}</div>
           </div>
         </div>
@@ -456,9 +540,26 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
               className="iv-ghost-btn iv-primary"
               onClick={completeInterview}
               disabled={isCompleting || isSending}
+              aria-label={synthesisActionLabel}
+              title={synthesisActionLabel}
+              aria-busy={isCompleting}
             >
-              <Sparkles size={13} aria-hidden="true" />
+              <Sparkles size={16} aria-hidden="true" />
               <span className="iv-label">{isCompleting ? 'Synthesizing…' : 'Complete & synthesize'}</span>
+            </button>
+          )}
+          {awaitingSynthesis && (
+            <button
+              type="button"
+              className="iv-ghost-btn iv-primary"
+              onClick={completeInterview}
+              disabled={isCompleting || isSending}
+              aria-label={synthesisActionLabel}
+              title={synthesisActionLabel}
+              aria-busy={isCompleting}
+            >
+              <Sparkles size={16} aria-hidden="true" />
+              <span className="iv-label">{isCompleting ? 'Synthesizing…' : 'Retry synthesis'}</span>
             </button>
           )}
           <button
@@ -467,8 +568,9 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
             onClick={exportTranscript}
             disabled={!hasTurns}
             aria-label="Export transcript as markdown"
+            title="Export transcript as markdown"
           >
-            <Download size={13} aria-hidden="true" />
+            <Download size={16} aria-hidden="true" />
             <span className="iv-label">Export</span>
           </button>
           <button
@@ -476,9 +578,11 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
             className="iv-ghost-btn iv-rail-toggle"
             onClick={() => setRailOpen((v) => !v)}
             aria-label="Toggle persona context panel"
+            title="Toggle persona context panel"
+            aria-controls={railId}
             aria-expanded={railOpen}
           >
-            <PanelRight size={14} aria-hidden="true" />
+            <PanelRight size={18} aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -491,8 +595,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
               <div className="iv-empty-orb" aria-hidden="true">
                 {initialsOf(personaName)}
               </div>
-              <div className="iv-empty-kicker">Simulated participant</div>
-              <h1 className="iv-empty-title">{personaName}</h1>
+              <h2 className="iv-empty-title">{personaName}</h2>
               <p className="iv-empty-sub">
                 Your simulated customer is ready to talk. Every answer is generated live and
                 drawn from this persona's profile and any evidence it cites — nothing is scripted.
@@ -505,7 +608,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                       type="button"
                       className="iv-suggestion"
                       onClick={() => send(q)}
-                      disabled={isSending}
+                      disabled={isSending || isCompleting}
                     >
                       {q}
                     </button>
@@ -538,11 +641,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                         </span>
                       </div>
                       <div className="iv-turn-body">
-                        {isPersona ? (
-                          <RevealText text={turn.content} animate={turn.id === lastRevealId} />
-                        ) : (
-                          turn.content
-                        )}
+                        {turn.content}
                       </div>
                       {isPersona && (
                         <>
@@ -611,20 +710,20 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
           <div className="iv-composer-zone">
             {sendError && (
               <div className="iv-error" role="alert">
-                <div className="iv-error-title">{FAILURE_COPY[sendError.kind].title}</div>
-                <div className="iv-error-body">{FAILURE_COPY[sendError.kind].body}</div>
+                <div className="iv-error-title">{failureCopy.title}</div>
+                <div className="iv-error-body">{failureCopy.body}</div>
                 {sendError.requestId && (
                   <div style={{ marginTop: '6px' }}>
                     <RequestIdTag requestId={sendError.requestId} />
                   </div>
                 )}
                 <div className="iv-error-actions">
-                  {sendError.kind !== 'finished' && (
+                  {sendError.operation === 'question' && sendError.kind !== 'finished' && sendError.kind !== 'synthesis_unavailable' && (
                     <button
                       type="button"
                       className="iv-ghost-btn iv-primary"
                       onClick={() => send(pendingQuestionRef.current || input)}
-                      disabled={isSending}
+                      disabled={isSending || isCompleting}
                     >
                       Retry question
                     </button>
@@ -634,9 +733,19 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                       type="button"
                       className="iv-ghost-btn iv-primary"
                       onClick={completeInterview}
-                      disabled={isCompleting}
+                      disabled={isCompleting || isSending}
                     >
                       Generate synthesis
+                    </button>
+                  )}
+                  {(sendError.operation === 'synthesis' || sendError.kind === 'synthesis_unavailable') && (
+                    <button
+                      type="button"
+                      className="iv-ghost-btn iv-primary"
+                      onClick={completeInterview}
+                      disabled={isCompleting || isSending}
+                    >
+                      Retry synthesis
                     </button>
                   )}
                   <button type="button" className="iv-ghost-btn" onClick={() => setSendError(null)}>
@@ -654,7 +763,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                     type="button"
                     className="iv-chip"
                     onClick={() => send(q)}
-                    disabled={isSending}
+                    disabled={isSending || isCompleting}
                     title={q}
                   >
                     {q}
@@ -670,7 +779,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                 onValueChange={setInput}
                 onSend={(text) => send(text)}
                 isLoading={isSending}
-                disabled={isSending}
+                disabled={isSending || isCompleting}
                 maxHeight={140}
                 placeholder={`Ask ${personaName.split(' ')[0]} about their world…`}
                 aria-label={`Interview question for ${personaName}`}
@@ -693,7 +802,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
         </div>
 
         {/* Context rail */}
-        {railOpen && (
+        {compactRail && railOpen && (
           <button
             type="button"
             className="iv-scrim"
@@ -701,9 +810,16 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
             onClick={() => setRailOpen(false)}
           />
         )}
-        <aside className={`iv-rail${railOpen ? ' iv-open' : ''}`} aria-label="Interview context">
+        <aside id={railId} ref={railRef} className={`iv-rail${railOpen ? ' iv-open' : ''}`} aria-label="Interview context"
+          role={compactRail ? 'dialog' : undefined} aria-modal={compactRail && railOpen ? true : undefined}
+          aria-hidden={compactRail && !railOpen ? true : undefined} tabIndex={-1}>
+          {compactRail && (
+            <button type="button" className="iv-ghost-btn" aria-label="Close interview context" title="Close interview context" onClick={() => setRailOpen(false)}>
+              <X size={16} aria-hidden="true" />
+            </button>
+          )}
           <section className="iv-rail-block">
-            <div className="iv-rail-section-title">Interview</div>
+            <h2 className="iv-rail-section-title">Interview</h2>
             <div className="iv-kv">
               <div className="iv-kv-row">
                 <span className="iv-kv-k">Objective</span>
@@ -730,7 +846,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
 
           {exploredTopics.length > 0 && (
             <section className="iv-rail-block">
-              <div className="iv-rail-section-title">Topic coverage</div>
+              <h2 className="iv-rail-section-title">Topic coverage</h2>
               <div className="iv-topic-chips">
                 {exploredTopics.map((t) => (
                   <span key={t.id} className={`iv-topic${t.explored ? ' iv-explored' : ''}`}>
@@ -743,24 +859,24 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
 
           {persona && (
             <section className="iv-rail-block">
-              <div className="iv-rail-section-title">Participant</div>
+              <h2 className="iv-rail-section-title">Participant</h2>
               <div className="iv-kv" style={{ marginBottom: 12 }}>
-                {(persona.demographics as any)?.age != null && (
+                {persona.demographics?.age != null && (
                   <div className="iv-kv-row">
                     <span className="iv-kv-k">Age</span>
-                    <span className="iv-kv-v">{(persona.demographics as any).age}</span>
+                    <span className="iv-kv-v">{persona.demographics.age}</span>
                   </div>
                 )}
-                {(persona.demographics as any)?.location && (
+                {persona.demographics?.location && (
                   <div className="iv-kv-row">
                     <span className="iv-kv-k">Location</span>
-                    <span className="iv-kv-v">{(persona.demographics as any).location}</span>
+                    <span className="iv-kv-v">{persona.demographics.location}</span>
                   </div>
                 )}
-                {(persona.demographics as any)?.income_bracket && (
+                {persona.demographics?.income_or_budget && (
                   <div className="iv-kv-row">
                     <span className="iv-kv-k">Income</span>
-                    <span className="iv-kv-v">{(persona.demographics as any).income_bracket}</span>
+                    <span className="iv-kv-v">{persona.demographics.income_or_budget}</span>
                   </div>
                 )}
                 {typeof persona.grounding_score === 'number' && persona.grounding_score > 0 && (
@@ -775,9 +891,9 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
               {persona.quote && <div className="iv-quote">“{persona.quote}”</div>}
               {(persona.pain_points?.length ?? 0) > 0 && (
                 <>
-                  <div className="iv-rail-section-title" style={{ marginTop: 16 }}>
+                  <h3 className="iv-rail-section-title" style={{ marginTop: 16 }}>
                     Pain points
-                  </div>
+                  </h3>
                   <div className="iv-trait-list">
                     {persona.pain_points.slice(0, 4).map((p) => (
                       <div key={p} className="iv-trait">
@@ -792,7 +908,10 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                   type="button"
                   className="iv-ghost-btn"
                   style={{ marginTop: 14, width: '100%', justifyContent: 'center' }}
-                  onClick={() => onNavigateToPersona(interview.persona_id)}
+                  onClick={() => {
+                    setRailOpen(false);
+                    onNavigateToPersona(interview.persona_id);
+                  }}
                 >
                   Full profile
                 </button>
@@ -802,7 +921,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
 
           {isCompleted && (interview.summary || (interview.key_findings?.length ?? 0) > 0) && (
             <section className="iv-rail-block">
-              <div className="iv-rail-section-title">Synthesis</div>
+              <h2 className="iv-rail-section-title">Synthesis</h2>
               {interview.summary && <p className="iv-summary">{interview.summary}</p>}
               {(interview.key_findings?.length ?? 0) > 0 && (
                 <div className="iv-trait-list" style={{ marginTop: 10 }}>
@@ -816,9 +935,25 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
             </section>
           )}
 
+          {awaitingSynthesis && (
+            <section className="iv-rail-block" aria-label="Synthesis not written">
+              <h2 className="iv-rail-section-title">Synthesis</h2>
+              <p className="iv-summary">{FAILURE_COPY.synthesis_unavailable.body}</p>
+              <button
+                type="button"
+                className="iv-ghost-btn"
+                style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}
+                onClick={completeInterview}
+                disabled={isCompleting || isSending}
+              >
+                {isCompleting ? 'Synthesizing…' : 'Retry synthesis'}
+              </button>
+            </section>
+          )}
+
           {insights.length > 0 && (
             <section className="iv-rail-block">
-              <div className="iv-rail-section-title">Structured insights</div>
+              <h2 className="iv-rail-section-title">Structured insights</h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {insights.map((ins) => (
                   <div key={ins.id} className="iv-insight">

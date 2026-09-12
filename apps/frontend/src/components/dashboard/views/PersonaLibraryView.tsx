@@ -28,19 +28,24 @@ import {
   Globe,
   DollarSign,
 } from 'lucide-react';
-import { SyntheticPersona, MarketSegment, Study, PersonaGenerationRun } from '../../../types';
+import { SyntheticPersona, MarketSegment, Study } from '../../../types';
 import { api } from '../../../services/api';
+import { serializeCsv } from '../../../utils/exports';
+import { datasetRefFields, datasetRefTitle, formatDatasetRefValue } from '../../../utils/datasetRefs';
+import { useRequestScope } from '../../../utils/useRequestScope';
+import { useRouteReady } from '../../../performance/routeTiming';
 import { CountUp } from '../../../motion/CountUp';
 import { EvidenceBadge, TemplateBadge, countEvidenceBacked } from '../../../utils/personaEvidence';
 import { useDialogA11y } from '../../../utils/useDialogA11y';
 import { PersonaMemoryPanel } from './persona/PersonaMemoryPanel';
 import { EvidenceClaimPeek } from './persona/EvidenceClaimPeek';
+import { Button } from '../../ui/Button';
 
 interface PersonaLibraryViewProps {
   studyId?: string;
   onStartInterviewWithPersona?: (personaId: string, studyId?: string) => void;
   onTestBehaviorWithPersona?: (personaId: string, studyId?: string) => void;
-  onNavigateToEvidence?: () => void;
+  onNavigateToEvidence?: (studyId: string) => void;
   onNavigateToSegmentation?: () => void;
 }
 
@@ -52,9 +57,9 @@ interface ClaimEntry {
 }
 
 const PROV_STYLES: Record<string, { fg: string; bg: string }> = {
-  OBSERVED: { fg: 'var(--accent-emerald)', bg: 'rgba(16, 185, 129, 0.12)' },
-  INFERRED: { fg: 'var(--prov-inferred)', bg: 'var(--status-warn-bg)' },
-  SYNTHETIC: { fg: 'var(--text-secondary)', bg: 'var(--fill-soft-2)' },
+  OBSERVED: { fg: 'var(--status-success-text)', bg: 'var(--status-success-bg)' },
+  INFERRED: { fg: 'var(--status-warn-text)', bg: 'var(--status-warn-bg)' },
+  SYNTHETIC: { fg: 'var(--text-muted)', bg: 'var(--bg-card)' },
 };
 
 export const ProvenanceChip: React.FC<{
@@ -75,7 +80,7 @@ export const ProvenanceChip: React.FC<{
   const chipStyle: React.CSSProperties = {
     fontSize: '0.72rem',
     fontWeight: 700,
-    letterSpacing: '0.05em',
+    letterSpacing: 0,
     color: s.fg,
     background: s.bg,
     padding: '1px 6px',
@@ -115,6 +120,10 @@ function claimEntries(persona: SyntheticPersona, group: 'goals' | 'needs' | 'pai
   return ((persona[group] as string[] | undefined) || []).map((v) => ({ value: v }));
 }
 
+function isMeasuredTraitScore(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
 export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   studyId,
   onStartInterviewWithPersona,
@@ -127,9 +136,15 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   const [activeStudyId, setActiveStudyId] = useState<string>(studyId || '');
   const [personas, setPersonas] = useState<SyntheticPersona[]>([]);
   const [segments, setSegments] = useState<MarketSegment[]>([]);
-  const [, setRuns] = useState<PersonaGenerationRun[]>([]);
+  const loadEpoch = useRef(0);
+  const activeStudyRef = useRef(activeStudyId);
+  activeStudyRef.current = activeStudyId;
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [studiesLoading, setStudiesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const scopeRef = useRequestScope([activeStudyId]);
+  const mutationPendingRef = useRef(false);
+  useRouteReady(!isLoading && !studiesLoading, error ? 'error' : personas.length ? 'content' : 'empty');
 
   // Search and Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -146,6 +161,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   const [openEvidenceKey, setOpenEvidenceKey] = useState<string | null>(null);
   const inspectorModalRef = useRef<HTMLDivElement | null>(null);
   const generateModalRef = useRef<HTMLDivElement | null>(null);
+  const generateFocusRef = useRef<HTMLElement | null>(null);
 
   // Generation Modal & Stepper States
   const [showGenerateModal, setShowGenerateModal] = useState<boolean>(false);
@@ -169,18 +185,27 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   useDialogA11y(inspectorModalRef, !!inspectingPersona, () => setInspectingPersona(null));
   useDialogA11y(generateModalRef, showGenerateModal, () => {
     if (!isGenerating) setShowGenerateModal(false);
-  });
+  }, { initialFocus: generateFocusRef });
+  useEffect(() => {
+    if (!showGenerateModal) return;
+    generateFocusRef.current = generateModalRef.current?.querySelector<HTMLElement>(
+      '[role="alert"], [role="status"], input[type="range"]',
+    ) ?? null;
+    generateFocusRef.current?.focus();
+  }, [showGenerateModal, isGenerating, generationError]);
   useEffect(() => {
     setOpenEvidenceKey(null);
   }, [inspectingPersona?.id, inspectorTab]);
 
   // Load Studies on mount
   useEffect(() => {
+    let current = true;
     const loadStudies = async () => {
       try {
         const studyList = await api.getStudies();
+        if (!current) return;
         setStudies(studyList);
-        if (!activeStudyId) {
+        if (!activeStudyRef.current) {
           // Never auto-open the seeded demo: showing someone else's personas as
           // "your library" is worse than showing an explicit picker.
           const own = studyList.filter((s) => !s.is_demo);
@@ -192,14 +217,18 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           if (mostRecent) setActiveStudyId(mostRecent.id);
         }
       } catch {
-        // fallback
+        if (current) setError('Studies could not be loaded.');
+      } finally {
+        if (current) setStudiesLoading(false);
       }
     };
-    loadStudies();
+    void loadStudies();
+    return () => { current = false; };
   }, []);
 
   // Update activeStudyId when prop changes
   useEffect(() => {
+    mutationPendingRef.current = false;
     if (studyId) {
       setActiveStudyId(studyId);
     }
@@ -207,68 +236,52 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
   // Load personas, segments, and runs when activeStudyId changes
   const loadStudyData = async () => {
+    if (activeStudyRef.current !== activeStudyId) return;
+    const epoch = ++loadEpoch.current;
+    const isCurrent = () => isMountedRef.current && loadEpoch.current === epoch;
+    setPersonas([]);
+    setSegments([]);
+    setInspectingPersona(null);
+    setError(null);
+    setActionError(null);
     if (!activeStudyId) {
-      setPersonas([]);
-      setSegments([]);
-      setRuns([]);
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    setError(null);
     try {
-      const [personasRes, segmentsRes, runsRes] = await Promise.allSettled([
-        api.getStudyPersonas(activeStudyId),
-        api.getMarketSegments(activeStudyId),
-        api.listStudyPersonaRuns(activeStudyId),
+      const [personasRes, segmentsRes] = await Promise.allSettled([
+        api.getStudyPersonas(activeStudyId).then((result) => {
+          if (isCurrent()) { setPersonas(result.personas); setIsLoading(false); }
+          return result;
+        }).catch((failure: unknown) => {
+          if (isCurrent()) { setError('Personas could not be loaded.'); setIsLoading(false); }
+          throw failure;
+        }),
+        api.getMarketSegments(activeStudyId).then((result) => {
+          if (isCurrent()) setSegments(result);
+          return result;
+        }),
       ]);
-
-      if (personasRes.status === 'fulfilled') {
-        setPersonas(personasRes.value.personas);
-      }
-      if (segmentsRes.status === 'fulfilled') {
-        setSegments((segmentsRes.value as MarketSegment[]) || []);
-      }
-      if (runsRes.status === 'fulfilled') {
-        setRuns((runsRes.value as any)?.runs || []);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load synthetic personas.');
+      if (!isCurrent()) return;
+      setPersonas(personasRes.status === 'fulfilled' ? personasRes.value.personas : []);
+      setSegments(segmentsRes.status === 'fulfilled' ? segmentsRes.value : []);
+      if (personasRes.status === 'rejected') setError('Personas could not be loaded.');
+      if (segmentsRes.status === 'rejected') setActionError('Segments could not be loaded.');
+    } catch {
+      if (isCurrent()) setError('Personas could not be loaded.');
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (!activeStudyId) {
-        setPersonas([]);
-        setSegments([]);
-        setRuns([]);
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(true);
-      setError(null);
-      try {
-        const [personasRes, segmentsRes, runsRes] = await Promise.allSettled([
-          api.getStudyPersonas(activeStudyId),
-          api.getMarketSegments(activeStudyId),
-          api.listStudyPersonaRuns(activeStudyId),
-        ]);
-        if (cancelled) return;
-        if (personasRes.status === 'fulfilled') setPersonas(personasRes.value.personas);
-        if (segmentsRes.status === 'fulfilled') setSegments((segmentsRes.value as MarketSegment[]) || []);
-        if (runsRes.status === 'fulfilled') setRuns((runsRes.value as any)?.runs || []);
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || 'Failed to load synthetic personas.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-    run();
-    return () => { cancelled = true; };
+    setIsGenerating(false);
+    mutationPendingRef.current = false;
+    setIsRegenerating(false);
+    setShowGenerateModal(false);
+    void loadStudyData();
+    return () => { loadEpoch.current += 1; };
   }, [activeStudyId]);
 
   // Filtered Personas
@@ -308,7 +321,10 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
   // Generation Stepper Handler
   const handleTriggerGeneration = async () => {
-    if (!activeStudyId) return;
+    const scope = scopeRef.current;
+    if (!activeStudyId || isLoading || !scope.active || mutationPendingRef.current) return;
+    mutationPendingRef.current = true;
+    loadEpoch.current += 1;
     setIsGenerating(true);
     setGenerationError(null);
 
@@ -318,35 +334,46 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         distribution_strategy: distributionStrategy,
       });
 
-      if (!isMountedRef.current) return;
+      if (!scope.active) return;
       setIsGenerating(false);
       setShowGenerateModal(false);
       setPersonas(res.personas);
-      setRuns((prev) => [res.run, ...prev]);
+      setIsLoading(false);
+      setError(null);
     } catch (err: any) {
-      if (!isMountedRef.current) return;
+      if (!scope.active) return;
       setIsGenerating(false);
       setGenerationError(err.message || 'Persona generation failed. Please ensure segmentation has completed.');
+    } finally {
+      if (scope.active) mutationPendingRef.current = false;
     }
   };
 
   // Regenerate Persona Handler
   const handleRegeneratePersona = async (personaId: string) => {
-    if (!activeStudyId) return;
+    const scope = scopeRef.current;
+    if (!activeStudyId || !scope.active || mutationPendingRef.current) return;
+    mutationPendingRef.current = true;
+    loadEpoch.current += 1;
     setIsRegenerating(true);
     setActionError(null);
     try {
       const updated = await api.regenerateStudyPersona(activeStudyId, personaId);
-      if (!isMountedRef.current) return;
-      setPersonas((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-      if (inspectingPersona && inspectingPersona.id === updated.id) {
-        setInspectingPersona(updated);
-      }
+      if (!scope.active) return;
+      setPersonas((current) => {
+        if (!scope.active || activeStudyRef.current !== activeStudyId) return current;
+        return current.map((entry) => (entry.id === updated.id ? updated : entry));
+      });
+      setInspectingPersona((current) =>
+        scope.active && activeStudyRef.current === activeStudyId && current?.id === updated.id
+          ? updated
+          : current,
+      );
     } catch (err: any) {
-      if (!isMountedRef.current) return;
+      if (!scope.active) return;
       setActionError(`Regeneration failed: ${err.message || 'the request did not complete.'}`);
     } finally {
-      if (isMountedRef.current) setIsRegenerating(false);
+      if (scope.active) { mutationPendingRef.current = false; setIsRegenerating(false); }
     }
   };
 
@@ -364,17 +391,17 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   const handleExportCSV = () => {
     const headers = ['ID', 'Name', 'Segment', 'Age', 'Occupation', 'Location', 'Monthly Budget', 'Grounding Score', 'Status'];
     const rows = filteredPersonas.map((p) => [
-      `"${p.id}"`,
-      `"${p.name}"`,
-      `"${p.segment_name || p.segment_id || ''}"`,
-      `"${p.demographics?.age || ''}"`,
-      `"${p.demographics?.occupation || ''}"`,
-      `"${p.demographics?.location || ''}"`,
-      `"${p.commercial_profile?.monthly_budget_bdt || ''}"`,
-      `"${(p.grounding_score * 100).toFixed(0)}%"`,
-      `"${p.status}"`,
+      p.id,
+      p.name,
+      p.segment_name || p.segment_id || '',
+      p.demographics?.age ?? '',
+      p.demographics?.occupation ?? '',
+      p.demographics?.location ?? '',
+      p.commercial_profile?.monthly_budget_bdt ?? '',
+      `${(p.grounding_score * 100).toFixed(0)}%`,
+      p.status,
     ]);
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const csvContent = serializeCsv([headers, ...rows]);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -385,24 +412,21 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   };
 
   return (
-    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+    <div style={{ padding: '1.5rem clamp(1rem, 4vw, 2.5rem)', maxWidth: '1400px', margin: '0 auto', width: '100%', minWidth: 0, overflowWrap: 'anywhere', letterSpacing: 0 }}>
       {/* =========================================================================
           1. HEADER & ACTIONS
          ========================================================================= */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.03em', margin: '0 0 6px 0' }}>
+        <div style={{ minWidth: 0, flex: '1 1 20rem' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-main)', letterSpacing: 0, margin: '0 0 0.5rem' }}>
             Persona Library
           </h1>
-          <p style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)', margin: 0 }}>
-            Saved personas and audiences you can reuse in any study.
-          </p>
           <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
             Synthetic participants: findings are research hypotheses to validate with real users.
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
           {/* Study Context Selector — shown whenever there is something to pick */}
           {studies.length > 0 && (
             <select
@@ -410,13 +434,16 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               value={activeStudyId}
               onChange={(e) => setActiveStudyId(e.target.value)}
               style={{
-                background: 'var(--bg-secondary)',
+                background: 'var(--bg-card)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: '10px',
+                borderRadius: '8px',
                 padding: '9px 34px 9px 14px',
                 fontSize: '0.85rem',
-                color: 'var(--text-primary)',
-                outline: 'none',
+                color: 'var(--text-main)',
+                outlineOffset: '2px',
+                minWidth: 0,
+                maxWidth: '100%',
+                minHeight: '2.5rem',
                 cursor: 'pointer',
               }}
             >
@@ -430,31 +457,17 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             </select>
           )}
 
-          <button
+          <Button
             type="button"
+            variant="primary"
             onClick={() => setShowGenerateModal(true)}
-            disabled={!activeStudyId}
+            disabled={!activeStudyId || isLoading}
             title={activeStudyId ? undefined : 'Choose a study first — personas are generated inside one'}
-            style={{
-              background: 'var(--accent-gradient)',
-              color: 'var(--text-on-accent)',
-              border: 'none',
-              borderRadius: '10px',
-              padding: '9px 18px',
-              fontSize: '0.86rem',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: activeStudyId ? 'pointer' : 'not-allowed',
-              opacity: activeStudyId ? 1 : 0.55,
-              boxShadow: '0 4px 14px var(--accent-glow)',
-              transition: 'all 0.16s ease',
-            }}
+            style={{ minHeight: '2.5rem', whiteSpace: 'normal' }}
           >
-            <Sparkles size={16} strokeWidth={2.5} />
+            <Sparkles size={16} aria-hidden="true" />
             Generate Personas
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -506,17 +519,18 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           borderBottom: '1px solid var(--border-subtle)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 16rem', minWidth: 0 }}>
           <Search size={16} color="var(--text-secondary)" />
           <input
-            type="text"
+            type="search"
+            aria-label="Search personas"
             placeholder="Search personas by name, occupation, goals, or pain points..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               background: 'transparent',
               border: 'none',
-              outline: 'none',
+              outlineOffset: '2px',
               color: 'var(--text-primary)',
               fontSize: '0.88rem',
               width: '100%',
@@ -529,9 +543,10 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
           {/* Segment Filter */}
           <select
+            aria-label="Filter by segment"
             value={selectedSegmentFilter}
             onChange={(e) => setSelectedSegmentFilter(e.target.value)}
             style={{
@@ -541,7 +556,10 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               padding: '6px 30px 6px 12px',
               fontSize: '0.82rem',
               color: 'var(--text-primary)',
-              outline: 'none',
+              outlineOffset: '2px',
+              minWidth: 0,
+              maxWidth: '100%',
+              minHeight: '2.25rem',
               cursor: 'pointer',
             }}
           >
@@ -555,6 +573,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
           {/* Status Filter */}
           <select
+            aria-label="Filter by status"
             value={selectedStatusFilter}
             onChange={(e) => setSelectedStatusFilter(e.target.value)}
             style={{
@@ -564,7 +583,10 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               padding: '6px 30px 6px 12px',
               fontSize: '0.82rem',
               color: 'var(--text-primary)',
-              outline: 'none',
+              outlineOffset: '2px',
+              minWidth: 0,
+              maxWidth: '100%',
+              minHeight: '2.25rem',
               cursor: 'pointer',
             }}
           >
@@ -575,6 +597,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
           {/* Grounding Filter */}
           <select
+            aria-label="Filter by evidence grounding"
             value={selectedGroundingFilter}
             onChange={(e) => setSelectedGroundingFilter(e.target.value)}
             style={{
@@ -584,7 +607,10 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               padding: '6px 30px 6px 12px',
               fontSize: '0.82rem',
               color: 'var(--text-primary)',
-              outline: 'none',
+              outlineOffset: '2px',
+              minWidth: 0,
+              maxWidth: '100%',
+              minHeight: '2.25rem',
               cursor: 'pointer',
             }}
           >
@@ -643,7 +669,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       {/* =========================================================================
           4. PERSONA CARDS GRID / SKELETON / EMPTY STATE
          ========================================================================= */}
-      {actionError && (
+      {actionError && !inspectingPersona && (
         <div
           role="alert"
           style={{
@@ -651,9 +677,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '12px',
-            background: 'rgba(239, 68, 68, 0.08)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
-            borderRadius: '12px',
+            background: 'var(--bg-pure)',
+            border: '1px solid var(--status-error-border)',
+            borderRadius: '8px',
             padding: '12px 16px',
             marginBottom: '16px',
             color: 'var(--status-error-text)',
@@ -667,14 +693,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             aria-label="Dismiss error"
             style={{ background: 'none', border: 'none', color: 'var(--status-error-text)', cursor: 'pointer', fontWeight: 700 }}
           >
-            ×
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
       )}
 
       {!activeStudyId ? (
-        <div style={{ background: 'var(--bg-secondary)', border: '1px dashed var(--border-subtle)', borderRadius: '18px', padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--accent-teal)' }}>
+        <div style={{ padding: '2rem 0', textAlign: 'center', minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', color: 'var(--text-muted)' }}>
             <Layers size={26} />
           </div>
           <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px 0' }}>
@@ -689,7 +715,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       ) : isLoading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: '20px' }}>
           {[1, 2, 3, 4, 5, 6].map((idx) => (
-            <div key={idx} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px', height: '320px', animation: 'pulse 1.5s infinite' }}>
+            <div key={idx} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '24px', height: '320px', animation: 'pulse 1.5s infinite', minWidth: 0 }}>
               <div style={{ height: '48px', width: '48px', borderRadius: '50%', background: 'var(--bg-card-hover)', marginBottom: '16px' }} />
               <div style={{ height: '20px', width: '60%', background: 'var(--bg-card-hover)', borderRadius: '6px', marginBottom: '10px' }} />
               <div style={{ height: '14px', width: '80%', background: 'var(--bg-card-hover)', borderRadius: '4px', marginBottom: '18px' }} />
@@ -698,17 +724,17 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           ))}
         </div>
       ) : error ? (
-        <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '16px', padding: '32px', textAlign: 'center' }}>
-          <AlertTriangle size={32} color="#EF4444" style={{ margin: '0 auto 12px' }} />
-          <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', margin: '0 0 6px 0' }}>Failed to Load Personas</h3>
-          <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: '0 0 16px 0' }}>{error}</p>
-          <button type="button" onClick={loadStudyData} style={{ background: '#14B8A6', color: 'var(--text-on-accent)', border: 'none', borderRadius: '8px', padding: '8px 16px', fontWeight: 600, cursor: 'pointer' }}>
-            Retry
-          </button>
+        <div role="alert" style={{ background: 'var(--bg-pure)', border: '1px solid var(--status-error-border)', borderRadius: '8px', padding: '1.5rem', textAlign: 'center', color: 'var(--status-error-text)' }}>
+          <AlertTriangle size={24} aria-hidden="true" style={{ margin: '0 auto 0.75rem' }} />
+          <h3 style={{ fontSize: '1rem', color: 'var(--status-error-text)', margin: '0 0 0.5rem' }}>Failed to Load Personas</h3>
+          <p style={{ fontSize: '0.875rem', margin: '0 0 1rem' }}>{error}</p>
+          <Button type="button" variant="secondary" onClick={loadStudyData}>
+            <RefreshCw size={16} aria-hidden="true" /> Retry
+          </Button>
         </div>
       ) : filteredPersonas.length === 0 ? (
-        <div style={{ background: 'var(--bg-secondary)', border: '1px dashed var(--border-subtle)', borderRadius: '18px', padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--accent-teal)' }}>
+        <div role="status" style={{ padding: '2rem 0', textAlign: 'center', minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', color: 'var(--text-muted)' }}>
             <Sparkles size={26} />
           </div>
           <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px 0' }}>
@@ -720,26 +746,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               : 'Try clearing your search query or adjusting segment and status filters to see available personas.'}
           </p>
           {personas.length === 0 ? (
-            <button
+            <Button
               type="button"
+              variant="primary"
               onClick={() => setShowGenerateModal(true)}
-              style={{
-                background: 'var(--accent-gradient)',
-                color: 'var(--text-on-accent)',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '10px 22px',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                cursor: 'pointer',
-              }}
             >
-              <Sparkles size={16} />
+              <Sparkles size={16} aria-hidden="true" />
               Generate Personas for Study
-            </button>
+            </Button>
           ) : (
             <button
               type="button"
@@ -777,14 +791,15 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             return (
               <article
                 key={persona.id}
-                className="bx-stagger bx-lift"
+                className="bx-stagger"
                 aria-label={`${persona.name} persona`}
                 style={{
                   ['--bx-i' as string]: Math.min(cardIdx, 12),
-                  background: 'var(--bg-secondary)',
+                  background: 'var(--bg-card)',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: '16px',
-                  padding: '22px',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  minWidth: 0,
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
@@ -794,33 +809,32 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               >
                 {/* Card Header: Avatar, Name, Badges */}
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', marginBottom: '14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      {/* Geometric Gradient Avatar */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 12rem' }}>
                       <div
                         style={{
                           width: '44px',
                           height: '44px',
-                          borderRadius: '12px',
-                          background: 'linear-gradient(135deg, var(--border-hover) 0%, rgba(34, 211, 238, 0.15) 100%)',
-                          border: '1px solid var(--border-hover)',
+                          borderRadius: '8px',
+                          background: 'var(--bg-card-hover)',
+                          border: '1px solid var(--border-subtle)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontSize: '0.95rem',
                           fontWeight: 700,
-                          color: 'var(--accent-cyan)',
-                          letterSpacing: '0.04em',
+                          color: 'var(--text-main)',
+                          letterSpacing: 0,
                           flexShrink: 0,
                         }}
                       >
                         {initials}
                       </div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', minWidth: 0 }}>
+                          <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0, overflowWrap: 'anywhere' }}>
                             {persona.name}
-                          </h3>
+                          </h2>
                           {persona.version > 1 && (
                             <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '1px 5px', borderRadius: '4px' }}>
                               v{persona.version}
@@ -829,7 +843,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           {persona.data_source === 'cached' && (
                             <span
                               title="Served from seeded/cached data — not generated live for this study"
-                              style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '1px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
+                              style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '1px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: 0 }}
                             >
                               CACHED
                             </span>
@@ -875,7 +889,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   {/* Segment & Synthetic Tag */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
                     {persona.segment_name && (
-                      <span style={{ fontSize: '0.75rem', fontWeight: 500, padding: '2px 8px', borderRadius: '6px', background: 'rgba(34, 211, 238, 0.1)', color: 'var(--accent-cyan)', border: '1px solid rgba(34, 211, 238, 0.2)' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 500, padding: '2px 8px', borderRadius: '6px', background: 'var(--bg-card-hover)', color: 'var(--text-main)', border: '1px solid var(--border-subtle)' }}>
                         {persona.segment_name}
                       </span>
                     )}
@@ -902,42 +916,45 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           { label: 'E', name: 'Extroversion', val: persona.personality.extroversion, color: 'var(--trait-e)' },
                           { label: 'A', name: 'Agreeableness', val: persona.personality.agreeableness, color: 'var(--trait-a)' },
                           { label: 'N', name: 'Neuroticism', val: persona.personality.neuroticism, color: 'var(--trait-n)' },
-                        ].map((trait) => (
-                          <div key={trait.label} title={`${trait.name}: ${trait.val}/100`} role="img" aria-label={`${trait.name} ${trait.val} out of 100`}>
-                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: trait.color }}>{trait.val}</div>
-                            <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden', margin: '2px 0' }}>
-                              <div style={{ width: `${trait.val}%`, height: '100%', background: trait.color }} />
+                        ].map((trait) => {
+                          const measured = isMeasuredTraitScore(trait.val);
+                          return (
+                            <div key={trait.label} title={measured ? `${trait.name}: ${trait.val}/100` : `${trait.name}: Not measured`} role={measured ? 'img' : undefined} aria-label={measured ? `${trait.name} ${trait.val} out of 100` : undefined} style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: measured ? 'var(--text-main)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{measured ? trait.val : 'Not measured'}</div>
+                              <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden', margin: '2px 0' }}>
+                                {measured && <div style={{ width: `${trait.val}%`, height: '100%', background: trait.color }} />}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{trait.label}</div>
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{trait.label}</div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
 
                   {/* Bio or Quote preview */}
-                  <p style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.45, margin: '0 0 12px 0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', lineHeight: 1.5, margin: '0 0 0.75rem', overflowWrap: 'anywhere' }}>
                     {persona.quote ? `"${persona.quote}"` : persona.bio}
                   </p>
 
                   {/* Goal and Pain Point Pills */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
-                    {persona.goals?.[0] && (
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <Target size={12} color="var(--accent-teal)" style={{ flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{persona.goals[0]}</span>
+                    {persona.goals?.map((goal, index) => (
+                      <div key={index} style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'flex-start', gap: '0.375rem', minWidth: 0 }}>
+                        <Target size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                        <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{goal}</span>
                       </div>
-                    )}
-                    {persona.pain_points?.[0] && (
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <AlertCircle size={12} color="var(--accent-amber)" style={{ flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{persona.pain_points[0]}</span>
+                    ))}
+                    {persona.pain_points?.map((painPoint, index) => (
+                      <div key={index} style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'flex-start', gap: '0.375rem', minWidth: 0 }}>
+                        <AlertCircle size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                        <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{painPoint}</span>
                       </div>
-                    )}
+                    ))}
                     {persona.detailed_attributes?.work_schedule && (
-                      <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <Clock size={11} color="var(--accent-cyan)" style={{ flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{persona.detailed_attributes.work_schedule}</span>
+                      <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'flex-start', gap: '0.375rem', minWidth: 0 }}>
+                        <Clock size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                        <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{persona.detailed_attributes.work_schedule}</span>
                       </div>
                     )}
                   </div>
@@ -949,7 +966,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       <CreditCard size={13} color="var(--accent-teal)" />
                       <span>
-                        {persona.commercial_profile?.monthly_budget_bdt
+                        {typeof persona.commercial_profile?.monthly_budget_bdt === 'number'
                           ? `৳${persona.commercial_profile.monthly_budget_bdt}/mo`
                           : 'Budget not stated'}
                       </span>
@@ -958,103 +975,44 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     <EvidenceBadge persona={persona} />
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                    <Button
                       type="button"
+                      variant="secondary"
                       onClick={() => {
                         setInspectingPersona(persona);
                         setInspectorTab('profile');
                       }}
-                      style={{
-                        flex: 1,
-                        background: 'var(--bg-card-hover)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: '8px',
-                        padding: '7px 12px',
-                        fontSize: '0.82rem',
-                        fontWeight: 600,
-                        color: 'var(--text-primary)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        transition: 'all 0.16s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'var(--accent-subtle)';
-                        e.currentTarget.style.borderColor = 'var(--border-hover)';
-                        e.currentTarget.style.color = 'var(--accent-teal)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'var(--bg-card-hover)';
-                        e.currentTarget.style.borderColor = 'var(--border-subtle)';
-                        e.currentTarget.style.color = 'var(--text-primary)';
-                      }}
+                      style={{ flex: 1, minWidth: 0, minHeight: '2.25rem', whiteSpace: 'normal' }}
                     >
+                      <User size={14} aria-hidden="true" />
                       Open profile
-                    </button>
+                    </Button>
 
                     {onStartInterviewWithPersona && (
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
                         onClick={() => onStartInterviewWithPersona(persona.id, activeStudyId || undefined)}
                         aria-label={`Start an interview with ${persona.name}`}
                         title={`Start an adaptive interview with ${persona.name}`}
-                        style={{
-                          background: 'rgba(34, 211, 238, 0.22)',
-                          border: '1px solid rgba(34, 211, 238, 0.55)',
-                          borderRadius: '8px',
-                          padding: '7px 10px',
-                          color: 'var(--accent-cyan)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.16s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(34, 211, 238, 0.35)';
-                          e.currentTarget.style.borderColor = 'var(--accent-cyan)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(34, 211, 238, 0.22)';
-                          e.currentTarget.style.borderColor = 'rgba(34, 211, 238, 0.55)';
-                        }}
+                        style={{ width: '2.25rem', height: '2.25rem', flexShrink: 0, padding: 0 }}
                       >
-                        <MessageSquare size={14} />
-                      </button>
+                        <MessageSquare size={14} aria-hidden="true" />
+                      </Button>
                     )}
 
                     {onTestBehaviorWithPersona && (
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
                         onClick={() => onTestBehaviorWithPersona(persona.id, activeStudyId || undefined)}
                         aria-label={`Run a behavioral test with ${persona.name}`}
                         title={`Simulate a behavioral scenario with ${persona.name}`}
-                        style={{
-                          background: 'var(--accent-subtle)',
-                          border: '1px solid var(--accent-glow)',
-                          borderRadius: '8px',
-                          padding: '7px 10px',
-                          color: 'var(--accent-teal)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.16s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--accent-teal)';
-                          e.currentTarget.style.color = 'var(--accent-teal)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = 'var(--accent-glow)';
-                          e.currentTarget.style.color = 'var(--accent-teal)';
-                        }}
+                        style={{ width: '2.25rem', height: '2.25rem', flexShrink: 0, padding: 0 }}
                       >
-                        <Sliders size={14} />
-                      </button>
+                        <Sliders size={14} aria-hidden="true" />
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -1077,7 +1035,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '24px',
+            padding: '1rem',
             zIndex: 100,
           }}
           onClick={() => setInspectingPersona(null)}
@@ -1086,95 +1044,112 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             ref={inspectorModalRef}
             className="bx-modal"
             role="dialog"
+            tabIndex={-1}
             aria-modal="true"
             aria-labelledby="persona-inspector-title"
             style={{
               background: 'var(--bg-secondary)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: '20px',
-              maxWidth: '900px',
+              borderRadius: '12px',
+              maxWidth: '56.25rem',
               width: '100%',
-              maxHeight: '90vh',
+              minWidth: 0,
+              maxHeight: 'calc(100dvh - 2rem)',
               display: 'flex',
               flexDirection: 'column',
               boxShadow: 'var(--shadow-lg)',
-              overflow: 'hidden',
+              overflowY: 'auto',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div style={{ padding: '24px 28px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div
-                  style={{
-                    width: '54px',
-                    height: '54px',
-                    borderRadius: '16px',
-                    background: 'linear-gradient(135deg, var(--border-hover) 0%, rgba(34, 211, 238, 0.15) 100%)',
-                    border: '1px solid var(--border-hover)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.2rem',
-                    fontWeight: 700,
-                    color: 'var(--accent-cyan)',
-                  }}
-                >
-                  {inspectingPersona.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+            <header style={{ padding: '1rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', minWidth: 0, flexShrink: 0 }}>
+              <div style={{ flex: '1 1 18rem', minWidth: 0 }}>
+                <h2 id="persona-inspector-title" style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0, overflowWrap: 'anywhere', letterSpacing: 0 }}>
+                  {inspectingPersona.name}
+                </h2>
+                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem', overflowWrap: 'anywhere' }}>
+                  {inspectingPersona.demographics?.age} yo • {inspectingPersona.demographics?.occupation} • {inspectingPersona.demographics?.location}
                 </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h2 id="persona-inspector-title" style={{ fontSize: '1.35rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                      {inspectingPersona.name}
-                    </h2>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', padding: '2px 6px', borderRadius: '4px' }}>
-                      v{inspectingPersona.version}
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  <span>Synthetic Persona</span>
+                  <span>v{inspectingPersona.version}</span>
+                  <span style={{ fontWeight: 600, padding: '2px 8px', borderRadius: '4px', background: inspectingPersona.status === 'ready' ? 'var(--status-success-bg)' : 'var(--status-warn-bg)', color: inspectingPersona.status === 'ready' ? 'var(--status-success-text)' : 'var(--status-warn-text)', border: `1px solid ${inspectingPersona.status === 'ready' ? 'var(--status-success-border)' : 'var(--status-warn-border)'}` }}>
+                    {inspectingPersona.status === 'ready' ? 'Complete' : 'Needs Review'}
+                  </span>
+                  {inspectingPersona.data_source === 'cached' && (
+                    <span title="Served from seeded/cached data - not generated live for this study" style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: 0 }}>
+                      CACHED
                     </span>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: '6px', background: inspectingPersona.status === 'ready' ? 'var(--status-success-bg)' : 'var(--status-warn-bg)', color: inspectingPersona.status === 'ready' ? 'var(--status-success-text)' : 'var(--status-warn-text)', border: `1px solid ${inspectingPersona.status === 'ready' ? 'var(--status-success-border)' : 'var(--status-warn-border)'}` }}>
-                      {inspectingPersona.status === 'ready' ? 'Complete' : 'Needs Review'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
-                    {inspectingPersona.demographics?.age} yo • {inspectingPersona.demographics?.occupation} • {inspectingPersona.demographics?.location}
-                  </div>
+                  )}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  type="button"
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', minWidth: 0 }}>
+                <Button
+                  size="sm"
                   onClick={() => handleRegeneratePersona(inspectingPersona.id)}
-                  disabled={isRegenerating}
-                  style={{
-                    background: 'var(--bg-card-hover)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '8px',
-                    padding: '6px 12px',
-                    fontSize: '0.8rem',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
+                  loading={isRegenerating}
+                  leadingIcon={<RefreshCw size={14} aria-hidden="true" />}
                 >
-                  <RefreshCw size={13} className={isRegenerating ? 'animate-spin' : ''} />
                   {isRegenerating ? 'Regenerating...' : 'Regenerate'}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="ghost"
+                  icon
                   onClick={() => setInspectingPersona(null)}
                   aria-label="Close persona details"
-                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px' }}
+                  title="Close persona details"
                 >
                   <X size={18} aria-hidden="true" />
-                </button>
+                  <span className="sr-only">Close</span>
+                </Button>
               </div>
-            </div>
+            </header>
+
+            {actionError && (
+              <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', padding: '0.75rem 1rem', background: 'var(--bg-pure)', color: 'var(--status-error-text)', borderBottom: '1px solid var(--status-error-border)', fontSize: '0.875rem', overflowWrap: 'anywhere' }}>
+                <span style={{ minWidth: 0, flex: '1 1 12rem' }}>{actionError}</span>
+                <Button variant="ghost" icon onClick={() => setActionError(null)} aria-label="Dismiss error" title="Dismiss error">
+                  <X size={16} aria-hidden="true" />
+                </Button>
+              </div>
+            )}
 
             {/* Modal Tabs Bar */}
-            <div className="bx-tabs-scroll" style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', padding: '0 28px', background: 'var(--bg-pure)', overflowX: 'auto' }}>
-              {[
+            <div
+              role="tablist"
+              aria-label="Persona details"
+              onKeyDown={(event) => {
+                const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+                const currentIndex = tabs.indexOf(event.target as HTMLButtonElement);
+                if (currentIndex < 0) return;
+                let nextIndex: number;
+                switch (event.key) {
+                  case 'ArrowRight':
+                  case 'ArrowDown':
+                    nextIndex = (currentIndex + 1) % tabs.length;
+                    break;
+                  case 'ArrowLeft':
+                  case 'ArrowUp':
+                    nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                    break;
+                  case 'Home':
+                    nextIndex = 0;
+                    break;
+                  case 'End':
+                    nextIndex = tabs.length - 1;
+                    break;
+                  default:
+                    return;
+                }
+                event.preventDefault();
+                tabs[nextIndex].focus();
+                tabs[nextIndex].click();
+              }}
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(9rem, 100%), 1fr))', gap: '0.25rem', borderBottom: '1px solid var(--border-subtle)', padding: '0.75rem 1rem', background: 'var(--bg-pure)', minWidth: 0, flexShrink: 0 }}
+            >
+              {([
                 { id: 'profile', label: 'Persona Profile', icon: <User size={14} /> },
                 { id: 'personality', label: 'Personality (Big Five)', icon: <Brain size={14} /> },
                 { id: 'lifestyle', label: 'Lifestyle & Routine', icon: <Activity size={14} /> },
@@ -1183,87 +1158,118 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                 { id: 'grounding', label: `Evidence Citations (${inspectingPersona.evidence_citations?.length || 0})`, icon: <ShieldCheck size={14} /> },
                 { id: 'dataset', label: 'Dataset Provenance', icon: <Database size={14} /> },
                 { id: 'memory', label: 'Memory', icon: <Brain size={14} /> },
-              ].map((t) => {
-                const isActive = inspectorTab === t.id;
+              ] as const).map((tab) => {
+                const isActive = inspectorTab === tab.id;
                 return (
                   <button
-                    key={t.id}
+                    key={tab.id}
                     type="button"
-                    onClick={() => setInspectorTab(t.id as any)}
+                    role="tab"
+                    id={`persona-tab-${tab.id}`}
+                    aria-selected={isActive}
+                    aria-controls="persona-inspector-panel"
+                    tabIndex={isActive ? 0 : -1}
+                    onClick={() => setInspectorTab(tab.id)}
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      borderBottom: isActive ? '2px solid var(--accent-teal)' : '2px solid transparent',
-                      padding: '12px 16px',
-                      fontSize: '0.84rem',
+                      background: isActive ? 'var(--bg-card-hover)' : 'transparent',
+                      border: '1px solid transparent',
+                      borderBottom: isActive ? '2px solid var(--text-primary)' : '2px solid transparent',
+                      borderRadius: '4px',
+                      padding: '0.625rem 0.5rem',
+                      fontSize: '0.8125rem',
                       fontWeight: isActive ? 600 : 500,
-                      color: isActive ? 'var(--accent-teal)' : 'var(--text-secondary)',
+                      color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '7px',
-                      whiteSpace: 'nowrap',
-                      transition: 'all 0.15s ease',
+                      gap: '0.375rem',
+                      minWidth: 0,
+                      minHeight: '2.75rem',
+                      whiteSpace: 'normal',
+                      textAlign: 'left',
+                      letterSpacing: 0,
+                      outlineOffset: '2px',
                     }}
                   >
-                    {t.icon}
-                    {t.label}
+                    <span aria-hidden="true" style={{ display: 'flex', flexShrink: 0 }}>{tab.icon}</span>
+                    <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{tab.label}</span>
                   </button>
                 );
               })}
             </div>
 
             {/* Modal Tab Body */}
-            <div style={{ padding: '24px 28px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div role="tabpanel" id="persona-inspector-panel" aria-labelledby={`persona-tab-${inspectorTab}`} tabIndex={0} style={{ padding: '1rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem', minWidth: 0, minHeight: '8rem', overflowWrap: 'anywhere' }}>
               {/* TAB 1: PROFILE */}
               {inspectorTab === 'profile' && (
                 <>
+                  <section aria-labelledby="persona-identity-heading" style={{ minWidth: 0 }}>
+                    <h3 id="persona-identity-heading" style={{ fontSize: '1rem', color: 'var(--text-primary)', margin: '0 0 0.75rem' }}>Identity</h3>
+                    <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(12rem, 100%), 1fr))', gap: '0.75rem', margin: 0 }}>
+                      {[
+                        { label: 'Age', value: inspectingPersona.demographics?.age },
+                        { label: 'Gender', value: inspectingPersona.demographics?.gender },
+                        { label: 'Occupation', value: inspectingPersona.demographics?.occupation },
+                        { label: 'Location', value: inspectingPersona.demographics?.location },
+                        { label: 'Education', value: inspectingPersona.demographics?.education },
+                        { label: 'Income or budget', value: inspectingPersona.demographics?.income_or_budget },
+                        { label: 'Archetype', value: inspectingPersona.archetype },
+                        { label: 'Origin country', value: inspectingPersona.origin_country },
+                        { label: 'Country code', value: inspectingPersona.country_code },
+                      ].map((field) => (
+                        <div key={field.label} style={{ minWidth: 0 }}>
+                          <dt style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>{field.label}</dt>
+                          <dd style={{ color: 'var(--text-primary)', fontSize: '0.875rem', margin: '0.25rem 0 0', overflowWrap: 'anywhere' }}>{field.value ?? 'Not stated'}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                  {inspectingPersona.validation_warnings.length > 0 && (
+                    <section aria-labelledby="persona-warnings-heading" style={{ minWidth: 0, borderLeft: '2px solid var(--status-warn-border)', paddingLeft: '0.75rem' }}>
+                      <h3 id="persona-warnings-heading" style={{ fontSize: '1rem', color: 'var(--status-warn-text)', margin: '0 0 0.5rem' }}>Validation warnings</h3>
+                      <ul style={{ margin: 0, paddingLeft: '1.25rem', color: 'var(--text-primary)', fontSize: '0.875rem' }}>
+                        {inspectingPersona.validation_warnings.map((warning, index) => <li key={index}>{warning}</li>)}
+                      </ul>
+                    </section>
+                  )}
                   {/* Tagline & Identity overview */}
                   {inspectingPersona.tagline && (
-                    <div style={{ background: 'rgba(34, 211, 238, 0.08)', border: '1px solid rgba(34, 211, 238, 0.25)', borderRadius: '12px', padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--accent-cyan)', fontWeight: 700, letterSpacing: '0.05em' }}>Archetype Tagline</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>{inspectingPersona.tagline}</div>
+                    <section aria-labelledby="persona-tagline-heading" style={{ minWidth: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <h3 id="persona-tagline-heading" style={{ fontSize: '1rem', color: 'var(--text-main)', fontWeight: 600, margin: '0 0 0.5rem' }}>Archetype Tagline</h3>
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-main)', margin: 0 }}>{inspectingPersona.tagline}</p>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {inspectingPersona.data_source === 'cached' && (
-                          <span
-                            title="Served from seeded/cached data — not generated live for this study"
-                            style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '3px 8px', borderRadius: '6px', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em' }}
-                          >
-                            CACHED
-                          </span>
-                        )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                         {(inspectingPersona.country_code || inspectingPersona.origin_country) && (
-                          <span style={{ fontSize: '0.78rem', color: 'var(--accent-teal)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-glow)', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                          <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
                             {[inspectingPersona.country_code, inspectingPersona.origin_country].filter(Boolean).join(' • ')}
                           </span>
                         )}
                       </div>
-                    </div>
+                    </section>
                   )}
 
                   {/* Bio & Quote */}
-                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-teal)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
-                      <Quote size={14} /> Consumer Bio & Direct Perspective
-                    </div>
+                  <section aria-labelledby="persona-bio-heading" style={{ minWidth: 0 }}>
+                    <h3 id="persona-bio-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                      <Quote size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Consumer Bio & Direct Perspective
+                    </h3>
                     <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.55, margin: '0 0 10px 0' }}>
                       {inspectingPersona.bio}
                     </p>
                     {inspectingPersona.quote && (
-                      <div style={{ fontStyle: 'italic', color: 'var(--accent-cyan)', fontSize: '0.86rem', borderLeft: '2px solid var(--accent-cyan)', paddingLeft: '10px' }}>
+                      <blockquote style={{ fontStyle: 'italic', color: 'var(--text-main)', fontSize: '0.875rem', borderLeft: '1px solid var(--border-subtle)', paddingLeft: '0.75rem', margin: 0, whiteSpace: 'pre-wrap' }}>
                         "{inspectingPersona.quote}"
-                      </div>
+                      </blockquote>
                     )}
-                  </div>
+                  </section>
 
                   {/* Goals & Needs Grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))', gap: '16px' }}>
-                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-emerald)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
-                        <Target size={14} /> Core Goals
-                      </div>
+                    <section aria-labelledby="persona-goals-heading" style={{ minWidth: 0 }}>
+                      <h3 id="persona-goals-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                        <Target size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Core Goals
+                      </h3>
                       <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
                         {claimEntries(inspectingPersona, 'goals').map((e, idx) => (
                           <li key={idx}>
@@ -1280,12 +1286,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           </li>
                         ))}
                       </ul>
-                    </div>
+                    </section>
 
-                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-cyan)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
-                        <CheckCircle2 size={14} /> Needs
-                      </div>
+                    <section aria-labelledby="persona-needs-heading" style={{ minWidth: 0 }}>
+                      <h3 id="persona-needs-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                        <CheckCircle2 size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Needs
+                      </h3>
                       <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
                         {claimEntries(inspectingPersona, 'needs').map((e, idx) => (
                           <li key={idx}>
@@ -1302,15 +1308,15 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           </li>
                         ))}
                       </ul>
-                    </div>
+                    </section>
                   </div>
 
                   {/* Pain Points & Objections Grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))', gap: '16px' }}>
-                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--status-warn-text)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
-                        <AlertCircle size={14} /> Pain Points & Anxieties
-                      </div>
+                    <section aria-labelledby="persona-pain-points-heading" style={{ minWidth: 0 }}>
+                      <h3 id="persona-pain-points-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--status-warn-text)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                        <AlertCircle size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Pain Points & Anxieties
+                      </h3>
                       <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
                         {claimEntries(inspectingPersona, 'pain_points').map((e, idx) => (
                           <li key={idx}>
@@ -1327,36 +1333,51 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                           </li>
                         ))}
                       </ul>
-                    </div>
+                    </section>
 
-                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#EF4444', fontSize: '0.82rem', fontWeight: 600, marginBottom: '10px' }}>
-                        <AlertTriangle size={14} /> Buying Objections
-                      </div>
+                    <section aria-labelledby="persona-objections-heading" style={{ minWidth: 0 }}>
+                      <h3 id="persona-objections-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--status-error-text)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                        <AlertTriangle size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Buying Objections
+                      </h3>
                       <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.84rem', color: 'var(--text-primary)' }}>
                         {inspectingPersona.objections?.map((obj, idx) => (
                           <li key={idx}>{obj}</li>
                         ))}
                       </ul>
-                    </div>
+                    </section>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(12rem, 100%), 1fr))', gap: '1rem' }}>
+                    {[
+                      { label: 'Behaviors', values: inspectingPersona.behaviors },
+                      { label: 'Preferences', values: inspectingPersona.preferences },
+                      { label: 'Motivations', values: inspectingPersona.motivations },
+                    ].map((group) => (
+                      <section key={group.label} style={{ minWidth: 0 }}>
+                        <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', margin: '0 0 0.5rem' }}>{group.label}</h3>
+                        {group.values.length > 0 ? (
+                          <ul style={{ margin: 0, paddingLeft: '1.25rem', color: 'var(--text-primary)', fontSize: '0.875rem' }}>
+                            {group.values.map((value, index) => <li key={index}>{value}</li>)}
+                          </ul>
+                        ) : <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No {group.label.toLowerCase()} recorded.</p>}
+                      </section>
+                    ))}
                   </div>
                 </>
               )}
 
               {/* TAB: PERSONALITY (BIG FIVE) */}
               {inspectorTab === 'personality' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                      <div>
-                        <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Brain size={18} color="var(--accent-teal)" /> Big Five Trait Spectrum
-                        </h4>
-                        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-                          Quantified psychometric scale (0–100) governing simulation conversational tone, risk tolerance, and decision pace.
+                <section aria-labelledby="persona-personality-title" style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+                      <div style={{ minWidth: 0, flex: '1 1 16rem' }}>
+                        <h3 id="persona-personality-title" style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Brain size={18} aria-hidden="true" style={{ flexShrink: 0 }} /> Big Five Trait Spectrum
+                        </h3>
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: '0.5rem 0 0' }}>
+                          Recorded source traits; not a validated psychometric assessment.
                         </p>
                       </div>
-                      <span style={{ fontSize: '0.75rem', background: 'var(--accent-subtle)', color: 'var(--accent-teal)', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                         OCEAN Psychometrics
                       </span>
                     </div>
@@ -1376,7 +1397,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             name: 'Conscientiousness',
                             val: inspectingPersona.personality.conscientiousness ?? null,
                             desc: 'Self-discipline, organization, diligence, and goal-oriented planning.',
-                            color: 'var(--accent-emerald)',
+                            color: 'var(--trait-c)',
                           },
                           {
                             key: 'extroversion',
@@ -1399,49 +1420,47 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             desc: 'Sensitivity to stress, vulnerability to anxiety, and reactivity to disruption.',
                             color: 'var(--trait-n)',
                           },
-                        ].map((trait) => (
-                          <div key={trait.key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>{trait.name}</div>
-                              {typeof trait.val === 'number' ? (
-                                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: trait.color }}>{trait.val} / 100</div>
-                              ) : (
-                                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', fontStyle: 'italic' }}>Not measured</div>
-                              )}
-                            </div>
-                            {typeof trait.val === 'number' && (
-                              <div style={{ height: '7px', background: 'var(--border-subtle)', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
-                                <div style={{ width: `${Math.max(0, Math.min(100, trait.val))}%`, height: '100%', background: `linear-gradient(90deg, ${trait.color}99, ${trait.color})`, borderRadius: '4px' }} />
+                        ].map((trait) => {
+                          const measured = isMeasuredTraitScore(trait.val);
+                          return (
+                            <div key={trait.key} style={{ minWidth: 0, borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-main)' }}>{trait.name}</div>
+                                {measured ? (
+                                  <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-main)', fontVariantNumeric: 'tabular-nums' }}>{trait.val} / 100</div>
+                                ) : (
+                                  <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Not measured</div>
+                                )}
                               </div>
-                            )}
-                            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>{trait.desc}</p>
-                          </div>
-                        ))}
+                              {measured && (
+                                <div role="meter" aria-label={trait.name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={trait.val} aria-describedby={`persona-trait-description-${trait.key}`} style={{ height: '7px', background: 'var(--border-subtle)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+                                  <div style={{ width: `${trait.val}%`, height: '100%', background: trait.color, borderRadius: '4px' }} />
+                                </div>
+                              )}
+                              <p id={`persona-trait-description-${trait.key}`} style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{trait.desc}</p>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
-                      <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '24px' }}>
+                      <p role="status" style={{ color: 'var(--text-muted)', margin: 0, padding: '1rem 0' }}>
                         No psychometric score data recorded for this persona.
-                      </div>
+                      </p>
                     )}
-                  </div>
-                </div>
+                </section>
               )}
 
               {/* TAB: LIFESTYLE & ROUTINE (45+ DETAILED ATTRIBUTES) */}
               {inspectorTab === 'lifestyle' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                    Granular behavioral context comprising daily habits, coping strategies, cultural affiliations, and operational realities.
-                  </div>
-
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
                   {inspectingPersona.detailed_attributes ? (
                     <>
                       {/* Section 1: Work & Daily Schedule */}
-                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--trait-o)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
-                          <Briefcase size={16} /> Work, Commute & Schedule Context
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
+                      <section aria-labelledby="persona-work-heading" style={{ minWidth: 0 }}>
+                        <h3 id="persona-work-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                          <Briefcase size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Work, Commute & Schedule Context
+                        </h3>
+                        <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '0.75rem', margin: 0 }}>
                           {[
                             { key: 'work_schedule', label: 'Work Schedule' },
                             { key: 'workplace_setting', label: 'Workplace Setting' },
@@ -1452,21 +1471,21 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'daily_activities', label: 'Daily Activities' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ minWidth: 0, borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+                                <dt style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{label}</dt>
+                                <dd style={{ fontSize: '0.875rem', color: 'var(--text-main)', lineHeight: 1.5, margin: '0.25rem 0 0', whiteSpace: 'pre-wrap' }}>{inspectingPersona.detailed_attributes[key]}</dd>
                               </div>
                             ) : null
                           ))}
-                        </div>
-                      </div>
+                        </dl>
+                      </section>
 
                       {/* Section 2: Living & Sustenance */}
-                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-emerald)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
-                          <Coffee size={16} /> Living, Meals & Household Structure
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
+                      <section aria-labelledby="persona-household-heading" style={{ minWidth: 0 }}>
+                        <h3 id="persona-household-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                          <Coffee size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Living, Meals & Household Structure
+                        </h3>
+                        <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '0.75rem', margin: 0 }}>
                           {[
                             { key: 'food_source', label: 'Food Source' },
                             { key: 'meal_timing', label: 'Meal Timing' },
@@ -1477,21 +1496,21 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'hobbies', label: 'Hobbies & Interests' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ minWidth: 0, borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+                                <dt style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{label}</dt>
+                                <dd style={{ fontSize: '0.875rem', color: 'var(--text-main)', lineHeight: 1.5, margin: '0.25rem 0 0', whiteSpace: 'pre-wrap' }}>{inspectingPersona.detailed_attributes[key]}</dd>
                               </div>
                             ) : null
                           ))}
-                        </div>
-                      </div>
+                        </dl>
+                      </section>
 
                       {/* Section 3: Mindset, Psychology & Communication */}
-                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--trait-e)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
-                          <Compass size={16} /> Mindset, Psychology & Communication Style
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
+                      <section aria-labelledby="persona-mindset-heading" style={{ minWidth: 0 }}>
+                        <h3 id="persona-mindset-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                          <Compass size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Mindset, Psychology & Communication Style
+                        </h3>
+                        <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '0.75rem', margin: 0 }}>
                           {[
                             { key: 'communication_style', label: 'Communication Style' },
                             { key: 'activity_level', label: 'Activity Level' },
@@ -1506,21 +1525,21 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'learning_style', label: 'Learning Style' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ minWidth: 0, borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+                                <dt style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{label}</dt>
+                                <dd style={{ fontSize: '0.875rem', color: 'var(--text-main)', lineHeight: 1.5, margin: '0.25rem 0 0', whiteSpace: 'pre-wrap' }}>{inspectingPersona.detailed_attributes[key]}</dd>
                               </div>
                             ) : null
                           ))}
-                        </div>
-                      </div>
+                        </dl>
+                      </section>
 
                       {/* Section 4: Culture, Beliefs & Social Values */}
-                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--trait-a)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
-                          <Globe size={16} /> Culture, Beliefs & Life Priorities
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
+                      <section aria-labelledby="persona-culture-heading" style={{ minWidth: 0 }}>
+                        <h3 id="persona-culture-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                          <Globe size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Culture, Beliefs & Life Priorities
+                        </h3>
+                        <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '0.75rem', margin: 0 }}>
                           {[
                             { key: 'language_preferences', label: 'Language Preferences' },
                             { key: 'cultural_affiliations', label: 'Cultural Affiliations' },
@@ -1538,21 +1557,21 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'community_engagement', label: 'Community Engagement' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ minWidth: 0, borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+                                <dt style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{label}</dt>
+                                <dd style={{ fontSize: '0.875rem', color: 'var(--text-main)', lineHeight: 1.5, margin: '0.25rem 0 0', whiteSpace: 'pre-wrap' }}>{inspectingPersona.detailed_attributes[key]}</dd>
                               </div>
                             ) : null
                           ))}
-                        </div>
-                      </div>
+                        </dl>
+                      </section>
 
                       {/* Section 5: Finance & Technology */}
-                      <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--trait-n)', fontSize: '0.88rem', fontWeight: 600, marginBottom: '14px' }}>
-                          <DollarSign size={16} /> Financial Mindset & Technology Adoption
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
+                      <section aria-labelledby="persona-financial-mindset-heading" style={{ minWidth: 0 }}>
+                        <h3 id="persona-financial-mindset-heading" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem' }}>
+                          <DollarSign size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Financial Mindset & Technology Adoption
+                        </h3>
+                        <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '0.75rem', margin: 0 }}>
                           {[
                             { key: 'payment_method', label: 'Preferred Payment Method' },
                             { key: 'financial_attitude', label: 'Financial Attitude' },
@@ -1564,14 +1583,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                             { key: 'technology_usage', label: 'Technology Usage' },
                           ].map(({ key, label }) => (
                             inspectingPersona.detailed_attributes?.[key] ? (
-                              <div key={key} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px' }}>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
-                                <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>{inspectingPersona.detailed_attributes[key]}</div>
+                              <div key={key} style={{ minWidth: 0, borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+                                <dt style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{label}</dt>
+                                <dd style={{ fontSize: '0.875rem', color: 'var(--text-main)', lineHeight: 1.5, margin: '0.25rem 0 0', whiteSpace: 'pre-wrap' }}>{inspectingPersona.detailed_attributes[key]}</dd>
                               </div>
                             ) : null
                           ))}
-                        </div>
-                      </div>
+                        </dl>
+                      </section>
                     </>
                   ) : (
                     <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '24px' }}>
@@ -1583,88 +1602,91 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
               {/* TAB 2: COMMERCIAL & WTP */}
               {inspectorTab === 'commercial' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '14px' }}>
-                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Estimated Monthly Budget</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-teal)' }}>
-                        {inspectingPersona.commercial_profile?.monthly_budget_bdt
+                <section aria-label="Commercial profile" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
+                  <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '1rem', margin: 0 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <dt style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Estimated Monthly Budget</dt>
+                      <dd style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-main)', margin: 0, fontVariantNumeric: 'tabular-nums' }}>
+                        {typeof inspectingPersona.commercial_profile?.monthly_budget_bdt === 'number'
                           ? `৳${inspectingPersona.commercial_profile.monthly_budget_bdt} / mo`
                           : 'Not stated'}
-                      </div>
+                      </dd>
                     </div>
 
-                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Price Sensitivity</div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <dt style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Price Sensitivity</dt>
+                      <dd style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
                         {inspectingPersona.commercial_profile?.price_sensitivity || 'Not stated'}
-                      </div>
+                      </dd>
                     </div>
 
-                    <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Payment Preference</div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <dt style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Payment Preference</dt>
+                      <dd style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
                         {inspectingPersona.commercial_profile?.payment_preference || 'Not stated'}
-                      </div>
+                      </dd>
                     </div>
-                  </div>
+                  </dl>
 
-                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Willingness-to-Pay Range</div>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 0.5rem' }}>Willingness-to-Pay Range</h3>
                     <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', margin: 0 }}>
                       {inspectingPersona.commercial_profile?.willingness_to_pay || 'Not stated'}
                     </p>
                   </div>
-                </div>
+                </section>
               )}
 
               {/* TAB 3: TECHNOLOGY PROFILE */}
               {inspectorTab === 'technology' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>Primary Devices</div>
+                  <section aria-labelledby="persona-devices-heading" style={{ minWidth: 0 }}>
+                    <h3 id="persona-devices-heading" style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 0.75rem' }}>Primary Devices</h3>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {inspectingPersona.technology_profile?.primary_devices?.map((d, idx) => (
-                        <span key={idx} style={{ background: 'var(--border-subtle)', color: 'var(--accent-cyan)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid rgba(34, 211, 238, 0.2)' }}>
+                        <span key={idx} style={{ background: 'var(--bg-card)', color: 'var(--text-main)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8125rem', border: '1px solid var(--border-subtle)', minWidth: 0 }}>
                           {d}
                         </span>
                       ))}
+                      {!inspectingPersona.technology_profile?.primary_devices?.length && <p role="status" style={{ margin: 0, color: 'var(--text-secondary)' }}>No devices recorded.</p>}
                     </div>
-                  </div>
+                  </section>
 
-                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>Frequently Used Platforms</div>
+                  <section aria-labelledby="persona-platforms-heading" style={{ minWidth: 0 }}>
+                    <h3 id="persona-platforms-heading" style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 0.75rem' }}>Frequently Used Platforms</h3>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {inspectingPersona.technology_profile?.platforms?.map((p, idx) => (
-                        <span key={idx} style={{ background: 'var(--border-subtle)', color: 'var(--accent-teal)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', border: '1px solid var(--accent-glow)' }}>
+                        <span key={idx} style={{ background: 'var(--bg-card)', color: 'var(--text-main)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8125rem', border: '1px solid var(--border-subtle)', minWidth: 0 }}>
                           {p}
                         </span>
                       ))}
+                      {!inspectingPersona.technology_profile?.platforms?.length && <p role="status" style={{ margin: 0, color: 'var(--text-secondary)' }}>No platforms recorded.</p>}
                     </div>
-                  </div>
+                  </section>
+                  <section style={{ minWidth: 0 }}>
+                    <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', margin: '0 0 0.5rem' }}>Technology familiarity</h3>
+                    <p style={{ margin: 0, color: 'var(--text-primary)', fontSize: '0.875rem' }}>{inspectingPersona.technology_profile?.familiarity || 'Not stated'}</p>
+                  </section>
                 </div>
               )}
 
               {/* TAB 4: EVIDENCE CITATIONS */}
               {inspectorTab === 'grounding' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                    Claims this persona cites from the study's evidence runs. Personas without citations are labeled
-                    INFERRED/SYNTHETIC in the profile tab — absence of evidence is shown, never papered over.
-                  </div>
+                <section aria-labelledby="persona-citations-heading" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
+                  <h3 id="persona-citations-heading" style={{ fontSize: '1rem', color: 'var(--text-main)', margin: 0 }}>Evidence citations</h3>
 
                   {inspectingPersona.evidence_citations && inspectingPersona.evidence_citations.length > 0 ? (
                     inspectingPersona.evidence_citations.map((c, idx) => (
-                      <div key={idx} style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-teal)', textTransform: 'uppercase' }}>
+                      <div key={idx} style={{ minWidth: 0, borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-main)' }}>
                             {c.category || 'General Finding'}
                           </span>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            Confidence: {c.confidence ? `${Math.round(c.confidence * 100)}%` : 'n/a'}
+                            Confidence: {typeof c.confidence === 'number' ? `${Math.round(c.confidence * 100)}%` : 'n/a'}
                           </span>
                         </div>
-                        <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.45 }}>
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-main)', margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                           "{c.claim_text}"
                         </p>
                       </div>
@@ -1676,48 +1698,52 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   )}
 
                   {onNavigateToEvidence && (
-                    <button
+                    <Button
                       type="button"
-                      onClick={onNavigateToEvidence}
-                      style={{
-                        alignSelf: 'flex-start',
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--accent-teal)',
-                        fontSize: '0.82rem',
-                        fontWeight: 600,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        cursor: 'pointer',
-                        padding: 0,
-                        marginTop: '6px',
-                      }}
+                      variant="ghost"
+                      onClick={() => onNavigateToEvidence?.(activeStudyId)}
+                      style={{ alignSelf: 'flex-start', minHeight: '2.25rem', whiteSpace: 'normal', textAlign: 'left' }}
                     >
-                      View in Evidence Laboratory <ExternalLink size={12} />
-                    </button>
+                      View in Evidence Laboratory <ExternalLink size={14} aria-hidden="true" />
+                    </Button>
                   )}
-                </div>
+                </section>
               )}
 
               {/* TAB 5: DATASET PROVENANCE */}
               {inspectorTab === 'dataset' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                    Dataset distributions that constrained demographic and commercial boundaries.
-                  </div>
-
-                  <div style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>Variable Constraints</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <section style={{ minWidth: 0 }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 0.75rem' }}>Variable Constraints</h3>
+                    {!inspectingPersona.dataset_refs?.length && (
+                      <p role="status" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No dataset provenance recorded for this persona.</p>
+                    )}
+                    <dl style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: 0 }}>
                       {inspectingPersona.dataset_refs?.map((ref, idx) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)', fontSize: '0.82rem' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>{ref.variable}</span>
-                          <span style={{ color: 'var(--accent-teal)', fontWeight: 600 }}>{String(ref.value)}</span>
+                        <div key={idx} style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border-subtle)', fontSize: '0.875rem', minWidth: 0, overflowWrap: 'anywhere' }}>
+                          <dt style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{datasetRefTitle(ref)}</dt>
+                          <dd style={{ margin: '0.5rem 0 0', minWidth: 0 }}>
+                            {ref.variable !== undefined && (
+                              <pre style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: 0 }}>{formatDatasetRefValue(ref.value)}</pre>
+                            )}
+                            {ref.variable === undefined && (
+                              <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 11rem) minmax(0, 1fr)', gap: '0.25rem 0.75rem' }}>
+                                {datasetRefFields(ref).map(([key, value]) => (
+                                  <React.Fragment key={key}>
+                                    <dt style={{ color: 'var(--text-secondary)' }}>{key.replace(/_/g, ' ')}</dt>
+                                    <dd style={{ margin: 0, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', whiteSpace: 'pre-wrap' }}>{value}</dd>
+                                  </React.Fragment>
+                                ))}
+                              </dl>
+                            )}
+                            {ref.source && <div style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Source: {ref.source}</div>}
+                            {ref.dataset_id && <div style={{ color: 'var(--text-secondary)' }}>Dataset ID: <code>{ref.dataset_id}</code></div>}
+                            {ref.content_hash && <div style={{ color: 'var(--text-secondary)' }}>Content hash: <code>{ref.content_hash}</code></div>}
+                          </dd>
                         </div>
                       ))}
-                    </div>
-                  </div>
+                    </dl>
+                  </section>
                 </div>
               )}
 
@@ -1726,52 +1752,26 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div style={{ padding: '16px 28px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-pure)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                Persona ID: <code style={{ color: 'var(--accent-teal)' }}>{inspectingPersona.id}</code>
+            <footer style={{ padding: '1rem', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-pure)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', minWidth: 0, flexShrink: 0 }}>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', minWidth: 0, overflowWrap: 'anywhere' }}>
+                Persona ID: <code>{inspectingPersona.id}</code>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', minWidth: 0 }}>
                 {onStartInterviewWithPersona && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leadingIcon={<MessageSquare size={14} aria-hidden="true" />}
                     onClick={() => {
                       onStartInterviewWithPersona(inspectingPersona.id, activeStudyId || undefined);
                       setInspectingPersona(null);
                     }}
-                    style={{
-                      background: 'var(--accent-gradient)',
-                      color: 'var(--text-on-accent)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '8px 16px',
-                      fontSize: '0.84rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
                   >
-                    <MessageSquare size={14} /> Start Adaptive Interview
-                  </button>
+                    Start Adaptive Interview
+                  </Button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setInspectingPersona(null)}
-                  style={{
-                    background: 'var(--bg-card-hover)',
-                    border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-primary)',
-                    borderRadius: '8px',
-                    padding: '8px 16px',
-                    fontSize: '0.84rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Close
-                </button>
               </div>
-            </div>
+            </footer>
           </div>
         </div>
       )}
@@ -1789,7 +1789,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '24px',
+            padding: '1rem',
             zIndex: 100,
           }}
           onClick={() => !isGenerating && setShowGenerateModal(false)}
@@ -1798,55 +1798,66 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             ref={generateModalRef}
             className="bx-modal"
             role="dialog"
+            tabIndex={-1}
             aria-modal="true"
             aria-labelledby="generate-personas-title"
+            aria-busy={isGenerating}
             style={{
-              background: 'var(--bg-secondary)',
+              background: 'var(--bg-card)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: '20px',
+              borderRadius: '12px',
               maxWidth: '560px',
               width: '100%',
-              padding: '28px',
+              minWidth: 0,
+              maxHeight: 'calc(100dvh - 2rem)',
+              overflowY: 'auto',
+              overflowWrap: 'anywhere',
+              padding: '1rem',
               boxShadow: 'var(--shadow-lg)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <div>
-                <h2 id="generate-personas-title" style={{ fontSize: '1.35rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1.25rem', minWidth: 0 }}>
+              <div style={{ minWidth: 0 }}>
+                <h2 id="generate-personas-title" style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 0.25rem', overflowWrap: 'anywhere' }}>
                   Generate Synthetic Personas
                 </h2>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-                  Synthesize simulation agents across market segments.
-                </p>
               </div>
               {!isGenerating && (
-                <button type="button" onClick={() => setShowGenerateModal(false)} aria-label="Close generate personas dialog" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <Button type="button" variant="ghost" onClick={() => setShowGenerateModal(false)} aria-label="Close generate personas dialog" title="Close generate personas dialog" style={{ width: '2.25rem', height: '2.25rem', flexShrink: 0, padding: 0 }}>
                   <X size={18} aria-hidden="true" />
-                </button>
+                </Button>
               )}
             </div>
 
             {generationError && (
-              <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '10px', padding: '12px 14px', color: '#EF4444', fontSize: '0.84rem', marginBottom: '18px' }}>
+              <div id="persona-generation-error" role="alert" tabIndex={-1} style={{ background: 'var(--bg-pure)', border: '1px solid var(--status-error-border)', borderRadius: '6px', padding: '0.75rem', color: 'var(--status-error-text)', fontSize: '0.875rem', marginBottom: '1rem', overflowWrap: 'anywhere' }}>
                 {generationError}
               </div>
             )}
 
             {!isGenerating ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleTriggerGeneration();
+                }}
+                aria-describedby={generationError ? 'persona-generation-error' : undefined}
+                style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}
+              >
                 {/* Personas per segment */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                  <label htmlFor="persona-segment-count" style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
                     Personas per Market Segment: {personasPerSegment}
                   </label>
                   <input
+                    id="persona-segment-count"
                     type="range"
                     min="1"
                     max="6"
                     value={personasPerSegment}
                     onChange={(e) => setPersonasPerSegment(Number(e.target.value))}
-                    style={{ width: '100%', accentColor: '#14B8A6', cursor: 'pointer' }}
+                    style={{ width: '100%', accentColor: 'var(--text-primary)', cursor: 'pointer' }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                     <span>1 Persona</span>
@@ -1856,91 +1867,47 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                 </div>
 
                 {/* Distribution Strategy */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+                  <legend style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
                     Quota Allocation Strategy
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: '10px' }}>
-                    <div
-                      onClick={() => setDistributionStrategy('population_weighted')}
-                      style={{
-                        background: distributionStrategy === 'population_weighted' ? 'var(--accent-subtle)' : 'var(--bg-card-hover)',
-                        border: `1px solid ${distributionStrategy === 'population_weighted' ? 'var(--accent-teal)' : 'var(--border-subtle)'}`,
-                        borderRadius: '10px',
-                        padding: '12px',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'population_weighted' ? 'var(--accent-teal)' : 'var(--text-primary)', marginBottom: '2px' }}>
-                        Population-Weighted
-                      </div>
-                      <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                        Allocates personas proportionally by segment market share.
-                      </div>
-                    </div>
-
-                    <div
-                      onClick={() => setDistributionStrategy('equal')}
-                      style={{
-                        background: distributionStrategy === 'equal' ? 'var(--accent-subtle)' : 'var(--bg-card-hover)',
-                        border: `1px solid ${distributionStrategy === 'equal' ? 'var(--accent-teal)' : 'var(--border-subtle)'}`,
-                        borderRadius: '10px',
-                        padding: '12px',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.84rem', fontWeight: 600, color: distributionStrategy === 'equal' ? 'var(--accent-teal)' : 'var(--text-primary)', marginBottom: '2px' }}>
-                        Equal Distribution
-                      </div>
-                      <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                        Generates equal number of personas for each segment.
-                      </div>
-                    </div>
+                  </legend>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(12rem, 100%), 1fr))', gap: '0.5rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', border: '1px solid var(--border-medium)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer', minWidth: 0 }}>
+                      <input type="radio" name="persona-distribution" value="population_weighted" checked={distributionStrategy === 'population_weighted'} onChange={() => setDistributionStrategy('population_weighted')} style={{ accentColor: 'var(--text-primary)', flexShrink: 0 }} />
+                      Population-Weighted
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', border: '1px solid var(--border-medium)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer', minWidth: 0 }}>
+                      <input type="radio" name="persona-distribution" value="equal" checked={distributionStrategy === 'equal'} onChange={() => setDistributionStrategy('equal')} style={{ accentColor: 'var(--text-primary)', flexShrink: 0 }} />
+                      Equal Distribution
+                    </label>
                   </div>
-                </div>
+                </fieldset>
 
                 {/* Submit button */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
-                  <button
-                    type="button"
+                <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <Button
                     onClick={() => setShowGenerateModal(false)}
-                    style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', borderRadius: '8px', padding: '9px 16px', fontSize: '0.84rem', cursor: 'pointer' }}
                   >
                     Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleTriggerGeneration}
-                    style={{
-                      background: 'var(--accent-gradient)',
-                      color: 'var(--text-on-accent)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '9px 18px',
-                      fontSize: '0.86rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    leadingIcon={<Sparkles size={15} aria-hidden="true" />}
                   >
-                    <Sparkles size={15} />
                     Synthesize Personas
-                  </button>
+                  </Button>
                 </div>
-              </div>
+              </form>
             ) : (
               /* HONEST INDETERMINATE LOADING — no fake step timers */
-              <div style={{ padding: '24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+              <div role="status" tabIndex={0} aria-live="polite" aria-atomic="true" style={{ padding: '1.5rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                 <div
                   style={{
                     width: '36px',
                     height: '36px',
-                    border: '3px solid var(--accent-glow)',
-                    borderTopColor: 'var(--accent-teal)',
+                    border: '3px solid var(--border-medium)',
+                    borderTopColor: 'var(--text-primary)',
                     borderRadius: '50%',
                     animation: 'authSpin 0.7s linear infinite',
                   }}
@@ -1950,7 +1917,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     Generating personas…
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    This may take up to a minute on free providers
+                    Selecting synthetic source profiles.
                   </div>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sliders,
   Plus,
@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { BehavioralTest, BehavioralMetricsResponse, BehavioralTestType } from '../../../types';
 import { api } from '../../../services/api';
+import { useRequestScope } from '../../../utils/useRequestScope';
+import { useRouteReady } from '../../../performance/routeTiming';
 import { CountUp } from '../../../motion/CountUp';
 import { CreateBehavioralTestModal } from '../modals/CreateBehavioralTestModal';
 
@@ -43,50 +45,41 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const scopeRef = useRequestScope([studyId]);
+  const generationRef = useRef(0);
+  useRouteReady(!isLoading, error ? 'error' : tests.length ? 'content' : 'empty');
 
   const fetchTestsAndMetrics = async () => {
+    const scope = scopeRef.current;
+    const generation = ++generationRef.current;
+    const isCurrent = () => scope.active && generation === generationRef.current;
     setIsLoading(true);
     setError(null);
+    setMetricsError(null);
+    setMetrics(null);
+    void api.getBehavioralMetrics(studyId).then((value) => { if (isCurrent()) setMetrics(value); })
+      .catch(() => { if (isCurrent()) setMetricsError('Behavioral metrics unavailable'); });
     try {
-      const [testList, metricsData] = await Promise.all([
-        api.getBehavioralTests(studyId, searchQuery, typeFilter, statusFilter),
-        api.getBehavioralMetrics(studyId),
-      ]);
-      setTests(testList || []);
-      setMetrics(metricsData || null);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load behavioral tests.');
+      const testList = await api.getBehavioralTests(studyId, searchQuery, typeFilter, statusFilter);
+      if (isCurrent()) setTests(testList || []);
+    } catch (err: unknown) {
+      if (isCurrent()) setError(err instanceof Error ? err.message : 'Failed to load behavioral tests.');
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const [testList, metricsData] = await Promise.all([
-          api.getBehavioralTests(studyId, searchQuery, typeFilter, statusFilter),
-          api.getBehavioralMetrics(studyId),
-        ]);
-        if (cancelled) return;
-        setTests(testList || []);
-        setMetrics(metricsData || null);
-      } catch (err: any) {
-        if (!cancelled) setError(err?.message || 'Failed to load behavioral tests.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-    run();
-    return () => { cancelled = true; };
+    setTests([]);
+    setShowCreateModal(false);
+    void fetchTestsAndMetrics();
+    return () => { generationRef.current += 1; };
   }, [studyId, typeFilter, statusFilter]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchTestsAndMetrics();
+    if (!isLoading) void fetchTestsAndMetrics();
   };
 
   const getTypeIcon = (type: BehavioralTestType) => {
@@ -112,18 +105,22 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
     }
   };
 
+  const hasFilters = !!searchQuery.trim() || typeFilter !== 'all' || statusFilter !== 'all';
+
   return (
-    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', width: '100%', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', minWidth: 0, margin: '0 auto', width: '100%', fontFamily: 'var(--font-sans)', color: 'var(--text-primary)' }}>
+      {metricsError && <div role="alert">{metricsError}</div>}
       {error && (
         <div
           role="alert"
           style={{
-            background: 'rgba(239,68,68,0.08)',
+            background: 'var(--bg-card)',
             border: '1px solid rgba(239,68,68,0.4)',
-            borderRadius: '10px',
+            borderRadius: '8px',
             padding: '14px 18px',
             marginBottom: '20px',
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '12px',
@@ -135,7 +132,9 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           <button
             type="button"
             onClick={fetchTestsAndMetrics}
-            style={{ background: 'transparent', border: '1px solid currentColor', borderRadius: '6px', padding: '4px 12px', color: 'inherit', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+            disabled={isLoading}
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+            style={{ minHeight: '44px', background: 'transparent', border: '1px solid currentColor', borderRadius: '6px', padding: '8px 12px', fontFamily: 'var(--font-sans)', color: 'inherit', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
           >
             Retry
           </button>
@@ -147,53 +146,58 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'space-between',
-          marginBottom: '28px',
+          marginBottom: '24px',
           flexWrap: 'wrap',
-          gap: '16px',
+          gap: '12px',
         }}
       >
-        <div>
+        <div style={{ minWidth: 0, flex: '1 1 320px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
             <div
               style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '10px',
-                backgroundColor: 'var(--accent-subtle)',
-                border: '1px solid var(--border-hover)',
+                width: '32px',
+                height: '32px',
+                flexShrink: 0,
+                borderRadius: '8px',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-subtle)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'var(--accent-teal)',
+                color: 'var(--text-secondary)',
               }}
             >
-              <Sliders size={20} />
+              <Sliders size={18} />
             </div>
-            <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-main)' }}>
+            <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 650, letterSpacing: 0, overflowWrap: 'anywhere', color: 'var(--text-main)' }}>
               Behavioral Testing & Simulation
             </h1>
           </div>
-          <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-secondary)' }}>
-            Test how your synthetic customer population responds to pricing, features, copy, and product offers.
+          <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+            Synthetic responses to pricing, features, copy, and product offers.
           </p>
         </div>
 
         <button
+          type="button"
+          className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
           onClick={() => setShowCreateModal(true)}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            minWidth: 0,
+            minHeight: '44px',
             padding: '12px 22px',
-            borderRadius: '10px',
-            backgroundColor: '#14B8A6',
+            borderRadius: '6px',
+            backgroundColor: 'var(--accent-teal)',
             border: 'none',
             color: 'var(--text-on-accent)',
+            fontFamily: 'var(--font-sans)',
             fontSize: '0.9rem',
             fontWeight: 700,
             cursor: 'pointer',
-            boxShadow: '0 0 20px var(--border-hover)',
-            transition: 'all 0.2s ease',
+            transition: 'background-color 0.2s ease',
           }}
         >
           <Plus size={18} />
@@ -213,7 +217,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
         <div
           style={{
             padding: '20px',
-            borderRadius: '14px',
+            borderRadius: '8px',
             backgroundColor: 'var(--glass-mid)',
             border: '1px solid var(--fill-soft-2)',
           }}
@@ -222,7 +226,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Total Tests</span>
             <Sliders size={16} className="text-teal-400" />
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-main)' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 650, color: 'var(--text-main)' }}>
             <CountUp value={metrics?.total_tests ?? tests.length} />
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Active decision hypotheses</div>
@@ -231,7 +235,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
         <div
           style={{
             padding: '20px',
-            borderRadius: '14px',
+            borderRadius: '8px',
             backgroundColor: 'var(--glass-mid)',
             border: '1px solid var(--fill-soft-2)',
           }}
@@ -240,7 +244,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Completed Runs</span>
             <CheckCircle2 size={16} className="text-emerald-400" />
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-main)' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 650, color: 'var(--text-main)' }}>
             <CountUp value={metrics?.completed_runs ?? 0} />
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Across scenarios</div>
@@ -249,7 +253,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
         <div
           style={{
             padding: '20px',
-            borderRadius: '14px',
+            borderRadius: '8px',
             backgroundColor: 'var(--glass-mid)',
             border: '1px solid var(--fill-soft-2)',
           }}
@@ -258,7 +262,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Simulated Personas</span>
             <Users size={16} className="text-cyan-400" />
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-main)' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 650, color: 'var(--text-main)' }}>
             <CountUp value={metrics?.total_personas_simulated ?? 0} />
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Persona evaluations</div>
@@ -267,7 +271,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
         <div
           style={{
             padding: '20px',
-            borderRadius: '14px',
+            borderRadius: '8px',
             backgroundColor: 'var(--glass-mid)',
             border: '1px solid var(--fill-soft-2)',
           }}
@@ -276,7 +280,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Avg Buy Likelihood</span>
             <TrendingUp size={16} className="text-teal-400" />
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--accent-teal-bright)' }}>
+          <div style={{ fontSize: '1.5rem', fontWeight: 650, color: 'var(--accent-teal-bright)' }}>
             {(metrics?.completed_runs ?? 0) > 0 && typeof metrics?.average_buy_likelihood_percentage === 'number' ? (
               <CountUp value={metrics.average_buy_likelihood_percentage} format={(v) => `${Math.round(v)}%`} />
             ) : (
@@ -298,7 +302,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           flexWrap: 'wrap',
         }}
       >
-        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', flex: 1, minWidth: '280px', maxWidth: '420px' }}>
+        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', flex: '1 1 280px', minWidth: 0, maxWidth: '420px' }}>
           <div style={{ position: 'relative', width: '100%' }}>
             <Search
               size={16}
@@ -306,36 +310,45 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             />
             <input
               type="text"
+              aria-label="Search behavioral tests"
+              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search behavioral tests..."
               style={{
                 width: '100%',
+                minWidth: 0,
+                minHeight: '44px',
                 padding: '10px 14px 10px 38px',
-                borderRadius: '10px',
+                borderRadius: '6px',
                 backgroundColor: 'var(--glass-mid)',
-                border: '1px solid var(--border-soft)',
+                border: '1px solid var(--border-control)',
                 color: 'var(--text-primary)',
+                fontFamily: 'var(--font-sans)',
                 fontSize: '0.88rem',
-                outline: 'none',
                 boxSizing: 'border-box',
               }}
             />
           </div>
         </form>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', minWidth: 0, gap: '10px', alignItems: 'center' }}>
           <select
+            aria-label="Test type"
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             style={{
               padding: '10px 34px 10px 14px',
-              borderRadius: '10px',
+              minWidth: 0,
+              maxWidth: '100%',
+              minHeight: '44px',
+              borderRadius: '6px',
               backgroundColor: 'var(--glass-mid)',
-              border: '1px solid var(--border-soft)',
+              border: '1px solid var(--border-control)',
               color: 'var(--text-primary)',
+              fontFamily: 'var(--font-sans)',
               fontSize: '0.85rem',
-              outline: 'none',
               cursor: 'pointer',
             }}
           >
@@ -351,16 +364,21 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           </select>
 
           <select
+            aria-label="Test status"
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{
               padding: '10px 34px 10px 14px',
-              borderRadius: '10px',
+              minWidth: 0,
+              maxWidth: '100%',
+              minHeight: '44px',
+              borderRadius: '6px',
               backgroundColor: 'var(--glass-mid)',
-              border: '1px solid var(--border-soft)',
+              border: '1px solid var(--border-control)',
               color: 'var(--text-primary)',
+              fontFamily: 'var(--font-sans)',
               fontSize: '0.85rem',
-              outline: 'none',
               cursor: 'pointer',
             }}
           >
@@ -371,16 +389,25 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           </select>
 
           <button
+            type="button"
+            aria-label="Refresh"
+            aria-busy={isLoading}
+            disabled={isLoading}
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             onClick={fetchTestsAndMetrics}
             style={{
               padding: '10px',
-              borderRadius: '10px',
+              minWidth: '44px',
+              minHeight: '44px',
+              borderRadius: '6px',
               backgroundColor: 'var(--glass-mid)',
-              border: '1px solid var(--border-soft)',
+              border: '1px solid var(--border-control)',
               color: 'var(--text-secondary)',
-              cursor: 'pointer',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              opacity: isLoading ? 0.55 : 1,
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
             }}
             title="Refresh"
           >
@@ -391,13 +418,13 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
 
       {/* Tests Grid */}
       {isLoading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(360px, 100%), 1fr))', gap: '18px' }}>
+        <div role="status" aria-label="Loading behavioral tests" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(360px, 100%), 1fr))', gap: '18px' }}>
           {[1, 2, 3].map((i) => (
             <div
               key={i}
               style={{
                 height: '180px',
-                borderRadius: '14px',
+                borderRadius: '8px',
                 backgroundColor: 'var(--fill-soft-2)',
                 border: '1px solid var(--fill-soft)',
                 animation: 'pulse 1.5s infinite',
@@ -405,21 +432,21 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             />
           ))}
         </div>
-      ) : tests.length === 0 ? (
+      ) : error ? null : tests.length === 0 ? (
         <div
           style={{
             padding: '60px 24px',
             textAlign: 'center',
             backgroundColor: 'var(--fill-soft-2)',
             border: '1px dashed var(--border-soft)',
-            borderRadius: '16px',
+            borderRadius: '8px',
           }}
         >
           <div
             style={{
               width: '56px',
               height: '56px',
-              borderRadius: '14px',
+              borderRadius: '8px',
               backgroundColor: 'var(--accent-subtle)',
               border: '1px solid var(--accent-glow)',
               display: 'flex',
@@ -432,27 +459,30 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
             <Sliders size={28} />
           </div>
           <h3 style={{ margin: '0 0 8px 0', fontSize: '1.2rem', color: 'var(--text-main)' }}>
-            No Behavioral Tests Created Yet
+            {hasFilters ? 'No Matching Behavioral Tests' : 'No Behavioral Tests Created Yet'}
           </h3>
           <p style={{ margin: '0 auto 24px auto', maxWidth: '440px', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Simulate how your synthetic customer population responds to pricing, features, marketing messages, and competitor alternatives.
+            {hasFilters ? 'No simulations match the current search and filters.' : 'No behavioral simulations have been created for this study.'}
           </p>
-          <button
+          {!hasFilters && <button
+            type="button"
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             onClick={() => setShowCreateModal(true)}
             style={{
+              minHeight: '44px',
               padding: '12px 24px',
-              borderRadius: '10px',
-              backgroundColor: '#14B8A6',
+              borderRadius: '6px',
+              backgroundColor: 'var(--accent-teal)',
               border: 'none',
               color: 'var(--text-on-accent)',
+              fontFamily: 'var(--font-sans)',
               fontSize: '0.9rem',
               fontWeight: 700,
               cursor: 'pointer',
-              boxShadow: '0 0 20px var(--border-hover)',
             }}
           >
             Create First Behavioral Test
-          </button>
+          </button>}
         </div>
       ) : (
         <div
@@ -465,27 +495,35 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           {tests.map((test) => {
             const hasRun = test.latest_run != null;
             return (
-              <div
+              <button
                 key={test.id}
+                type="button"
+                aria-label={`View Results: ${test.name}`}
+                className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                 onClick={() => onOpenTest(test.id, test.latest_run?.id)}
                 style={{
                   padding: '22px',
-                  borderRadius: '14px',
+                  minWidth: 0,
+                  minHeight: '44px',
+                  width: '100%',
+                  textAlign: 'left',
+                  fontFamily: 'var(--font-sans)',
+                  color: 'var(--text-primary)',
+                  overflowWrap: 'anywhere',
+                  borderRadius: '8px',
                   backgroundColor: 'var(--glass-mid)',
-                  border: '1px solid var(--fill-soft-2)',
+                  border: '1px solid var(--border-control)',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  position: 'relative',
-                  overflow: 'hidden',
+                  transition: 'border-color 0.2s ease',
                 }}
               >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div
+                <span style={{ display: 'block', minWidth: 0, width: '100%' }}>
+                  <span style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <span style={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: '8px' }}>
+                      <span
                         style={{
                           padding: '6px',
                           borderRadius: '8px',
@@ -493,12 +531,12 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                         }}
                       >
                         {getTypeIcon(test.test_type)}
-                      </div>
+                      </span>
                       <span
                         style={{
                           fontSize: '0.72rem',
                           padding: '2px 8px',
-                          borderRadius: '999px',
+                          borderRadius: '6px',
                           backgroundColor: 'var(--accent-subtle)',
                           color: 'var(--accent-teal-bright)',
                           border: '1px solid var(--accent-glow)',
@@ -507,7 +545,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                       >
                         {test.test_type.replace('_', ' ')}
                       </span>
-                    </div>
+                    </span>
 
                     <span
                       style={{
@@ -528,54 +566,55 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                       />
                       {test.status}
                     </span>
-                  </div>
+                  </span>
 
-                  <h3 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                  <span style={{ display: 'block', margin: '0 0 6px 0', fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>
                     {test.name}
-                  </h3>
-                  <p style={{ margin: '0 0 16px 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4, minHeight: '36px' }}>
+                  </span>
+                  <span style={{ display: 'block', margin: '0 0 16px 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4, minHeight: '36px' }}>
                     {test.description || 'Behavioral evaluation scenario against this study\u2019s synthetic population.'}
-                  </p>
-                </div>
+                  </span>
+                </span>
 
-                <div>
+                <span style={{ display: 'block', minWidth: 0, width: '100%' }}>
                   {/* Latest Run Snapshot */}
                   {hasRun ? (
-                    <div
+                    <span
                       style={{
-                        padding: '12px',
-                        borderRadius: '10px',
-                        backgroundColor: 'var(--glass-mid)',
+                        padding: '12px 0',
+                        borderTop: '1px solid var(--border-subtle)',
                         marginBottom: '14px',
                         display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '12px',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                       }}
                     >
-                      <div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Latest Simulation</div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      <span>
+                        <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)' }}>Latest Simulation</span>
+                        <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                           {test.latest_run?.persona_count} personas evaluated
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Likelihood</div>
-                        <div
-                          style={{ fontSize: '0.95rem', fontWeight: 700, color: typeof test.latest_run?.average_likelihood === 'number' ? 'var(--accent-teal-bright)' : 'var(--text-muted)' }}
+                        </span>
+                      </span>
+                      <span style={{ textAlign: 'right' }}>
+                        <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)' }}>Likelihood</span>
+                        <span
+                          style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: typeof test.latest_run?.average_likelihood === 'number' ? 'var(--accent-teal-bright)' : 'var(--text-muted)' }}
                           title={typeof test.latest_run?.average_likelihood === 'number' ? undefined : 'Not measured yet for this run'}
                         >
                           {typeof test.latest_run?.average_likelihood === 'number'
                             ? `${Math.round(test.latest_run.average_likelihood * 100)}%`
                             : '—'}
-                        </div>
-                      </div>
-                    </div>
+                        </span>
+                      </span>
+                    </span>
                   ) : (
-                    <div
+                    <span
                       style={{
-                        padding: '10px 12px',
-                        borderRadius: '10px',
-                        backgroundColor: 'rgba(15, 23, 42, 0.4)',
+                        display: 'block',
+                        padding: '10px 0',
+                        borderTop: '1px solid var(--border-subtle)',
                         marginBottom: '14px',
                         fontSize: '0.78rem',
                         color: 'var(--text-secondary)',
@@ -583,20 +622,20 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
                       }}
                     >
                       Ready to execute first simulation run.
-                    </div>
+                    </span>
                   )}
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', minWidth: 0, alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       {test.run_count} {test.run_count === 1 ? 'run' : 'runs'} recorded
                     </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', color: 'var(--accent-teal)', fontWeight: 600 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', color: 'var(--accent-teal)', fontWeight: 600 }}>
                       <span>View Results</span>
                       <ArrowRight size={14} />
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    </span>
+                  </span>
+                </span>
+              </button>
             );
           })}
         </div>
@@ -609,7 +648,7 @@ export const BehavioralTestingView: React.FC<BehavioralTestingViewProps> = ({
           onClose={() => setShowCreateModal(false)}
           studyId={studyId}
           onTestCreated={(testId, runId) => {
-            fetchTestsAndMetrics();
+            void fetchTestsAndMetrics();
             onOpenTest(testId, runId);
           }}
         />

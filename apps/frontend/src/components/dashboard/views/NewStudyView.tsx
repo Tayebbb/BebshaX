@@ -1,16 +1,15 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect, useId } from 'react';
 import {
   Users,
   Compass,
   MessageSquare,
   BadgePercent,
-  ArrowUp,
   ArrowUpRight,
-  Loader2,
   AlertCircle,
-  Check,
 } from 'lucide-react';
 import { StudyType } from '../../../types';
+import { useRouteReady } from '../../../performance/routeTiming';
+import { Button } from '../../ui/Button';
 import './newstudy.css';
 
 interface NewStudyViewProps {
@@ -26,10 +25,12 @@ const EXAMPLE_PROMPTS = [
 ];
 
 export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpenExampleStudy }) => {
+  useRouteReady(true);
   const [prompt, setPrompt] = useState('');
   const [selectedType, setSelectedType] = useState<StudyType>('interviews');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const formId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const submissionRef = useRef({ active: false, pending: false });
 
@@ -42,7 +43,7 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpen
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      handleSubmit();
+      void handleSubmit();
     }
   };
 
@@ -54,6 +55,7 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpen
 
     if (!cleanPrompt) {
       setValidationError('Describe your product idea before starting the study.');
+      textareaRef.current?.focus();
       return;
     }
 
@@ -72,176 +74,151 @@ export const NewStudyView: React.FC<NewStudyViewProps> = ({ onStartStudy, onOpen
     }
   };
 
-  const handleCardClick = async (type: StudyType) => {
+  const handleTypeChange = (type: StudyType) => {
     const epoch = submissionRef.current;
     if (!epoch.active || epoch.pending) return;
     setSelectedType(type);
     setValidationError(null);
-    const cleanPrompt = prompt.trim();
-    if (cleanPrompt) {
-      epoch.pending = true;
-      setIsSubmitting(true);
-      try {
-        await onStartStudy(type, cleanPrompt);
-      } catch (error) {
-        if (epoch.active) {
-          setValidationError(error instanceof Error ? error.message : "We couldn't create your study. Please try again.");
-        }
-      } finally {
-        epoch.pending = false;
-        if (epoch.active) setIsSubmitting(false);
-      }
-    }
   };
 
   const studyTypes: {
     type: StudyType;
     icon: React.ReactNode;
-    iconBg: string;
-    iconColor: string;
     title: string;
     description: string;
   }[] = [
     {
       type: 'interviews',
-      icon: <Users size={19} />,
-      iconBg: 'var(--accent-subtle)',
-      iconColor: 'var(--accent-teal)',
+      icon: <Users size={17} aria-hidden="true" />,
       title: 'User Interviews',
-      description: 'Simulate in-depth discovery interviews with synthetic personas to reveal daily workflows and unarticulated pain points.',
+      description: 'Explore hypothetical routines, needs, and pain points through synthetic interviews.',
     },
     {
       type: 'landing_page_test',
-      icon: <Compass size={19} />,
-      iconBg: 'rgba(34, 211, 238, 0.15)',
-      iconColor: 'var(--accent-cyan)',
+      icon: <Compass size={17} aria-hidden="true" />,
       title: 'Concept & Demand',
-      description: 'Validate product-market fit, value proposition desirability, and core feature hypotheses before writing code.',
+      description: 'Explore possible reactions to a concept, not measured demand or product-market fit.',
     },
     {
       type: 'message_testing',
-      icon: <MessageSquare size={19} />,
-      iconBg: 'var(--accent-subtle)',
-      iconColor: 'var(--accent-teal-bright)',
+      icon: <MessageSquare size={17} aria-hidden="true" />,
       title: 'Message Testing',
-      description: 'Test pitch clarity, value proposition framing, and objection handling across customer demographic segments.',
+      description: 'Explore how synthetic personas might interpret a message and question its claims.',
     },
     {
       type: 'ab_test',
-      icon: <BadgePercent size={19} />,
-      iconBg: 'rgba(34, 211, 238, 0.15)',
-      iconColor: 'var(--accent-cyan)',
+      icon: <BadgePercent size={17} aria-hidden="true" />,
       title: 'Pricing & WTP',
-      description: 'Validate price elasticity, subscription ceilings, and tier packaging against each persona\u2019s stated budget constraints.',
+      description: 'Explore hypothetical pricing trade-offs, not measured willingness to pay or price elasticity.',
     },
   ];
 
   return (
     <div className="ns-root">
-      <div className="ns-ambient" aria-hidden="true" />
       <div className="ns-inner">
-        <div className="ns-kicker">New research study</div>
-        <h1 className="ns-title">What do you want to find out?</h1>
-        <p className="ns-sub">Ask anything about your business idea, or pick any study type below.</p>
+        <header className="ns-header">
+          <h1 className="ns-title">What do you want to find out?</h1>
+          <p className="ns-sub">Explore questions and assumptions with synthetic personas.</p>
+        </header>
 
-        {validationError && (
-          <div role="alert" className="ns-error">
-            <AlertCircle size={17} style={{ flexShrink: 0 }} aria-hidden="true" />
-            <span>{validationError}</span>
-          </div>
-        )}
+        <form onSubmit={handleSubmit} className="ns-form">
+          <fieldset className="ns-types" disabled={isSubmitting}>
+            <legend className="ns-label">Study type</legend>
+            <div className="ns-modes" role="radiogroup" aria-label="Study type selection">
+              {studyTypes.map((item) => (
+                <label key={item.type} className="ns-mode">
+                  <input
+                    type="radio"
+                    name={`${formId}-type`}
+                    value={item.type}
+                    checked={selectedType === item.type}
+                    onChange={() => handleTypeChange(item.type)}
+                    aria-label={item.title}
+                    aria-describedby={`${formId}-mode-description`}
+                  />
+                  <span className="ns-mode-label">{item.icon}<span>{item.title}</span></span>
+                </label>
+              ))}
+            </div>
+            <p className="ns-mode-description" id={`${formId}-mode-description`}>
+              {studyTypes.find((item) => item.type === selectedType)?.description}
+            </p>
+          </fieldset>
 
-        <form onSubmit={handleSubmit} className="ns-composer">
-          <textarea
-            ref={textareaRef}
-            className="ns-textarea"
-            style={{ outline: 'none', border: 'none', boxShadow: 'none' }}
-            value={prompt}
-            onChange={(e) => {
-              setPrompt(e.target.value);
-              if (validationError) setValidationError(null);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Describe your business idea, target audience, or pricing hypothesis (e.g., An AI study planner for students with a 250 BDT/month tier)..."
-            rows={3}
-            aria-label="Business idea description"
-          />
-          <div className="ns-composer-bar">
-            <span className="ns-hint">
-              <span className="ns-kbd">Ctrl</span>+<span className="ns-kbd">Enter</span> to start
-            </span>
-            <button
-              type="submit"
-              className="ns-send"
-              disabled={isSubmitting || !prompt.trim()}
-              aria-label={isSubmitting ? 'Creating study...' : 'Start research study'}
-            >
-              {isSubmitting ? (
-                <Loader2 size={19} className="animate-spin" aria-hidden="true" />
-              ) : (
-                <ArrowUp size={19} strokeWidth={2.5} aria-hidden="true" />
-              )}
-            </button>
+          <div className="ns-composer">
+            <label className="ns-label" htmlFor={`${formId}-question`}>Research question</label>
+            <p className="ns-question-hint" id={`${formId}-question-hint`}>
+              Your idea, intended audience, and the uncertainty behind it.
+            </p>
+            <textarea
+              ref={textareaRef}
+              id={`${formId}-question`}
+              className="ns-textarea"
+              value={prompt}
+              readOnly={isSubmitting}
+              onChange={(event) => {
+                setPrompt(event.target.value);
+                if (validationError) setValidationError(null);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="Describe your business idea or research question..."
+              rows={4}
+              aria-label="Business idea description"
+              aria-invalid={!!validationError}
+              aria-describedby={`${formId}-question-hint${validationError ? ` ${formId}-error` : ''}`}
+            />
+            {validationError && (
+              <div role="alert" className="ns-error" id={`${formId}-error`}>
+                <AlertCircle size={17} aria-hidden="true" />
+                <span>{validationError}</span>
+              </div>
+            )}
+            <div className="ns-composer-bar">
+              <p className="ns-disclosure">Synthetic research, not observed customers or validated demand.</p>
+              <Button
+                type="submit"
+                variant="primary"
+                className="ns-submit"
+                loading={isSubmitting}
+                disabled={!prompt.trim()}
+                aria-label={isSubmitting ? 'Creating study...' : 'Start research study'}
+                trailingIcon={<ArrowUpRight size={17} aria-hidden="true" />}
+              >
+                {isSubmitting ? 'Creating study...' : 'Start research study'}
+              </Button>
+            </div>
           </div>
         </form>
 
-        <div className="ns-examples" aria-label="Example ideas">
-          {EXAMPLE_PROMPTS.map((ex) => (
-            <button
-              key={ex}
-              type="button"
-              className="ns-example"
-              disabled={isSubmitting}
-              onClick={() => {
-                setPrompt(ex);
-                setValidationError(null);
-                textareaRef.current?.focus();
-              }}
-              title={ex}
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
+        <section className="ns-examples" aria-label="Example ideas">
+          <h2 className="ns-section-title">Example questions</h2>
+          <ul className="ns-example-list">
+            {EXAMPLE_PROMPTS.map((example) => (
+              <li key={example}>
+                <button
+                  type="button"
+                  className="ns-example"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    setPrompt(example);
+                    setValidationError(null);
+                    textareaRef.current?.focus();
+                  }}
+                >
+                  <span>{example}</span>
+                  <ArrowUpRight size={15} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         {onOpenExampleStudy && (
-          <button type="button" className="ns-demo-link" onClick={onOpenExampleStudy}>
+          <button type="button" className="ns-demo-link" disabled={isSubmitting} onClick={onOpenExampleStudy}>
             See a finished example study
             <ArrowUpRight size={14} aria-hidden="true" />
           </button>
         )}
-
-        <div className="ns-section-label">Study type</div>
-        <div className="ns-grid" role="group" aria-label="Study type selection">
-          {studyTypes.map((item) => {
-            const isSelected = selectedType === item.type;
-            return (
-              <button
-                key={item.type}
-                type="button"
-                className={`ns-card${isSelected ? ' ns-selected' : ''}`}
-                aria-pressed={isSelected}
-                disabled={isSubmitting}
-                onClick={() => handleCardClick(item.type)}
-              >
-                <span className="ns-check" aria-hidden="true">
-                  <Check size={12} strokeWidth={3} />
-                </span>
-                <span
-                  className="ns-card-icon"
-                  style={{ background: item.iconBg, color: item.iconColor }}
-                  aria-hidden="true"
-                >
-                  {item.icon}
-                </span>
-                <span>
-                  <h2 className="ns-card-title">{item.title}</h2>
-                  <p className="ns-card-desc">{item.description}</p>
-                </span>
-              </button>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

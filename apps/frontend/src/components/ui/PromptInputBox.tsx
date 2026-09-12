@@ -54,6 +54,7 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
   const [dragging, setDragging] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
   const innerRef = useRef<HTMLTextAreaElement | null>(null);
+  const composingRef = useRef(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   const setRefs = (el: HTMLTextAreaElement | null) => {
@@ -118,9 +119,10 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
     clearFile();
   };
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (composingRef.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
       submit();
     }
   };
@@ -186,6 +188,8 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
           value={value}
           onChange={(e) => onValueChange(e.target.value)}
           onKeyDown={onKeyDown}
+          onCompositionStart={() => { composingRef.current = true; }}
+          onCompositionEnd={() => { composingRef.current = false; }}
           placeholder={placeholder}
           disabled={disabled}
           title={disabled ? disabledReason : undefined}

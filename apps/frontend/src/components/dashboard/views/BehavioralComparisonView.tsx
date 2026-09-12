@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { BehavioralTestRun } from '../../../types';
 import { api } from '../../../services/api';
+import { useRequestScope } from '../../../utils/useRequestScope';
+import { useRouteReady } from '../../../performance/routeTiming';
 
 interface BehavioralComparisonViewProps {
   studyId: string;
@@ -21,28 +23,42 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
 }) => {
   const [runs, setRuns] = useState<BehavioralTestRun[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const selectionKey = JSON.stringify(runIds);
+  const scopeRef = useRequestScope([studyId, selectionKey]);
+  const requestRef = useRef(0);
+  useRouteReady(!isLoading, error ? 'error' : runs.length ? 'content' : 'empty');
+
+  const fetchComparison = async () => {
+    const scope = scopeRef.current;
+    const request = ++requestRef.current;
+    const isCurrent = () => scope.active && request === requestRef.current;
+    setIsLoading(true);
+    setRuns([]);
+    setError(null);
+    try {
+      const res = await api.compareBehavioralRuns(studyId, [...runIds]);
+      if (isCurrent()) setRuns(res.runs || []);
+    } catch (failure) {
+      if (isCurrent()) setError(failure instanceof Error ? failure.message : 'Run comparison unavailable');
+    } finally {
+      if (isCurrent()) setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchComparison = async () => {
-      setIsLoading(true);
-      try {
-        const res = await api.compareBehavioralRuns(studyId, runIds);
-        setRuns(res.runs || []);
-      } catch {
-        // Soft error
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchComparison();
-  }, [studyId, runIds]);
+    void fetchComparison();
+    return () => { requestRef.current += 1; };
+  }, [studyId, selectionKey]);
 
   return (
-    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', margin: '0 auto', width: '100%', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', minWidth: 0, margin: '0 auto', width: '100%', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
       {/* Top Header */}
       <div style={{ marginBottom: '24px' }}>
         <button
+          type="button"
           onClick={onBack}
+          className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -53,6 +69,7 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
             fontSize: '0.88rem',
             cursor: 'pointer',
             padding: 0,
+            minHeight: '44px',
             marginBottom: '16px',
           }}
         >
@@ -77,7 +94,7 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
       </div>
 
       {isLoading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '16px' }}>
+        <div role="status" aria-label="Loading simulation comparison" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '16px' }}>
           {[1, 2].map((i) => (
             <div
               key={i}
@@ -90,7 +107,10 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
             />
           ))}
         </div>
-      ) : runs.length === 0 ? (
+      ) : error ? <div role="alert" className="bx-alert bx-alert--error">
+        <span>{error}</span>
+        <button type="button" disabled={isLoading} className="bx-btn bx-btn-secondary" onClick={() => void fetchComparison()}>Retry Comparison</button>
+      </div> : runs.length === 0 ? (
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
           No runs found for comparison.
         </div>
@@ -98,7 +118,7 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(${Math.min(runs.length, 3)}, 1fr)`,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))',
             gap: '20px',
             overflowX: 'auto',
           }}
@@ -110,8 +130,9 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
                 key={run.id}
                 style={{
                   padding: '24px',
-                  borderRadius: '16px',
-                  backgroundColor: 'var(--glass-mid)',
+                  minWidth: 0,
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--bg-card)',
                   border: '1px solid var(--fill-soft-2)',
                   display: 'flex',
                   flexDirection: 'column',
@@ -132,7 +153,7 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
                 </div>
 
                 {/* Score */}
-                <div style={{ padding: '16px', backgroundColor: 'var(--glass-mid)', borderRadius: '12px', textAlign: 'center' }}>
+                <div style={{ padding: '16px 0', borderTop: '1px solid var(--border-soft)', borderBottom: '1px solid var(--border-soft)', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Acceptance Likelihood</div>
                   <div
                     style={{ fontSize: '2.2rem', fontWeight: 800, color: typeof metrics?.average_likelihood_percentage === 'number' || typeof metrics?.average_likelihood === 'number' ? 'var(--accent-teal-bright)' : 'var(--text-muted)' }}
@@ -156,11 +177,11 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
                     <span>Top Risks</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {run.risks?.slice(0, 2).map((r, i) => (
+                    {run.risks?.length ? run.risks.slice(0, 2).map((r, i) => (
                       <div key={i} style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card-hover)', borderRadius: '6px', fontSize: '0.78rem', color: 'var(--text-primary)' }}>
                         {r.title}
                       </div>
-                    )) || <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>None</div>}
+                    )) : <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>None</div>}
                   </div>
                 </div>
 
@@ -171,11 +192,11 @@ export const BehavioralComparisonView: React.FC<BehavioralComparisonViewProps> =
                     <span>Top Drivers</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {run.opportunities?.slice(0, 2).map((o, i) => (
+                    {run.opportunities?.length ? run.opportunities.slice(0, 2).map((o, i) => (
                       <div key={i} style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card-hover)', borderRadius: '6px', fontSize: '0.78rem', color: 'var(--text-primary)' }}>
                         {o.title}
                       </div>
-                    )) || <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>None</div>}
+                    )) : <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>None</div>}
                   </div>
                 </div>
               </div>
