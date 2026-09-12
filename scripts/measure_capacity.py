@@ -4,7 +4,7 @@ Replays a configurable mix of PERSONA_GENERATION / PERSONA_INTERVIEW-shaped
 requests through the LIVE router and reports tokens + requests per concrete
 provider, so the PROVIDER_QUOTAS table can be tuned against reality.
 
-Usage: python scripts/measure_capacity.py [--requests 6] [--concurrency 2]
+Usage: python scripts/measure_capacity.py --allow-network [--requests 6] [--concurrency 2]
 """
 
 from __future__ import annotations
@@ -16,23 +16,26 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bebshax.llm import ChatMessage, LLMRequest, TaskType
-from bebshax.llm.adapters.factory import build_default_adapters
-from bebshax.llm.router import PoolRouter
+from scripts.ops.remote_probe import synthetic_probe_router
 
 GEN_PROMPT = "Sketch one realistic customer persona (3 sentences) for a rural mobile-savings app."
 INT_PROMPT = "As a rice farmer persona, answer in 2 sentences: how do you save after harvest?"
 
 
-async def main() -> int:
+async def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--requests", type=int, default=6)
     parser.add_argument("--concurrency", type=int, default=2)
-    args = parser.parse_args()
+    parser.add_argument("--allow-network", action="store_true")
+    args = parser.parse_args(argv)
+    if not args.allow_network:
+        parser.error("Capacity measurement requires explicit --allow-network consent")
+    if not 1 <= args.requests <= 20 or not 1 <= args.concurrency <= 2:
+        parser.error("The reviewed sample budget is 1..20 requests and 1..2 concurrent calls")
 
-    adapters = build_default_adapters()
-    router = PoolRouter(adapters)
     sem = asyncio.Semaphore(args.concurrency)
     stats: dict[str, dict[str, int]] = defaultdict(lambda: {"requests": 0, "tokens": 0})
     failures = 0
@@ -62,9 +65,12 @@ async def main() -> int:
             stats[result.provider]["tokens"] += usage
             print(f"  #{i} {task.value[:18]:<18} -> {result.provider}/{result.model} ({usage} tok)")
 
-    await asyncio.gather(*(one(i) for i in range(args.requests)))
-    for adapter in adapters.values():
-        await adapter.aclose()
+    try:
+        async with synthetic_probe_router() as router:
+            await asyncio.gather(*(one(i) for i in range(args.requests)))
+    except Exception as error:
+        print(f"CAPACITY BLOCKED: {type(error).__name__}")
+        return 1
 
     print("\nProvider capacity sample:")
     print(f"{'provider':<16}{'requests':>9}{'tokens':>9}")

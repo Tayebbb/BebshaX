@@ -37,8 +37,11 @@ dev = [
     "pytest-cov>=5.0",
     "aiosqlite>=0.20.0",
     "ruff>=0.6",
-    # CI vulnerability scan of the resolved environment (advisory step).
-    "pip-audit>=2.7",
+    "pip-audit==2.10.1",
+    "pyright==1.1.412",
+    "PyYAML==6.0.3",
+    "setuptools==84.0.0",
+    "wheel==0.48.0",
 ]
 
 [tool.setuptools.packages.find]

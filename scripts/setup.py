@@ -5,14 +5,13 @@ Run with the SYSTEM python from the repo root:
 
     python scripts/setup.py [--profile minimal] [--skip-docker] [--skip-datasets] [--skip-frontend]
 
-Idempotent: every step detects "already done" and skips. Fails loudly on the
-first hard error; never writes secrets anywhere except the local .env.
+Installs the reviewed dependency graph. Database changes and dataset preparation
+require explicit options. Never reads or writes an environment/credential file.
 """
 
 from __future__ import annotations
 
 import argparse
-import secrets
 import shutil
 import subprocess
 import sys
@@ -37,8 +36,8 @@ def run(cmd: list[str | Path], cwd: Path = ROOT, check: bool = True) -> int:
 
 def ensure_python_version() -> None:
     step("Python version")
-    if sys.version_info < (3, 12):
-        sys.exit(f"Python 3.12+ required, found {sys.version.split()[0]}")
+    if sys.version_info[:2] != (3, 12):
+        sys.exit(f"The frozen release requires Python 3.12, found {sys.version.split()[0]}")
     print(f"OK: {sys.version.split()[0]}")
 
 
@@ -51,48 +50,14 @@ def ensure_venv() -> None:
 
 
 def install_backend() -> None:
-    step("Backend install (editable + dev extras)")
-    run([
-        VENV_PY, "-m", "pip", "install",
-        "-e", str(ROOT / "ml_persona"),
-        "-e", str(ROOT / "apps" / "backend") + "[dev]",
-    ])
+    step("Backend install (reviewed hash lock + local packages)")
+    run([VENV_PY, str(ROOT / "scripts" / "ops" / "dependencies.py"), "install"])
 
 
-def ensure_env_file() -> None:
-    step("Secrets (.env)")
-    env_path = ROOT / ".env"
-    example = ROOT / ".env.example"
-    if not env_path.exists():
-        if not example.exists():
-            sys.exit(".env.example missing - cannot bootstrap .env")
-        shutil.copyfile(example, env_path)
-        print("Created .env from .env.example")
-    text = env_path.read_text(encoding="utf-8")
-    needs_secret = True
-    for line in text.splitlines():
-        if line.startswith("BEBSHAX_JWT_SECRET="):
-            value = line.split("=", 1)[1].strip()
-            # only replace the shipped placeholder or a too-short value —
-            # never silently rotate a legitimate secret
-            needs_secret = len(value) < 32 or value.startswith("<")
-            break
-    if needs_secret:
-        token = secrets.token_urlsafe(48)
-        lines = []
-        replaced = False
-        for line in text.splitlines():
-            if line.startswith("BEBSHAX_JWT_SECRET="):
-                lines.append(f"BEBSHAX_JWT_SECRET={token}")
-                replaced = True
-            else:
-                lines.append(line)
-        if not replaced:
-            lines.append(f"BEBSHAX_JWT_SECRET={token}")
-        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print("Generated a fresh BEBSHAX_JWT_SECRET (local .env only)")
-    else:
-        print("OK: BEBSHAX_JWT_SECRET already set")
+def report_configuration() -> None:
+    step("Operator configuration")
+    print("Supply BEBSHAX_DATABASE_URL and BEBSHAX_JWT_SECRET explicitly before starting the API.")
+    print("No credential files are read, created, copied, or rotated by this helper.")
 
 
 def start_database(skip_docker: bool) -> None:
@@ -110,11 +75,15 @@ def start_database(skip_docker: bool) -> None:
         return
 
 
-def run_migrations() -> None:
+def run_migrations(url_env: str, confirmation: str, allow_remote: bool) -> None:
     step("Migrations (alembic upgrade head)")
-    rc = run([VENV_PY, "-m", "alembic", "upgrade", "head"], cwd=ROOT / "apps" / "backend", check=False)
+    command = [VENV_PY, str(ROOT / "scripts/migrate_db.py"), "--url-env", url_env,
+               "--confirm-target", confirmation, "--apply"]
+    if allow_remote:
+        command.append("--allow-remote-target")
+    rc = run(command, check=False)
     if rc != 0:
-        sys.exit("alembic upgrade failed - check BEBSHAX_DATABASE_URL / database availability")
+        sys.exit("Migration gate failed; verify the explicitly selected direct target and approvals")
 
 
 def setup_datasets(profile: str, skip: bool) -> None:
@@ -141,34 +110,46 @@ def install_frontend(skip: bool) -> None:
         return
     npm = shutil.which("npm")
     if npm is None:
-        print("npm not found - install Node.js 20+ to run the frontend")
+        print("npm not found - the reviewed release uses Node.js 24.20.0 and npm 11.19.0")
         return
-    run([npm, "ci"], cwd=ROOT / "apps" / "frontend")
+    run([npm, "ci", "--workspaces", "--include-workspace-root"], cwd=ROOT)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", default="minimal", help="dataset profile (minimal/development/evaluation/full)")
+    parser.add_argument("--profile", default=None, help="explicit reviewed dataset profile; omitted means no dataset work")
     parser.add_argument("--skip-docker", action="store_true")
     parser.add_argument("--skip-datasets", action="store_true")
     parser.add_argument("--skip-frontend", action="store_true")
+    parser.add_argument("--start-database", action="store_true")
+    parser.add_argument("--migrate", action="store_true")
+    parser.add_argument("--migration-url-env")
+    parser.add_argument("--confirm-migration-target")
+    parser.add_argument("--allow-remote-migration", action="store_true")
+    parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()
 
+    if args.migrate and not (args.migration_url_env and args.confirm_migration_target):
+        parser.error("--migrate requires --migration-url-env and --confirm-migration-target before setup runs")
     ensure_python_version()
     ensure_venv()
     install_backend()
-    ensure_env_file()
-    start_database(args.skip_docker)
-    run_migrations()
-    setup_datasets(args.profile, args.skip_datasets)
+    report_configuration()
+    if args.start_database and not args.skip_docker:
+        start_database(False)
+    if args.migrate:
+        run_migrations(args.migration_url_env, args.confirm_migration_target, args.allow_remote_migration)
+    if args.profile is not None and not args.skip_datasets:
+        setup_datasets(args.profile, False)
     install_frontend(args.skip_frontend)
-    run_tests()
+    if args.verify:
+        run_tests()
 
     step("Done")
     print("Start everything:  node scripts/dev.js")
     print("API health:        http://localhost:8000/api/health")
     print("Frontend:          http://localhost:5173")
-    print("Demo mode & offline drill: docs/DEMO.md")
+    print("Release prerequisites: docs/SETUP.md (remote inference requires connectivity and quota)")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-import { spawn, spawnSync, execSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -6,70 +6,17 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
+if (process.env.NODE_ENV === 'production' || ['production', 'staging'].includes(process.env.BEBSHAX_ENVIRONMENT)) {
+  process.stderr.write('The dev launcher is not a production supervisor. Use the reviewed release images.\n');
+  process.exit(1);
+}
+
 console.log('\x1b[36m%s\x1b[0m', '════════════════════════════════════════════════════════════');
 console.log('\x1b[36m%s\x1b[0m', '🚀 BebshaX Full-Stack Platform Launcher (Backend + Frontend)');
 console.log('\x1b[36m%s\x1b[0m', '════════════════════════════════════════════════════════════');
 
-// 1. Attempt to start Docker Database Container (db on port 5433)
-console.log('\x1b[33m%s\x1b[0m', '🐳 Checking Docker Database Container (db on port 5433)...');
-try {
-  // --wait blocks until the pg_isready healthcheck passes — without it the
-  // backend races a cold-booting Postgres and fails its first connections.
-  const dockerResult = execSync('docker compose up -d --wait db', {
-    cwd: rootDir,
-    stdio: 'pipe',
-    encoding: 'utf-8',
-  });
-  console.log('\x1b[32m%s\x1b[0m', '✅ Database container is running on localhost:5433');
-  if (dockerResult && dockerResult.trim()) {
-    console.log(`   ${dockerResult.trim()}`);
-  }
-} catch {
-  console.log('\x1b[33m%s\x1b[0m', 'ℹ️ Local Docker container skipped or daemon not responding.');
-  console.log('\x1b[33m%s\x1b[0m', '   Using configured cloud database from .env / Neon Postgres.');
-}
-
-// Warn-only demo-readiness hint — never blocks or exits (daily-dev tool).
-// Mirrors backend env precedence: real environment beats .env. Prints host:port
-// only, never credentials or full URLs.
-try {
-  const dotenv = {};
-  const envPath = path.join(rootDir, '.env');
-  if (fs.existsSync(envPath)) {
-    for (const raw of fs.readFileSync(envPath, 'utf-8').split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith('#') || !line.includes('=')) continue;
-      const idx = line.indexOf('=');
-      dotenv[line.slice(0, idx).trim()] = line.slice(idx + 1).trim().replace(/^['"]|['"]$/g, '');
-    }
-  }
-  const envVal = (name) => process.env[name] ?? dotenv[name] ?? '';
-  // Default mirrors bebshax/config.py Settings.database_url
-  const dbUrl = envVal('BEBSHAX_DATABASE_URL') || 'postgresql+asyncpg://bebshax:bebshax@localhost:5433/bebshax';
-  let dbHost = '?';
-  let dbPort = '?';
-  try {
-    const parsed = new URL(dbUrl.replace(/^postgresql\+[a-z0-9]+:/i, 'postgresql:'));
-    dbHost = parsed.hostname || '?';
-    dbPort = parsed.port || '5432';
-  } catch {}
-  const dbLocal = (dbHost === 'localhost' || dbHost === '127.0.0.1') && dbPort === '5433';
-  const demoOn = ['true', '1', 'yes', 'on'].includes(envVal('BEBSHAX_DEMO_MODE').toLowerCase());
-  if (!dbLocal || !demoOn) {
-    const reasons = [];
-    if (!dbLocal) reasons.push(`database is ${dbHost}:${dbPort} (offline demo needs localhost:5433)`);
-    if (!demoOn) reasons.push('BEBSHAX_DEMO_MODE is not true');
-    console.log('\x1b[33m%s\x1b[0m', '┌────────────────────────────────────────────────────────────');
-    console.log('\x1b[33m%s\x1b[0m', '│ ⚠ NOT demo-ready (fine for daily dev):');
-    for (const reason of reasons) {
-      console.log('\x1b[33m%s\x1b[0m', `│   • ${reason}`);
-    }
-    console.log('\x1b[33m%s\x1b[0m', '│   run: .venv\\Scripts\\python scripts\\demo_preflight.py');
-    console.log('\x1b[33m%s\x1b[0m', '└────────────────────────────────────────────────────────────');
-  }
-} catch {
-  // hint is best-effort only — never interfere with startup
-}
+process.stdout.write('Development only. Database startup/migrations and operator credentials are explicit prerequisites.\n');
+process.stdout.write('Live conversation uses approved remote providers; CPU selection and cached examples are separate.\n');
 
 // 2. Locate Python executable in virtual environment
 let pythonCmd = 'python';
@@ -138,8 +85,8 @@ backend.on('exit', (code, signal) => {
 
 // 4. Start Vite Frontend
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const frontend = spawn(npmCmd, ['run', 'dev'], {
-  cwd: path.join(rootDir, 'apps', 'frontend'),
+const frontend = spawn(npmCmd, ['run', 'dev', '--workspace', 'apps/frontend', '--', '--host', '127.0.0.1', '--strictPort'], {
+  cwd: rootDir,
   shell: true,
   stdio: 'pipe',
 });

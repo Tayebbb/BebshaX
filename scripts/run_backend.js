@@ -1,4 +1,4 @@
-import { spawn, execSync } from 'child_process';
+import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -6,42 +6,23 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
-console.log('\x1b[36m%s\x1b[0m', '═══════════════════════════════════════════════════');
-console.log('\x1b[36m%s\x1b[0m', '🚀 BebshaX Backend & Database Launcher');
-console.log('\x1b[36m%s\x1b[0m', '═══════════════════════════════════════════════════');
-
-// 1. Attempt to start Docker Database Container (db on port 5433)
-console.log('\x1b[33m%s\x1b[0m', '🐳 Starting Docker Database Container (db on port 5433)...');
-try {
-  const dockerResult = execSync('docker compose up -d db', {
-    cwd: rootDir,
-    stdio: 'pipe',
-    encoding: 'utf-8',
-  });
-  console.log('\x1b[32m%s\x1b[0m', '✅ Database container is running on localhost:5433');
-  if (dockerResult && dockerResult.trim()) {
-    console.log(`   ${dockerResult.trim()}`);
-  }
-} catch (err) {
-  console.log('\x1b[33m%s\x1b[0m', 'ℹ️ Local Docker container skipped or daemon not responding.');
-  console.log('\x1b[33m%s\x1b[0m', '   Using configured cloud database from .env / Neon Postgres.');
+if (process.env.NODE_ENV === 'production' || ['production', 'staging'].includes(process.env.BEBSHAX_ENVIRONMENT)) {
+  process.stderr.write('The backend development launcher cannot run in production or staging. Use npm start.\n');
+  process.exit(1);
 }
 
-// 2. Locate Python executable in virtual environment
-let pythonCmd = 'python';
 const venvWin = path.join(rootDir, '.venv', 'Scripts', 'python.exe');
 const venvUnix = path.join(rootDir, '.venv', 'bin', 'python');
+const pythonCmd = [venvWin, venvUnix].find((candidate) => fs.existsSync(candidate));
 
-if (fs.existsSync(venvWin)) {
-  pythonCmd = venvWin;
-} else if (fs.existsSync(venvUnix)) {
-  pythonCmd = venvUnix;
+if (!pythonCmd) {
+  process.stderr.write('Missing project virtual environment. Follow docs/SETUP.md before starting the API.\n');
+  process.exit(1);
 }
 
-console.log('\x1b[36m%s\x1b[0m', `🚀 Starting FastAPI Backend at http://127.0.0.1:8000 ...`);
+process.stdout.write('Development API: http://127.0.0.1:8000. Database and migrations must already be ready.\n');
 
-// 3. Start Backend uvicorn server with proper quoting for spaces in paths
-const uvicornArgs = ['-m', 'uvicorn', 'bebshax.main:app', '--host', '127.0.0.1', '--port', '8000', '--reload'];
+const uvicornArgs = ['-m', 'uvicorn', 'bebshax.main:app', '--host', '127.0.0.1', '--port', '8000', '--reload', '--reload-dir', 'apps/backend/bebshax'];
 const backend = spawn(pythonCmd, uvicornArgs, {
   cwd: rootDir,
   shell: false,
@@ -49,16 +30,13 @@ const backend = spawn(pythonCmd, uvicornArgs, {
   env: { ...process.env, PYTHONUNBUFFERED: '1' },
 });
 
-backend.on('error', (err) => {
-  console.error('\x1b[31m[Backend Error]\x1b[0m', err);
+backend.on('error', () => {
+  process.stderr.write('Backend process could not start. Check the project environment.\n');
+  process.exitCode = 1;
 });
 
-function cleanup() {
-  console.log('\n\x1b[33m%s\x1b[0m', '🛑 Stopping backend server...');
-  try { backend.kill(); } catch {}
-  process.exit();
-}
-
-process.on('SIGINT', cleanup);
-process.on('SIGTERM', cleanup);
-process.on('exit', cleanup);
+backend.on('exit', (code, signal) => {
+  process.exitCode = code ?? (signal === 'SIGINT' ? 130 : 1);
+});
+process.on('SIGINT', () => backend.kill('SIGINT'));
+process.on('SIGTERM', () => backend.kill('SIGTERM'));

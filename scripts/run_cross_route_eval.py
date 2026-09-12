@@ -10,12 +10,12 @@ engine's contradiction detector, and full provenance per answer.
   python scripts/run_cross_route_eval.py --fake --personas 3 --questions 5 \
       --routes fakeA/m1,fakeB/m2 --repeats 2 --seed 42
 
-  # real routes: the local model vs the free pool. freellmpool is ONE virtual
+    # real routes: the independent remote tiers. freellmpool is ONE virtual
   # candidate ("freellmpool/auto"); the concrete provider it picked (llm7,
   # kilo, …) is recorded per row in served_by. Requesting "llm7/codestral-latest"
   # directly cannot be honoured (no such candidate) and is reported as such.
   python scripts/run_cross_route_eval.py --personas 3 --questions 5 \
-      --routes ollama/llama3.2:3b,freellmpool/auto --repeats 3
+    --routes freellmpool/auto,openrouter/* --repeats 3 --allow-network
 
 Writes <output>.json (rows + aggregates + bootstrap CIs) and a sibling .md
 summary. Route preference is advisory in PoolRouter: rows record which route
@@ -32,6 +32,7 @@ import json
 import os
 import sys
 from datetime import datetime, timezone
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -42,6 +43,8 @@ REPO = Path(__file__).resolve().parents[1]
 BACKEND = REPO / "apps" / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
 os.environ.setdefault("BEBSHAX_JWT_SECRET", "x" * 40)  # config import guard for scripts
 os.environ.setdefault("FREELLMPOOL_CONFIG", str(REPO / "providers.toml"))
 
@@ -52,15 +55,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--personas", type=int, default=3, help=f"number of personas (1..{len(PERSONA_BANK)})")
     parser.add_argument("--questions", type=int, default=len(QUESTION_BANK), help=f"number of questions (1..{len(QUESTION_BANK)})")
-    parser.add_argument("--routes", default="ollama/llama3.2:3b,freellmpool/auto", help="comma-separated provider/model routes ('*' = any); freellmpool exposes the single virtual route freellmpool/auto")
+    parser.add_argument("--routes", default="freellmpool/auto,openrouter/*", help="comma-separated approved remote provider/model routes ('*' = any)")
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default=None, help="JSON path (default data/metadata/cross_route_<ts>.json)")
     parser.add_argument("--fake", action="store_true", help="scripted FakeAdapter routes - offline pipeline check, not a model measurement")
+    parser.add_argument("--allow-network", action="store_true", help="explicitly permit real remote inference")
     return parser.parse_args(argv)
 
 
 async def _run(args: argparse.Namespace) -> tuple[CrossRouteReport, Path, Path]:
+    if not args.fake and not args.allow_network:
+        raise SystemExit("Real inference requires --allow-network; --fake is the no-network check")
     from bebshax.evaluation.cross_route_consistency import (
         PERSONA_BANK,
         QUESTION_BANK,
@@ -75,38 +81,30 @@ async def _run(args: argparse.Namespace) -> tuple[CrossRouteReport, Path, Path]:
     if not 1 <= args.questions <= len(QUESTION_BANK):
         raise SystemExit(f"--questions must be 1..{len(QUESTION_BANK)}")
     routes = [Route.parse(spec) for spec in args.routes.split(",") if spec.strip()]
+    if not args.fake and any(route.provider not in {"freellmpool", "openrouter"} for route in routes):
+        raise SystemExit("Only the approved independent remote tiers may be evaluated")
     if len(routes) < 2:
         raise SystemExit("--routes needs at least two provider/model routes to compare")
     personas = list(PERSONA_BANK[: args.personas])
     questions = list(QUESTION_BANK[: args.questions])
 
     notes: list[str] = []
-    adapters = None
-    if args.fake:
-        llm = scripted_router(routes)
-        notes.append(
-            "SIMULATED: replies are scripted from the identity card by ScriptedRouteAdapter — "
-            "this run validates the pipeline and metric code, it says nothing about any model."
-        )
-    else:
-        # Mirrors bebshax.main wiring minus DB/sink/ledger — provenance lands in
-        # the report rows instead of llm_requests (no database in this script).
-        from bebshax.llm.adapters.factory import build_default_adapters
-        from bebshax.llm.router import PoolRouter
+    async with AsyncExitStack() as cleanup:
+        if args.fake:
+            llm = scripted_router(routes)
+            notes.append(
+                "SIMULATED: replies are scripted from the identity card by ScriptedRouteAdapter — "
+                "this run validates the pipeline and metric code, it says nothing about any model."
+            )
+        else:
+            from scripts.ops.remote_probe import synthetic_probe_router
 
-        adapters = build_default_adapters()
-        llm = PoolRouter(adapters)
-        notes.append("provenance_persisted=False: rows carry served_by/attempts; llm_requests was not written")
-
-    try:
+            llm = await cleanup.enter_async_context(synthetic_probe_router())
+            notes.append("provenance_persisted=False: rows carry served_by/attempts; llm_requests was not written")
         report = await run_cross_route_eval(
             llm, personas, questions, routes,
             repeats=args.repeats, seed=args.seed, simulated=args.fake, notes=notes,
         )
-    finally:
-        if adapters is not None:
-            for adapter in adapters.values():
-                await adapter.aclose()
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     json_path = Path(args.output) if args.output else REPO / "data" / "metadata" / f"cross_route_{stamp}.json"

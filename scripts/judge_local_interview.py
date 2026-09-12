@@ -1,61 +1,20 @@
-"""Judged side-by-side: local llama3.2:3b vs the current best free-pool route.
-
-Same persona + same 5-question interview script through the REAL InterviewEngine,
-then a blind LLM judge scores both transcripts on the owner's weighted rubric
-(persona consistency 25%, naturalness 20%, instruction following 15%,
-context/memory 15%, specificity 15%, stability 10%). Production bar: 8/10.
-
-Output: data/metadata/local_3b_gate_<ts>.json + console summary. Nothing is
-fabricated — raw judge output and full transcripts are persisted.
-
-Run:  .venv\\Scripts\\python scripts/judge_local_interview.py
-"""
+"""Historical judge-disjointness helpers; the local benchmark CLI is retired."""
 
 from __future__ import annotations
 
-import asyncio
+if __name__ == "__main__":
+    raise SystemExit("This historical benchmark is retired. Use scripts/release_preflight.py for current operations checks.")
+
 import json
-import os
 import re
-import time
 from collections.abc import Callable
-from datetime import datetime, timezone
-from pathlib import Path
-
-REPO = Path(__file__).resolve().parents[1]
-os.environ.setdefault("BEBSHAX_JWT_SECRET", "x" * 40)  # config import guard for scripts
-os.environ.setdefault("FREELLMPOOL_CONFIG", str(REPO / "providers.toml"))
-
-import bebshax.interview.orm
-import bebshax.memory.orm
-import bebshax.persona.orm  # noqa: F401
-from bebshax.db.models import Base
-from bebshax.interview.engine import InterviewEngine
 from bebshax.llm import SingleAdapterLLMService
 from bebshax.llm.adapters.base import (
     AdapterCompletion,
     ProviderAdapter,
     RouteCandidate,
 )
-from bebshax.llm.adapters.embeddings import HashEmbedding
-from bebshax.llm.adapters.freellmpool_adapter import FreellmpoolAdapter
-from bebshax.llm.adapters.ollama_adapter import OllamaAdapter
-from bebshax.llm.adapters.openrouter_adapter import OpenRouterAdapter
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
-from bebshax.memory.service import MemoryService
-from bebshax.persona.schema import PersonaAttribute, PersonaProfile
-from bebshax.persona.store import create_business, save_persona
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
-
-LOCAL_MODEL = "llama3.2:3b"
-QUESTIONS = [
-    "Walk me through what you ate for lunch yesterday — where did it come from and what did it cost?",
-    "What is the most frustrating part of how you handle lunch on workdays?",
-    "Would you pay 3000 BDT per month for healthy delivered lunches? Why or why not?",
-    "Earlier you told me what lunch costs you — how does that compare over a month?",
-    "What would make you cancel such a subscription after the first month?",
-]
 
 RUBRIC = {
     "persona_consistency": 0.25,
@@ -65,20 +24,6 @@ RUBRIC = {
     "specificity": 0.15,
     "response_stability": 0.10,
 }
-
-
-class PinnedModel(ProviderAdapter):
-    """Restrict an adapter to routes whose model name contains `needle`."""
-
-    def __init__(self, inner: ProviderAdapter, needle: str) -> None:
-        self._inner = inner
-        self._needle = needle
-
-    async def candidates(self) -> list[RouteCandidate]:
-        return [c for c in await self._inner.candidates() if self._needle in c.model]
-
-    async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
-        return await self._inner.complete(candidate, request)
 
 
 def _weights(route: str) -> str:
@@ -102,6 +47,7 @@ class ExcludeArmRoutes(ProviderAdapter):
     def __init__(self, inner: ProviderAdapter, arm_routes: set[str]) -> None:
         self._inner = inner
         self._arm_routes = arm_routes
+        self.remote_processing = inner.remote_processing
 
     async def candidates(self) -> list[RouteCandidate]:
         return [
@@ -112,70 +58,6 @@ class ExcludeArmRoutes(ProviderAdapter):
 
     async def complete(self, candidate: RouteCandidate, request: LLMRequest) -> AdapterCompletion:
         return await self._inner.complete(candidate, request)
-
-
-def _persona() -> PersonaProfile:
-    return PersonaProfile(
-        business_id="",  # filled after create_business
-        name="Farhana Kabir",
-        age=31,
-        occupation="Senior Accountant at a Gulshan trading firm",
-        location="Gulshan, Dhaka, Bangladesh",
-        income_range="65,000-80,000 BDT/month",
-        education="MBA (Finance)",
-        description=(
-            "Works 9-10 hour days; buys street lunch (100-150 BDT/day) near the office "
-            "most workdays; tired of oily food and afternoon energy crashes; careful with "
-            "money and skeptical of subscriptions; pays with bKash."
-        ),
-        attributes=[
-            PersonaAttribute(key="pain_point", value="oily street lunch causes 3pm energy crash"),
-            PersonaAttribute(key="budget", value="lunch spend 100-150 BDT/day (~2,500-3,600/month)"),
-            PersonaAttribute(key="constraint", value="cancels any service that fails twice in a week"),
-            PersonaAttribute(key="preference", value="Bengali home-style food over fast food"),
-        ],
-    )
-
-
-async def run_interview(llm, tag: str) -> dict:
-    engine_db = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine_db.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    session_maker = sessionmaker(engine_db, class_=AsyncSession, expire_on_commit=False)
-
-    async with session_maker() as session:
-        business = await create_business(
-            session,
-            "TiffinBox",
-            "healthy Bengali lunch subscription, 3000 BDT/month, Dhaka",
-            owner_id="usr_system_holder",
-        )
-        profile = _persona()
-        profile.business_id = business.id
-        await save_persona(session, profile, owner_id="usr_system_holder")
-
-    memory = MemoryService(session_maker, HashEmbedding())
-    engine = InterviewEngine(llm, session_maker, memory=memory)
-    conversation = await engine.start(profile.id, "pricing & willingness to pay")
-
-    turns: list[dict] = []
-    total_ms = 0.0
-    for q in QUESTIONS:
-        t0 = time.perf_counter()
-        result = await engine.ask(conversation.id, q)
-        ms = (time.perf_counter() - t0) * 1000
-        total_ms += ms
-        turns.append(
-            {
-                "question": q,
-                "reply": result["reply"],
-                "served_by": result.get("served_by"),
-                "latency_ms": round(ms),
-            }
-        )
-        print(f"  [{tag}] {round(ms):>6}ms  {result.get('served_by')}")
-    await engine_db.dispose()
-    return {"tag": tag, "turns": turns, "total_ms": round(total_ms), "avg_ms": round(total_ms / len(QUESTIONS))}
 
 
 def transcript_text(run: dict) -> str:
@@ -231,11 +113,7 @@ async def judge_disjoint(
     verdict whose served route collides with an arm is DISCARDED; when every
     candidate collides or fails, raise instead of quietly judging with arm B."""
     if judge_adapters is None:
-        judge_adapters = [
-            ("openrouter", lambda: OpenRouterAdapter()),
-            ("freellmpool/fast", lambda: FreellmpoolAdapter(routing="fast")),
-            ("freellmpool/default", lambda: FreellmpoolAdapter()),
-        ]
+        raise JudgeNotDisjoint("The retired benchmark requires explicitly injected approved judge adapters")
     rejected: list[str] = []
     for label, build in judge_adapters:
         adapter = build()
@@ -255,87 +133,3 @@ async def judge_disjoint(
         "no judge route disjoint from the arms' serving routes "
         f"{sorted(arm_routes)}; tried: {rejected}"
     )
-
-
-def _write_report(report: dict) -> Path:
-    out = REPO / "data" / "metadata" / f"local_3b_gate_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}.json"
-    out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    return out
-
-
-async def main() -> None:
-    print("== Arm A: local", LOCAL_MODEL)
-    local = SingleAdapterLLMService(PinnedModel(OllamaAdapter(), LOCAL_MODEL))
-    run_a = await run_interview(local, f"local/{LOCAL_MODEL}")
-
-    print("== Arm B: freellmpool routing=fast")
-    cloud_adapter = FreellmpoolAdapter(routing="fast")
-    cloud = SingleAdapterLLMService(cloud_adapter)
-    run_b = await run_interview(cloud, "freellmpool/fast")
-    await cloud_adapter.aclose()
-
-    arm_routes = {
-        *(t["served_by"] for t in run_a["turns"] if t["served_by"]),
-        *(t["served_by"] for t in run_b["turns"] if t["served_by"]),
-    }
-    base_report = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "bar": 8.0,
-        "rubric_weights": RUBRIC,
-        "arm_routes": sorted(arm_routes),
-        # Always present, even when judging fails, so readers never have to
-        # infer them from a missing key.
-        "judge_route": None,
-        "self_preference_risk": None,
-    }
-
-    print("== Judging (blind labels A/B; judge must be disjoint from both arms)")
-    try:
-        verdict = await judge_disjoint(run_a, run_b, arm_routes)
-    except JudgeNotDisjoint as exc:
-        report = {
-            **base_report,
-            "gate": "NOT_JUDGED",
-            "judge_error": str(exc),
-            "arm_a": {"model": f"ollama/{LOCAL_MODEL}", **run_a},
-            "arm_b": {"model": "freellmpool/fast (see served_by)", **run_b},
-            "judge": {"route": None, "notes": None, "self_preference_risk": None, "error": str(exc)},
-        }
-        out = _write_report(report)
-        print(f"\nJUDGING REFUSED: {exc}")
-        print("Transcripts were saved unjudged; re-run when a provider disjoint from both arms is available.")
-        print(f"report: {out}")
-        raise SystemExit(2)
-
-    a, b = verdict["scores"]["A"], verdict["scores"]["B"]
-    # Disjointness was enforced above; the flag is recomputed (not assumed) so
-    # the artifact states what was checked, including same-weights matches.
-    self_pref = shares_weights(verdict["judge_route"], arm_routes)
-    report = {
-        **base_report,
-        "judge_route": verdict["judge_route"],
-        "self_preference_risk": self_pref,
-        "arm_a": {"model": f"ollama/{LOCAL_MODEL}", **run_a, "weighted": weighted(a), "dims": a},
-        "arm_b": {"model": "freellmpool/fast (see served_by)", **run_b, "weighted": weighted(b), "dims": b},
-        "judge": {
-            "route": verdict["judge_route"],
-            "notes": verdict["scores"].get("notes"),
-            "self_preference_risk": self_pref,
-            "rejected_judges": verdict.get("rejected_judges", []),
-        },
-    }
-    out = _write_report(report)
-
-    print(f"\nA local/{LOCAL_MODEL}:  weighted {report['arm_a']['weighted']}/10  avg {run_a['avg_ms']}ms")
-    print(f"B freellmpool/fast:     weighted {report['arm_b']['weighted']}/10  avg {run_b['avg_ms']}ms")
-    print(f"judge: {verdict['judge_route']}  self_preference_risk={self_pref}")
-    print(f"report: {out}")
-    verdict_line = (
-        f"GATE {'PASS' if report['arm_a']['weighted'] >= 8.0 else 'FAIL'}: "
-        f"local 3B {'meets' if report['arm_a']['weighted'] >= 8.0 else 'below'} the 8/10 bar"
-    )
-    print(verdict_line)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
