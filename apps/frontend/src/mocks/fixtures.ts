@@ -24,7 +24,7 @@ export const mockRoutesStatus: RoutesStatusResponse = {
     { name: 'groq', type: 'free_tier_key', status: 'healthy', available_models: 5, active_cooldowns: 0 },
     { name: 'mistral', type: 'free_tier_key', status: 'healthy', available_models: 4, active_cooldowns: 0 },
     { name: 'ovhcloud', type: 'keyless', status: 'degraded', available_models: 3, active_cooldowns: 1 },
-    { name: 'ollama', type: 'local_fallback', status: 'healthy', available_models: 2, active_cooldowns: 0 },
+    { name: 'openrouter', type: 'free_tier_key', status: 'unknown', available_models: 2, active_cooldowns: 0 },
   ],
   pools: [
     { name: 'reasoning', max_concurrency: 4, active_requests: 1, candidates_count: 6 },
@@ -43,7 +43,7 @@ export const mockProvenanceRecords: ProvenanceRecord[] = [
     persona_id: 'per_sarah_01',
     conversation_id: null,
     created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    routing_path: ['groq/llama-3.3-70b-versatile', 'pollinations/deepseek-r1', 'ollama/llama3.2:3b'],
+    routing_path: ['groq/llama-3.3-70b-versatile', 'pollinations/deepseek-r1', 'openrouter/fixture-secondary'],
     attempts: [
       {
         attempt_number: 1,
@@ -84,7 +84,7 @@ export const mockProvenanceRecords: ProvenanceRecord[] = [
     persona_id: 'per_sarah_01',
     conversation_id: 'conv_201',
     created_at: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
-    routing_path: ['mistral/mistral-small-latest', 'pollinations/mistral-large', 'ollama/llama3.2:3b'],
+    routing_path: ['mistral/mistral-small-latest', 'pollinations/mistral-large', 'openrouter/fixture-secondary'],
     attempts: [
       {
         attempt_number: 1,
@@ -113,7 +113,7 @@ export const mockProvenanceRecords: ProvenanceRecord[] = [
     persona_id: 'per_marcus_02',
     conversation_id: null,
     created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    routing_path: ['ovhcloud/deepseek-r1-distill-llama-70b', 'pollinations/qwen2.5-coder-32b', 'ollama/llama3.2:3b'],
+    routing_path: ['ovhcloud/deepseek-r1-distill-llama-70b', 'pollinations/qwen2.5-coder-32b', 'openrouter/fixture-secondary'],
     attempts: [
       {
         attempt_number: 1,
@@ -154,7 +154,7 @@ export const mockProvenanceRecords: ProvenanceRecord[] = [
     persona_id: 'per_sarah_01',
     conversation_id: 'conv_201',
     created_at: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-    routing_path: ['groq/llama-3.1-8b-instant', 'ollama/llama3.2:3b'],
+    routing_path: ['groq/llama-3.1-8b-instant', 'openrouter/fixture-secondary'],
     attempts: [
       {
         attempt_number: 1,
@@ -506,7 +506,6 @@ export const mockEvaluationMetrics: EvaluationMetrics = {
       response_stability: 0.1,
     },
     arms: [
-      { tag: 'local/llama3.2:3b', model: 'ollama/llama3.2:3b', weighted_score: 9.65, avg_latency_ms: 6067, dims: null },
       { tag: 'freellmpool/fast', model: 'freellmpool', weighted_score: 8.25, avg_latency_ms: 52988, dims: null },
     ],
     judge_route: 'llm7/codestral-latest',

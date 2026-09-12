@@ -1,5 +1,5 @@
 /* ==========================================================================
-   BebshaX Teal / Cyan Research Theme Design System
+  BebshaX Black / Porcelain Research Theme Design System
    ========================================================================== */
 
 /* Tailwind utilities for the utility-classed console components.
@@ -10,59 +10,59 @@
 @tailwind utilities;
 
 :root {
-  /* Core Color Palette — iOS/macOS dark system palette. The canvas is a
-     true near-black (OLED feel); grouped surfaces step up in luminance
-     rather than being outlined. */
-  --bg-pure: #000000;
-  --bg-primary: #000000;
-  --bg-secondary: #0d0d0f;
-  --bg-card: #1c1c1e;
-  --bg-card-hover: #242426;
-  --bg-glass: rgba(18, 18, 20, 0.82);
+    /* Pure-black canvas with neutral control surfaces. */
+    --bg-pure: #000000;
+    --bg-primary: #000000;
+    --bg-secondary: #080808;
+    --bg-card: #101010;
+    --bg-card-hover: #191919;
+    --bg-glass: var(--bg-pure);
 
   /* Borders & Dividers — iOS separators: hairlines, never outlines */
   --border-subtle: rgba(84, 84, 88, 0.42);
   --border-medium: rgba(84, 84, 88, 0.65);
   --border-hover: rgba(48, 209, 199, 0.45);
   --border-soft: rgba(255, 255, 255, 0.07);
+  --border-control: #858585;
 
   /* Soft fills — iOS system fill tiers */
   --fill-soft: rgba(120, 120, 128, 0.16);
   --fill-soft-2: rgba(120, 120, 128, 0.24);
 
-  /* Frosted glass tiers — thick / regular / thin system materials */
-  --glass-strong: rgba(28, 28, 30, 0.9);
-  --glass-mid: rgba(28, 28, 30, 0.68);
-  --glass-soft: rgba(28, 28, 30, 0.5);
+  /* Opaque aliases for existing material consumers. */
+  --glass-strong: var(--bg-card);
+  --glass-mid: var(--bg-secondary);
+  --glass-soft: var(--bg-card);
 
-  /* Glass material physics — one blur/saturation recipe app-wide */
-  --glass-blur: 30px;
-  --glass-saturate: 180%;
+  /* Legacy material filters stay neutral on opaque surfaces. */
+  --glass-blur: 0px;
+  --glass-saturate: 100%;
   /* Top-edge light reflection (the hairline highlight on raised surfaces) */
   --reflect: rgba(255, 255, 255, 0.06);
   --reflect-strong: rgba(255, 255, 255, 0.1);
   /* Dialog scrim behind frosted backdrops */
   --scrim: rgba(0, 0, 0, 0.5);
-  /* Ambient canvas glow — barely-there washes the glass picks up */
-  --ambient-a: rgba(48, 209, 199, 0.05);
-  --ambient-b: rgba(100, 210, 255, 0.035);
-  --ambient-c: rgba(48, 209, 199, 0.03);
+  /* Dark canvas consumers must not add ambient color. */
+  --ambient-a: transparent;
+  --ambient-b: transparent;
+  --ambient-c: transparent;
 
-  /* Typography Palette — iOS label hierarchy */
-  --text-main: #ffffff;
-  --text-primary: #f5f5f7;
-  --text-secondary: rgba(235, 235, 245, 0.6);
-  --text-muted: rgba(235, 235, 245, 0.38);
-  --text-faint: rgba(235, 235, 245, 0.26);
-  --text-label: rgba(235, 235, 245, 0.78);
-  /* Text sitting on the accent (CTAs) — white on a saturated tint */
-  --text-on-accent: #ffffff;
+  /* Opaque text hierarchy, readable on every shared surface. */
+  --text-main: #f5f5f4;
+  --text-primary: #f2f4f4;
+  --text-secondary: #d0d4d5;
+  --text-muted: #b5bcbe;
+  --text-faint: #a4adaf;
+  --text-label: #c3cacc;
+  /* Deep ink on bright mint CTAs. */
+  --text-on-accent: #062f2c;
 
   /* Primary Accent: system teal (iOS-vivid) */
   --accent-primary: #30d1c7;
   --accent-hover: #5ce1d8;
   --accent-subtle: rgba(48, 209, 199, 0.14);
   --accent-glow: rgba(48, 209, 199, 0.28);
+  --focus-ring: var(--accent-primary);
 
   /* Secondary Accent & Status (readable variants flip per theme) */
   --accent-cyan: #64d2ff;
@@ -82,14 +82,13 @@
   --scrollbar-thumb-hover: rgba(120, 120, 128, 0.55);
 
   /* Legacy Accent Mappings for backward compatibility */
-  --accent-gold-primary: #30d1c7;
-  --accent-gold-hover: #5ce1d8;
+    --accent-gold-primary: var(--accent-primary);
+    --accent-gold-hover: var(--accent-hover);
 
-  /* Typography Fonts — the system UI face first (SF on Apple hardware),
-     Plus Jakarta Sans as the loaded cross-platform fallback. */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Plus Jakarta Sans', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+    /* Existing self-hosted families lead every typography role. */
+    --font-sans: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+    --font-display: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Elevation Shadows — soft, wide, low-contrast (iOS sheet shadows) */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.24);
@@ -103,25 +102,26 @@
    <html data-theme="light">; every token above has a light counterpart.
    ========================================================================== */
 [data-theme='light'] {
-  /* iOS grouped light: cool grey canvas, white cells */
-  --bg-pure: #f2f2f7;
-  --bg-primary: #f2f2f7;
-  --bg-secondary: #e9e9ee;
+  /* Porcelain canvas, white cards, neutral grouped surfaces. */
+  --bg-pure: #f6f7f8;
+  --bg-primary: #f6f7f8;
+  --bg-secondary: #eceef0;
   --bg-card: #ffffff;
-  --bg-card-hover: #f7f7fa;
-  --bg-glass: rgba(249, 249, 251, 0.86);
+  --bg-card-hover: #f0f2f3;
+  --bg-glass: var(--bg-secondary);
 
   --border-subtle: rgba(60, 60, 67, 0.16);
   --border-medium: rgba(60, 60, 67, 0.26);
   --border-hover: rgba(0, 150, 140, 0.4);
   --border-soft: rgba(60, 60, 67, 0.1);
+  --border-control: #707070;
 
   --fill-soft: rgba(120, 120, 128, 0.1);
   --fill-soft-2: rgba(120, 120, 128, 0.16);
 
-  --glass-strong: rgba(249, 249, 251, 0.92);
-  --glass-mid: rgba(249, 249, 251, 0.74);
-  --glass-soft: rgba(249, 249, 251, 0.6);
+  --glass-strong: var(--bg-card);
+  --glass-mid: var(--bg-secondary);
+  --glass-soft: var(--bg-card);
 
   --reflect: rgba(255, 255, 255, 0.9);
   --reflect-strong: rgba(255, 255, 255, 1);
@@ -130,22 +130,22 @@
   --ambient-b: rgba(0, 122, 255, 0.035);
   --ambient-c: rgba(0, 150, 140, 0.03);
 
-  --text-main: #000000;
-  --text-primary: #1d1d1f;
-  --text-secondary: rgba(60, 60, 67, 0.6);
-  --text-muted: rgba(60, 60, 67, 0.42);
-  --text-faint: rgba(60, 60, 67, 0.3);
-  --text-label: rgba(60, 60, 67, 0.82);
+  --text-main: #171c1e;
+  --text-primary: #202628;
+  --text-secondary: #3f4b4f;
+  --text-muted: #4f5d63;
+  --text-faint: #58666c;
+  --text-label: #354247;
   --text-on-accent: #ffffff;
 
-  --accent-primary: #00968c;
-  --accent-hover: #007f76;
-  --accent-subtle: rgba(0, 150, 140, 0.1);
-  --accent-glow: rgba(0, 150, 140, 0.22);
+  --accent-primary: #0b746c;
+  --accent-hover: #095f59;
+  --accent-subtle: rgba(11, 116, 108, 0.1);
+  --accent-glow: rgba(11, 116, 108, 0.22);
 
   --accent-cyan: #0071e3;
-  --accent-teal: #00968c;
-  --accent-teal-bright: #00968c;
+  --accent-teal: #0b746c;
+  --accent-teal-bright: #0c7a72;
   --accent-emerald: #34c759;
   --accent-amber: #ff9f0a;
   --accent-rose: #ff3b30;
@@ -158,8 +158,8 @@
   --scrollbar-thumb: rgba(60, 60, 67, 0.22);
   --scrollbar-thumb-hover: rgba(60, 60, 67, 0.36);
 
-  --accent-gold-primary: #00968c;
-  --accent-gold-hover: #007f76;
+  --accent-gold-primary: var(--accent-primary);
+  --accent-gold-hover: var(--accent-hover);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.05), 0 14px 36px rgba(0, 0, 0, 0.08);
@@ -173,14 +173,14 @@
    Space: 4px base. Radius: 5 stops + pill. See docs/DESIGN_SYSTEM.md.
    ========================================================================== */
 :root {
-  --fs-xs: 0.72rem;
+  --fs-xs: 0.75rem;
   --fs-sm: 0.8rem;
   --fs-base: 0.875rem;
   --fs-md: 0.95rem;
   --fs-lg: 1.1rem;
   --fs-xl: 1.35rem;
   --fs-2xl: 1.75rem;
-  --fs-3xl: clamp(1.9rem, 3.4vw, 2.5rem);
+  --fs-3xl: 2.25rem;
 
   --sp-1: 4px;
   --sp-2: 8px;
@@ -195,16 +195,16 @@
   --page-x: clamp(16px, 4vw, 40px);
   --page-max: 1280px;
 
-  /* iOS continuous-corner scale: controls 10, cells 14, cards 18, sheets 24 */
-  --r-xs: 8px;
-  --r-sm: 10px;
-  --r-md: 14px;
-  --r-lg: 18px;
-  --r-xl: 24px;
+  /* Compact controls and cards; the largest radius is reserved for dialogs. */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 8px;
+  --r-xl: 12px;
   --r-pill: 999px;
 
   /* The one CTA fill — a flat, saturated tint with a whisper of top light */
-  --accent-gradient: linear-gradient(180deg, #3ddad0 0%, var(--accent-teal) 100%);
+  --accent-gradient: linear-gradient(180deg, var(--accent-teal-bright) 0%, var(--accent-teal) 100%);
 
   /* Semantic status surfaces (bg + border pair with the *-text tokens above) */
   --status-success-bg: rgba(16, 185, 129, 0.1);
@@ -229,7 +229,7 @@
   --trait-n: #ec4899;
 }
 [data-theme='light'] {
-  --accent-gradient: linear-gradient(180deg, #06a89c 0%, #00968c 100%);
+  --accent-gradient: linear-gradient(180deg, var(--accent-teal-bright) 0%, var(--accent-teal) 100%);
   --status-success-bg: rgba(52, 199, 89, 0.1);
   --status-success-border: rgba(52, 199, 89, 0.3);
   --status-warn-bg: rgba(255, 159, 10, 0.1);
@@ -270,7 +270,7 @@
 }
 
 *:focus-visible {
-  outline: 2px solid var(--accent-primary);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -340,26 +340,50 @@ body {
   color: var(--text-main);
 }
 
+input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='hidden']),
+select,
+textarea,
+.ns-composer,
+.bx-prompt-card,
+.bx-prompt,
+.ai-prompt-box {
+  border-color: var(--border-control) !important;
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='hidden']):focus,
+select:focus,
+textarea:focus,
+.ns-composer:focus-within,
+.bx-prompt-card:focus-within,
+.bx-prompt:focus-within,
+.ai-prompt-box:focus-within,
+.secondary-hero-btn:focus-visible,
+.secondary-btn:focus-visible,
+.bx-request-id-copy:focus-visible {
+  border-color: var(--focus-ring) !important;
+}
+
 :focus-visible {
-  outline: 3px solid var(--accent-glow) !important;
+  outline: 3px solid var(--focus-ring) !important;
   outline-offset: 2px;
   border-radius: var(--r-sm);
 }
-/* Solid teal meets >=3:1 on both dark and light canvases. */
-[data-theme='light'] :focus-visible {
-  outline: 3px solid rgba(0, 150, 140, 0.45) !important;
+
+.ns-composer:focus-within,
+.bx-prompt-card:focus-within,
+.bx-prompt:focus-within,
+.ai-prompt-box:focus-within {
+  outline: 3px solid var(--focus-ring) !important;
   outline-offset: 2px;
 }
 
 /* Prompt composers and text inputs already provide outer card focus-within indication — suppress inner outline */
 .ns-composer textarea:focus,
 .ns-composer textarea:focus-visible,
-.ns-textarea:focus,
-.ns-textarea:focus-visible,
 .bx-prompt-card textarea:focus,
 .bx-prompt-card textarea:focus-visible,
-.bx-prompt-input:focus,
-.bx-prompt-input:focus-visible,
+.bx-prompt .bx-prompt-input:focus,
+.bx-prompt .bx-prompt-input:focus-visible,
 .ai-prompt-box textarea:focus,
 .ai-prompt-box textarea:focus-visible {
   outline: none !important;
@@ -368,10 +392,25 @@ body {
   border: none !important;
 }
 
-/* Typography Utility Classes — SF-style: semibold, tight tracking */
+.bx-request-id-copy {
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0;
+  justify-content: center;
+  border: 1px solid var(--border-control);
+}
+
+@media (max-width: 720px), (pointer: coarse) {
+  .bx-request-id-copy {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Typography Utility Classes — semibold with natural tracking */
 h1, h2, h3, h4, h5, h6 {
   color: var(--text-main);
-  letter-spacing: -0.022em;
+  letter-spacing: 0;
   font-weight: 600;
   font-family: var(--font-display);
 }
@@ -446,29 +485,20 @@ h1, h2, h3 {
 }
 
 /* ==========================================================================
-   Liquid Glass material system
-   Real frosted glass for CHROME (sidebar, headers, drawers, popovers,
-   dialog backdrops) — never for dozens of content cards at once, which
-   would blow the compositor budget. Content cards get a simulated
-   material instead: surface gradient + top-edge light reflection.
+  Shared surface materials
+  Existing material classes inherit opaque theme-aware surfaces.
    ========================================================================== */
 
-/* Ambient canvas glow — a static, inert light field behind the app.
-   Frosted surfaces scrolling over it pick up soft colour, which is what
-   makes the blur readable. Pure radial-gradients: no filter, no
-   animation, zero per-frame cost. */
+/* Keep the inert canvas layer without decorative color washes. */
 .bx-ambient {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(42% 34% at 12% 0%, var(--ambient-a) 0%, transparent 100%),
-    radial-gradient(36% 30% at 88% 12%, var(--ambient-b) 0%, transparent 100%),
-    radial-gradient(50% 40% at 55% 100%, var(--ambient-c) 0%, transparent 100%);
+  background: none;
 }
 
-/* Frosted chrome tiers */
+/* Legacy chrome tiers */
 .bx-glass {
   background: var(--glass-mid);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -480,7 +510,7 @@ h1, h2, h3 {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
 
-/* Canonical frosted sticky header — both app headers share this material.
+/* Canonical sticky header — both app headers share this material.
    (Component styles must not set background/backdrop-filter inline.) */
 .bx-appheader {
   background: var(--glass-mid);
@@ -714,7 +744,7 @@ html.theme-transition *::after {
   display: block;
   font-size: 0.7rem;
   font-weight: 400;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   color: var(--text-muted);
   margin-top: 1px;
 }
@@ -728,7 +758,7 @@ html.theme-transition *::after {
   display: none;
   font-size: var(--fs-xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: var(--text-muted);
   margin-right: 4px;
@@ -853,7 +883,7 @@ html.theme-transition *::after {
   background: var(--lp-contrast-bg, #ffffff);
   color: var(--lp-contrast-fg, #000000);
   border: none !important;
-  outline: none !important;
+  outline: none;
   border-radius: 9999px;
   font-weight: 700;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -893,7 +923,7 @@ html.theme-transition *::after {
   background: var(--accent-primary);
   color: var(--text-on-accent);
   border: none !important;
-  outline: none !important;
+  outline: none;
   border-radius: 9999px;
   font-weight: 700;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -912,7 +942,7 @@ html.theme-transition *::after {
   background: var(--accent-primary);
   color: var(--text-on-accent);
   border: none !important;
-  outline: none !important;
+  outline: none;
   border-radius: 9999px;
   font-weight: 700;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -929,8 +959,8 @@ html.theme-transition *::after {
 .secondary-hero-btn {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-main);
-  border: none !important;
-  outline: none !important;
+  border: 1px solid var(--border-control) !important;
+  outline: none;
   border-radius: 9999px;
   font-weight: 600;
   transition: all 0.2s ease;
@@ -943,8 +973,8 @@ html.theme-transition *::after {
 .secondary-btn {
   background: rgba(var(--lp-fill-rgb, 255, 255, 255), 0.06);
   color: var(--text-main);
-  border: none !important;
-  outline: none !important;
+  border: 1px solid var(--border-control) !important;
+  outline: none;
   border-radius: 9999px;
   transition: all 0.2s ease;
 }
@@ -957,7 +987,7 @@ html.theme-transition *::after {
 .nav-link-btn {
   background: none;
   border: none !important;
-  outline: none !important;
+  outline: none;
   font-size: 0.88rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -974,7 +1004,7 @@ html.theme-transition *::after {
 .mobile-nav-btn {
   background: none;
   border: none !important;
-  outline: none !important;
+  outline: none;
   color: var(--text-primary);
   font-size: 1.05rem;
   font-weight: 600;
@@ -991,7 +1021,7 @@ html.theme-transition *::after {
 .footer-wordmark {
   font-size: clamp(3.5rem, 9vw, 8rem);
   font-weight: 900;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
   color: rgba(255, 255, 255, 0.03);
   text-transform: uppercase;
 }
