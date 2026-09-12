@@ -80,13 +80,15 @@ def test_different_emails_from_same_ip_still_share_the_limit(client):
     assert response.status_code == 429
 
 
-def test_failed_attempt_is_logged_without_password(client, caplog):
-    """Confirm the audit log captures email + IP, never the password itself."""
+def test_failed_attempt_is_logged_without_credentials(client, caplog):
+    """The audit log records the failed attempt but never the account email or password:
+    identifiers belong in the transactional budget rows, not in plaintext logs."""
     with caplog.at_level(logging.WARNING, logger="bebshax.api.auth"):
         client.post(
             "/api/auth/signin",
             json={"email": "logtest@example.com", "password": "supersecretvalue123"},
         )
     log_text = caplog.text
-    assert "logtest@example.com" in log_text
+    assert "Failed signin attempt" in log_text
+    assert "logtest@example.com" not in log_text
     assert "supersecretvalue123" not in log_text

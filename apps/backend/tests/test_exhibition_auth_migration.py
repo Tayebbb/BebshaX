@@ -24,12 +24,14 @@ def migration():
     return matches[0]
 
 
-def test_session_migration_is_the_unique_child_of_the_current_head(migration):
+def test_session_migration_remains_in_the_unique_head_history(migration):
     scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1] / "alembic"))
     revisions = list(scripts.walk_revisions())
 
     assert migration.down_revision == _PARENT
-    assert scripts.get_heads() == [_REVISION]
+    heads = scripts.get_heads()
+    assert len(heads) == 1
+    assert _REVISION in {revision.revision for revision in scripts.walk_revisions(head=heads[0])}
     assert len(revisions) == len({revision.revision for revision in revisions})
     assert "test" not in Path(migration.path).name.lower()
 

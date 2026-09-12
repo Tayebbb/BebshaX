@@ -4,6 +4,7 @@ verification with lockout, resend invalidation, PBKDF2 cost, timing oracle."""
 import base64
 import hashlib
 import secrets
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -13,21 +14,18 @@ from starlette.testclient import TestClient
 from bebshax.api import auth as auth_api
 from bebshax.api.limiter import limiter
 from bebshax.auth import service as auth_service
-from bebshax.auth.models import EmailVerificationToken, Users
+from bebshax.auth.models import AuthRateLimits, EmailVerificationToken, Users
 from bebshax.auth.security import PBKDF2_ITERATIONS, hash_password, verify_password
 
 _PASSWORD = "Password123!"
 
 
 @pytest.fixture(autouse=True)
-def _reset_limiter_and_lockouts():
-    """signup/verify/resend are per-IP limited and every TestClient shares one
-    address; the OTP lockout dict is process-global."""
+def _reset_limiter():
+    """Reset only the legacy IP limiter; transactional budgets use isolated databases."""
     limiter._limiter.storage.reset()
-    auth_api._verify_failures.clear()
     yield
     limiter._limiter.storage.reset()
-    auth_api._verify_failures.clear()
 
 
 def _signup(client: TestClient, email: str) -> str:
@@ -162,11 +160,19 @@ async def test_lockout_is_per_account(api_test_app: TestClient):
     assert ok.status_code == 200
 
 
-def test_lockout_expires_after_the_window():
-    auth_api._verify_failures["usr_x"] = (auth_api.VERIFY_MAX_FAILURES, 100.0)
-    assert auth_api._verification_locked("usr_x", now=50.0) is True
-    assert auth_api._verification_locked("usr_x", now=100.0) is False
-    assert "usr_x" not in auth_api._verify_failures  # counter reset once the window passed
+async def test_lockout_expires_after_the_window(identity_state):
+    payload = {"email": "absent@example.test", "token": "123456"}
+    for attempt in range(5):
+        response = await identity_state.client.post("/api/auth/verify-email", json=payload)
+        assert response.status_code == 400
+    locked = await identity_state.client.post("/api/auth/verify-email", json=payload)
+    assert locked.status_code == 429
+    async with identity_state.sessions() as session:
+        for budget in await session.scalars(select(AuthRateLimits)):
+            budget.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        await session.commit()
+    elapsed = await identity_state.client.post("/api/auth/verify-email", json=payload)
+    assert elapsed.status_code == 400
 
 
 async def test_resend_invalidates_outstanding_codes(api_test_app: TestClient):
@@ -176,7 +182,7 @@ async def test_resend_invalidates_outstanding_codes(api_test_app: TestClient):
 
     stale = api_test_app.post("/api/auth/verify-email", json={"token": first, "email": email})
     assert stale.status_code == 400
-    assert "already used" in stale.json()["detail"]
+    assert stale.json()["detail"] == "Invalid verification token."
 
     fresh = api_test_app.post("/api/auth/verify-email", json={"token": second, "email": email})
     assert fresh.status_code == 200, fresh.text

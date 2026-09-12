@@ -34,44 +34,61 @@ def clean_settings(monkeypatch):
     get_settings.cache_clear()
 
 
+@pytest.fixture()
+def trusted_proxy(clean_settings):
+    """Forwarded headers are honoured only from proxies in an explicit CIDR list."""
+    clean_settings.setenv("BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR", "true")
+    clean_settings.setenv("BEBSHAX_TRUSTED_PROXY_CIDRS", "10.0.0.0/8")
+    return clean_settings
+
+
 def test_default_key_is_socket_address_and_xff_is_ignored(clean_settings):
     """Untrusted default: a spoofed X-Forwarded-For must not mint a new bucket."""
     clean_settings.delenv("BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR", raising=False)
+    clean_settings.delenv("BEBSHAX_TRUSTED_PROXY_CIDRS", raising=False)
     req = _request("10.0.0.7", {"X-Forwarded-For": "1.2.3.4, 10.0.0.7"})
     assert _client_key(req) == "10.0.0.7"
 
 
-def test_trusted_proxy_uses_last_forwarded_hop(clean_settings):
-    """Append-mode proxies put the peer they saw LAST — that's the only hop we wrote."""
+def test_trust_flag_without_proxy_cidrs_still_ignores_forwarded_header(clean_settings):
+    """Opting in without naming the proxies keeps the secure socket-address key."""
     clean_settings.setenv("BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR", "true")
+    clean_settings.delenv("BEBSHAX_TRUSTED_PROXY_CIDRS", raising=False)
+    req = _request("10.0.0.7", {"X-Forwarded-For": "1.2.3.4"})
+    assert _client_key(req) == "10.0.0.7"
+
+
+def test_unlisted_proxy_forwarded_header_is_ignored(trusted_proxy):
+    req = _request("192.0.2.9", {"X-Forwarded-For": "1.2.3.4"})
+    assert _client_key(req) == "192.0.2.9"
+
+
+def test_trusted_proxy_uses_last_forwarded_hop(trusted_proxy):
+    """Append-mode proxies put the peer they saw LAST — that's the only hop we wrote."""
     req = _request("10.0.0.7", {"X-Forwarded-For": "6.6.6.6, 1.2.3.4"})
     assert _client_key(req) == "1.2.3.4"
 
 
-def test_trusted_proxy_spoofed_first_hop_cannot_mint_buckets(clean_settings):
+def test_trusted_proxy_spoofed_first_hop_cannot_mint_buckets(trusted_proxy):
     """Client-sent 'X-Forwarded-For: junk' arrives as 'junk, <real-ip>' — junk must lose."""
-    clean_settings.setenv("BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR", "true")
     req = _request("10.0.0.7", {"X-Forwarded-For": "i-am-not-an-ip, 1.2.3.4"})
     assert _client_key(req) == "1.2.3.4"
 
 
-def test_trusted_proxy_non_ip_hop_falls_back_to_socket(clean_settings):
-    clean_settings.setenv("BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR", "true")
+def test_trusted_proxy_non_ip_hop_falls_back_to_socket(trusted_proxy):
     req = _request("10.0.0.7", {"X-Forwarded-For": "totally-junk"})
     assert _client_key(req) == "10.0.0.7"
 
 
-def test_trusted_proxy_strips_port_suffixes(clean_settings):
+def test_trusted_proxy_strips_port_suffixes(trusted_proxy):
     """IIS/ARR-style 'ip:port' hops must not collapse everyone onto one bucket."""
-    clean_settings.setenv("BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR", "true")
     req = _request("10.0.0.7", {"X-Forwarded-For": "1.2.3.4:51423"})
     assert _client_key(req) == "1.2.3.4"
     req6 = _request("10.0.0.7", {"X-Forwarded-For": "[2001:db8::1]:443"})
     assert _client_key(req6) == "2001:db8::1"
 
 
-def test_trusted_proxy_with_missing_header_falls_back_to_socket(clean_settings):
-    clean_settings.setenv("BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR", "true")
+def test_trusted_proxy_with_missing_header_falls_back_to_socket(trusted_proxy):
     req = _request("10.0.0.7")
     assert _client_key(req) == "10.0.0.7"
 

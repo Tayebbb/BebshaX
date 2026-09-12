@@ -20,13 +20,9 @@ def _claims(token: str) -> dict:
     return json.loads(base64.urlsafe_b64decode(part))
 
 
-def test_token_lifetime_matches_what_the_api_reports():
-    """B4/M7: tokens lived 365 days while AuthResponse claimed 7.
-
-    The response field is now derived from the same setting that signs the
-    token, so the two cannot drift apart again.
-    """
-    from bebshax.api.auth import AuthResponse, UserProfileResponse
+def test_pending_signup_does_not_advertise_a_signed_in_lifetime():
+    """No issued session means no advertised lifetime or existing-account profile."""
+    from bebshax.api.auth import AuthResponse
 
     settings = get_settings()
     claims = _claims(create_access_token("usr_probe"))
@@ -34,17 +30,10 @@ def test_token_lifetime_matches_what_the_api_reports():
 
     assert actual_days == pytest.approx(settings.jwt_expire_days, abs=0.01)
 
-    response = AuthResponse(
-        access_token="t",
-        user=UserProfileResponse(
-            id="u", email="a@b.co", full_name="A", is_active=True,
-            is_verified=True, auth_provider="email",
-            created_at="2026-01-01T00:00:00Z", updated_at="2026-01-01T00:00:00Z",
-        ),
-    )
-    assert response.expires_in_days == settings.jwt_expire_days, (
-        "AuthResponse must report the lifetime it actually issued"
-    )
+    response = AuthResponse(access_token="", verification_required=True)
+    assert response.expires_in == response.expires_in_days == 0
+    assert response.refresh_token is None
+    assert response.user is None
 
 
 def test_token_lifetime_is_not_a_year():

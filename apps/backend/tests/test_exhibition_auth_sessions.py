@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from fastapi import Depends, FastAPI
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.testclient import TestClient
 
@@ -49,7 +50,6 @@ async def auth_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncI
     verification_mail = AsyncMock(return_value=True)
     monkeypatch.setattr(auth_api, "send_verification_email", verification_mail)
     limiter._limiter.storage.reset()
-    auth_api._verify_failures.clear()
 
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
@@ -73,22 +73,29 @@ async def auth_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncI
     finally:
         await engine.dispose()
         limiter._limiter.storage.reset()
-        auth_api._verify_failures.clear()
 
 
-def _signup(client: TestClient) -> dict:
+def _signup(client: TestClient, *, verified: bool = False) -> dict:
     response = client.post(
         "/api/auth/signup",
         json={
             "email": _EMAIL,
             "full_name": "Session Owner",
             "password": _PASSWORD,
-            "auth_provider": "neon",
-            "is_verified": True,
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    assert response.json()["user"] is None
+    return _verify_email(client) if verified else response.json()
+
+
+def _registered_user_id(client: TestClient) -> str:
+    async def lookup_id() -> str:
+        async with client.app.state.db_sessionmaker() as session:
+            return (await session.scalars(select(Users.id).where(Users.email == _EMAIL))).one()
+
+    assert client.portal is not None
+    return client.portal.call(lookup_id)
 
 
 def _verify_email(client: TestClient) -> dict:
@@ -108,8 +115,8 @@ def test_signup_with_required_verification_returns_no_session(auth_client: TestC
     assert signup["verification_required"] is True
     assert signup["access_token"] == ""
     assert signup["token_type"] == "bearer"
-    assert signup["user"]["is_verified"] is False
-    assert signup["user"]["auth_provider"] == "email"
+    assert signup["user"] is None
+    assert signup["refresh_token"] is None
 
 
 @pytest.mark.parametrize("provider", ["email", "neon", "google"])
@@ -117,12 +124,13 @@ def test_signup_with_required_verification_returns_no_session(auth_client: TestC
 async def test_unverified_token_cannot_authenticate_or_refresh(
     auth_client: TestClient, provider: str, method: str, path: str,
 ):
-    signup = _signup(auth_client)
+    _signup(auth_client)
+    user_id = _registered_user_id(auth_client)
     async with auth_client.app.state.db_sessionmaker() as session:
-        user = await session.get(Users, signup["user"]["id"])
+        user = await session.get(Users, user_id)
         user.auth_provider = provider
         await session.commit()
-    token = security.create_access_token(signup["user"]["id"])
+    token = security.create_access_token(user_id, session_version=user.session_version)
 
     response = auth_client.request(method, path, headers=_headers(token))
 
@@ -133,17 +141,18 @@ async def test_unverified_token_cannot_authenticate_or_refresh(
 async def test_optional_auth_does_not_identify_an_unverified_user(
     auth_client: TestClient, provider: str,
 ):
-    signup = _signup(auth_client)
+    _signup(auth_client)
+    user_id = _registered_user_id(auth_client)
     async with auth_client.app.state.db_sessionmaker() as session:
-        user = await session.get(Users, signup["user"]["id"])
+        user = await session.get(Users, user_id)
         user.auth_provider = provider
         await session.commit()
-    token = security.create_access_token(signup["user"]["id"])
+    token = security.create_access_token(user_id, session_version=user.session_version)
 
     response = auth_client.get("/optional-auth", headers=_headers(token))
 
-    assert response.status_code == 200
-    assert response.json() == {"user_id": None}
+    assert response.status_code == 403
+    assert "user_id" not in response.json()
 
 
 def test_signin_requires_verification_when_enforced(auth_client: TestClient):
@@ -156,17 +165,18 @@ def test_signin_requires_verification_when_enforced(auth_client: TestClient):
 
 
 def test_email_verification_and_signin_issue_usable_sessions(auth_client: TestClient):
-    signup = _signup(auth_client)
+    _signup(auth_client)
+    user_id = _registered_user_id(auth_client)
 
     verified = _verify_email(auth_client)
 
     assert verified["detail"] == "Email verified successfully."
     assert verified["verification_required"] is False
-    assert verified["user"]["id"] == signup["user"]["id"]
+    assert verified["user"]["id"] == user_id
     assert verified["user"]["is_verified"] is True
     assert auth_client.get("/api/auth/me", headers=_headers(verified["access_token"])).status_code == 200
     assert auth_client.get("/optional-auth", headers=_headers(verified["access_token"])).json() == {
-        "user_id": signup["user"]["id"],
+        "user_id": user_id,
     }
     signin = auth_client.post("/api/auth/signin", json={"email": _EMAIL, "password": _PASSWORD})
     assert signin.status_code == 200
@@ -176,40 +186,41 @@ def test_email_verification_and_signin_issue_usable_sessions(auth_client: TestCl
 
 
 async def test_email_verification_cannot_issue_a_session_for_a_disabled_user(auth_client: TestClient):
-    signup = _signup(auth_client)
+    _signup(auth_client)
+    user_id = _registered_user_id(auth_client)
     async with auth_client.app.state.db_sessionmaker() as session:
-        user = await session.get(Users, signup["user"]["id"])
+        user = await session.get(Users, user_id)
         user.is_active = False
         await session.commit()
     otp_code = auth_client.app.state.verification_mail.call_args.kwargs["otp_code"]
 
     response = auth_client.post("/api/auth/verify-email", json={"email": _EMAIL, "token": otp_code})
 
-    assert response.status_code == 403
+    assert response.status_code == 400
     assert "access_token" not in response.json()
 
 
-def test_development_without_email_credentials_still_allows_sessions(auth_client: TestClient):
+def test_development_without_email_credentials_still_requires_proof(auth_client: TestClient):
     auth_client.app.state.auth_test_settings.require_email_verification = None
 
     signup = _signup(auth_client)
 
-    assert signup["verification_required"] is False
-    assert signup["access_token"]
-    assert auth_client.get("/api/auth/me", headers=_headers(signup["access_token"])).status_code == 200
-    assert auth_client.post("/api/auth/refresh", headers=_headers(signup["access_token"])).status_code == 200
-    assert auth_client.get("/optional-auth", headers=_headers(signup["access_token"])).json() == {
-        "user_id": signup["user"]["id"],
-    }
+    assert signup["verification_required"] is True
+    assert signup["access_token"] == ""
+    assert signup["user"] is None
     assert auth_client.post(
         "/api/auth/signin", json={"email": _EMAIL, "password": _PASSWORD},
-    ).status_code == 200
+    ).status_code == 403
+    verified = _verify_email(auth_client)
+    assert auth_client.get("/api/auth/me", headers=_headers(verified["access_token"])).status_code == 200
 
 
 def test_wrong_verification_code_does_not_issue_a_session(auth_client: TestClient):
     _signup(auth_client)
 
-    response = auth_client.post("/api/auth/verify-email", json={"email": _EMAIL, "token": "000000"})
+    actual = auth_client.app.state.verification_mail.call_args.kwargs["otp_code"]
+    wrong = "000000" if actual != "000000" else "111111"
+    response = auth_client.post("/api/auth/verify-email", json={"email": _EMAIL, "token": wrong})
 
     assert response.status_code == 400
     assert "access_token" not in response.json()
@@ -272,15 +283,13 @@ def _assert_session_rejected(client: TestClient, token: str) -> None:
     assert profile.status_code == 401
     refreshed = client.post("/api/auth/refresh", headers=_headers(token))
     assert refreshed.status_code == 401
-    assert client.get("/optional-auth", headers=_headers(token)).json() == {"user_id": None}
+    assert client.get("/optional-auth", headers=_headers(token)).status_code == 401
 
 
-def test_new_tokens_include_the_initial_session_version(auth_client: TestClient):
-    auth_client.app.state.auth_test_settings.require_email_verification = False
+def test_verified_signup_tokens_include_the_current_session_version(auth_client: TestClient):
+    signup = _signup(auth_client, verified=True)
 
-    signup = _signup(auth_client)
-
-    assert security.decode_access_token(signup["access_token"])["session_version"] == 0
+    assert security.decode_access_token(signup["access_token"])["session_version"] == 1
 
 
 def test_token_creation_supports_an_explicit_session_version(auth_client: TestClient):
@@ -289,29 +298,34 @@ def test_token_creation_supports_an_explicit_session_version(auth_client: TestCl
     assert security.decode_access_token(token)["session_version"] == 7
 
 
-@pytest.mark.parametrize("version", [None, -1, True, False, 0.0, "0", [], {}, 1])
+@pytest.mark.parametrize("version", [None, -1, True, False, 0.0, "0", [], {}, 2])
 def test_invalid_or_mismatched_session_version_cannot_authenticate(
     auth_client: TestClient, version: object,
 ):
-    auth_client.app.state.auth_test_settings.require_email_verification = False
-    signup = _signup(auth_client)
+    signup = _signup(auth_client, verified=True)
     token = _signed_token(signup["user"]["id"], version)
 
     _assert_session_rejected(auth_client, token)
 
 
 async def test_legacy_token_only_works_before_the_first_password_reset(auth_client: TestClient):
-    auth_client.app.state.auth_test_settings.require_email_verification = False
-    signup = _signup(auth_client)
-    legacy_token = _signed_token(signup["user"]["id"])
+    async with auth_client.app.state.db_sessionmaker() as session:
+        user = Users(
+            email=_EMAIL, full_name="Legacy Owner", is_active=True, is_verified=True,
+            hashed_password=security.hash_password(_PASSWORD), auth_provider="email",
+        )
+        session.add(user)
+        await session.commit()
+        user_id = user.id
+    legacy_token = _signed_token(user_id)
     assert auth_client.get("/api/auth/me", headers=_headers(legacy_token)).status_code == 200
     assert auth_client.post("/api/auth/refresh", headers=_headers(legacy_token)).status_code == 200
     assert auth_client.get("/optional-auth", headers=_headers(legacy_token)).json() == {
-        "user_id": signup["user"]["id"],
+        "user_id": user_id,
     }
 
     async with auth_client.app.state.db_sessionmaker() as session:
-        user = await session.get(Users, signup["user"]["id"])
+        user = await session.get(Users, user_id)
         user.hashed_password = security.hash_password("Replacement456!")
         await session.commit()
 
@@ -321,8 +335,7 @@ async def test_legacy_token_only_works_before_the_first_password_reset(auth_clie
 async def test_password_reset_revokes_all_old_sessions_and_new_signin_uses_current_version(
     auth_client: TestClient,
 ):
-    auth_client.app.state.auth_test_settings.require_email_verification = False
-    signup = _signup(auth_client)
+    signup = _signup(auth_client, verified=True)
     refreshed = auth_client.post("/api/auth/refresh", headers=_headers(signup["access_token"])).json()
     replacement = "Replacement456!"
 
@@ -339,19 +352,18 @@ async def test_password_reset_revokes_all_old_sessions_and_new_signin_uses_curre
     signin = auth_client.post("/api/auth/signin", json={"email": _EMAIL, "password": replacement})
     assert signin.status_code == 200
     new_token = signin.json()["access_token"]
-    assert security.decode_access_token(new_token)["session_version"] == 1
+    assert security.decode_access_token(new_token)["session_version"] == 2
     assert auth_client.get("/api/auth/me", headers=_headers(new_token)).status_code == 200
     assert auth_client.get("/optional-auth", headers=_headers(new_token)).json() == {
         "user_id": signup["user"]["id"],
     }
     refreshed = auth_client.post("/api/auth/refresh", headers=_headers(new_token))
     assert refreshed.status_code == 200
-    assert security.decode_access_token(refreshed.json()["access_token"])["session_version"] == 1
+    assert security.decode_access_token(refreshed.json()["access_token"])["session_version"] == 2
 
 
 async def test_password_resets_from_stale_orm_snapshots_do_not_lose_revocations(auth_client: TestClient):
-    auth_client.app.state.auth_test_settings.require_email_verification = False
-    signup = _signup(auth_client)
+    signup = _signup(auth_client, verified=True)
     sessions = auth_client.app.state.db_sessionmaker
     async with sessions() as first_session, sessions() as second_session:
         first_user = await first_session.get(Users, signup["user"]["id"])
@@ -371,7 +383,7 @@ async def test_password_resets_from_stale_orm_snapshots_do_not_lose_revocations(
         "/api/auth/signin", json={"email": _EMAIL, "password": "SecondReplacement789!"},
     )
     assert second_signin.status_code == 200
-    assert security.decode_access_token(second_signin.json()["access_token"])["session_version"] == 2
+    assert security.decode_access_token(second_signin.json()["access_token"])["session_version"] == 3
 
 
 @pytest.mark.parametrize("provider", ["email", "neon", "google"])
@@ -379,22 +391,22 @@ async def test_password_resets_from_stale_orm_snapshots_do_not_lose_revocations(
 def test_identity_link_revokes_prior_sessions_regardless_of_client_provider(
     auth_client: TestClient, neon_identity: dict, provider: str, verified_local: bool,
 ):
-    auth_client.app.state.auth_test_settings.require_email_verification = False
-    signup = _signup(auth_client)
-    previous = _verify_email(auth_client) if verified_local else signup
-    legacy_token = _signed_token(signup["user"]["id"])
-    auth_client.app.state.auth_test_settings.require_email_verification = True
+    _signup(auth_client)
+    user_id = _registered_user_id(auth_client)
+    previous = _verify_email(auth_client) if verified_local else None
+    legacy_token = _signed_token(user_id)
 
     linked = _sync(auth_client, provider)
 
-    assert linked["user"]["id"] == signup["user"]["id"]
-    _assert_session_rejected(auth_client, previous["access_token"])
+    assert linked["user"]["id"] == user_id
+    if previous is not None:
+        _assert_session_rejected(auth_client, previous["access_token"])
     _assert_session_rejected(auth_client, legacy_token)
     assert linked["user"]["auth_provider"] == "neon"
     assert linked["user"]["is_verified"] is True
     assert auth_client.get("/api/auth/me", headers=_headers(linked["access_token"])).status_code == 200
     assert auth_client.get("/optional-auth", headers=_headers(linked["access_token"])).json() == {
-        "user_id": signup["user"]["id"],
+        "user_id": user_id,
     }
     refreshed = auth_client.post("/api/auth/refresh", headers=_headers(linked["access_token"]))
     assert refreshed.status_code == 200
@@ -405,13 +417,12 @@ def test_identity_link_revokes_prior_sessions_regardless_of_client_provider(
     assert signin.status_code == (200 if verified_local else 401)
 
 
-def test_refresh_cannot_extend_a_pre_link_signup_token(auth_client: TestClient, neon_identity: dict):
-    auth_client.app.state.auth_test_settings.require_email_verification = False
-    signup = _signup(auth_client)
-    auth_client.app.state.auth_test_settings.require_email_verification = True
+def test_refresh_cannot_extend_a_pre_link_legacy_token(auth_client: TestClient, neon_identity: dict):
+    _signup(auth_client)
+    legacy_token = _signed_token(_registered_user_id(auth_client))
     _sync(auth_client, "email")
 
-    response = auth_client.post("/api/auth/refresh", headers=_headers(signup["access_token"]))
+    response = auth_client.post("/api/auth/refresh", headers=_headers(legacy_token))
 
     assert response.status_code == 401
     assert "access_token" not in response.json()
@@ -443,9 +454,10 @@ def test_sync_requires_a_literal_verified_boolean_from_neon(
 
 
 async def test_sync_cannot_issue_a_session_for_a_disabled_user(auth_client: TestClient, neon_identity: dict):
-    signup = _signup(auth_client)
+    _signup(auth_client)
+    user_id = _registered_user_id(auth_client)
     async with auth_client.app.state.db_sessionmaker() as session:
-        user = await session.get(Users, signup["user"]["id"])
+        user = await session.get(Users, user_id)
         user.is_active = False
         await session.commit()
 

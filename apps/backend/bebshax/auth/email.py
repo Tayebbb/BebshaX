@@ -3,7 +3,9 @@
 import asyncio
 import logging
 import smtplib
+import ssl
 from email.message import EmailMessage
+from html import escape
 from typing import Optional
 import httpx
 
@@ -30,13 +32,14 @@ def _send_smtp_sync(
     msg.set_content("Please enable HTML to view this email.")
     msg.add_alternative(html_body, subtype="html")
 
+    tls_context = ssl.create_default_context()
     if smtp_port == 465:
-        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as server:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10, context=tls_context) as server:
             server.login(username, password)
             server.send_message(msg)
     else:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-            server.starttls()
+            server.starttls(context=tls_context)
             server.login(username, password)
             server.send_message(msg)
     return True
@@ -67,13 +70,11 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
                 subject,
                 html_body,
             )
-            logger.info("Sent email to %s via SMTP (%s)", to_email, smtp_host)
+            logger.info("Email sent via SMTP")
             return True
-        except Exception as exc:
+        except Exception:
             logger.warning(
-                "SMTP email delivery to %s failed (%s). Trying Resend API fallback.",
-                to_email,
-                exc,
+                "SMTP email delivery failed. Trying Resend API fallback."
             )
 
     # 2. Fallback to Resend API
@@ -82,9 +83,7 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
         from_addr = settings.email_from_address
         if not from_addr:
             logger.warning(
-                "BEBSHAX_EMAIL_FROM_ADDRESS is not set — Resend requires a verified "
-                "sender; skipping Resend delivery to %s.",
-                to_email,
+                "BEBSHAX_EMAIL_FROM_ADDRESS is not set; skipping Resend delivery."
             )
         else:
             try:
@@ -100,19 +99,33 @@ async def send_email(to_email: str, subject: str, html_body: str) -> bool:
                         },
                     )
                 if resp.status_code < 400:
-                    logger.info("Sent email to %s via Resend API", to_email)
+                    logger.info("Email sent via Resend API")
                     return True
                 else:
-                    logger.error("Resend API failed: %d %s", resp.status_code, resp.text)
-            except Exception as exc:
-                logger.error("Resend API exception: %s", exc)
+                    logger.error("Resend API failed: %d", resp.status_code)
+            except Exception:
+                logger.error("Resend API delivery failed")
 
-    logger.warning("No working email credentials configured. Email to %s skipped.", to_email)
+    logger.warning("No working email credentials configured; delivery skipped.")
     return False
 
 
+def _console_code_fallback(purpose: str, otp_code: Optional[str]) -> None:
+    """Print a one-time code to the log when nothing can deliver it.
+
+    Strictly the local development environment: without this, a fresh signup
+    on a machine with no mail transport can never be verified. Codes are
+    single-use and expire in 15 minutes; the recipient address is never logged.
+    """
+    if otp_code and get_settings().environment == "development":
+        logger.warning(
+            "DEVELOPMENT ONLY (no email transport configured): the %s code just issued is %s",
+            purpose, otp_code,
+        )
+
+
 async def send_verification_email(to_email: str, verification_url: str, otp_code: Optional[str] = None) -> bool:
-    """Send verification email with both 6-digit OTP code and direct link."""
+    """Send a six-digit code and a token-free link to its entry page."""
     subject = f"Your BebshaX Verification Code: {otp_code}" if otp_code else "Verify your BebshaX account"
 
     otp_html = ""
@@ -126,9 +139,26 @@ async def send_verification_email(to_email: str, verification_url: str, otp_code
         "<div style='font-family: Arial, sans-serif; max-width: 500px; padding: 24px; border: 1px solid #e5e7eb; border-radius: 10px;'>"
         "<h2 style='color: #111827; margin-top: 0;'>Welcome to BebshaX</h2>"
         f"{otp_html}"
-        "<p style='margin-top: 20px; font-size: 14px; color: #6b7280;'>Or click the button below to verify automatically:</p>"
-        f'<p><a href="{verification_url}" style="display:inline-block; padding: 12px 24px; background-color: #4f46e5; color: white; border-radius: 6px; text-decoration: none; font-weight: bold;">Verify Email Address</a></p>'
-        "<p style='font-size: 12px; color: #9ca3af;'>This verification code expires in 24 hours.</p>"
+        "<p style='margin-top: 20px; font-size: 14px; color: #6b7280;'>Open the verification page and enter your email address and code:</p>"
+        f'<p><a href="{escape(verification_url, quote=True)}" style="display:inline-block; padding: 12px 24px; background-color: #4f46e5; color: white; border-radius: 6px; text-decoration: none; font-weight: bold;">Verify Email Address</a></p>'
+        "<p style='font-size: 12px; color: #9ca3af;'>This verification code expires in 15 minutes and can be used only once.</p>"
         "</div>"
     )
-    return await send_email(to_email, subject, html)
+    delivered = await send_email(to_email, subject, html)
+    if not delivered:
+        _console_code_fallback("verification", otp_code)
+    return delivered
+
+
+async def send_password_reset_email(to_email: str, otp_code: str) -> bool:
+    delivered = await send_email(
+        to_email,
+        "Reset your BebshaX password",
+        "<h2>Reset your BebshaX password</h2>"
+        f"<p>Your password reset code is <strong>{otp_code}</strong>.</p>"
+        "<p>This code expires in 15 minutes and can be used only once.</p>"
+        "<p>If you did not request a password reset, ignore this email.</p>",
+    )
+    if not delivered:
+        _console_code_fallback("password reset", otp_code)
+    return delivered

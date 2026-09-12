@@ -10,27 +10,50 @@ frozen path.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import nullcontext
+from ipaddress import ip_address
 from typing import Optional
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bebshax.api.auth import get_current_user, get_optional_current_user
 from bebshax.auth.models import Users
+from bebshax.config import get_settings
 from bebshax.db.models import Studies
+from bebshax.llm.governance import LLMRequestContext, llm_request_context
 from bebshax.tenancy import STUDY_ANON_OWNER_IDS
 from bebshax.tenancy import owner_accessible as _tenancy_owner_accessible
 from bebshax.tenancy import owner_can_write as _tenancy_owner_can_write
+from bebshax.tenancy_context import tenant_scope
+
+
+async def get_tenant_user(current_user: Users = Depends(get_current_user)) -> AsyncIterator[Users]:
+    """Keep a required authenticated identity bound through the route and its cleanup."""
+    with tenant_scope(current_user.id), llm_request_context(LLMRequestContext(owner_user_id=current_user.id)):
+        yield current_user
+
+
+async def get_optional_tenant_user(
+    current_user: Optional[Users] = Depends(get_optional_current_user),
+) -> AsyncIterator[Optional[Users]]:
+    """Bind only the identity verified by the auth dependency, never a payload owner."""
+    processing_scope = (
+        llm_request_context(LLMRequestContext(owner_user_id=current_user.id))
+        if current_user else nullcontext()
+    )
+    with tenant_scope(current_user.id if current_user else None), processing_scope:
+        yield current_user
 
 
 def user_owns_study(study: Studies, current_user: Optional[Users]) -> bool:
-    """Return True if the current user owns the study, or it is a public demo / default study."""
+    """Only explicit demos are public; legacy or missing ownership stays private."""
     if study.is_demo:
         return True
-    if current_user and study.user_id == current_user.id:
-        return True
-    if current_user is None and (not study.user_id or study.user_id in STUDY_ANON_OWNER_IDS):
-        return True
-    return False
+    return bool(
+        current_user and current_user.id not in STUDY_ANON_OWNER_IDS
+        and study.user_id and study.user_id == current_user.id
+    )
 
 
 def user_can_write_study(study: Studies, current_user: Optional[Users]) -> bool:
@@ -43,7 +66,7 @@ def user_can_write_study(study: Studies, current_user: Optional[Users]) -> bool:
     so granting them writes would let any visitor edit or delete any other
     visitor's study.
     """
-    if current_user is None:
+    if current_user is None or study.is_demo or current_user.id in STUDY_ANON_OWNER_IDS:
         return False
     return bool(study.user_id) and study.user_id == current_user.id
 
@@ -66,6 +89,34 @@ def owner_can_write(owner_id: Optional[str], current_user: Optional[Users]) -> b
 READ_ONLY_STUDY_DETAIL = (
     "This is a read-only example study — create your own study to make changes."
 )
+
+
+async def require_developer_user(current_user: Users = Depends(get_tenant_user)) -> Users:
+    """Roles are read from the verified user's DB row, never JWT or client claims."""
+    if current_user.role not in {"developer", "admin"}:
+        raise HTTPException(status_code=403, detail="Developer access required.")
+    return current_user
+
+
+def require_development_environment(request: Request) -> None:
+    """404 outside development or off-loopback, before any credential is examined."""
+    settings = getattr(request.app.state, "settings", None) or get_settings()
+    if settings.environment != "development" or request.client is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        local_peer = ip_address(request.client.host).is_loopback
+    except ValueError:
+        local_peer = False
+    if not local_peer:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def require_development_diagnostics(
+    _environment: None = Depends(require_development_environment),
+    current_user: Users = Depends(require_developer_user),
+) -> None:
+    """Development-only diagnostics: existence check first, then developer identity."""
+    return None
 
 
 def require_study_access(

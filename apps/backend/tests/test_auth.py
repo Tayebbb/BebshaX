@@ -1,6 +1,7 @@
 """Tests for Authentication: password hashing, JWT creation/validation, and API endpoints."""
 
 import pytest
+from unittest.mock import AsyncMock
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -83,6 +84,7 @@ async def test_user_service_crud_and_auth(tmp_path):
 @pytest.mark.asyncio
 async def test_auth_api_flow(monkeypatch, tmp_path):
     """Test HTTP signup, signin, and /me authenticated profile."""
+    monkeypatch.setattr("bebshax.api.auth.send_verification_email", AsyncMock(return_value=True))
     db_url = f"sqlite+aiosqlite:///{tmp_path}/test_auth_api.db"
     monkeypatch.setenv("BEBSHAX_DATABASE_URL", db_url)
 
@@ -97,7 +99,6 @@ async def test_auth_api_flow(monkeypatch, tmp_path):
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # 1. Sign Up — account is created, token issued, is_verified=False until confirmed.
         signup_res = await client.post(
             "/api/auth/signup",
             json={
@@ -108,12 +109,11 @@ async def test_auth_api_flow(monkeypatch, tmp_path):
         )
         assert signup_res.status_code == 201
         data = signup_res.json()
-        assert data["access_token"]
-        assert data["user"]["email"] == "alex.rivera@fintech.io"
-        assert data["user"]["full_name"] == "Alex Rivera"
-        assert data["user"]["is_verified"] is False
+        assert data["access_token"] == ""
+        assert data["refresh_token"] is None
+        assert data["verification_required"] is True
+        assert data["user"] is None
 
-        # Duplicate signup should conflict (409)
         dup_res = await client.post(
             "/api/auth/signup",
             json={
@@ -122,7 +122,14 @@ async def test_auth_api_flow(monkeypatch, tmp_path):
                 "password": "Password1234!",
             },
         )
-        assert dup_res.status_code == 409
+        assert dup_res.status_code == 201
+        assert dup_res.json() == data
+
+        unverified_signin = await client.post(
+            "/api/auth/signin",
+            json={"email": "alex.rivera@fintech.io", "password": "Password1234!"},
+        )
+        assert unverified_signin.status_code == 403
 
         # Simulate email verification flow via token or db flip
         async with sm() as session:

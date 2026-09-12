@@ -162,7 +162,9 @@ def test_demo_studies_are_readable_but_not_writable_by_anonymous_callers(client)
     assert client.post(
         "/api/studies/std_demo_write_guard/script/generate", json={"question_count": 3}
     ).status_code == 403
-    assert client.post("/api/studies/std_demo_write_guard/research/run").status_code == 403
+    # Research runs authenticate before the study gate (they spend LLM budget), so an
+    # anonymous caller is refused with 401 rather than the read-only 403.
+    assert client.post("/api/studies/std_demo_write_guard/research/run").status_code in {401, 403}
     assert client.delete("/api/studies/std_demo_write_guard").status_code == 403
 
     async def unchanged():

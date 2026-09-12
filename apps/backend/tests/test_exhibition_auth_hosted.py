@@ -3,10 +3,12 @@
 import secrets
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import Depends, FastAPI
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.testclient import TestClient
 
@@ -27,8 +29,9 @@ async def hosted_auth_client(
     request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncIterator[TestClient]:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'hosted_auth.db'}"
+    settings_options: dict[str, Any] = {"_env_file": None}
     settings = Settings(
-        _env_file=None,
+        **settings_options,
         environment=request.param,
         database_url=database_url,
         jwt_secret=secrets.token_urlsafe(48),
@@ -46,13 +49,10 @@ async def hosted_auth_client(
     verification_mail = AsyncMock(return_value=True)
     monkeypatch.setattr(auth_api, "send_verification_email", verification_mail)
     limiter._limiter.storage.reset()
-    auth_api._verify_failures.clear()
 
     engine = create_async_engine(database_url)
     async with engine.begin() as connection:
-        await connection.run_sync(
-            Base.metadata.create_all, tables=[Users.__table__, EmailVerificationToken.__table__],
-        )
+        await connection.run_sync(Base.metadata.create_all)
     app = FastAPI()
     app.include_router(auth_api.auth_router)
     app.state.limiter = limiter
@@ -71,7 +71,6 @@ async def hosted_auth_client(
     finally:
         await engine.dispose()
         limiter._limiter.storage.reset()
-        auth_api._verify_failures.clear()
 
 
 def _signup(client: TestClient) -> dict:
@@ -87,26 +86,27 @@ def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_hosted_verification_gates_all_auth_paths_and_mints_current_sessions(
+async def test_hosted_verification_gates_all_auth_paths_and_mints_current_sessions(
     hosted_auth_client: TestClient,
 ) -> None:
+    app = hosted_auth_client.app
+    assert isinstance(app, FastAPI)
     signup = _signup(hosted_auth_client)
-    user_id = signup["user"]["id"]
+    async with app.state.sessionmaker() as session:
+        user_id = (await session.scalars(select(Users.id).where(Users.email == _EMAIL))).one()
     prior_token = security.create_access_token(user_id)
 
     assert signup["verification_required"] is True
     assert signup["access_token"] == ""
-    assert signup["user"]["is_verified"] is False
+    assert signup["user"] is None
     assert hosted_auth_client.get("/api/auth/me", headers=_headers(prior_token)).status_code == 403
     assert hosted_auth_client.post("/api/auth/refresh", headers=_headers(prior_token)).status_code == 403
-    assert hosted_auth_client.get("/optional-auth", headers=_headers(prior_token)).json() == {
-        "user_id": None,
-    }
+    assert hosted_auth_client.get("/optional-auth", headers=_headers(prior_token)).status_code == 403
     assert hosted_auth_client.post(
         "/api/auth/signin", json={"email": _EMAIL, "password": _PASSWORD},
     ).status_code == 403
 
-    otp_code = hosted_auth_client.app.state.verification_mail.call_args.kwargs["otp_code"]
+    otp_code = app.state.verification_mail.call_args.kwargs["otp_code"]
     verified = hosted_auth_client.post(
         "/api/auth/verify-email", json={"email": _EMAIL, "token": otp_code},
     )
@@ -114,7 +114,9 @@ def test_hosted_verification_gates_all_auth_paths_and_mints_current_sessions(
     assert verified.json()["verification_required"] is False
     assert verified.json()["user"]["is_verified"] is True
     verified_token = verified.json()["access_token"]
-    assert security.decode_access_token(verified_token)["session_version"] == 1
+    verified_claims = security.decode_access_token(verified_token)
+    assert verified_claims is not None
+    assert verified_claims["session_version"] == 1
     assert hosted_auth_client.get("/api/auth/me", headers=_headers(verified_token)).status_code == 200
     assert hosted_auth_client.get("/optional-auth", headers=_headers(verified_token)).json() == {
         "user_id": user_id,
@@ -126,22 +128,28 @@ def test_hosted_verification_gates_all_auth_paths_and_mints_current_sessions(
     )
     assert signin.status_code == 200, signin.text
     signin_token = signin.json()["access_token"]
-    assert security.decode_access_token(signin_token)["session_version"] == 1
+    signin_claims = security.decode_access_token(signin_token)
+    assert signin_claims is not None
+    assert signin_claims["session_version"] == 1
     refreshed = hosted_auth_client.post("/api/auth/refresh", headers=_headers(signin_token))
     assert refreshed.status_code == 200, refreshed.text
-    assert security.decode_access_token(refreshed.json()["access_token"])["session_version"] == 1
+    refreshed_claims = security.decode_access_token(refreshed.json()["access_token"])
+    assert refreshed_claims is not None
+    assert refreshed_claims["session_version"] == 1
 
 
 def test_hosted_email_delivery_failure_never_grants_a_signup_session(
     hosted_auth_client: TestClient,
 ) -> None:
-    hosted_auth_client.app.state.verification_mail.side_effect = RuntimeError("Test delivery failure")
+    app = hosted_auth_client.app
+    assert isinstance(app, FastAPI)
+    app.state.verification_mail.side_effect = RuntimeError("Test delivery failure")
 
     signup = _signup(hosted_auth_client)
 
     assert signup["verification_required"] is True
     assert signup["access_token"] == ""
-    assert signup["user"]["is_verified"] is False
+    assert signup["user"] is None
     assert hosted_auth_client.post(
         "/api/auth/signin", json={"email": _EMAIL, "password": _PASSWORD},
     ).status_code == 403

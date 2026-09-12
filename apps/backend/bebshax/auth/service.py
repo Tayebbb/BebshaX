@@ -2,12 +2,13 @@
 
 import functools
 import secrets
+from asyncio import to_thread
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.auth.models import Users
-from bebshax.auth.security import hash_password, verify_password
+from bebshax.auth.security import hash_password, password_hash_usable, verify_password
 
 
 @functools.lru_cache(maxsize=1)
@@ -40,9 +41,14 @@ async def create_user(
     password: Optional[str] = None,
     auth_provider: str = "email",
     avatar_url: Optional[str] = None,
+    prehashed_password: str | None = None,
 ) -> Users:
     """Create and persist a new user."""
-    hashed = hash_password(password) if password else None
+    if prehashed_password is not None and (password is not None or not password_hash_usable(prehashed_password)):
+        raise ValueError("Invalid prehashed password input")
+    hashed = prehashed_password
+    if password is not None:
+        hashed = await to_thread(hash_password, password)
     user = Users(
         email=email.strip().lower(),
         full_name=full_name.strip(),
@@ -65,10 +71,9 @@ async def authenticate_user(
     Unknown emails and accounts without a usable password (federated or
     revoked) take the same code path length as a wrong password.
     """
+    dummy = await to_thread(_dummy_hash)
     user = await get_user_by_email(session, email)
-    if not user or not user.hashed_password:
-        verify_password(password, _dummy_hash())
-        return None
-    if not verify_password(password, user.hashed_password):
-        return None
-    return user
+    usable = bool(user and password_hash_usable(user.hashed_password))
+    hashed = user.hashed_password if user and usable else dummy
+    verified = await to_thread(verify_password, password, hashed or dummy)
+    return user if user and user.is_active and usable and verified else None

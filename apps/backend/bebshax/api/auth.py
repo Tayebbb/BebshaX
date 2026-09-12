@@ -1,32 +1,74 @@
 import logging
-import secrets
-import time
-import uuid
+from asyncio import to_thread
+from collections.abc import AsyncIterator
+from contextlib import ExitStack
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
+from urllib.parse import urlsplit
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from pydantic import BaseModel, Field, field_validator
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response, status
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bebshax.auth.models import Users, EmailVerificationToken
-from bebshax.auth.email import send_verification_email
-from bebshax.auth.security import create_access_token, decode_access_token
+from bebshax.auth.models import AuthSessions, Users, EmailVerificationToken
+from bebshax.auth.email import send_password_reset_email, send_verification_email
+from bebshax.auth.recovery import request_password_reset, reset_local_password
+from bebshax.auth.otp import VERIFY_PURPOSE, consume_otp, issue_otp
+from bebshax.auth.security import decode_access_token, hash_password
 from bebshax.auth.service import authenticate_user, create_user, get_user_by_email, get_user_by_id
+from bebshax.auth.sessions import (
+    ACCESS_LIFETIME, SessionCredentials, authenticated_user, aware, find_refresh_session,
+    issue_session, lock_user, refresh_user, revoke_family, rotate_session, utc_now,
+)
+from bebshax.auth.transport import (
+    ACCESS_COOKIE, REFRESH_COOKIE, SAFE_METHODS, AuthRoute, access_credential,
+    clear_session_cookies, csrf_token, has_auth_cookies, requested_transport,
+    require_cookie_binding, require_cookie_csrf, require_cookie_origin, set_session_cookies,
+)
 from bebshax.api.errors import APIError
-from bebshax.api.limiter import limiter
+from bebshax.api.limiter import enforce_auth_limits, limiter
 from bebshax.config import get_settings
+from bebshax.llm.governance import LLMRequestContext, llm_request_context
+from bebshax.tenancy_context import tenant_scope
 
 logger = logging.getLogger(__name__)
 
-auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
+auth_router = APIRouter(prefix="/api/auth", tags=["auth"], route_class=AuthRoute)
 
 
-class SignUpRequest(BaseModel):
+class AuthInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def require_valid_unicode(cls, value: object) -> object:
+        if isinstance(value, str):
+            try:
+                value.encode("utf-8")
+            except UnicodeError:
+                raise ValueError("Invalid text encoding") from None
+        return value
+
+
+class EmailRequest(AuthInput):
+    email: str = Field(..., min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+
+class SignUpRequest(EmailRequest):
     full_name: str = Field(..., min_length=2, max_length=100)
-    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def normalize_full_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
     @field_validator("password")
     @classmethod
@@ -42,9 +84,8 @@ class SignUpRequest(BaseModel):
 
 
 
-class SignInRequest(BaseModel):
-    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-    password: str
+class SignInRequest(EmailRequest):
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 from enum import Enum
@@ -56,9 +97,31 @@ class AuthProvider(str, Enum):
     GOOGLE = "google"
 
 
-class UserSyncRequest(BaseModel):
-    neon_token: str = Field(..., min_length=1)
+class UserSyncRequest(AuthInput):
+    neon_token: str = Field(..., min_length=1, max_length=8192)
     auth_provider: AuthProvider = AuthProvider.NEON
+
+
+class VerifiedNeonIdentity(EmailRequest):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    full_name: str | None = Field(default=None, min_length=1, max_length=100)
+    image: str | None = Field(default=None, min_length=1, max_length=512)
+    avatar_url: str | None = Field(default=None, min_length=1, max_length=512)
+
+    @field_validator("image", "avatar_url")
+    @classmethod
+    def validate_avatar_url(cls, value: str | None) -> str | None:
+        if value is not None:
+            parsed = urlsplit(value)
+            if (
+                parsed.scheme not in {"https", "http"} or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or any(ord(character) < 33 for character in value)
+            ):
+                raise ValueError("Invalid avatar URL")
+        return value
 
 
 
@@ -70,6 +133,7 @@ class UserProfileResponse(BaseModel):
     is_active: bool
     is_verified: bool
     auth_provider: str
+    role: str
     created_at: str
     updated_at: str
 
@@ -77,12 +141,15 @@ class UserProfileResponse(BaseModel):
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    # Derived, never restated: this used to be a hardcoded 7 while
-    # settings.jwt_expire_days was 365, so the API told every client a lifetime
-    # 52x shorter than the token it had just issued.
-    expires_in_days: int = Field(default_factory=lambda: get_settings().jwt_expire_days)
+    expires_in: int = 0
+    expires_in_days: float = 0
+    refresh_token: str | None = None
+    refresh_expires_in: int = 0
+    session_id: str | None = None
+    session_expires_at: str | None = None
+    csrf_token: str | None = None
     verification_required: bool = False
-    user: UserProfileResponse
+    user: UserProfileResponse | None = None
 
 
 def _serialize_user(user: Users) -> UserProfileResponse:
@@ -94,16 +161,46 @@ def _serialize_user(user: Users) -> UserProfileResponse:
         is_active=user.is_active,
         is_verified=user.is_verified,
         auth_provider=user.auth_provider,
+        role=user.role or "user",
         created_at=user.created_at.isoformat(),
         updated_at=user.updated_at.isoformat(),
     )
 
 
 def _verification_required(user: Users) -> bool:
-    return get_settings().email_verification_enforced and not user.is_verified
+    return not user.is_verified
 
 
-async def get_session(request: Request) -> AsyncSession:
+def _session_response(user: Users, credentials: SessionCredentials, response: Response) -> AuthResponse:
+    record = credentials.record
+    claims = decode_access_token(credentials.access_token)
+    if claims is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired authentication token")
+    expires_in = max(0, claims["exp"] - int(datetime.now(timezone.utc).timestamp()))
+    cookie_mode = record.transport == "cookie"
+    if cookie_mode:
+        set_session_cookies(response, credentials)
+    return AuthResponse(
+        access_token="" if cookie_mode else credentials.access_token,
+        refresh_token=None if cookie_mode else credentials.refresh_token,
+        expires_in=expires_in, expires_in_days=expires_in / 86400,
+        refresh_expires_in=max(0, int((aware(record.refresh_expires_at) - utc_now()).total_seconds())),
+        session_id=record.family_id, session_expires_at=record.absolute_expires_at.isoformat(),
+        csrf_token=csrf_token(record) if cookie_mode else None,
+        user=_serialize_user(user),
+    )
+
+
+async def _issue_auth_response(
+    session: AsyncSession, user: Users, request: Request, response: Response,
+) -> AuthResponse:
+    credentials = await issue_session(session, user, transport=requested_transport(request))
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Session has been revoked. Please sign in again.")
+    return _session_response(user, credentials, response)
+
+
+async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     sessionmaker = getattr(request.app.state, "db_sessionmaker", None) or getattr(
         request.app.state, "sessionmaker", None
     )
@@ -113,18 +210,18 @@ async def get_session(request: Request) -> AsyncSession:
         yield session
 
 
+async def get_identity_scope() -> AsyncIterator[ExitStack]:
+    with ExitStack() as context_stack:
+        yield context_stack
+
+
 async def get_current_user(
     request: Request,
     authorization: Optional[str] = Header(None),
+    context_stack: ExitStack = Depends(get_identity_scope),
 ) -> Users:
     """Dependency to validate JWT and return the current user."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    token = authorization.split(" ", 1)[1].strip()
+    token, cookie_mode = access_credential(request, authorization)
     payload = decode_access_token(token)
     if not payload or "sub" not in payload:
         raise HTTPException(
@@ -140,12 +237,19 @@ async def get_current_user(
     if not sessionmaker:
         raise HTTPException(status_code=500, detail="Database not configured")
     async with sessionmaker() as session:
-        user = await get_user_by_id(session, user_id)
+        user = await authenticated_user(session, payload, transport="cookie" if cookie_mode else "bearer")
         if not user or not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found or inactive",
             )
+        if cookie_mode:
+            record = await session.get(AuthSessions, payload["jti"])
+            if record is None:
+                raise HTTPException(status_code=401, detail="Invalid session")
+            require_cookie_binding(request, record)
+            if request.method not in SAFE_METHODS:
+                require_cookie_csrf(request, record)
         if _verification_required(user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -157,44 +261,21 @@ async def get_current_user(
                 detail="Session has been revoked. Please sign in again.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        if isinstance(context_stack, ExitStack):
+            context_stack.enter_context(tenant_scope(user.id))
+            context_stack.enter_context(llm_request_context(LLMRequestContext(owner_user_id=user.id)))
         return user
 
 
 async def get_optional_current_user(
     request: Request,
     authorization: str | None = Header(None, alias="Authorization"),
+    context_stack: ExitStack = Depends(get_identity_scope),
 ) -> Users | None:
-    """Extract and validate current user if Bearer token is provided, otherwise return None."""
-    if not authorization or not authorization.startswith("Bearer "):
+    """Anonymous means absent credentials, never rejected or unavailable credentials."""
+    if authorization is None and not has_auth_cookies(request):
         return None
-    token = authorization.split(" ", 1)[1].strip()
-    payload = decode_access_token(token)
-    if not payload or "sub" not in payload:
-        return None
-
-    user_id = payload["sub"]
-    sessionmaker = getattr(request.app.state, "db_sessionmaker", None) or getattr(
-        request.app.state, "sessionmaker", None
-    )
-    if not sessionmaker:
-        return None
-    try:
-        async with sessionmaker() as session:
-            user = await get_user_by_id(session, user_id)
-            if (
-                user and user.is_active and not _verification_required(user)
-                and payload.get("session_version", 0) == user.session_version
-            ):
-                return user
-    except Exception:
-        # Fail-open to anonymous by design (optional auth), but a DB outage
-        # here must never be invisible — it silently demotes valid tokens.
-        logger.warning(
-            "optional-auth user lookup failed for sub=%s — treating request as anonymous",
-            user_id,
-            exc_info=True,
-        )
-    return None
+    return await get_current_user(request, authorization, context_stack)
 
 
 @auth_router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
@@ -204,101 +285,48 @@ async def get_optional_current_user(
 async def signup(
     request: Request,
     payload: SignUpRequest,
+    response: Response,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
+    await enforce_auth_limits(request, session, "signup", payload.email)
+    pending = AuthResponse(access_token="", verification_required=True)
     try:
+        hashed = await to_thread(hash_password, payload.password)
         existing = await get_user_by_email(session, payload.email)
         if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this email address already exists.",
-            )
+            return pending
 
         user = await create_user(
             session=session,
             email=payload.email,
             full_name=payload.full_name,
-            password=payload.password,
+            prehashed_password=hashed,
             auth_provider="email",
         )
 
-        otp_code = f"{secrets.randbelow(900000) + 100000}"
-        token_value = otp_code
-        verification_token = EmailVerificationToken(
-            id=str(uuid.uuid4()),
-            user_id=user.id,
-            token=token_value,
-            created_at=datetime.now(timezone.utc),
-            expires_at=EmailVerificationToken.generate_expiry(hours=24),
-        )
-        session.add(verification_token)
-        await session.commit()
-        await session.refresh(user)
+        otp_code = await issue_otp(session, user, VERIFY_PURPOSE)
+        if otp_code is not None:
+            background_tasks.add_task(_deliver_verification, user.email, otp_code)
 
-        settings = get_settings()
-        verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
-        try:
-            await send_verification_email(user.email, verification_url, otp_code=otp_code)
-        except Exception as mail_exc:
-            logger.warning("Background email dispatch warning: %s", mail_exc)
-
-        verification_required = _verification_required(user)
-        token = ""
-        if not verification_required:
-            token = create_access_token(user_id=user.id, session_version=user.session_version)
-        return AuthResponse(
-            access_token=token,
-            verification_required=verification_required,
-            user=_serialize_user(user),
-        )
+        return pending
+    except IntegrityError:
+        await session.rollback()
+        return pending
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error("Signup exception: %s", exc, exc_info=True)
+    except Exception:
+        await session.rollback()
+        logger.error("Signup failed due to an internal error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Signup failed due to an internal error. Please try again.",
         )
 
 
-def _is_dt_expired(expires_at: datetime) -> bool:
-    if expires_at.tzinfo is None:
-        return expires_at < datetime.now(timezone.utc).replace(tzinfo=None)
-    return expires_at < datetime.now(timezone.utc)
-
-
-class VerifyEmailRequest(BaseModel):
-    token: str = Field(..., min_length=1, max_length=64)
-    # Binds the 6-digit OTP to the account it was issued for: the lookup is
-    # scoped to THIS user's tokens, so a code issued to one account can never
-    # verify another, and guessing is per-account rather than global.
-    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
-# Per-account failed-attempt counter for OTP verification: 6-digit codes are
-# guessable at ~1e6, so 5 misses lock the account's verification for 15 min.
-# In-process by design (single worker); a multi-process deployment needs a
-# `verification_failures`/`locked_until` column on users instead of this dict.
-VERIFY_MAX_FAILURES = 5
-VERIFY_LOCKOUT_SECONDS = 15 * 60
-_verify_failures: dict[str, tuple[int, float]] = {}  # user_id -> (failures, locked_until)
-
-
-def _verification_locked(user_id: str, now: Optional[float] = None) -> bool:
-    now = time.monotonic() if now is None else now
-    failures, locked_until = _verify_failures.get(user_id, (0, 0.0))
-    if failures >= VERIFY_MAX_FAILURES:
-        if now < locked_until:
-            return True
-        _verify_failures.pop(user_id, None)  # lockout elapsed
-    return False
-
-
-def _record_verification_failure(user_id: str) -> None:
-    failures, _ = _verify_failures.get(user_id, (0, 0.0))
-    failures += 1
-    locked_until = time.monotonic() + VERIFY_LOCKOUT_SECONDS if failures >= VERIFY_MAX_FAILURES else 0.0
-    _verify_failures[user_id] = (failures, locked_until)
+class VerifyEmailRequest(EmailRequest):
+    token: str = Field(..., min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
+    purpose: Literal["email-verification"] = "email-verification"
 
 
 def _invalid_token() -> HTTPException:
@@ -312,68 +340,43 @@ def _invalid_token() -> HTTPException:
 async def verify_email(
     request: Request,
     payload: VerifyEmailRequest,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ):
     """Verify a user's email with the OTP issued to that account."""
-    user = await get_user_by_email(session, payload.email)
+    await enforce_auth_limits(request, session, "verify", payload.email)
+    user = await consume_otp(session, payload.email, VERIFY_PURPOSE, payload.token)
     if not user:
         raise _invalid_token()
-    if _verification_locked(user.id):
-        raise APIError(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            "Too many verification attempts. Request a new code and try again in 15 minutes.",
-            error_code="too_many_attempts",
-        )
-
-    stmt = select(EmailVerificationToken).where(
-        EmailVerificationToken.token == payload.token,
-        EmailVerificationToken.user_id == user.id,
-    )
-    record = (await session.execute(stmt)).scalar_one_or_none()
-    if not record:
-        _record_verification_failure(user.id)
-        raise _invalid_token()
-    if record.used_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Token already used.",
-        )
-    if _is_dt_expired(record.expires_at):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Verification link expired.",
-        )
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled.",
-        )
 
     user.is_verified = True
-    record.used_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(user)
-    _verify_failures.pop(user.id, None)
-    response = AuthResponse(
-        access_token=create_access_token(user_id=user.id, session_version=user.session_version),
-        user=_serialize_user(user),
-    )
-    return {"detail": "Email verified successfully.", **response.model_dump()}
+    auth_response = await _issue_auth_response(session, user, request, response)
+    return {"detail": "Email verified successfully.", **auth_response.model_dump()}
 
 
-class ResendVerificationRequest(BaseModel):
-    email: Optional[str] = None
+class ResendVerificationRequest(AuthInput):
+    email: str | None = Field(default=None, min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
 
 
 @auth_router.post("/resend-verification")
 @limiter.limit("10/hour")
 async def resend_verification(
     request: Request,
+    background_tasks: BackgroundTasks,
     payload: Optional[ResendVerificationRequest] = None,
     session: AsyncSession = Depends(get_session),
     current_user: Optional[Users] = Depends(get_optional_current_user),
 ):
     """Resend email verification link (rate-limited)."""
+    account = current_user.email if current_user else payload.email if payload else None
+    await enforce_auth_limits(request, session, "resend", account)
     # The response is deliberately identical whether or not the address exists
     # and whether or not it is already verified — differing replies let an
     # unauthenticated caller enumerate registered accounts.
@@ -383,38 +386,75 @@ async def resend_verification(
     if not target_user and payload and payload.email:
         target_user = await get_user_by_email(session, payload.email)
 
-    if not target_user or target_user.is_verified:
+    if not target_user:
         return uniform_response
-
-    # A resend supersedes every code still outstanding for this account, so an
-    # attacker cannot keep guessing an older code after the user asked for a
-    # fresh one.
-    now = datetime.now(timezone.utc)
-    await session.execute(
-        update(EmailVerificationToken)
-        .where(
-            EmailVerificationToken.user_id == target_user.id,
-            EmailVerificationToken.used_at.is_(None),
-        )
-        .values(used_at=now)
-    )
-
-    otp_code = f"{secrets.randbelow(900000) + 100000}"
-    token_value = otp_code
-    verification_token = EmailVerificationToken(
-        id=str(uuid.uuid4()),
-        user_id=target_user.id,
-        token=token_value,
-        created_at=now,
-        expires_at=EmailVerificationToken.generate_expiry(hours=24),
-    )
-    session.add(verification_token)
-    await session.commit()
-
-    settings = get_settings()
-    verification_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token_value}"
-    await send_verification_email(target_user.email, verification_url, otp_code=otp_code)
+    otp_code = await issue_otp(session, target_user, VERIFY_PURPOSE)
+    if otp_code is not None:
+        background_tasks.add_task(_deliver_verification, target_user.email, otp_code)
     return uniform_response
+
+
+async def _deliver_verification(email: str, code: str) -> None:
+    verification_url = f"{get_settings().frontend_base_url.rstrip('/')}/verify-email"
+    try:
+        await send_verification_email(email, verification_url, otp_code=code)
+    except Exception:
+        logger.warning("Verification email delivery failed")
+
+
+class ForgotPasswordRequest(EmailRequest):
+    purpose: Literal["forget-password"] = "forget-password"
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+
+class ResetPasswordRequest(ForgotPasswordRequest):
+    otp: str = Field(..., pattern=r"^[0-9]{6}$")
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return SignUpRequest.password_must_be_alphanumeric_mix(value)
+
+
+async def _deliver_password_reset(email: str, code: str) -> None:
+    try:
+        await send_password_reset_email(email, code)
+    except Exception:
+        logger.warning("Password recovery email delivery failed")
+
+
+@auth_router.post("/forgot-password")
+@auth_router.post("/request-password-reset")
+@limiter.limit("5/hour")
+async def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    await enforce_auth_limits(request, session, "forgot", payload.email)
+    code = await request_password_reset(session, payload.email)
+    if code is not None:
+        background_tasks.add_task(_deliver_password_reset, payload.email, code)
+    return {"detail": "If the account is eligible, a password reset code has been sent."}
+
+
+@auth_router.post("/reset-password")
+@limiter.limit("10/hour")
+async def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    await enforce_auth_limits(request, session, "reset", payload.email)
+    if not await reset_local_password(session, payload.email, payload.otp, payload.password):
+        raise HTTPException(status_code=400, detail="Invalid or expired password reset code.")
+    return {"detail": "Password reset successfully. Please sign in again."}
 
 
 @auth_router.post("/signin", response_model=AuthResponse)
@@ -422,17 +462,14 @@ async def resend_verification(
 async def signin(
     request: Request,
     payload: SignInRequest,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ):
     """Authenticate with email and password."""
+    await enforce_auth_limits(request, session, "signin", payload.email)
     user = await authenticate_user(session, payload.email, payload.password)
     if not user:
-        client_ip = request.client.host if request.client else "unknown"
-        logger.warning(
-            "Failed signin attempt for %s from %s",
-            payload.email,
-            client_ip,
-        )
+        logger.warning("Failed signin attempt")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -455,14 +492,26 @@ async def signin(
             ),
         )
 
-    token = create_access_token(user_id=user.id, session_version=user.session_version)
-    return AuthResponse(
-        access_token=token,
-        user=_serialize_user(user),
-    )
+    return await _issue_auth_response(session, user, request, response)
 
 
 
+
+
+def _neon_session_url(base_url: str) -> str:
+    try:
+        parsed = urlsplit(base_url)
+        if (
+            not 1 <= len(base_url) <= 2048 or parsed.scheme != "https" or not parsed.hostname
+            or parsed.username is not None or parsed.password is not None
+            or parsed.query or parsed.fragment or "\\" in base_url
+            or any(ord(character) <= 32 or ord(character) == 127 for character in base_url)
+            or parsed.port == 0
+        ):
+            raise ValueError("Invalid identity service URL")
+        return str(httpx.URL(f"{base_url.rstrip('/')}/get-session"))
+    except (ValueError, httpx.InvalidURL):
+        raise HTTPException(status_code=503, detail="Neon authentication is not configured") from None
 
 
 async def verify_neon_token(token: str) -> dict:
@@ -474,29 +523,32 @@ async def verify_neon_token(token: str) -> dict:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Neon authentication is not configured",
         )
-    base_url = settings.neon_auth_url.rstrip("/")
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    session_url = _neon_session_url(settings.neon_auth_url)
+    async with httpx.AsyncClient(timeout=5.0, follow_redirects=False, trust_env=False) as client:
         try:
             resp = await client.get(
-                f"{base_url}/get-session",
+                session_url,
                 headers={"Authorization": f"Bearer {token}"},
             )
-        except httpx.RequestError as exc:
-            # The exception text carries the Neon endpoint hostname — log it,
-            # never echo it to the caller.
-            logger.error("Neon session verification transport failure", exc_info=exc)
+        except httpx.RequestError:
+            logger.error("Neon session verification transport failure")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Unable to reach the authentication service. Please try again.",
             )
+    if resp.status_code == 429 or resp.status_code >= 500:
+        raise HTTPException(status_code=503, detail="Authentication service is unavailable. Please try again.")
     if resp.status_code != 200:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired Neon session token",
         )
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid identity provider response") from None
     user = data.get("user") if isinstance(data, dict) else None
-    if not user or not user.get("email"):
+    if not isinstance(user, dict) or not user.get("email"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired Neon session token",
@@ -509,10 +561,12 @@ async def verify_neon_token(token: str) -> dict:
 async def sync_user(
     request: Request,
     payload: UserSyncRequest,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ):
     """Sync a Neon-authenticated user into the local mirror table.
     Identity comes ONLY from Neon's verified response — never from client input."""
+    await enforce_auth_limits(request, session, "sync")
     neon_response = await verify_neon_token(payload.neon_token)
     neon_user = neon_response.get("user") if isinstance(neon_response, dict) and "user" in neon_response else neon_response
     if not isinstance(neon_user, dict):
@@ -528,27 +582,32 @@ async def sync_user(
         )
 
 
-    email = (neon_user.get("email") or "").strip().lower()
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Verified Neon session returned no email address",
-        )
+    try:
+        identity = VerifiedNeonIdentity.model_validate(neon_user)
+    except ValidationError:
+        raise HTTPException(status_code=401, detail="Invalid identity provider response") from None
+    email = identity.email
 
-    full_name = neon_user.get("name") or neon_user.get("full_name") or email.split("@")[0]
-    avatar_url = neon_user.get("image") or neon_user.get("avatar_url")
+    await enforce_auth_limits(request, session, "sync", email, include_ip=False)
+
+    full_name = identity.name or identity.full_name or email.split("@", 1)[0]
+    avatar_url = identity.image or identity.avatar_url
 
     user = await get_user_by_email(session, email)
     if not user:
-        user = await create_user(
-            session=session,
-            email=email,
-            full_name=full_name,
-            # Not payload.auth_provider: identity was proven by Neon, so the
-            # provider is Neon regardless of what the client claimed.
-            auth_provider="neon",
-            avatar_url=avatar_url,
-        )
+        try:
+            user = await create_user(
+                session=session, email=email, full_name=full_name,
+                auth_provider="neon", avatar_url=avatar_url,
+            )
+        except IntegrityError:
+            await session.rollback()
+            user = await get_user_by_email(session, email)
+    if user is None:
+        raise HTTPException(status_code=503, detail="Identity synchronization is unavailable")
+    user = await lock_user(session, user.id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid identity provider response")
 
     if not user.is_active:
         raise HTTPException(
@@ -586,11 +645,7 @@ async def sync_user(
         await session.commit()
         await session.refresh(user)
 
-    token = create_access_token(user_id=user.id, session_version=user.session_version)
-    return AuthResponse(
-        access_token=token,
-        user=_serialize_user(user),
-    )
+    return await _issue_auth_response(session, user, request, response)
 
 
 
@@ -602,11 +657,144 @@ async def get_me(current_user: Users = Depends(get_current_user)):
     return _serialize_user(current_user)
 
 
+class RefreshRequest(AuthInput):
+    refresh_token: str = Field(..., min_length=76, max_length=76, pattern=r"^[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$")
+
+
 @auth_router.post("/refresh", response_model=AuthResponse)
-async def refresh_token(current_user: Users = Depends(get_current_user)):
-    """Refresh a valid access token and return a new persistent JWT session."""
-    token = create_access_token(user_id=current_user.id, session_version=current_user.session_version)
+async def refresh_token(
+    request: Request, response: Response, payload: RefreshRequest | None = None,
+    session: AsyncSession = Depends(get_session),
+    authorization: str | None = Header(None),
+) -> AuthResponse:
+    await enforce_auth_limits(request, session, "refresh")
+    refresh_value = payload.refresh_token if payload is not None else request.cookies.get(REFRESH_COOKIE)
+    if refresh_value is not None:
+        record = await find_refresh_session(session, refresh_value)
+        cookie_mode = payload is None
+        if record is None or record.transport != ("cookie" if cookie_mode else "bearer"):
+            raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+        if cookie_mode:
+            require_cookie_csrf(request, record)
+        await enforce_auth_limits(request, session, "refresh", record.family_id, include_ip=False)
+        result = await rotate_session(session, refresh_value)
+        if result is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+        return _session_response(*result, response)
+    current_user = await get_current_user(request, authorization)
+    await enforce_auth_limits(request, session, "refresh", current_user.id, include_ip=False)
+    token = authorization.split(" ", 1)[1].strip() if authorization else ""
+    claims = decode_access_token(token)
+    if claims is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired authentication token")
+    expires_at = min(claims["exp"], claims["iat"] + int(ACCESS_LIFETIME.total_seconds()))
+    expires_in = max(0, expires_at - int(datetime.now(timezone.utc).timestamp()))
     return AuthResponse(
-        access_token=token,
+        access_token=token, expires_in=expires_in, expires_in_days=expires_in / 86400,
         user=_serialize_user(current_user),
     )
+
+
+@auth_router.get("/session")
+async def get_browser_session(
+    request: Request, session: AsyncSession = Depends(get_session),
+) -> dict:
+    require_cookie_origin(request)
+    await enforce_auth_limits(request, session, "refresh")
+    record = await find_refresh_session(session, request.cookies.get(REFRESH_COOKIE, ""))
+    if record is None or record.transport != "cookie":
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    require_cookie_binding(request, record)
+    user = await refresh_user(session, record)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    await enforce_auth_limits(request, session, "refresh", record.family_id, include_ip=False)
+    claims = decode_access_token(request.cookies.get(ACCESS_COOKIE, ""))
+    access_user = await authenticated_user(session, claims, transport="cookie") if claims else None
+    return {
+        "user": _serialize_user(user).model_dump(), "csrf_token": csrf_token(record),
+        "session_id": record.family_id,
+        "session_expires_at": aware(record.absolute_expires_at).isoformat(),
+        "needs_refresh": access_user is None or not claims or claims.get("jti") != record.id,
+    }
+
+
+async def _logout(
+    request: Request, response: Response, session: AsyncSession,
+    authorization: str | None, payload: RefreshRequest | None, *, all_sessions: bool,
+) -> dict[str, str]:
+    await enforce_auth_limits(request, session, "logout")
+    refresh_value = payload.refresh_token if payload else request.cookies.get(REFRESH_COOKIE) if authorization is None else None
+    record = None
+    claims = None
+    cookie_mode = authorization is None and payload is None and has_auth_cookies(request)
+    if refresh_value is not None:
+        record = await find_refresh_session(session, refresh_value)
+        if record is None or record.transport != ("cookie" if cookie_mode else "bearer"):
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+        if cookie_mode:
+            require_cookie_csrf(request, record)
+        user = await refresh_user(session, record, allow_rotated=not all_sessions)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+    else:
+        token, cookie_mode = access_credential(request, authorization)
+        claims = decode_access_token(token)
+        if claims is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+        user = await authenticated_user(
+            session, claims, transport="cookie" if cookie_mode else "bearer",
+            allow_rotated=not all_sessions,
+        )
+        if user is None or _verification_required(user):
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+        if claims.get("jti"):
+            record = await session.get(AuthSessions, claims["jti"])
+            if cookie_mode and record is not None:
+                require_cookie_csrf(request, record)
+    expected_version = user.session_version
+    await enforce_auth_limits(request, session, "logout", user.id, include_ip=False)
+    current = await lock_user(session, user.id)
+    if current is None or current.session_version != expected_version:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    if record is not None:
+        await session.refresh(record)
+    if refresh_value is not None and record is not None:
+        confirmed = await refresh_user(session, record, allow_rotated=not all_sessions)
+    elif claims is not None:
+        confirmed = await authenticated_user(
+            session, claims, transport="cookie" if cookie_mode else "bearer",
+            allow_rotated=not all_sessions,
+        )
+    else:
+        confirmed = None
+    if confirmed is None or _verification_required(confirmed):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    current.legacy_tokens_revoked_at = utc_now()
+    if all_sessions:
+        current.session_version += 1
+        await session.execute(update(AuthSessions).where(
+            AuthSessions.user_id == current.id, AuthSessions.revoked_at.is_(None),
+        ).values(revoked_at=utc_now()))
+    elif record is not None:
+        await revoke_family(session, record.family_id, current.id)
+    await session.commit()
+    if cookie_mode:
+        clear_session_cookies(response)
+    return {"detail": "All sessions revoked." if all_sessions else "Signed out successfully."}
+
+
+@auth_router.post("/logout")
+async def logout(
+    request: Request, response: Response, payload: RefreshRequest | None = None,
+    authorization: str | None = Header(None), session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    return await _logout(request, response, session, authorization, payload, all_sessions=False)
+
+
+@auth_router.post("/logout-all")
+async def logout_all(
+    request: Request, response: Response, payload: RefreshRequest | None = None,
+    authorization: str | None = Header(None), session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    return await _logout(request, response, session, authorization, payload, all_sessions=True)

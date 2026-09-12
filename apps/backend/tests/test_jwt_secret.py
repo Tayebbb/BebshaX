@@ -23,17 +23,18 @@ def _clear():
 def _restore_config_after_test(monkeypatch):
     yield
     # Teardown runs while the test's (possibly invalid) env is still patched —
-    # force a valid secret BEFORE reloading, and catch BaseException because
-    # the fail-fast raises SystemExit, which `except Exception` cannot catch.
+    # force a valid secret before dropping the cached settings.
     monkeypatch.setenv("BEBSHAX_JWT_SECRET", VALID_TEST_SECRET)
     _clear()
-    try:
-        import bebshax.config as c
 
-        importlib.reload(c)
-    except BaseException:
-        pass
-    _clear()
+
+def _boot_refuses():
+    """The fail-fast lives in create_app(): importing config must stay
+    side-effect free, but a process must never *boot* with a bad secret."""
+    from bebshax.main import create_app
+
+    with pytest.raises(SystemExit):
+        create_app()
 
 
 def _token(payload, secret):
@@ -46,31 +47,19 @@ def _token(payload, secret):
 def test_empty_secret_exits(monkeypatch):
     monkeypatch.setenv("BEBSHAX_JWT_SECRET", "")
     _clear()
-    import bebshax.config as c
-
-    with pytest.raises(SystemExit):
-        importlib.reload(c)
-    _clear()
+    _boot_refuses()
 
 
 def test_short_secret_exits(monkeypatch):
     monkeypatch.setenv("BEBSHAX_JWT_SECRET", "tooshort")
     _clear()
-    import bebshax.config as c
-
-    with pytest.raises(SystemExit):
-        importlib.reload(c)
-    _clear()
+    _boot_refuses()
 
 
 def test_burned_secret_exits(monkeypatch):
     monkeypatch.setenv("BEBSHAX_JWT_SECRET", BURNED)
     _clear()
-    import bebshax.config as c
-
-    with pytest.raises(SystemExit):
-        importlib.reload(c)
-    _clear()
+    _boot_refuses()
 
 
 def test_missing_aud_rejected():
