@@ -31,7 +31,7 @@ pytestmark = pytest.mark.integration
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "alembic"
 PREMODERNIZATION = "a9c2e7b6d410"
 INTEGRATION_REVISION = "c6f8a2d4e901"
-REVISION = "f2b4d6e8a013"
+REVISION = "1a3c5e7f9b2d"
 FIXED_TIME = datetime(2026, 9, 9, tzinfo=timezone.utc)
 
 
@@ -82,7 +82,9 @@ def disposable_postgres(request, tmp_path):
         port = int(endpoint.rsplit(":", 1)[1])
         deadline = time.monotonic() + 45
         while True:
-            ready = run("exec", container, "pg_isready", "-U", "db_integrator", "-d", database, check=False)
+            # Over TCP: the entrypoint's temporary init server answers only on the
+            # unix socket, so a socket-based probe reports ready before the restart.
+            ready = run("exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "db_integrator", "-d", database, check=False)
             if ready.returncode == 0:
                 break
             if time.monotonic() >= deadline:
@@ -178,7 +180,14 @@ def _plain(value):
 
 
 def _rows(connection, tables) -> dict:
-    allowed_backfills = {("personas", "personality"), ("personas", "detailed_attributes"), ("conversations", "started_at")}
+    # Columns the chain converts from NULL to the ORM's empty default (c6f8a2d4e901
+    # and 1a3c5e7f9b2d); every other value must survive the upgrade byte-for-byte.
+    reconciled_persona_columns = (
+        "personality", "detailed_attributes", "demographics", "goals", "needs", "pain_points", "behaviors",
+        "preferences", "motivations", "objections", "commercial_profile", "technology_profile",
+        "evidence_citations", "dataset_refs", "validation_warnings", "grounding_score", "confidence",
+    )
+    allowed_backfills = {("personas", name) for name in reconciled_persona_columns} | {("conversations", "started_at")}
     return {
         table.name: [
             {name: _plain(value) for name, value in row.items() if (table.name, name) not in allowed_backfills}

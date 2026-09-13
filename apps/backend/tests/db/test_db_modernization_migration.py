@@ -20,7 +20,7 @@ from bebshax.db.engine import get_metadata
 
 
 REVISION = "c6f8a2d4e901"
-CURRENT_HEAD = "f2b4d6e8a013"
+CURRENT_HEAD = "1a3c5e7f9b2d"
 PREDECESSOR = "b1bf09c4d2e7"
 PREMODERNIZATION = "a9c2e7b6d410"
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "alembic"
@@ -73,7 +73,8 @@ def test_modernization_is_one_revision_after_existing_head(modernization_revisio
     scripts = ScriptDirectory(str(SCRIPT_PATH))
 
     assert scripts.get_heads() == [CURRENT_HEAD]
-    assert scripts.get_revision(CURRENT_HEAD).down_revision == "e7a9c1d3f205"
+    assert scripts.get_revision(CURRENT_HEAD).down_revision == "f2b4d6e8a013"
+    assert scripts.get_revision("f2b4d6e8a013").down_revision == "e7a9c1d3f205"
     assert scripts.get_revision("e7a9c1d3f205").down_revision == "d4e6f8a0b219"
     assert scripts.get_revision("d4e6f8a0b219").down_revision == REVISION
     assert modernization_revision.revision == REVISION

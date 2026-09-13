@@ -41,7 +41,8 @@ def provenance_revision():
 def test_provenance_context_has_one_forward_head_without_rewriting_parents() -> None:
     scripts = ScriptDirectory(str(SCRIPT_PATH))
 
-    assert scripts.get_heads() == ["f2b4d6e8a013"]
+    assert scripts.get_heads() == ["1a3c5e7f9b2d"]
+    assert scripts.get_revision("1a3c5e7f9b2d").down_revision == "f2b4d6e8a013"
     assert scripts.get_revision("f2b4d6e8a013").down_revision == "e7a9c1d3f205"
     assert scripts.get_revision("e7a9c1d3f205").down_revision == REVISION
     assert [item.revision for item in scripts.iterate_revisions(REVISION, "a9c2e7b6d410")] == [

@@ -30,7 +30,8 @@ def source_revision():
 
 def test_source_ledger_is_one_forward_revision(source_revision) -> None:
     scripts = ScriptDirectory(str(SCRIPT_PATH))
-    assert scripts.get_heads() == ["f2b4d6e8a013"]
+    assert scripts.get_heads() == ["1a3c5e7f9b2d"]
+    assert scripts.get_revision("1a3c5e7f9b2d").down_revision == "f2b4d6e8a013"
     assert scripts.get_revision("f2b4d6e8a013").down_revision == REVISION
     assert source_revision.down_revision == PREDECESSOR
     assert [script.revision for script in scripts.iterate_revisions(REVISION, PREDECESSOR)] == [REVISION]

@@ -47,7 +47,7 @@ Set-Location apps/backend
 The current integration chain ends in:
 
 ```text
-a9c2e7b6d410 -> b1bf09c4d2e7 -> c6f8a2d4e901 -> d4e6f8a0b219 -> e7a9c1d3f205 -> f2b4d6e8a013
+a9c2e7b6d410 -> b1bf09c4d2e7 -> c6f8a2d4e901 -> d4e6f8a0b219 -> e7a9c1d3f205 -> f2b4d6e8a013 -> 1a3c5e7f9b2d
 ```
 
 `a9c2e7b6d410` is the pre-modernization baseline. The pre-existing
@@ -63,6 +63,18 @@ The current continuation adds only
 [f2b4d6e8a013_report_version_integrity.py](../apps/backend/alembic/versions/f2b4d6e8a013_report_version_integrity.py)
 after that ledger revision. It enforces positive report versions and unique
 `(study_id, version)` pairs without changing report columns or historical rows.
+The launch rehearsal of 2026-09-13 (fresh dump of the hosted Neon database,
+PostgreSQL 18.6, restored into a local PG18 pgvector container) showed that the
+API still refused to boot after `f2b4d6e8a013`: the hosted schema was stamped,
+not migrated, and had 23 differences from the ORM that no revision corrected.
+[1a3c5e7f9b2d_reconcile_legacy_hosted_schema.py](../apps/backend/alembic/versions/1a3c5e7f9b2d_reconcile_legacy_hosted_schema.py)
+converges them idempotently — three missing `conversations` indexes, one unique
+index instead of constraint-plus-index on `email_verification_tokens.token`,
+fifteen `personas` columns set NOT NULL after backfilling NULLs with the ORM's
+empty defaults (the hosted rows held none), and `conversation_turns.role` /
+`conversations.status` widened to 32 — and is a no-op on chain-created
+databases. After it the rehearsal reported zero metadata differences and
+`/api/health/ready` returned 200 with the model required.
 No historically applied revision was rewritten. On 2026-09-10 the owner explicitly
 confirmed that `c6f8a2d4e901` has never been applied to a user database and approved
 its pre-deployment memory-owner correction. This is not a general permission to

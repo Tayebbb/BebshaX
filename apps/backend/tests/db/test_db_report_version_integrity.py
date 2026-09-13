@@ -100,7 +100,8 @@ def legacy_report_connection(monkeypatch: pytest.MonkeyPatch, report_revision: M
 
 def test_report_backstops_extend_the_existing_single_head(report_revision: ModuleType) -> None:
     scripts = ScriptDirectory(str(SCRIPT_PATH))
-    assert scripts.get_heads() == [REVISION]
+    assert scripts.get_heads() == ["1a3c5e7f9b2d"]
+    assert scripts.get_revision("1a3c5e7f9b2d").down_revision == REVISION
     assert report_revision.down_revision == PREDECESSOR
     assert scripts.get_revision(PREDECESSOR).down_revision == "d4e6f8a0b219"
 
