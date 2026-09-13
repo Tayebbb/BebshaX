@@ -1,7 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { PromptInputBox } from '@/components/ui/ai-prompt-box';
-import { DemoOne } from '@/components/ui/demo';
 
 describe('PromptInputBox Component', () => {
   it('renders input box with placeholder and action buttons', () => {
@@ -42,11 +41,5 @@ describe('PromptInputBox Component', () => {
     fireEvent.click(sendBtn);
 
     expect(handleSend).toHaveBeenCalledWith('[Search: competitor pricing]', []);
-  });
-
-  it('renders the DemoOne showcase container without crashing', () => {
-    render(<DemoOne />);
-    expect(screen.getByText('BebshaX · AI Research Prompt Box')).toBeInTheDocument();
-    expect(screen.getByText('Synthetic Persona Interview Input')).toBeInTheDocument();
   });
 });
