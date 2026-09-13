@@ -4,6 +4,16 @@ import type { ClaimDetail } from '../../../../types';
 import { api } from '../../../../services/api';
 import { toUserMessage } from '../../../../utils/apiError';
 
+const safeSourceUrl = (value?: string | null): string | undefined => {
+  if (!value || /[\u0000-\u001f\u007f-\u009f]/.test(value)) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 /**
  * Inline claim → source trace opened from an OBSERVED provenance chip. Fetches
  * each cited evidence claim and lists its supporting sources so a reader can
@@ -94,23 +104,27 @@ export const EvidenceClaimPeek: React.FC<{ studyId: string; evidenceIds: string[
                 <div key={label} style={{ marginTop: '0.75rem' }}>
                   <div style={{ fontWeight: 600 }}>{label}</div>
                   <ul aria-label={label} style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem', color: 'var(--text-main)' }}>
-                    {sources.map((source) => (
-                      <li key={source.id} style={{ minWidth: 0, marginTop: '0.5rem' }}>
-                        {source.url ? (
-                          <a href={source.url} target="_blank" rel="noreferrer" style={{ color: 'var(--text-main)', textDecoration: 'underline', textUnderlineOffset: '0.2em' }}>
-                            {source.title || source.publisher || source.id} <ExternalLink size={12} aria-hidden="true" style={{ verticalAlign: 'middle' }} />
-                          </a>
-                        ) : (
-                          <span>{source.title || source.publisher || source.id}</span>
-                        )}
-                        {source.publisher && source.title && <span style={{ color: 'var(--text-muted)' }}> — {source.publisher}</span>}
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Source <code>{source.id}</code> · {source.source_type} · {source.status}
-                          {source.content_hash && <div>Content hash <code>{source.content_hash}</code></div>}
-                        </div>
-                        {source.content && <p style={{ margin: '0.25rem 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{source.content}</p>}
-                      </li>
-                    ))}
+                    {sources.map((source) => {
+                      const sourceUrl = safeSourceUrl(source.url);
+                      return (
+                        <li key={source.id} style={{ minWidth: 0, marginTop: '0.5rem' }}>
+                          {sourceUrl ? (
+                            <a href={sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-main)', textDecoration: 'underline', textUnderlineOffset: '0.2em' }}>
+                              {source.title || source.publisher || source.id} <ExternalLink size={12} aria-hidden="true" style={{ verticalAlign: 'middle' }} />
+                            </a>
+                          ) : (
+                            <span>{source.title || source.publisher || source.id}</span>
+                          )}
+                          {source.publisher && source.title && <span style={{ color: 'var(--text-muted)' }}> — {source.publisher}</span>}
+                          {!sourceUrl && source.url && <div style={{ whiteSpace: 'pre-wrap' }}>{source.url}</div>}
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            Source <code>{source.id}</code> · {source.source_type} · {source.status}
+                            {source.content_hash && <div>Content hash <code>{source.content_hash}</code></div>}
+                          </div>
+                          {source.content && <p style={{ margin: '0.25rem 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{source.content}</p>}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))}

@@ -186,13 +186,15 @@ async function enqueueStudyWrite(
       return saved;
     } catch (error) {
       const failure = retry?.signal.aborted ? new DOMException('Study draft retry cancelled', 'AbortError') : error;
-      entry.failure = failure;
-      if (expectedSession === getSessionEpoch() && !retry?.signal.aborted) {
+      if (expectedSession === getSessionEpoch() && entries.get(id) === entry && entry.owner === owner) {
+        entry.failure = failure;
         persist();
         const conflict = isRevisionConflict(failure);
         publish(id, conflict ? 'conflict' : 'unsaved', conflict
           ? 'This study changed elsewhere. Your unsaved draft is preserved; reload the saved version to resolve the conflict.'
-          : 'Changes are not saved. Your draft is retained in this tab.');
+          : retry?.signal.aborted
+            ? 'Save confirmation was cancelled. Your draft is retained in this tab. The write may have reached the server; reload the saved version to recover.'
+            : 'Changes are not saved. Your draft is retained in this tab.');
       }
       throw failure;
     } finally { entry.pending -= 1; }

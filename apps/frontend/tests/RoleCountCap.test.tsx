@@ -6,6 +6,7 @@ import { MAX_PERSONAS_PER_ROLE } from '../src/components/dashboard/views/workflo
 import { EvidenceSummary, Persona, PersonaRoleSuggestion, Study } from '../src/types';
 import { api } from '../src/services/api';
 import { discardStudyDraft, pendingStudyDraft, queueStudyWrite, rememberStudyRevision } from '../src/services/studyPersistence';
+import { NavigationProvider, useNavigation } from '../src/context/NavigationContext';
 
 vi.mock('../src/services/api', () => {
   const stub = {
@@ -284,7 +285,7 @@ describe('Guards run before the step change', () => {
 });
 
 describe('Generated persona draft-save recovery', () => {
-  it('retries only the failed draft and keeps the generated personas', async () => {
+  it.each([1, 2])('blocks generation from step %i until the failed draft is retried and keeps generated personas', async (step) => {
     const original = study({ revision: 1 });
     const persist = vi.fn()
       .mockResolvedValueOnce(study({ revision: 2, step: 2 }))
@@ -294,7 +295,7 @@ describe('Generated persona draft-save recovery', () => {
     rememberStudyRevision(original);
     vi.mocked(api.updateStudy).mockImplementation((id, updates) =>
       queueStudyWrite(id, 'anonymous', updates, async () => original, persist));
-    const view = renderWorkflow(1);
+    const view = renderWorkflow(2);
 
     try {
       fireEvent.click(await screen.findByRole('button', { name: /^Generate Personas$/i }));
@@ -304,7 +305,22 @@ describe('Generated persona draft-save recovery', () => {
       const retainedDraft = pendingStudyDraft('anonymous', original.id);
       expect(retainedDraft).toBeDefined();
       await waitFor(() => expect(retry).toBeEnabled());
-      fireEvent.click(retry);
+
+      view.rerender(<StudyWorkflowView studyId={original.id} initialStep={step} onExit={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: step === 1 ? 'Generate Personas' : 'Regenerate Personas' }));
+      await act(async () => {});
+      expect(api.generateStudyPersonasDetailed).toHaveBeenCalledTimes(1);
+      expect(persist).toHaveBeenCalledTimes(2);
+      expect(pendingStudyDraft('anonymous', original.id)).toEqual(retainedDraft);
+      if (step === 1) expect(screen.getByRole('checkbox', { name: 'UNIVERSITY STUDENT' })).toBeInTheDocument();
+
+      view.rerender(<StudyWorkflowView studyId={original.id} initialStep={2} onExit={vi.fn()} />);
+      const retainedRetry = await screen.findByRole('button', { name: 'Retry save' });
+      await waitFor(() => expect(retainedRetry).toBeEnabled());
+      expect(screen.getByRole('button', { name: 'Regenerate Personas' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Regenerate Personas' })).toHaveAttribute('title',
+        'Save the retained draft or reload the saved version before generating new personas.');
+      fireEvent.click(retainedRetry);
 
       await waitFor(() => expect(persist).toHaveBeenCalledTimes(3));
       await waitFor(() => expect(screen.queryByText(/Study draft save failed:/)).not.toBeInTheDocument());
@@ -312,6 +328,7 @@ describe('Generated persona draft-save recovery', () => {
       expect(api.generateStudyPersonasDetailed).toHaveBeenCalledTimes(1);
       expect(screen.getByText('Nusrat Jahan')).toBeInTheDocument();
       expect(pendingStudyDraft('anonymous', original.id)).toBeUndefined();
+      expect(screen.getByRole('button', { name: 'Regenerate Personas' })).toBeEnabled();
     } finally {
       view.unmount();
       discardStudyDraft('anonymous', original.id);
@@ -346,6 +363,7 @@ describe('Generated persona draft-save recovery', () => {
 
       const nextRetry = await screen.findByRole('button', { name: 'Retry save' });
       await waitFor(() => expect(nextRetry).toBeEnabled());
+      expect(screen.getByRole('button', { name: 'Regenerate Personas' })).toBeDisabled();
       fireEvent.click(nextRetry);
       await waitFor(() => expect(persist).toHaveBeenCalledTimes(4));
       await waitFor(() => expect(screen.queryByText(/Study draft save failed:/)).not.toBeInTheDocument());
@@ -354,6 +372,70 @@ describe('Generated persona draft-save recovery', () => {
     } finally {
       view.unmount();
       discardStudyDraft('anonymous', original.id);
+    }
+  });
+
+  it('offers reload after browser Back cancels a deferred retry without another step save', async () => {
+    const original = study({ revision: 1, step: 2 });
+    const saved = study({ revision: 3, step: 2 });
+    let finishRetry!: (value: Study) => void;
+    const pendingRetry = new Promise<Study>((resolve) => { finishRetry = resolve; });
+    const persist = vi.fn()
+      .mockResolvedValueOnce(study({ revision: 2, step: 2 }))
+      .mockRejectedValueOnce(new Error('Draft save unavailable'))
+      .mockReturnValueOnce(pendingRetry);
+    vi.mocked(api.getStudy).mockResolvedValue(original);
+    rememberStudyRevision(original);
+    vi.mocked(api.updateStudy).mockImplementation((id, updates) =>
+      queueStudyWrite(id, 'anonymous', updates, async () => original, persist));
+    const onStepChange = vi.fn();
+    const RoutedWorkflow = () => {
+      const { currentPath } = useNavigation();
+      return <StudyWorkflowView studyId={original.id} initialStep={currentPath.endsWith('/step1') ? 1 : 2}
+        onExit={vi.fn()} onStepChange={onStepChange} />;
+    };
+    const previousPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.history.replaceState({}, '', `/research/${original.id}/step2`);
+    const view = render(<NavigationProvider><RoutedWorkflow /></NavigationProvider>);
+
+    try {
+      fireEvent.click(await screen.findByRole('button', { name: 'Generate Personas' }));
+      const retry = await screen.findByRole('button', { name: 'Retry save' });
+      await waitFor(() => expect(retry).toBeEnabled());
+      const retainedDraft = pendingStudyDraft('anonymous', original.id);
+      fireEvent.click(retry);
+      await waitFor(() => expect(persist).toHaveBeenCalledTimes(3));
+      expect(screen.getByText('Saving changes...')).toBeInTheDocument();
+
+      act(() => {
+        window.history.replaceState({}, '', `/research/${original.id}/step1`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      expect(screen.getByRole('textbox', { name: 'Describe your idea or answer the copilot' })).toBeInTheDocument();
+      expect(onStepChange).toHaveBeenCalledTimes(1);
+      expect(api.updateStudy).toHaveBeenCalledTimes(2);
+      await act(async () => { finishRetry(saved); });
+
+      expect(screen.queryByText('Saving changes...')).not.toBeInTheDocument();
+      expect(screen.getByText(/Save confirmation was cancelled/).closest('[role="alert"]')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Reload saved version' })).toBeEnabled();
+      expect(pendingStudyDraft('anonymous', original.id)).toEqual(retainedDraft);
+      expect(persist).toHaveBeenCalledTimes(3);
+      expect(api.generateStudyPersonasDetailed).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        window.history.replaceState({}, '', `/research/${original.id}/step2`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      expect(screen.getByText('Nusrat Jahan')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Regenerate Personas' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Retry save' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Reload saved version' })).toBeEnabled();
+    } finally {
+      view.unmount();
+      await act(async () => { finishRetry(saved); });
+      discardStudyDraft('anonymous', original.id);
+      window.history.replaceState({}, '', previousPath);
     }
   });
 });

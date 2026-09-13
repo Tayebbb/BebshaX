@@ -736,7 +736,10 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     expect(alert).toHaveTextContent(/Personas were generated/i);
     expect(alert).not.toHaveTextContent(/Persona generation failed|no personas were fabricated|regenerate to retry/i);
     expect(screen.getByText(persona.name)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Regenerate Personas' })).toBeEnabled();
+    const regenerate = screen.getByRole('button', { name: 'Regenerate Personas' });
+    expect(regenerate).toBeDisabled();
+    expect(regenerate).toHaveAttribute('title', 'Save the retained draft or reload the saved version before generating new personas.');
+    fireEvent.click(regenerate);
     expect(generate).toHaveBeenCalledTimes(1);
     expect(createStudy).not.toHaveBeenCalled();
     expect(discardDraft).not.toHaveBeenCalled();

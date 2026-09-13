@@ -199,6 +199,12 @@ describe('Blocker 3 — step 5 agrees with step 2', () => {
     metrics: { total_claims: 0 },
   };
 
+  it('uses the contrast-tested heading token for strategic recommendations', () => {
+    renderStep5([], bareReport);
+    expect(screen.getByRole('heading', { name: 'Strategic Recommendations' }))
+      .toHaveStyle({ color: 'var(--text-main)' });
+  });
+
   const recoveryCases = [
     { errorKind: 'loading', label: 'Reload saved reports' },
     { errorKind: 'generation', label: 'Retry report generation' },

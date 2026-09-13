@@ -7,9 +7,6 @@ import { FAQ } from './FAQ';
 import { Pricing } from './Pricing';
 import { FinalCTA } from './FinalCTA';
 import { Footer } from './Footer';
-import '@fontsource/space-grotesk/latin-500.css';
-import '@fontsource/space-grotesk/latin-600.css';
-import '@fontsource/space-grotesk/latin-700.css';
 import './studio.css';
 
 interface LandingPageProps {

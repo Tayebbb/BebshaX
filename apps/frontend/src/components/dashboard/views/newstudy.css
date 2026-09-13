@@ -2,7 +2,7 @@
   flex: 1;
   width: 100%;
   min-width: 0;
-  padding: 2rem 2rem 3rem;
+  padding: 3rem var(--page-x) 3rem;
   color: var(--text-main);
   font-family: var(--font-sans);
   letter-spacing: 0;
@@ -10,17 +10,17 @@
 
 .ns-inner {
   width: 100%;
-  max-width: 68rem;
+  max-width: 50rem;
   margin: 0 auto;
 }
 
 .ns-header {
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.5rem;
 }
 
 .ns-title {
   margin: 0 0 0.5rem;
-  font: 600 1.875rem/1.25 var(--font-display);
+  font: 600 2rem/1.25 var(--font-display);
   letter-spacing: 0;
   color: var(--text-main);
   overflow-wrap: anywhere;
@@ -28,7 +28,7 @@
 
 .ns-sub {
   margin: 0;
-  font: 400 0.9375rem/1.6 var(--font-sans);
+  font: 400 0.875rem/1.6 var(--font-sans);
   color: var(--text-secondary);
 }
 
@@ -58,7 +58,7 @@
   gap: 0.25rem;
   padding: 0.25rem;
   background: var(--fill-soft);
-  border: 1px solid var(--border-soft);
+  border: 0;
   border-radius: 8px;
 }
 
@@ -102,9 +102,9 @@
 
 .ns-mode input:checked + .ns-mode-label {
   background: var(--bg-card);
-  border-color: var(--border-hover);
+  border-color: var(--border-medium);
   color: var(--text-main);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .ns-mode input:focus-visible + .ns-mode-label {
@@ -120,17 +120,17 @@
 .ns-mode-description {
   min-height: 2.75rem;
   margin: 0.625rem 0 0;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font: 400 0.8125rem/1.6 var(--font-sans);
 }
 
 .ns-composer {
   width: 100%;
-  padding: 1.25rem 1.5rem;
+  padding: 1.25rem;
   border: 1px solid var(--border-hover);
   border-radius: 8px;
   background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .ns-composer:focus-within {
@@ -150,7 +150,7 @@
 .ns-textarea {
   display: block;
   width: 100%;
-  min-height: 8.5rem;
+  min-height: 10rem;
   max-height: 28rem;
   margin: 0;
   padding: 0.5rem 0;
@@ -161,7 +161,7 @@
   font: 400 1rem/1.7 var(--font-sans);
   letter-spacing: 0;
   resize: vertical;
-  caret-color: var(--text-main);
+  caret-color: var(--accent-primary);
 }
 
 .ns-textarea::placeholder {
@@ -200,7 +200,7 @@
   gap: 1rem;
   padding-top: 1rem;
   margin-top: 1rem;
-  border-top: 1px solid var(--border-soft);
+  border-top: 0;
 }
 
 .ns-disclosure {
@@ -219,7 +219,7 @@
 }
 
 .ns-examples {
-  margin-top: 1.75rem;
+  margin-top: 1.5rem;
 }
 
 .ns-section-title {
@@ -285,19 +285,19 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--accent-primary);
   font: 500 0.8125rem/1.5 var(--font-sans);
   cursor: pointer;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1100px) {
   .ns-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ns-mode-label { justify-content: flex-start; }
 }
 
 @media (max-width: 720px) {
   .ns-root { padding: 1.5rem 1rem 2.5rem; }
-  .ns-title { font-size: 1.5rem; }
+  .ns-title { font-size: 1.75rem; }
   .ns-header { margin-bottom: 1.5rem; }
   .ns-composer { padding: 1rem; }
   .ns-mode-label { gap: 0.375rem; padding: 0.625rem 0.5rem; }

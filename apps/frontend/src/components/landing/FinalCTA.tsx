@@ -20,7 +20,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({ onOpenApp }) => {
     <section id="start" className="studio-section studio-closing" aria-labelledby="studio-closing-title" tabIndex={-1}>
       <div className="studio-container">
         <h2 id="studio-closing-title">Bring your next question.</h2>
-        <p>Give it a study. Keep the assumptions visible.</p>
+        <p>Start a study and keep the assumptions in view.</p>
         <button type="button" className="studio-button" onClick={handlePrimaryAction}>
           Open workspace <ArrowRight size={18} aria-hidden="true" />
         </button>

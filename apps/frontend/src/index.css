@@ -19,15 +19,15 @@
     --bg-glass: var(--bg-pure);
 
   /* Borders & Dividers — iOS separators: hairlines, never outlines */
-  --border-subtle: rgba(84, 84, 88, 0.42);
-  --border-medium: rgba(84, 84, 88, 0.65);
-  --border-hover: rgba(48, 209, 199, 0.45);
+  --border-subtle: rgba(255, 255, 255, 0.12);
+  --border-medium: rgba(255, 255, 255, 0.18);
+  --border-hover: rgba(255, 255, 255, 0.28);
   --border-soft: rgba(255, 255, 255, 0.07);
   --border-control: #858585;
 
   /* Soft fills — iOS system fill tiers */
-  --fill-soft: rgba(120, 120, 128, 0.16);
-  --fill-soft-2: rgba(120, 120, 128, 0.24);
+  --fill-soft: rgba(255, 255, 255, 0.05);
+  --fill-soft-2: rgba(255, 255, 255, 0.08);
 
   /* Opaque aliases for existing material consumers. */
   --glass-strong: var(--bg-card);
@@ -48,26 +48,26 @@
   --ambient-c: transparent;
 
   /* Opaque text hierarchy, readable on every shared surface. */
-  --text-main: #f5f5f4;
-  --text-primary: #f2f4f4;
-  --text-secondary: #d0d4d5;
-  --text-muted: #b5bcbe;
-  --text-faint: #a4adaf;
-  --text-label: #c3cacc;
-  /* Deep ink on bright mint CTAs. */
-  --text-on-accent: #062f2c;
+  --text-main: #f5f5f7;
+  --text-primary: #f5f5f7;
+  --text-secondary: #d2d2d7;
+  --text-muted: #b6b6be;
+  --text-faint: #a6a6b0;
+  --text-label: #c7c7ce;
+  /* Deep ink on blue commands. */
+  --text-on-accent: #07172f;
 
-  /* Primary Accent: system teal (iOS-vivid) */
-  --accent-primary: #30d1c7;
-  --accent-hover: #5ce1d8;
-  --accent-subtle: rgba(48, 209, 199, 0.14);
-  --accent-glow: rgba(48, 209, 199, 0.28);
+  /* Primary Accent: restrained blue. */
+  --accent-primary: #8cb4ff;
+  --accent-hover: #a7c6ff;
+  --accent-subtle: rgba(140, 180, 255, 0.1);
+  --accent-glow: rgba(140, 180, 255, 0.22);
   --focus-ring: var(--accent-primary);
 
   /* Secondary Accent & Status (readable variants flip per theme) */
-  --accent-cyan: #64d2ff;
-  --accent-teal: #30d1c7;
-  --accent-teal-bright: #5ce1d8;
+  --accent-cyan: var(--accent-primary);
+  --accent-teal: var(--accent-primary);
+  --accent-teal-bright: var(--accent-hover);
   --accent-emerald: #30d158;
   --accent-amber: #ffd60a;
   --accent-rose: #ff453a;
@@ -87,14 +87,14 @@
 
     /* Existing self-hosted families lead every typography role. */
     --font-sans: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
-    --font-display: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    --font-display: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Elevation Shadows — soft, wide, low-contrast (iOS sheet shadows) */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.24);
   --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.3), 0 14px 36px rgba(0, 0, 0, 0.36);
   --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.34), 0 28px 72px rgba(0, 0, 0, 0.48);
-  --shadow-glow: 0 0 28px rgba(48, 209, 199, 0.18);
+  --shadow-glow: none;
 }
 
 /* ==========================================================================
@@ -110,14 +110,14 @@
   --bg-card-hover: #f0f2f3;
   --bg-glass: var(--bg-secondary);
 
-  --border-subtle: rgba(60, 60, 67, 0.16);
-  --border-medium: rgba(60, 60, 67, 0.26);
-  --border-hover: rgba(0, 150, 140, 0.4);
-  --border-soft: rgba(60, 60, 67, 0.1);
+  --border-subtle: rgba(0, 0, 0, 0.1);
+  --border-medium: rgba(0, 0, 0, 0.16);
+  --border-hover: rgba(0, 0, 0, 0.24);
+  --border-soft: rgba(0, 0, 0, 0.07);
   --border-control: #707070;
 
-  --fill-soft: rgba(120, 120, 128, 0.1);
-  --fill-soft-2: rgba(120, 120, 128, 0.16);
+  --fill-soft: rgba(0, 0, 0, 0.04);
+  --fill-soft-2: rgba(0, 0, 0, 0.06);
 
   --glass-strong: var(--bg-card);
   --glass-mid: var(--bg-secondary);
@@ -126,26 +126,26 @@
   --reflect: rgba(255, 255, 255, 0.9);
   --reflect-strong: rgba(255, 255, 255, 1);
   --scrim: rgba(0, 0, 0, 0.28);
-  --ambient-a: rgba(0, 150, 140, 0.05);
-  --ambient-b: rgba(0, 122, 255, 0.035);
-  --ambient-c: rgba(0, 150, 140, 0.03);
+  --ambient-a: transparent;
+  --ambient-b: transparent;
+  --ambient-c: transparent;
 
-  --text-main: #171c1e;
-  --text-primary: #202628;
-  --text-secondary: #3f4b4f;
-  --text-muted: #4f5d63;
-  --text-faint: #58666c;
-  --text-label: #354247;
+  --text-main: #1d1d1f;
+  --text-primary: #1d1d1f;
+  --text-secondary: #3e3e43;
+  --text-muted: #54545c;
+  --text-faint: #62626a;
+  --text-label: #414148;
   --text-on-accent: #ffffff;
 
-  --accent-primary: #0b746c;
-  --accent-hover: #095f59;
-  --accent-subtle: rgba(11, 116, 108, 0.1);
-  --accent-glow: rgba(11, 116, 108, 0.22);
+  --accent-primary: #175cd3;
+  --accent-hover: #124ba9;
+  --accent-subtle: rgba(23, 92, 211, 0.07);
+  --accent-glow: rgba(23, 92, 211, 0.2);
 
-  --accent-cyan: #0071e3;
-  --accent-teal: #0b746c;
-  --accent-teal-bright: #0c7a72;
+  --accent-cyan: var(--accent-primary);
+  --accent-teal: var(--accent-primary);
+  --accent-teal-bright: var(--accent-hover);
   --accent-emerald: #34c759;
   --accent-amber: #ff9f0a;
   --accent-rose: #ff3b30;
@@ -164,7 +164,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.05), 0 14px 36px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.06), 0 28px 72px rgba(0, 0, 0, 0.12);
-  --shadow-glow: 0 0 28px rgba(0, 150, 140, 0.14);
+  --shadow-glow: none;
 }
 
 /* ==========================================================================
@@ -203,8 +203,8 @@
   --r-xl: 12px;
   --r-pill: 999px;
 
-  /* The one CTA fill — a flat, saturated tint with a whisper of top light */
-  --accent-gradient: linear-gradient(180deg, var(--accent-teal-bright) 0%, var(--accent-teal) 100%);
+  /* Keep the legacy gradient API flat for background-image consumers. */
+  --accent-gradient: linear-gradient(180deg, var(--accent-primary), var(--accent-primary));
 
   /* Semantic status surfaces (bg + border pair with the *-text tokens above) */
   --status-success-bg: rgba(16, 185, 129, 0.1);
@@ -229,7 +229,7 @@
   --trait-n: #ec4899;
 }
 [data-theme='light'] {
-  --accent-gradient: linear-gradient(180deg, var(--accent-teal-bright) 0%, var(--accent-teal) 100%);
+  --accent-gradient: linear-gradient(180deg, var(--accent-primary), var(--accent-primary));
   --status-success-bg: rgba(52, 199, 89, 0.1);
   --status-success-border: rgba(52, 199, 89, 0.3);
   --status-warn-bg: rgba(255, 159, 10, 0.1);
@@ -474,14 +474,13 @@ h1, h2, h3 {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--r-lg);
-  box-shadow: inset 0 1px 0 var(--reflect), var(--shadow-sm);
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease,
-    box-shadow 0.25s var(--bx-ease);
+  box-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .clean-card:hover {
   background: var(--bg-card-hover);
-  box-shadow: inset 0 1px 0 var(--reflect), var(--shadow-md);
+  box-shadow: none;
 }
 
 /* ==========================================================================
@@ -560,56 +559,38 @@ h1, h2, h3 {
   --bx-ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* View switch: every dashboard tab rises in when it mounts */
-.bx-view {
-  animation: bx-view-in 0.5s var(--bx-ease) both;
-}
-@keyframes bx-view-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: none; }
-}
-
-/* Staggered card entrance — set `--bx-i` inline (cap the index in JS) */
+/* Views and cards remain stationary as their content loads. */
+.bx-view,
 .bx-stagger {
-  animation: bx-rise 0.5s var(--bx-ease) both;
-  animation-delay: calc(var(--bx-i, 0) * 45ms);
-}
-@keyframes bx-rise {
-  from { opacity: 0; transform: translateY(12px) scale(0.985); }
-  to { opacity: 1; transform: none; }
+  animation: none;
 }
 
-/* Hover lift for interactive cards (inline styles can't express :hover) */
+/* Interactive cards use a boundary change without moving the target. */
 .bx-lift {
-  box-shadow: inset 0 1px 0 var(--reflect);
-  transition: transform 0.25s var(--bx-ease), border-color 0.25s var(--bx-ease),
-    box-shadow 0.25s var(--bx-ease), background 0.25s var(--bx-ease);
+  box-shadow: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 .bx-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: inset 0 1px 0 var(--reflect-strong), var(--shadow-md);
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border-hover);
 }
 
 /* ==========================================================================
    Global motion layer — every page inherits the same physicality.
    ========================================================================== */
 
-/* Buttons: shared spring feel without touching inline styles.
-   `filter` is applied but not transitioned — interpolating it promotes every
-   hovered button to its own layer and re-filters its subtree for the whole
-   transition, which invalidates the cached backdrop of the glass chrome. */
+/* Controls change color without moving or filtering their labels. */
 button {
-  transition: transform 0.18s var(--bx-ease), box-shadow 0.25s var(--bx-ease),
-    opacity 0.18s var(--bx-ease),
-    background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  transition: opacity 0.15s ease, background-color 0.15s ease,
+    color 0.15s ease, border-color 0.15s ease;
 }
 button:not(:disabled):hover {
-  filter: brightness(1.04);
+  filter: none;
 }
-/* iOS press: a quick, shallow scale-down */
 button:not(:disabled):active {
-  transform: scale(0.97);
-  filter: brightness(0.94);
+  transform: none;
+  filter: none;
 }
 
 /* Inputs settle smoothly between states */
@@ -811,7 +792,7 @@ html.theme-transition *::after {
     width: 100% !important;
     max-width: 100% !important;
     max-height: 94dvh !important;
-    border-radius: 16px !important;
+    border-radius: var(--r-xl) !important;
   }
 }
 @media (max-width: 900px) {
@@ -861,21 +842,21 @@ html.theme-transition *::after {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--border-soft);
-  border-radius: 20px;
-  box-shadow: inset 0 1px 0 var(--reflect), var(--shadow-md);
+  border-radius: var(--r-lg);
+  box-shadow: none;
 }
 
 .glass-card {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--r-lg);
-  box-shadow: inset 0 1px 0 var(--reflect);
-  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.25s var(--bx-ease);
+  box-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .glass-card:hover {
   background: var(--bg-card-hover);
-  box-shadow: inset 0 1px 0 var(--reflect-strong), var(--shadow-sm);
+  box-shadow: none;
 }
 
 /* Buttons */
@@ -884,39 +865,21 @@ html.theme-transition *::after {
   color: var(--lp-contrast-fg, #000000);
   border: none !important;
   outline: none;
-  border-radius: 9999px;
-  font-weight: 700;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  transition: background-color 0.15s ease, color 0.15s ease;
   position: relative;
   overflow: hidden;
 }
 
-/* Light sweep across primary CTAs on hover — transform-only, one-shot */
 .primary-hero-btn::after,
 .indigo-btn::after,
 .gold-btn::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 38%,
-    rgba(255, 255, 255, 0.28) 50%,
-    transparent 62%
-  );
-  transform: translateX(-120%);
-  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-  pointer-events: none;
-}
-.primary-hero-btn:hover::after,
-.indigo-btn:hover::after,
-.gold-btn:hover::after {
-  transform: translateX(120%);
+  content: none;
 }
 
 .primary-hero-btn:hover {
   background: var(--lp-contrast-bg-hover, #e4e4e7);
-  transform: translateY(-1px);
 }
 
 .indigo-btn {
@@ -924,18 +887,16 @@ html.theme-transition *::after {
   color: var(--text-on-accent);
   border: none !important;
   outline: none;
-  border-radius: 9999px;
-  font-weight: 700;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px var(--accent-glow);
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  box-shadow: none;
   position: relative;
   overflow: hidden;
 }
 
 .indigo-btn:hover {
   background: var(--accent-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px var(--accent-glow);
 }
 
 .gold-btn {
@@ -943,44 +904,43 @@ html.theme-transition *::after {
   color: var(--text-on-accent);
   border: none !important;
   outline: none;
-  border-radius: 9999px;
-  font-weight: 700;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px var(--accent-glow);
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  box-shadow: none;
   position: relative;
   overflow: hidden;
 }
 
 .gold-btn:hover {
   background: var(--accent-hover);
-  transform: translateY(-1px);
 }
 
 .secondary-hero-btn {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--fill-soft);
   color: var(--text-main);
   border: 1px solid var(--border-control) !important;
   outline: none;
-  border-radius: 9999px;
+  border-radius: var(--r-sm);
   font-weight: 600;
-  transition: all 0.2s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .secondary-hero-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--fill-soft-2);
 }
 
 .secondary-btn {
-  background: rgba(var(--lp-fill-rgb, 255, 255, 255), 0.06);
+  background: var(--fill-soft);
   color: var(--text-main);
   border: 1px solid var(--border-control) !important;
   outline: none;
-  border-radius: 9999px;
-  transition: all 0.2s ease;
+  border-radius: var(--r-sm);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .secondary-btn:hover {
-  background: rgba(var(--lp-fill-rgb, 255, 255, 255), 0.12);
+  background: var(--fill-soft-2);
 }
 
 /* Nav Link Button */

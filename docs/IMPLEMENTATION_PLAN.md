@@ -53,6 +53,126 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-09-13): Minimal Apple-like public redesign
+
+User asked for a minimal, modern, high-value public site with full design
+authority; the pinned pure-black dark canvas stays. Reading: product landing
+for founders and research teams, Persuade mode, dials 5/3/3. Replaced the
+mint/gold palette and the Space Grotesk display face with one sans family
+(Plus Jakarta Sans), a black/porcelain canvas pair, and a single blue
+(`--studio-action` for links/focus, `--studio-action-fill` for button fills at
+4.5:1). Rebuilt the product section as a keyboard-operable tabbed gallery
+([ProductGallery.tsx](../apps/frontend/src/components/landing/ProductGallery.tsx))
+over three real 1200x1000 Edge captures of the mock preview (brief, persona
+library, interviews list) plus a fresh 390x844 phone brief; all frames are
+SAMPLE-captioned. Workflow steps became a numbered typographic list without
+icon tiles; pricing and closing copy were rewritten in visitor language;
+section rhythm widened to 7rem with hairline dividers. The in-app interviews
+list ([InterviewsView.tsx](../apps/frontend/src/components/dashboard/views/InterviewsView.tsx))
+dropped its hardcoded teal/cyan Tailwind colors and eyebrow pill for token
+colors and the shared button, so it matches the redesigned shell in captures.
+
+Verification: gallery tab/arrow-key contract added to
+[StudioLanding.test.tsx](../apps/frontend/tests/StudioLanding.test.tsx) (RED
+before implementation, GREEN after); two headline/dimension assertions updated
+to the new copy and 1200x1000 assets. Final gate **1,117 tests / 65 files, 0
+failed, 0 skipped**; typecheck, Vite build and theme check exit 0. Rendered
+captures at 1440 and 390 in both themes show pure-black or `#f5f5f7` canvas,
+zero horizontal overflow, all images loaded, no page errors. Impeccable
+detector on the landing components returns only the retained font advisory.
+An independent read-only critique confirmed no eyebrows, gradient text,
+equal-card rows or second accent; its light-canvas and button-contrast
+findings were applied, its `letter-spacing` suggestion was declined because
+the shared theme test pins tracking to 0. Receipts under the ignored frontend
+`.tmp/black-audit/redesign-*` directories. No commit, push or CI is claimed;
+the mock preview at `http://127.0.0.1:5194` was left running.
+
+### Maintenance (2026-09-13): Pitch-black UI audit and interaction repairs
+
+Completed the newly user-authorized pitch-black UI audit after explicit renewed
+multi-agent permission following the prior cloud cancellation. Three independent
+code-audit groups covered public/auth/common, all workflow/interview, and deeper
+research; scoped TDD implementers were followed by independent final code
+reviews, browser review and a verifier. The parent code gate is complete; this
+close-out changes only the five existing UI/design/quality/log docs, not UI code.
+
+Dark page canvas is pinned to `#000000`, secondary `#080808`, card `#101010` and
+hover `#191919`; light porcelain is unchanged and near-black component surfaces
+remain allowed. Colored ambient/glowing page backgrounds and decorative
+background gradients were removed. Defined theme-paired control borders/focus
+target 3:1 and normal text 4.5:1. Responsive SAMPLE pictures are actual mock
+workspace renders, 1184x1000 desktop and 390x844 phone, not invented people.
+
+Repairs cover fixed-slot strict six-digit OTP, shared legal focus/labels and
+removal of the unsupported privacy claim, sign-in-only retry after a successful
+reset, IME-safe submission, honest clipboard/manual-copy recovery, pending-dialog
+focus, native role/count controls, active-persona conversation retention,
+accessible mobile trash/synthesis controls, fresh-batch versus resume guards,
+generation-success visibility and stale inspector/modal callback protection.
+Evidence retains full SUPPORTING/CONTRADICTING sources/excerpts; HTTP(S) links
+reject C0/DEL/C1 controls while preserving invalid URLs as full plain text.
+Segments load independently of auxiliary failures with pinned run/study
+provenance. Behavioral reruns retain scenario/target; failed starts retry only
+the saved run, polling resumes on the same Running run, reasoning supports
+keyboard/focus return, and synthesis retries the correct operation.
+
+Study-draft retry uses the actual failed queue entry with owner/study/revision/
+session/abort guards, complete retained payload and canonical write order.
+Failed save blocks Regenerate until durable acknowledgment or discard; aborted
+current-owner saves publish UNSAVED, not permanent Saving or late/cross-session
+SAVED. Restored save-error copy does not misreport generation failure. Direct
+router URLs now guard developer/admin access; auth has a named main. Post-capture
+repairs use `--text-main` for Strategic Recommendations and an explicit 52px
+border-box mobile header retaining 44px targets.
+
+| Frozen frontend gate | Result |
+| --- | --- |
+| Tests | **1,100 passed, 0 failed, 0 skipped; 65 files**; exit 0; 86,546 ms |
+| TypeScript / Vite 8.2.2 build / theme | All exit 0; 5,777 / 1,616 / 77 ms; theme drift 0 files |
+| Source/asset stability | 189 files; identical pre/post SHA-256; `sourceStable: true` |
+
+SHA-256: `2f978f5ff8a055ddb4b08985ffc013c0afd06d16bed8e7dc5267d82eafefa621`.
+[Frozen receipt](../apps/frontend/.tmp/black-audit/verified-2026-09-12T23-08-04-867Z/summary.json)
+uses September 12 late UTC (23:08:04.871Z to 23:09:38.926Z); this entry uses the
+September 13 local date. The preceding 1,099-pass/1-failure run exposed an old
+StudyCopilot expectation that Regenerate was enabled after failed save; the test
+was aligned with the correct blocked-regeneration policy. Incomplete earlier
+verifiers without JSON are not failing suites. One prior duplicate CSS property
+was fixed at typecheck. Parent-composed regressions passed 47 then 53; the final
+four-file run passed 143 before the full gate.
+
+Browser evidence preserves **774 PASS / 133 FAIL** from first inspection:
+130 wrong light-must-be-black harness assertions and three actual router UI
+assertions later fixed; all 93 dark root captures passed. Confirmation retains
+**1,143 PASS / 25 FAIL assertions**, not unit tests: three app assertions/two
+issues, seven harness errors, fifteen environment/artifact errors. There are
+148 captures at 1440x1000/390x844 in both themes and 2,320 valid bare-canvas RGB
+samples. The light report heading's 2.22:1 and mobile header's 53px findings
+were fixed after capture and regression-tested, not relabeled green or followed
+by a third broad browser round. Exact post-fix non-occlusion, populated dedicated
+InterviewWorkspace and behavioral detail/comparison, Back to studies activation,
+interrupted dark-desktop send/options flows and unit-only draft/URL/batch edges
+retain their browser gaps. Native IME/mobile-OS paste/autofill are not certified.
+
+Impeccable's final dashboard/auth/interview/ui/common/landing scan returned only
+six intentional font warnings; already self-hosted Plus Jakarta Sans/Space
+Grotesk remain, with no dependency, ignore or suppression added. Earlier root
+gradient-text warnings are outside that scan, not a whole-repo zero-warning
+verdict. The parent reviewed saved black desktop landing, porcelain mobile
+landing and the real phone workspace shot. No further visual-world change.
+
+Updated [UI_UX_AUDIT.md](UI_UX_AUDIT.md), [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md),
+[TASTE_REVIEW.md](TASTE_REVIEW.md) and [UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md)
+with full mounted-family scope and explicit dynamic-state limits. No new
+dependency or full backend/ML/live auth/OTP/provider/payment/database check;
+other workers' upgrades and the following live sweep's **1,039 frontend / 2,938
+backend** results remain theirs. No commit, push or CI claim; external HEAD
+advancement was another agent's work. The isolated mock preview was left at
+`http://127.0.0.1:5194`, without environment-file loading/live API access;
+`5173`/`8000` were not managed or touched. Local artifacts are ignored and not
+portable. All earlier log entries, including 744-test counts and four retired
+component links, remain unchanged historical records.
+
 ### Maintenance (2026-09-13): Production launch path — hosted release without a demo surface
 
 Prepared the hosted release the owner publishes next (Vercel SPA → Render API

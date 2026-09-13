@@ -118,6 +118,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const [personaErrorKind, setPersonaErrorKind] = useState<'generation' | 'save'>('generation');
   const [personaSaveRetry, setPersonaSaveRetry] = useState<(() => Promise<Study>) | null>(null);
   const [isRetryingPersonaSave, setIsRetryingPersonaSave] = useState(false);
+  const hasUnresolvedDraftFailure = (personaErrorKind === 'save' && Boolean(personaGenError))
+    || saveState?.state === 'unsaved' || saveState?.state === 'conflict';
   const personaSaveControllerRef = useRef<AbortController | null>(null);
   const personaSavePendingRef = useRef(false);
   const sessionEpoch = getSessionEpoch();
@@ -691,7 +693,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   const handleGeneratePersonas = async () => {
     const epoch = studyEpochRef.current;
-    if (!epoch.active || isGeneratingPersonas || personaSavePendingRef.current) return;
+    if (!epoch.active || isGeneratingPersonas || personaSavePendingRef.current || hasUnresolvedDraftFailure) return;
     setPersonaGenError(null);
     setPersonaErrorKind('generation');
     setPersonaSaveRetry(null);
@@ -1489,6 +1491,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               personas={personas}
               personaGenError={personaGenError}
               personaErrorKind={personaErrorKind}
+              hasUnresolvedDraftFailure={hasUnresolvedDraftFailure}
               canRetryPersonaSave={Boolean(personaSaveRetry)}
               isRetryingPersonaSave={isRetryingPersonaSave}
               handleRetryPersonaSave={handleRetryPersonaSave}

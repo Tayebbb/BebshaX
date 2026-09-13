@@ -235,12 +235,16 @@ describe('Frontend canonical study persistence', () => {
     await failDraftSave();
     const controller = new AbortController();
     const retry = getStudyDraftRetry(study.user_id, study.id, controller.signal)!;
+    const events = vi.spyOn(window, 'dispatchEvent');
     const saving = retry();
     controller.abort();
     await expect(saving).rejects.toMatchObject({ name: 'AbortError' });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(api.getPendingStudyDraft(study.id)).toEqual({ prompt: 'Complete retained draft' });
     expect(getStudyDraftRetry(study.user_id, study.id, new AbortController().signal)).toBeUndefined();
+    expect(events).toHaveBeenCalledWith(expect.objectContaining({ type: STUDY_SAVE_CHANGED, detail: expect.objectContaining({
+      studyId: study.id, state: 'unsaved', message: expect.stringMatching(/confirmation was cancelled.*reload the saved version/i),
+    }) }));
   });
 
   it('does not replay a conflict after route ownership ends during the fresh revision load', async () => {
@@ -260,7 +264,7 @@ describe('Frontend canonical study persistence', () => {
     expect(api.getPendingStudyDraft(study.id)).toEqual({ prompt: 'Complete retained draft' });
   });
 
-  it('does not publish saved or revive retry when an aborted in-flight response arrives', async () => {
+  it.each([200, 503])('publishes reload recovery without saved or retry after an aborted in-flight HTTP %i response', async (status) => {
     await failDraftSave();
     const controller = new AbortController();
     const retry = getStudyDraftRetry(study.user_id, study.id, controller.signal)!;
@@ -270,23 +274,32 @@ describe('Frontend canonical study persistence', () => {
     const saving = retry();
     const rejected = expect(saving).rejects.toMatchObject({ name: 'AbortError' });
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+    expect(events).toHaveBeenCalledWith(expect.objectContaining({ type: STUDY_SAVE_CHANGED, detail: expect.objectContaining({ state: 'saving' }) }));
     controller.abort();
-    finish(response({ ...study, revision: 2, prompt: 'Complete retained draft' }));
+    finish(response(status === 200 ? { ...study, revision: 2, prompt: 'Complete retained draft' } : { detail: 'Save unavailable' }, status));
     await rejected;
     expect(events).not.toHaveBeenCalledWith(expect.objectContaining({ type: STUDY_SAVE_CHANGED, detail: expect.objectContaining({ state: 'saved' }) }));
+    expect(events).toHaveBeenLastCalledWith(expect.objectContaining({ type: STUDY_SAVE_CHANGED, detail: expect.objectContaining({
+      studyId: study.id, state: 'unsaved', message: expect.stringMatching(/confirmation was cancelled.*may have reached the server.*reload the saved version/i),
+    }) }));
     expect(api.getPendingStudyDraft(study.id)).toEqual({ prompt: 'Complete retained draft' });
+    expect(JSON.parse(sessionStorage.getItem(`bebshax_draft_${study.user_id}_${study.id}`)!)).toEqual({
+      revision: 1, updates: { prompt: 'Complete retained draft' },
+    });
     expect(getStudyDraftRetry(study.user_id, study.id, new AbortController().signal)).toBeUndefined();
   });
 
-  it('does not restore private draft data or saved events after session reset during retry', async () => {
+  it.each([false, true])('does not restore private draft data or events after session reset during retry (route aborted: %s)', async (routeAborted) => {
     await failDraftSave();
-    const retry = getStudyDraftRetry(study.user_id, study.id, new AbortController().signal)!;
+    const controller = new AbortController();
+    const retry = getStudyDraftRetry(study.user_id, study.id, controller.signal)!;
     let finish!: (value: Response) => void;
     vi.mocked(fetch).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
     const saving = retry();
     const rejected = expect(saving).rejects.toMatchObject({ name: 'AbortError' });
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
     api.clearSession();
+    if (routeAborted) controller.abort();
     const events = vi.spyOn(window, 'dispatchEvent');
     finish(response({ ...study, revision: 2, prompt: 'Complete retained draft' }));
     await rejected;
@@ -450,6 +463,38 @@ describe('Frontend canonical study persistence', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Changes are not saved/);
     expect(api.getPendingStudyDraft(study.id)?.step).toBe(1);
+  });
+
+  it.each([0, 1])('blocks fresh generation with %i saved personas while a recovered draft awaits resolution', async (personaCount) => {
+    const draft = { prompt: 'Complete recovered study context' };
+    const savedStudy = {
+      ...study, step: 2, prompt: 'Saved study context',
+      suggested_roles: [{ id: 'role', role: 'Researcher', description: 'Synthetic source profile', count: 1, selected: true }],
+      personas_data: personaCount ? [{ id: 'saved-persona', name: 'Saved persona', archetype: 'Researcher' }] : [],
+    };
+    sessionStorage.setItem(`bebshax_draft_${study.user_id}_${study.id}`, JSON.stringify({ revision: 1, updates: draft }));
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).endsWith(`/studies/${study.id}`)) return response(savedStudy);
+      if (String(input).endsWith('/reports')) return response([]);
+      return response({ detail: 'Optional evidence unavailable' }, 503);
+    });
+    const generate = vi.spyOn(api, 'generateStudyPersonasDetailed');
+    render(<StudyWorkflowView studyId={study.id} initialStep={2} onExit={vi.fn()} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Recovered unsaved changes/);
+    const regenerate = screen.getByRole('button', { name: 'Regenerate Personas' });
+    expect(regenerate).toBeDisabled();
+    expect(regenerate).toHaveAttribute('title', 'Save the retained draft or reload the saved version before generating new personas.');
+    fireEvent.click(regenerate);
+    if (personaCount === 0) {
+      const initialGenerate = screen.getByRole('button', { name: 'Generate Personas' });
+      expect(initialGenerate).toBeDisabled();
+      fireEvent.click(initialGenerate);
+    }
+    expect(generate).not.toHaveBeenCalled();
+    expect(api.getPendingStudyDraft(study.id)).toEqual(draft);
+    expect(getStudyDraftRetry(study.user_id, study.id, new AbortController().signal)).toBeUndefined();
+    expect(screen.getByRole('button', { name: 'Reload saved version' })).toBeEnabled();
   });
 
   it.each([2, 3] as const)('does not record step %i generation placeholders as primary content', async (step) => {

@@ -492,7 +492,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   };
 
   return (
-    <div
+    <main
+      aria-label="BebshaX account"
       style={{
         minHeight: '100dvh',
         width: '100%',
@@ -1440,6 +1441,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         onClose={() => setLegalModal(null)}
         type={legalModal || 'terms'}
       />
-    </div>
+    </main>
   );
 };

@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   RefreshCw,
   Layers,
-  Bot,
   Activity,
   Award,
   ChevronRight,
@@ -145,12 +144,6 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-500/10 text-teal-300 border border-teal-500/30 flex items-center gap-1">
-              <Bot className="w-3 h-3" />
-              Adaptive Persona Interviews
-            </span>
-          </div>
           <h1 className="text-xl font-semibold text-[var(--text-primary)] tracking-normal">
             Customer Interview Lab
           </h1>
@@ -162,9 +155,9 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
 
         <button
           onClick={navigateToPersonas}
-          className="px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-black font-bold text-xs flex items-center gap-2 shadow-lg shadow-teal-500/20 transition-all cursor-pointer shrink-0 self-start md:self-auto"
+          className="bx-btn bx-btn--primary shrink-0 self-start md:self-auto"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4" aria-hidden="true" />
           <span>New Persona Interview</span>
         </button>
       </div>
@@ -175,7 +168,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
         <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
           <div className="flex items-center justify-between text-[var(--text-muted)]">
             <span className="text-xs font-semibold uppercase tracking-wider">Total Interviews</span>
-            <MessageSquare className="w-4 h-4 text-teal-400" />
+            <MessageSquare className="w-4 h-4 text-[var(--accent-primary)]" />
           </div>
           <div className="text-2xl font-black text-white">{metrics ? <CountUp value={metrics.total_interviews} /> : <span aria-label="Total interviews unavailable">--</span>}</div>
           <p className="text-[0.72rem] text-[var(--text-muted)]">Recorded research sessions</p>
@@ -184,9 +177,9 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
         <div className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl p-5 space-y-2 shadow-md">
           <div className="flex items-center justify-between text-[var(--text-muted)]">
             <span className="text-xs font-semibold uppercase tracking-wider">Active Sessions</span>
-            <Activity className="w-4 h-4 text-cyan-400" />
+            <Activity className="w-4 h-4 text-[var(--accent-primary)]" />
           </div>
-          <div className="text-2xl font-black text-cyan-400">{metrics ? <CountUp value={metrics.active_interviews} /> : <span aria-label="Active sessions unavailable">--</span>}</div>
+          <div className="text-2xl font-black text-[var(--accent-primary)]">{metrics ? <CountUp value={metrics.active_interviews} /> : <span aria-label="Active sessions unavailable">--</span>}</div>
           <p className="text-[0.72rem] text-[var(--text-muted)]">Conversations in progress</p>
         </div>
 
@@ -222,7 +215,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by persona name, objective, or topic..."
-            className="w-full bg-[var(--bg-card-hover)] border border-[var(--border-medium)] focus:border-teal-500 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-[var(--text-muted)] focus:outline-none transition-colors"
+            className="w-full bg-[var(--bg-card-hover)] border border-[var(--border-medium)] focus:border-[var(--focus-ring)] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-[var(--text-muted)] focus:outline-none transition-colors"
           />
         </form>
 
@@ -272,12 +265,12 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
       {/* 4. Interviews List Grid */}
       {isLoading ? (
         <div className="p-16 text-center text-[var(--text-secondary)] space-y-4">
-          <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <div className="w-8 h-8 border-3 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs">Loading study interviews...</p>
         </div>
       ) : error ? null : filteredInterviews.length === 0 ? (
         <div className="p-12 text-center bg-[var(--bg-card-hover)] border border-[var(--border-medium)] rounded-2xl space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 mx-auto">
+          <div className="w-14 h-14 rounded-2xl bg-[var(--accent-subtle)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)] mx-auto">
             <MessageSquare className="w-7 h-7" />
           </div>
           <div className="space-y-1">
@@ -290,7 +283,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
           </div>
           <button
             onClick={navigateToPersonas}
-            className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-black font-bold rounded-xl text-xs transition-colors cursor-pointer"
+            className="bx-btn bx-btn--primary"
           >
             Go to Persona Library
           </button>
@@ -323,13 +316,13 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                   }
                 }}
                 onClick={() => openInterview(item.id)}
-                className="bg-[var(--bg-card-hover)] border border-[var(--border-medium)] hover:border-teal-500/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all duration-200 cursor-pointer shadow-md hover:shadow-teal-500/5 group"
+                className="bg-[var(--bg-card)] border border-[var(--border-medium)] hover:border-[var(--border-hover)] rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-colors duration-200 cursor-pointer group"
               >
                 {/* Card Top: Persona & Status */}
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500/20 to-cyan-500/20 border border-teal-500/30 flex items-center justify-center text-teal-300 font-bold text-sm shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-[var(--accent-subtle)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--accent-primary)] font-bold text-sm shrink-0">
                         {item.persona_avatar ? (
                           <img
                             src={item.persona_avatar}
@@ -343,7 +336,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                         )}
                       </div>
                       <div>
-                        <h3 className="text-sm font-bold text-white group-hover:text-teal-300 transition-colors line-clamp-1">
+                        <h3 className="text-sm font-bold text-white transition-colors line-clamp-1">
                           {item.persona_name || 'Synthetic Persona'}
                         </h3>
                         <p className="text-[0.72rem] text-[var(--text-secondary)] line-clamp-1">
@@ -358,11 +351,11 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                           ? awaitingSynthesis
                             ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
                             : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                          : 'bg-teal-500/10 text-teal-400 border-teal-500/30 flex items-center gap-1'
+                          : 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] border-[var(--border-subtle)] flex items-center gap-1'
                       }`}
                     >
                       {!isCompleted && !turnCapReached && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)]" />
                       )}
                       {isCompleted ? (awaitingSynthesis ? 'Synthesis pending' : 'Completed') : turnCapReached ? 'Ready to synthesize' : 'Active'}
                     </span>
@@ -388,11 +381,11 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                         Turns: <strong className="text-white">{turnsCount}</strong>
                         {maxTurns !== null ? ` / ${maxTurns}` : ''}
                       </span>
-                      <span className="text-teal-400 capitalize font-medium">{item.length_tier} Tier</span>
+                      <span className="text-[var(--text-secondary)] capitalize font-medium">{item.length_tier} Tier</span>
                     </div>
                     <div className="w-full h-1.5 bg-[var(--border-subtle)] rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-teal-500 to-cyan-400"
+                        className="h-full bg-[var(--accent-primary)]"
                         style={{ width: maxTurns !== null ? `${Math.min(100, (turnsCount / maxTurns) * 100)}%` : '0%' }}
                       />
                     </div>
@@ -401,7 +394,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                   {/* Explored Topics & Insights Badges */}
                   <div className="flex items-center justify-between text-[0.72rem] pt-1">
                     <span className="flex items-center gap-1 text-[var(--text-secondary)]">
-                      <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                      <Layers className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                       {exploredCount} topics explored
                     </span>
                     {insightsCount > 0 && (
@@ -414,7 +407,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                 </div>
 
                 {/* Card Bottom: Action CTA */}
-                <div className="pt-2 flex items-center justify-between text-xs font-semibold text-teal-400 group-hover:translate-x-0.5 transition-transform">
+                <div className="pt-2 flex items-center justify-between text-xs font-semibold text-[var(--accent-primary)]">
                   <span>{isCompleted ? (awaitingSynthesis ? 'Retry synthesis & view transcript' : 'View Analysis & Transcript') : turnCapReached ? 'Generate synthesis' : 'Continue Interview'}</span>
                   <ChevronRight className="w-4 h-4" />
                 </div>

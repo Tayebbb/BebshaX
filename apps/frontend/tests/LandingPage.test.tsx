@@ -59,7 +59,7 @@ describe('BebshaX Premium Landing Page', () => {
     ).toBeInTheDocument();
 
     expect(
-      screen.getByRole('heading', { name: /A workspace for the questions/i })
+      screen.getByRole('heading', { name: /One connected study/i })
     ).toBeInTheDocument();
 
     expect(

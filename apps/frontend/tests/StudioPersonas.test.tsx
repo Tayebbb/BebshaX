@@ -802,6 +802,93 @@ describe('Studio persona controls', () => {
     expect(screen.getByRole('region', { name: 'Cited evidence' })).toHaveTextContent('status supported');
   });
 
+  it.each([
+    ['javascript', 'javascript:alert(1)'],
+    ['data', 'data:text/plain,Complete source context'],
+    ['scheme-relative', '//example.test/source'],
+    ['relative', '/source'],
+    ['non-HTTP', 'ftp://example.test/source'],
+    ['malformed', 'https://'],
+    ['tab-containing', 'https://example.test/with\ttab'],
+    ['newline-containing', 'https://example.test/with\nnewline'],
+    ['carriage-return-containing', 'https://example.test/with\rcarriage-return'],
+    ['null-character-containing', '\u0000https://example.test/source'],
+    ['delete-character-containing', 'https://example.test/with\u007fdelete'],
+    ['C1-next-line-containing', 'https://example.test/with\u0085next-line'],
+    ['C1-control-containing', 'https://example.test/with\u009fcontrol'],
+  ])('keeps %s URLs as complete plain text in both source collections', async (_condition, url) => {
+    const supportingSource = { ...claim.supporting_sources[0], url, content_hash: 'complete-supporting-hash' };
+    const contradictingSource = {
+      ...supportingSource, id: 'contradicting-source', title: 'Contradicting source record',
+      publisher: 'Contradicting fixture catalog', content_hash: 'complete-contradicting-hash',
+      content: 'Complete contradicting evidence. '.repeat(18).trim(),
+    };
+    vi.mocked(api.getEvidenceClaimDetail).mockResolvedValue({
+      ...claim,
+      supporting_sources: [supportingSource],
+      contradicting_sources: [contradictingSource],
+      contradicting_source_ids: [contradictingSource.id],
+    });
+    render(<EvidenceClaimPeek studyId={study.id} evidenceIds={[claim.id]} onClose={vi.fn()} />);
+    const supporting = await screen.findByRole('list', { name: 'Supporting sources' });
+    const contradicting = screen.getByRole('list', { name: 'Contradicting sources' });
+
+    for (const [group, source] of [[supporting, supportingSource], [contradicting, contradictingSource]] as const) {
+      expect(group.querySelector('[href]')).toBeNull();
+      expect(within(group).queryByRole('link')).not.toBeInTheDocument();
+      expect(group.textContent).toContain(url);
+      expect(within(group).getByText(source.title)).toBeVisible();
+      expect(group.textContent).toContain(source.publisher);
+      expect(group.textContent).toContain(source.id);
+      expect(group.textContent).toContain(source.source_type);
+      expect(group.textContent).toContain(source.status);
+      expect(group.textContent).toContain(source.content_hash);
+      expect(group.textContent).toContain(source.content);
+    }
+    expect(screen.getByRole('region', { name: 'Cited evidence' }).textContent).toContain(claim.claim_text);
+    expect(screen.getByRole('list', { name: 'Supporting excerpts' }).textContent).toContain(claim.supporting_chunks[0].content);
+  });
+
+  it.each(['https://example.test/source?query=complete#excerpt', 'http://example.test/source'])(
+    'links the absolute HTTP(S) URL %s safely in both source collections',
+    async (url) => {
+      const source = { ...claim.supporting_sources[0], url };
+      vi.mocked(api.getEvidenceClaimDetail).mockResolvedValue({
+        ...claim, supporting_sources: [source], contradicting_sources: [source], contradicting_source_ids: [source.id],
+      });
+      render(<EvidenceClaimPeek studyId={study.id} evidenceIds={[claim.id]} onClose={vi.fn()} />);
+      await screen.findByRole('list', { name: 'Supporting sources' });
+
+      for (const label of ['Supporting sources', 'Contradicting sources']) {
+        const group = screen.getByRole('list', { name: label });
+        const link = within(group).getByRole('link', { name: source.title });
+        expect(link).toHaveAttribute('href', url);
+        expect(link).toHaveAttribute('target', '_blank');
+        expect(link.getAttribute('rel')?.split(/\s+/)).toEqual(expect.arrayContaining(['noopener', 'noreferrer']));
+        expect(group.textContent).toContain(source.content);
+      }
+    }
+  );
+
+  it.each<[string, string | undefined]>([['missing', undefined], ['empty', '']])(
+    'retains sources with a %s URL as unlinked evidence in both collections',
+    async (_condition, url) => {
+      const source = { ...claim.supporting_sources[0], url };
+      vi.mocked(api.getEvidenceClaimDetail).mockResolvedValue({
+        ...claim, supporting_sources: [source], contradicting_sources: [source], contradicting_source_ids: [source.id],
+      });
+      render(<EvidenceClaimPeek studyId={study.id} evidenceIds={[claim.id]} onClose={vi.fn()} />);
+      await screen.findByRole('list', { name: 'Supporting sources' });
+
+      for (const label of ['Supporting sources', 'Contradicting sources']) {
+        const group = screen.getByRole('list', { name: label });
+        expect(group.querySelector('[href]')).toBeNull();
+        expect(within(group).getByText(source.title)).toBeVisible();
+        expect(group.textContent).toContain(source.content);
+      }
+    }
+  );
+
   it.each(['Contradicting sources', 'Supporting excerpts'])('does not report an empty trace when only %s are returned', async (groupName) => {
     vi.mocked(api.getEvidenceClaimDetail).mockResolvedValue({
       ...claim,

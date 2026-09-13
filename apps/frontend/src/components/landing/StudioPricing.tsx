@@ -26,8 +26,8 @@ export const StudioPricing: React.FC<StudioPricingProps> = ({
   <section id="pricing" className="studio-section studio-pricing" aria-labelledby="studio-pricing-title" tabIndex={-1}>
     <div className="studio-container">
       <div className="studio-section-heading">
-        <h2 id="studio-pricing-title">Room to explore. No payment details.</h2>
-        <p>Start with free research rehearsal. Remote conversations depend on provider availability and quotas.</p>
+        <h2 id="studio-pricing-title">Start without a card.</h2>
+        <p>The first plan costs nothing. Interviews run on remote models, so availability and quotas apply.</p>
       </div>
       {errorMessage && <p className="studio-error" role="alert">{errorMessage}</p>}
       <div className="studio-plans">
@@ -56,7 +56,7 @@ export const StudioPricing: React.FC<StudioPricingProps> = ({
           ? 'Paid plans are not enabled in this build. No payment is taken.'
           : billingEnabled
             ? 'Paid plans are processed by Stripe. Access changes only after server confirmation.'
-            : 'Paid plans are unavailable unless explicitly enabled by the server.'}
+            : 'Paid plans are not available yet.'}
       </p>
     </div>
   </section>

@@ -29,7 +29,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenApp }) => {
             Open workspace <ArrowRight size={18} aria-hidden="true" />
           </button>
           <a className="studio-text-link" href="#product">
-            Explore the workspace <ArrowDown size={17} aria-hidden="true" />
+            See the workspace <ArrowDown size={17} aria-hidden="true" />
           </a>
         </div>
       </div>

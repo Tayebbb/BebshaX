@@ -41,7 +41,7 @@ type EvidenceTab = 'claims' | 'sources' | 'runs';
 type EvidenceResource = EvidenceTab | 'summary';
 
 const externalSourceUrl = (value?: string | null): string | undefined => {
-  if (!value) return undefined;
+  if (!value || /[\u0000-\u001f\u007f-\u009f]/.test(value)) return undefined;
   try {
     const url = new URL(value);
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : undefined;

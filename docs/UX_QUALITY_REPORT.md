@@ -1,6 +1,128 @@
 # BebshaX UX Quality Report
 
-## Current Verdict (2026-09-13)
+## Current Pitch-Black Verdict (2026-09-13)
+
+**Final frontend code gate: PASS. Browser coverage is bounded, with two
+post-capture issues repaired and regression-tested, not recaptured as all green.**
+This is the new user-authorized audit, not the earlier 744-test studio close-out
+or a production/accessibility certification. No numerical taste score is assigned.
+
+### Frozen Gate
+
+The [final receipt](../apps/frontend/.tmp/black-audit/verified-2026-09-12T23-08-04-867Z/summary.json)
+records the completed parent gate; this documentation update did not rerun it.
+
+| Check | Final result |
+| --- | --- |
+| Frontend regression suite | **1,100 passed, 0 failed, 0 skipped; 65 files**; exit 0; 86,546 ms |
+| TypeScript (`tsc`) | Exit 0; 5,777 ms |
+| Production build | Vite 8.2.2; exit 0; 1,616 ms |
+| Theme drift | Exit 0; 0 files requiring tokenization; 77 ms |
+| Snapshot stability | Same 189 source/asset files and SHA-256 before and after; `sourceStable: true` |
+
+Pre/post SHA-256: `2f978f5ff8a055ddb4b08985ffc013c0afd06d16bed8e7dc5267d82eafefa621`.
+The receipt runs from `2026-09-12T23:08:04.871Z` to
+`2026-09-12T23:09:38.926Z`; September 13 is the local documentation date,
+not a rewritten UTC timestamp. Different historical fingerprint scopes are not
+directly comparable.
+
+The preceding full attempt had **1,099 passes / 1 failure**: an old StudyCopilot
+assertion expected Regenerate to be enabled after a failed save. The test was
+aligned with the correct policy: regeneration stays blocked until durable
+acknowledgment or explicit discard. Earlier incomplete verifier attempts without
+result JSON are incomplete, not fabricated failing suites. One earlier duplicate
+CSS-property patch was corrected at typecheck. Parent-composed save regressions
+passed first 47, then 53 checks; the final four-file focused run passed 143,
+followed by the frozen 1,100-test gate above.
+
+### Browser Evidence
+
+| Record | Raw assertions | Classification, not rewritten results |
+| --- | --- | --- |
+| [First inspection](../apps/frontend/.tmp/black-audit/audit-report.json) | 774 PASS / 133 FAIL | 130 harness bugs wrongly required black in LIGHT; 3 actual normal-user router UI assertions were subsequently fixed |
+| [Final confirmation](../apps/frontend/.tmp/black-audit/confirmation-20260913-final/reviewed-summary.json) | **1,143 PASS / 25 FAIL** | 3 app assertions representing 2 issues; 7 harness errors; 15 environment/artifact errors |
+
+These are assertion records, **not unit-test counts**. All 93 dark captures in
+the first inspection passed their root checks. The earlier all-theme-black
+expectation was wrong: only DARK page canvas is `#000000`; LIGHT remains
+porcelain `#f6f7f8`, and near-black component surfaces are permitted.
+
+Confirmation retained **148 captures** at **1440x1000** and **390x844**, both
+themes; all viewport PNG dimensions matched. **2,320 valid bare-canvas RGB
+samples** agree with the theme-specific canvas rule. Samples on expanded trace
+panels were excluded as non-canvas, not converted into fresh passes. The seven
+harness errors cover mobile-only target sizing applied to desktop, H1-only
+denial capture, and panel sampling. The fifteen environment/artifact errors
+cover interrupted Edge/terminal targets and a Windows EPERM receipt rename.
+Raw failures, screenshots and classifications remain preserved in the
+[confirmation report](../apps/frontend/.tmp/black-audit/confirmation-20260913-final/REPORT.md)
+and [capture index](../apps/frontend/.tmp/black-audit/confirmation-20260913-final/capture-index.json).
+
+The two actual findings were fixed **after** those captures: Strategic
+Recommendations measured **2.22:1** in light mode and now uses normal
+`--text-main`; the mobile header measured **53px** and now declares **52px
+border-box**, preserving **44px** targets. Regression coverage is in
+[FrontendAccessibility.test.tsx](../apps/frontend/tests/FrontendAccessibility.test.tsx)
+and [HonestyRound2.test.tsx](../apps/frontend/tests/HonestyRound2.test.tsx), alongside
+the C1 unsafe-URL guard tests in the final focused run. The raw confirmation
+verdict remains `FAIL_WITH_EXPLICIT_COVERAGE_LIMITS`; there was no third broad
+browser round or post-fix full non-occlusion browser verification.
+
+### Coverage And Limits
+
+Browser evidence includes public navigation/FAQ/legal, actual SAMPLE image
+intrinsics in each mode (1184x1000 desktop, 390x844 phone), all six native auth
+variants, OTP editing, legal focus, mock signup/signin/logout, named account
+main, shell/menu/theme/body layout, ordinary-user route denial and developer/
+admin mock diagnostics. Study workflow fixtures, persona inspector/evidence,
+segments, behavioral wizard and saved/example reports were also reached.
+[UI_UX_AUDIT.md](UI_UX_AUDIT.md) separates all mounted code-audit families from
+the dynamic states actually exercised in the browser.
+
+- Populated **dedicated InterviewWorkspace** and behavioral **detail/comparison**
+	were unavailable through existing mocks. Their error/empty views were captured;
+	deep component tests passed. No transcript or results were invented.
+- **Back to studies activation** was not browser-exercised: the H1 capture helper
+	stopped after the valid H3 denial. The back-navigation unit assertion passed.
+- Pending-draft recovery, unsafe-URL and batch edge cases remain unit-only.
+	Ordinary links or enabled sample-report Copy do not establish those paths.
+- The interrupted dark-desktop interview send/report-refusal and original
+	options/delete-cancellation flow remain gaps. Unexecuted views were continued
+	with existing fixtures, not counted as a completed interrupted journey.
+- Exact 52px layout has regression coverage only after the fix. Full content
+	non-occlusion, native IME hardware behavior, and mobile-OS paste/autofill are
+	not certified. Simulated composition/OTP tests are narrower evidence.
+- No full backend/ML suites, live auth/OTP/provider/payment/database checks,
+	exhaustive WCAG/screen-reader audit, Lighthouse or field Core Web Vitals were
+	performed in this pass. Component/token checks are not those certifications.
+
+### Review And Ownership
+
+After the earlier cloud cancellation, the user explicitly renewed multi-agent
+authorization: three independent code-audit groups covered public/auth/common,
+all workflow/interview, and deeper research; scoped TDD implementers were
+followed by independent final code reviews, browser review and a verifier.
+Impeccable's final structured scan of dashboard/auth/interview/ui/common/landing
+returned only six intentional font advisories. Earlier root gradient-text
+utility warnings sit outside that component scan; this is not zero warnings
+across the repository. [TASTE_REVIEW.md](TASTE_REVIEW.md) records the decision.
+The parent visually reviewed saved full-black desktop landing, porcelain mobile
+landing and the actual phone workspace shot.
+
+No dependency was added for this audit; other workers' upgrades were preserved.
+The neighboring live-sweep entry's **1,039 frontend / 2,938 backend** results
+belong to that worker, not this pass. No commit, push or CI success is claimed;
+external HEAD advancement was another agent's work. The isolated mock preview
+was left running at `http://127.0.0.1:5194`, without environment-file loading or
+live API access; the user's `5173`/`8000` services were not managed or touched.
+Local receipts are Git-ignored and not portable, so essential results are
+included above. This close-out changes documentation only.
+
+## Historical Studio Close-out (2026-09-13)
+
+The preserved 744-test verdict and studio browser checks below are a prior
+stage, not the current pitch-black audit. Its cancellation and verification
+scope must not be carried forward as the method or totals for the new pass.
 
 **Frontend verification passed, with scoped browser coverage and documented
 advisories.** No arbitrary studio-quality score or production certification is
@@ -31,7 +153,7 @@ The subsequent full run passed without an application or test change. The
 earlier failure receipt remains preserved; its cause is not established, and
 the successful rerun is not proof that this intermittent test risk is resolved.
 
-## Browser Evidence
+### Studio Browser Evidence
 
 Playwright 1.63 with locally installed Edge produced exact-size viewport and
 full-page captures. The broad confirmation covered desktop 1440x1000 and phone
@@ -79,7 +201,7 @@ Current report links resolve. Four links to retired landing implementation
 files remain only in the append-only historical implementation log; those old
 entries have not been rewritten or presented as current file references.
 
-## Review Method
+### Studio Review Method
 
 Earlier independent implementation, code, usability and browser reviews were
 followed by targeted fixes. UI/UX Pro Max informed the direction; the taste
@@ -89,7 +211,7 @@ single-context after the user canceled cloud-agent delegation, not a new
 independent dual-agent certification. [TASTE_REVIEW.md](TASTE_REVIEW.md) records
 the six retained typography advisories.
 
-## Explicit Limits
+### Studio Explicit Limits
 
 Live Google consent, OTP delivery, checkout, provider availability, successful
 backend report generation, durable database/concurrency behavior, and the

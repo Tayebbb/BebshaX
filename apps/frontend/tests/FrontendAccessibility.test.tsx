@@ -51,6 +51,8 @@ describe('Frontend keyboard access and commercial honesty', () => {
     expect(drawer.inert).toBe(true);
     expect(drawer).toHaveAttribute('aria-hidden', 'true');
     const trigger = screen.getByRole('button', { name: /Open navigation/i });
+    expect(trigger).toHaveStyle({ width: '44px', height: '44px' });
+    expect(trigger.parentElement).toHaveStyle({ height: '52px', boxSizing: 'border-box', padding: '0px 14px' });
     trigger.focus();
     fireEvent.click(trigger);
     const dialog = screen.getByRole('dialog', { name: 'Workspace navigation' });

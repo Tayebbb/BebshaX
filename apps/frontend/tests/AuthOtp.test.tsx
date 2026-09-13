@@ -152,6 +152,12 @@ describe('AuthPage OTP Verification & Reset Flows', () => {
     vi.restoreAllMocks();
   });
 
+  it('provides one named main landmark around authentication controls', () => {
+    renderAuthPage('signin');
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    expect(screen.getByRole('main', { name: 'BebshaX account' })).toContainElement(screen.getByRole('button', { name: /^Sign in$/i }));
+  });
+
   const renderAuthPage = (initialMode: any = 'signup-email') => {
     return render(
       <NavigationProvider>

@@ -306,7 +306,9 @@ describe('Evidence laboratory presentation', () => {
     },
   );
 
-  it.each(['javascript:alert(1)', 'data:text/html,private', '//external.example/path'])(
+  it.each(['javascript:alert(1)', 'data:text/html,private', '//external.example/path',
+    'https://example.test/with\ttab', 'https://example.test/with\u0085next-line',
+    'https://example.test/with\u009fcontrol'])(
     'preserves evidence text without exposing an unsafe source link %s', async (url) => {
       const source = { ...evidenceSource, url, content: 'Evidence remains readable without a safe external link.' };
       vi.mocked(api.getEvidenceClaimDetail).mockResolvedValueOnce({

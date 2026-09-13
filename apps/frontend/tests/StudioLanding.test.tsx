@@ -416,12 +416,51 @@ describe('Studio landing contracts', () => {
     expect(caption).toHaveTextContent(/\bnot\s+(?:an?\s+)?(?:observed|real|customer)\b|\bnon[-\s]observed\b/i);
   });
 
+  it('provides a phone-sized SAMPLE screenshot without shrinking the entire desktop workspace', () => {
+    renderLanding();
+    const screenshot = sampleScreenshot();
+    const picture = screenshot.closest('picture');
+    expect(picture).not.toBeNull();
+    const mobileSource = picture!.querySelector('source[media="(max-width: 40rem)"]');
+    expect(mobileSource).toHaveAttribute('srcset', expect.stringContaining('research-workspace-mobile.png'));
+    expect(mobileSource).toHaveAttribute('width', '390');
+    expect(mobileSource).toHaveAttribute('height', '844');
+    expect(screenshot).toHaveAttribute('width', '1200');
+    expect(screenshot).toHaveAttribute('height', '1000');
+  });
+
   it('loads the above-fold screenshot eagerly without an unsupported React DOM prop', () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     renderLanding();
 
     expect(sampleScreenshot()).toHaveAttribute('loading', 'eager');
     expect(errors.mock.calls.some((entry) => entry.some((value) => String(value).includes('fetchPriority')))).toBe(false);
+  });
+
+  it('switches the product gallery between real screenshots with tabs and arrow keys', () => {
+    renderLanding();
+    const tablist = screen.getByRole('tablist', { name: 'Product views' });
+    const tabs = within(tablist).getAllByRole('tab');
+    expect(tabs.length).toBeGreaterThanOrEqual(3);
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+    const first = sampleScreenshot().getAttribute('src');
+
+    fireEvent.click(tabs[1]);
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'false');
+    const second = sampleScreenshot();
+    expect(second.getAttribute('src')).not.toBe(first);
+    expect(second.getAttribute('alt')).toMatch(/SAMPLE/);
+    expect(second.closest('figure')!.querySelector('figcaption')).toHaveTextContent(/\bSAMPLE\b/);
+
+    tabs[1].focus();
+    fireEvent.keyDown(tabs[1], { key: 'ArrowRight' });
+    expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs[2]).toHaveFocus();
+    fireEvent.keyDown(tabs[2], { key: 'Home' });
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs[0]).toHaveFocus();
+    expect(sampleScreenshot().getAttribute('src')).toBe(first);
   });
 });
 

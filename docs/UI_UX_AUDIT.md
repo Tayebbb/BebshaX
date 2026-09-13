@@ -1,6 +1,104 @@
 # BebshaX UI/UX Audit
 
-## Studio Redesign (2026-09-12)
+## Pitch-Black Audit (2026-09-13)
+
+**Completed frontend code gate; bounded browser confirmation with explicit gaps.**
+The user renewed explicit multi-agent authorization after the earlier cloud
+cancellation. Three independent code-audit groups covered public/auth/common,
+all workflow/interview, and deeper research. Scoped TDD implementers were followed
+by independent final code reviews, browser review and a verifier. This record
+documents that completed parent pass; the close-out edits documentation only.
+
+The pinned dark PAGE CANVAS is `#000000`, with neutral `#080808` secondary,
+`#101010` card and `#191919` hover surfaces. No colored ambient/glowing page
+background; light porcelain is unchanged. This overrides the old graphite
+direction, not the distinction between canvas and component paint.
+
+### Surface Coverage
+
+This is the mounted **code-audit and regression-review inventory**, not a claim
+that every dynamic state ran in a real browser. Mounting is controlled by
+[App.tsx](../apps/frontend/src/App.tsx),
+[AuthPage.tsx](../apps/frontend/src/components/auth/AuthPage.tsx) and
+[DashboardLayout.tsx](../apps/frontend/src/components/dashboard/DashboardLayout.tsx).
+
+| Mounted family | Features and controls in scope | Browser boundary |
+| --- | --- | --- |
+| Public site | All seven sections: brand introduction, actual product picture, study sequence, research boundaries, pricing, FAQ, closing action; desktop/mobile navigation, theme, account/sign-out, workspace actions, pricing controls, native FAQ and legal dialogs | Sections, controls, legal keyboard behavior and SAMPLE image intrinsics checked in both viewport/theme pairs; no live payment claim |
+| Authentication | All six variants: sign-in, signup chooser, email signup, forgot password, verify OTP, reset-password OTP; labels, password reveal, back/switch controls, resend/countdown, validation, submit/error/retry, legal and named account main | Native forms, OTP editing and mock signup/signin/logout reached; no real delivery, OAuth or mobile-OS certification |
+| Shared shell/common/UI | Workspace/Study/System navigation, recent/active study, command search/keyboard, account/theme/sign-out, mobile drawer, skip link/main, role-limited route, dialogs, form boundaries, alerts/loading/empty states, clipboard and prompt controls | Representative menus, focus, body layout and route denial captured; zero-control pending dialogs and composition edge cases use component tests |
+| Studies | Composer, native study-type radios, explicit Start, examples, study CRUD, row/options menu, delete confirmation/cancel/error and retained selection | Fixture creation/list/options/cancel paths reached; interrupted dark-desktop options/delete flow remains a gap |
+| Workflow steps 1-5 | 1: context/copilot/send and draft state; 2: native role checkboxes/counts, persona generation and batch resume; 3: script edit/regenerate; 4: persona selection/interview/send/synthesis; 5: report versions/generate/retry/copy/export/read-only; stepper, gating and modal recovery | Existing workflow and saved-example fixtures reached; pending-save/batch edge cases are unit-only; one dark-desktop send/report-refusal flow was interrupted |
+| Persona library | Study selection, filters, generation/quota controls, cards/delete, regeneration, inspector tabs, complete attributes/provenance, supporting/contradicting evidence, source/excerpts, memory and interview/behavior/synthesis actions | Populated inspector/evidence and ordinary generation captured; late callback, auxiliary-load and pending-dialog cases use regressions |
+| Interviews | List/filter/open, dedicated InterviewWorkspace, StartInterviewModal, transcript/composer, persona selection, memory, options and synthesis/retry | List/start and workflow interview states reached; populated dedicated workspace unavailable in existing mocks, error/empty view captured; deep component tests passed |
+| Segments/datasets | Primary segments, dataset selection/upload controls, generation/refresh/retry, run selection, summaries, selected study/run provenance, evidence and persona navigation | Representative fixture views/controls reached; independent-load and provenance edge cases use component tests, not live data certification |
+| Evidence laboratory | Sources, claims/provenance, research runs/status/retry, source controls, links/copy, full evidence/excerpts and study navigation | Fixture sources/claims/runs and ordinary links reached; unsafe-URL edge cases remain unit-only |
+| Behavioral testing | List/filter/run selection, four-step type/population/configuration/preview wizard, create/run/retry, detail/reasoning, rerun scenario/target, polling, comparison and back navigation | Wizard and unavailable detail/comparison views reached; populated detail/comparison not seeded by existing mocks; deep component tests passed |
+| Developer diagnostics | Direct developer/admin route guard, normal-user denial/Back to studies, request traces/expansion, candidates/failures/provenance, health/pools, evaluation and conditionally exposed Judge Lab | Role denial and mock developer/admin diagnostics checked; Back activation stopped in the H1 capture helper; unit back-navigation passed; no live judge/provider check |
+
+Legacy unmounted `AuthModal`, `ai-prompt-box` and its `demo`, and
+`OpenRouterDiagnostic` were read/reference-checked by the code audits but are
+explicitly excluded from runtime coverage. No missing or unmounted surface is
+presented as browser-tested.
+
+### Interaction Repairs
+
+| Area | Completed repair |
+| --- | --- |
+| Theme and accessibility | Root, landing and interview CSS remove colored ambient/decorative gradients. Defined paired `--border-control` and `--focus-ring` meet the tested 3:1 control target; normal text targets 4.5:1. Auth has its named main. Mobile header declares 52px border-box with 44px targets; report Strategic Recommendations uses `--text-main` after the light 2.22:1 finding. |
+| Auth and legal | OTP retains fixed slots for edit/backspace/partial or full paste/autofill and requires exactly six valid digits. Legal dialogs share labeling, focus trap and restoration; unsupported "Zero PII Leakage" copy was removed. A successful reset followed by sign-in failure retries sign-in only. |
+| Shared interactions | IME composition does not trigger false Enter submission. Clipboard success requires a successful write; stale identity/timers are guarded/cleaned and manual copy remains available. Pending dialogs with no enabled controls retain focus. |
+| Persona/workflow state | Native role checkboxes preserve counts; reselecting the active persona does not clear messages or conversation identity. Trash/synthesis controls have accessible labels and mobile 44px targets. Fresh-batch prerequisites do not block pending-batch resume. Generation success remains visible despite a pending/failed list read. Late regeneration/modal callbacks cannot reopen a closed or different inspector or a dismissed modal. |
+| Evidence and segments | Complete SUPPORTING and CONTRADICTING evidence, provenance and excerpts remain visible. Only HTTP(S) URLs without C0/DEL/C1 controls become links; the full rejected URL stays plain text. Primary segments load independently of auxiliary failure, with selected run/study provenance pinned. |
+| Behavioral and synthesis recovery | Reruns preserve the selected run's scenario/target. Create-success/run-failure retries only the saved run, avoiding duplicates. Reasoning cards are keyboard-accessible and restore focus. Retry restarts polling when the same run is still Running. Synthesis errors retry the correct operation. |
+| Durable study drafts | Safe retry belongs to a real failed queue entry and is guarded by owner, study, revision, session and abort state. It retains the complete payload and canonical write order. Failed save blocks Regenerate until durable acknowledgment/discard; abort publishes UNSAVED for the current owner instead of permanent Saving. No late SAVED or cross-session publication; restored save-error copy does not misreport generation failure. |
+| Permission boundary | Direct router URLs enforce developer/admin access, not just hidden navigation. This is frontend route coverage, not a new claim about live authentication or backend authorization. |
+
+Regression anchors:
+[AuthOtp](../apps/frontend/tests/AuthOtp.test.tsx),
+[DialogA11y](../apps/frontend/tests/DialogA11y.test.tsx),
+[StudioPersonas](../apps/frontend/tests/StudioPersonas.test.tsx),
+[BehavioralTesting](../apps/frontend/tests/BehavioralTesting.test.tsx),
+[FrontendStudyPersistence](../apps/frontend/tests/FrontendStudyPersistence.test.tsx),
+[StudyCopilot](../apps/frontend/tests/StudyCopilot.test.tsx) and
+[StudioTheme](../apps/frontend/tests/StudioTheme.test.ts).
+Parent-composed draft checks passed first 47, then 53; the final four-file
+focused run passed 143, followed by **1,100 passed / 0 failed / 0 skipped in
+65 files** on a stable 189-file source/asset snapshot. TypeScript, Vite 8.2.2
+build and theme check exited 0. No dependency was added; concurrent upgrades
+were preserved.
+
+### Browser Record And Limits
+
+First inspection retained **774 PASS / 133 FAIL**: 130 incorrect light-must-be-
+black harness assertions and three actual router UI assertions subsequently
+fixed; all 93 dark root captures passed. Confirmation retained **1,143 PASS /
+25 FAIL assertions**: three app assertions representing two issues, seven
+harness errors and fifteen environment/artifact errors. Its 148 captures cover
+1440x1000 and 390x844 in both themes; 2,320 valid bare-canvas RGB samples support
+dark black/light porcelain. Invalid panel samples are not new passes.
+
+The report contrast and 53px-header issues were fixed after capture with focused
+regressions; failing screenshots were not relabeled and there was no third
+broad browser round. Exact 52px full non-occlusion was not browser-reverified.
+Native IME hardware and mobile paste/autofill remain uncertified. No full
+backend/ML, live auth/OTP/provider/payment/database, exhaustive WCAG/screen-reader,
+Lighthouse or field Core Web Vitals checks belong to this pass. No commit, push
+or CI claim; external HEAD advancement and the neighboring 1,039-frontend/
+2,938-backend live sweep belong to other work.
+
+[UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md) is the current receipt and exclusions
+record; [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) has exact paired tokens and
+[TASTE_REVIEW.md](TASTE_REVIEW.md) records the six intentional font advisories,
+not a repository-wide zero-warning claim. The isolated mock preview was left
+at `http://127.0.0.1:5194`, with no environment-file loading/live API access;
+the user's `5173`/`8000` services were untouched. Ignored local artifacts are
+not portable; essential results are reproduced here.
+
+## Historical Studio Redesign (2026-09-12)
+
+The following studio scope, cancellation note and 744-test verdict are the
+prior stage, not the renewed pitch-black audit above.
 
 Scope: public site, authentication, shared shell and controls, study creation
 and management, personas, the five-step workflow, evidence, segments,

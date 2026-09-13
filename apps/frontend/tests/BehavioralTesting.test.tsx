@@ -1002,6 +1002,117 @@ describe('Part 7: Behavioral Testing & Simulation Frontend Tests', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('resumes serial polling after four 503 failures and Retry returns the same running run', async () => {
+    vi.useFakeTimers();
+    const runningRun: BehavioralTestRun = { ...mockRun, status: 'running', completed_count: 0, results: [] };
+    const nextPoll = deferred<BehavioralTestRun>();
+    const unavailable = Object.assign(new Error('Updates temporarily unavailable'), { status: 503 });
+    mockBehavioralDetail(runningRun);
+    const readResults = vi.mocked(api.getBehavioralRunResults)
+      .mockResolvedValueOnce(runningRun)
+      .mockRejectedValueOnce(unavailable)
+      .mockRejectedValueOnce(unavailable)
+      .mockRejectedValueOnce(unavailable)
+      .mockRejectedValueOnce(unavailable)
+      .mockResolvedValueOnce(runningRun)
+      .mockReturnValueOnce(nextPoll.promise)
+      .mockResolvedValue(mockRun);
+    const view = render(<BehavioralTestDetailView studyId="std_test_1" testId={mockTest.id} onBack={vi.fn()} />);
+
+    try {
+      await act(async () => {});
+      await act(async () => { await vi.advanceTimersByTimeAsync(7500); });
+      expect(readResults).toHaveBeenCalledTimes(5);
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Re-Run Simulation' })).toBeDisabled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+      expect(readResults).toHaveBeenCalledTimes(5);
+
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry' })); });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Re-Run Simulation' })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: 'Open reasoning for Nadia Rahman' })).not.toBeInTheDocument();
+      const readsWhilePending = readResults.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+      expect(readResults).toHaveBeenCalledTimes(readsWhilePending);
+
+      await act(async () => { nextPoll.resolve(runningRun); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+      expect(screen.getByRole('button', { name: 'Open reasoning for Nadia Rahman' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Re-Run Simulation' })).toBeEnabled();
+      expect(readResults).toHaveBeenCalledTimes(8);
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+      expect(readResults).toHaveBeenCalledTimes(8);
+      expect(api.triggerBehavioralTestRun).not.toHaveBeenCalled();
+      expect(api.retryFailedBehavioralRun).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(['study', 'test', 'run', 'unmount'] as const)(
+    'aborts retried polling and ignores late results after the %s changes',
+    async (owner) => {
+      vi.useFakeTimers();
+      const runningRun: BehavioralTestRun = { ...mockRun, status: 'running', completed_count: 0, results: [] };
+      const nextRun: BehavioralTestRun = {
+        ...mockRun,
+        id: owner === 'run' ? 'next-run' : mockRun.id,
+        study_id: owner === 'study' ? 'next-study' : mockRun.study_id,
+        behavioral_test_id: owner === 'test' ? 'next-test' : mockRun.behavioral_test_id,
+        results: [{ ...mockRun.results![0], id: 'current-result', persona_name: 'Current persona' }],
+      };
+      const stalePoll = deferred<BehavioralTestRun>();
+      const unavailable = Object.assign(new Error('Updates temporarily unavailable'), { status: 503 });
+      mockBehavioralDetail(runningRun);
+      if (owner === 'run') vi.mocked(api.getBehavioralTestRuns).mockResolvedValue([runningRun, nextRun]);
+      const readResults = vi.mocked(api.getBehavioralRunResults)
+        .mockResolvedValueOnce(runningRun)
+        .mockRejectedValueOnce(unavailable)
+        .mockRejectedValueOnce(unavailable)
+        .mockRejectedValueOnce(unavailable)
+        .mockRejectedValueOnce(unavailable)
+        .mockResolvedValueOnce(runningRun)
+        .mockReturnValueOnce(stalePoll.promise)
+        .mockResolvedValue(nextRun);
+      const props = { studyId: mockRun.study_id, testId: mockTest.id, initialRunId: mockRun.id, onBack: vi.fn() };
+      const view = render(<BehavioralTestDetailView {...props} />);
+
+      try {
+        await act(async () => {});
+        await act(async () => { await vi.advanceTimersByTimeAsync(7500); });
+        expect(readResults).toHaveBeenCalledTimes(5);
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry' })); });
+        expect(readResults).toHaveBeenCalledTimes(7);
+        const pollingSignal = readResults.mock.calls[6][2]!;
+        expect(pollingSignal.aborted).toBe(false);
+
+        vi.mocked(api.getBehavioralTestDetail).mockResolvedValue({ ...mockTest, id: nextRun.behavioral_test_id, study_id: nextRun.study_id });
+        vi.mocked(api.getBehavioralTestRuns).mockResolvedValue([nextRun]);
+        await act(async () => {
+          if (owner === 'unmount') view.unmount();
+          else if (owner === 'run') fireEvent.click(screen.getByRole('button', { name: /Run #1/ }));
+          else view.rerender(<BehavioralTestDetailView {...props} studyId={nextRun.study_id} testId={nextRun.behavioral_test_id} />);
+        });
+        expect(pollingSignal.aborted).toBe(true);
+
+        await act(async () => {
+          stalePoll.resolve({ ...mockRun, results: [{ ...mockRun.results![0], persona_name: 'Stale persona' }] });
+        });
+        expect(screen.queryByRole('button', { name: 'Open reasoning for Stale persona' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        if (owner !== 'unmount') expect(screen.getByRole('button', { name: 'Open reasoning for Current persona' })).toBeInTheDocument();
+        const readsAfterChange = readResults.mock.calls.length;
+        await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+        expect(readResults).toHaveBeenCalledTimes(readsAfterChange);
+      } finally {
+        view.unmount();
+        vi.useRealTimers();
+      }
+    }
+  );
+
   it('locks conflicting run actions during a failed-persona retry and clears a recovered start error', async () => {
     const failedRun = { ...mockRun, status: 'completed_with_warnings' as const, failed_count: 1 };
     mockBehavioralDetail(failedRun);

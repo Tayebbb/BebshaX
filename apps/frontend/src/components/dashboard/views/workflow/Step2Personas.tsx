@@ -13,6 +13,7 @@ interface Step2PersonasProps {
   personas: Persona[];
   personaGenError: string | null;
   personaErrorKind?: 'generation' | 'save';
+  hasUnresolvedDraftFailure?: boolean;
   canRetryPersonaSave?: boolean;
   isRetryingPersonaSave?: boolean;
   handleRetryPersonaSave?: () => Promise<void>;
@@ -39,6 +40,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
   personas,
   personaGenError,
   personaErrorKind = 'generation',
+  hasUnresolvedDraftFailure = personaErrorKind === 'save' && Boolean(personaGenError),
   canRetryPersonaSave = false,
   isRetryingPersonaSave = false,
   handleRetryPersonaSave,
@@ -60,6 +62,9 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
   const syntheticSourceCount = personas.filter(isSyntheticSourcePersona).length;
   const hasSyntheticSources = syntheticSourceCount > 0;
   const allSyntheticSources = hasSyntheticSources && syntheticSourceCount === personas.length;
+  const isGenerationDisabled = isGeneratingPersonas || isRetryingPersonaSave || isReadOnly || hasUnresolvedDraftFailure;
+  const generationTitle = isReadOnly ? READ_ONLY_TITLE : hasUnresolvedDraftFailure
+    ? 'Save the retained draft or reload the saved version before generating new personas.' : undefined;
   return (
     <>
             {personaGenError && (
@@ -159,8 +164,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 <button
                   type="button"
                   onClick={handleGeneratePersonas}
-                  disabled={isGeneratingPersonas || isRetryingPersonaSave || isReadOnly}
-                  title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                  disabled={isGenerationDisabled}
+                  title={generationTitle}
                   style={{
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border-subtle)',
@@ -169,8 +174,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                     padding: '8px 16px',
                     fontSize: '0.84rem',
                     fontWeight: 600,
-                    cursor: isGeneratingPersonas || isReadOnly ? 'not-allowed' : 'pointer',
-                    opacity: isGeneratingPersonas || isReadOnly ? 0.6 : 1,
+                    cursor: isGenerationDisabled ? 'not-allowed' : 'pointer',
+                    opacity: isGenerationDisabled ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
@@ -489,8 +494,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                 <button
                   type="button"
                   onClick={handleGeneratePersonas}
-                  disabled={isReadOnly}
-                  title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                  disabled={isGenerationDisabled}
+                  title={generationTitle}
                   style={{
                     marginTop: '6px',
                     background: 'var(--accent-gradient)',
@@ -500,8 +505,8 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                     color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '0.85rem',
-                    cursor: isReadOnly ? 'not-allowed' : 'pointer',
-                    opacity: isReadOnly ? 0.55 : 1,
+                    cursor: isGenerationDisabled ? 'not-allowed' : 'pointer',
+                    opacity: isGenerationDisabled ? 0.55 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',

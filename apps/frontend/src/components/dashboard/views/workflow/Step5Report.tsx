@@ -271,7 +271,7 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
 
                 {/* Recommendations */}
                 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '24px' }}>
-                  <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--accent-emerald)', margin: '0 0 14px 0' }}>
+                  <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 14px 0' }}>
                     Strategic Recommendations
                   </h2>
                   <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>

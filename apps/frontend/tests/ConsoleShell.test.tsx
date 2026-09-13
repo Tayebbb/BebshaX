@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { DashboardLayout } from '../src/components/dashboard/DashboardLayout';
@@ -35,6 +35,24 @@ describe('Console shell — navigation architecture', () => {
     localStorage.setItem('bebshax_tour_dismissed', '1');
   });
 
+  it('opens a first visit directly on the study controls without a tour banner', () => {
+    localStorage.removeItem('bebshax_tour_dismissed');
+    renderShell();
+    const main = screen.getByRole('main');
+    expect(within(main).queryByText(/New here\? The 3-minute tour/)).not.toBeInTheDocument();
+    expect(within(main).getAllByRole('radio')).toHaveLength(4);
+    expect(within(main).getByRole('textbox', { name: 'Business idea description' })).toBeEnabled();
+    expect(within(main).getByRole('button', { name: 'Start research study' })).toBeInTheDocument();
+  });
+
+  it('keeps the desktop sidebar at 240px and preserves its collapsed rail', () => {
+    renderShell();
+    const sidebar = screen.getByRole('navigation', { name: /primary/i }).closest('aside');
+    expect(sidebar).toHaveStyle({ width: '240px' });
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle sidebar' }));
+    expect(sidebar).toHaveStyle({ width: '72px' });
+  });
+
   it('groups regular-user navigation into Workspace and Study with one current page', () => {
     renderShell('/dashboard');
     const nav = screen.getByRole('navigation', { name: /primary/i });
@@ -52,6 +70,19 @@ describe('Console shell — navigation architecture', () => {
     const nav = screen.getByRole('navigation', { name: /primary/i });
     expect(within(nav).getByText('System')).toBeInTheDocument();
     expect(within(nav).getByRole('button', { name: 'Routing & Provenance' })).toBeInTheDocument();
+  });
+
+  it('does not mount diagnostics for a regular user visiting the router URL', async () => {
+    const routes = vi.spyOn(api, 'getRoutesStatus');
+    try {
+      renderShell('/router');
+      expect(await screen.findByRole('heading', { name: 'Developer access required' })).toBeInTheDocument();
+      expect(routes).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Back to studies' }));
+      await waitFor(() => expect(window.location.pathname).toBe('/dashboard'));
+    } finally {
+      routes.mockRestore();
+    }
   });
 
   it('tells the user when study-scoped tabs have no study to work in', () => {

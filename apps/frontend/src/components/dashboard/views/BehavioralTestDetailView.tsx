@@ -51,6 +51,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
   const [runs, setRuns] = useState<BehavioralTestRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string>(initialRunId || '');
   const [activeRun, setActiveRun] = useState<BehavioralTestRun | null>(null);
+  const [pollAttempt, setPollAttempt] = useState(0);
   const [selectedPersonaResult, setSelectedPersonaResult] = useState<BehavioralTestResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingRun, setIsLoadingRun] = useState(false);
@@ -83,7 +84,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
     setIsTriggeringRun(false);
   }, [studyId, testId]);
 
-  const fetchDetailAndRuns = async (keepLoading = true) => {
+  const fetchDetailAndRuns = async (keepLoading = true, restartPolling = false) => {
     const scope = scopeRef.current;
     const request = ++requestRef.current;
     const isCurrent = () => scope.active && request === requestRef.current;
@@ -103,7 +104,10 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
         selectionRef.current = targetRunId;
         setSelectedRunId(targetRunId);
         const runDetail = await api.getBehavioralRunResults(studyId, targetRunId, scope.controller.signal);
-        if (isCurrent()) setActiveRun(runDetail);
+        if (isCurrent()) {
+          setActiveRun(runDetail);
+          if (restartPolling) setPollAttempt((attempt) => attempt + 1);
+        }
       } else {
         setActiveRun(null);
       }
@@ -136,7 +140,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
       },
     }).catch((error: unknown) => { if (isCurrent()) setLoadError(toUserMessage(error)); });
     return () => controller.abort();
-  }, [activeRun?.status, activeRun?.id, studyId]);
+  }, [activeRun?.status, activeRun?.id, studyId, testId, pollAttempt]);
 
   const handleSelectRun = async (runId: string) => {
     if (actionRef.current) return;
@@ -258,7 +262,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
       <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
         <h3>{loadError ? 'Test unavailable' : 'Test not found'}</h3>
         {loadError && <p role="alert">{loadError}</p>}
-        {loadError && <button type="button" className="bx-btn bx-btn-secondary" onClick={() => void fetchDetailAndRuns()}>Retry</button>}
+        {loadError && <button type="button" className="bx-btn bx-btn-secondary" onClick={() => void fetchDetailAndRuns(true, true)}>Retry</button>}
         <button onClick={onBack} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: '8px', backgroundColor: '#14B8A6', color: 'var(--text-on-accent)', border: 'none', cursor: 'pointer' }}>
           Back to Tests
         </button>
@@ -275,7 +279,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
     <div style={{ padding: '32px clamp(16px, 4vw, 40px)', maxWidth: '1400px', minWidth: 0, margin: '0 auto', width: '100%', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
       {loadError && <div role="alert" className="bx-alert bx-alert--error">
         <span>{loadError}</span>
-        <button type="button" className="bx-btn bx-btn-secondary" disabled={actionPending || isLoadingRun} onClick={() => void fetchDetailAndRuns()}>Retry</button>
+        <button type="button" className="bx-btn bx-btn-secondary" disabled={actionPending || isLoadingRun} onClick={() => void fetchDetailAndRuns(true, true)}>Retry</button>
       </div>}
       {actionError && <div role="alert" className="bx-alert bx-alert--error">{actionError}</div>}
       {/* Top Breadcrumb & Actions */}

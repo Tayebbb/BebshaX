@@ -19,6 +19,18 @@ const landingStylesheet = postcss.parse(readFileSync(
   resolve(dirname(fileURLToPath(import.meta.url)), '../src/components/landing/studio.css'),
   'utf8',
 ));
+const uiStylesheet = postcss.parse(readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../src/components/ui/ui.css'),
+  'utf8',
+));
+const newStudyStylesheet = postcss.parse(readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../src/components/dashboard/views/newstudy.css'),
+  'utf8',
+));
+const studiesStylesheet = postcss.parse(readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../src/components/dashboard/views/studies.css'),
+  'utf8',
+));
 const textRoles = ['--text-primary', '--text-secondary', '--text-muted', '--text-faint', '--text-label'];
 const surfaceRoles = ['--bg-primary', '--bg-secondary', '--bg-card', '--bg-card-hover'];
 const accentRoles = ['--accent-primary', '--accent-hover', '--accent-teal', '--accent-teal-bright', '--accent-cyan'];
@@ -316,6 +328,55 @@ describe.each<Theme>(['dark', 'light'])('%s studio theme', (theme) => {
   }));
   const minimumAccent = Math.min(...accentMeasurements.map(({ ratio }) => ratio)).toFixed(2);
 
+  it('uses the pinned blue and contrasting label color for primary commands', () => {
+    expect(tokenColor('--accent-primary', tokens)).toEqual(parseColor(theme === 'dark' ? '#8cb4ff' : '#175cd3'));
+    expect(tokenColor('--text-on-accent', tokens)).toEqual(parseColor(theme === 'dark' ? '#07172f' : '#ffffff'));
+  });
+
+  it('maps legacy teal, cyan, and gold accents to the same blue command roles', () => {
+    for (const role of ['--accent-teal', '--accent-cyan', '--accent-gold-primary']) {
+      expect.soft(tokenColor(role, tokens), role).toEqual(tokenColor('--accent-primary', tokens));
+    }
+    for (const role of ['--accent-teal-bright', '--accent-gold-hover']) {
+      expect.soft(tokenColor(role, tokens), role).toEqual(tokenColor('--accent-hover', tokens));
+    }
+  });
+
+  it('keeps the legacy gradient API visually flat without a colored glow', () => {
+    for (const color of gradientColors(resolveValue(tokens['--accent-gradient'], tokens))) {
+      expect.soft(color).toEqual(tokenColor('--accent-primary', tokens));
+    }
+    expect(tokens['--shadow-glow']).toBe('none');
+  });
+
+  it('paints primary app buttons with a flat contrast-tested fill and no reflection', () => {
+    const button = controlElement(theme, 'button', 'bx-btn bx-btn--primary', false);
+    expect(winningStyle(button, ['background', 'background-color'], uiStylesheet)).toBe('var(--accent-primary)');
+    expect(winningStyle(button, ['box-shadow'], uiStylesheet)).toBe('none');
+    const label = parseColor(resolveValue(winningStyle(button, ['color'], uiStylesheet)!, tokens));
+    expect(contrast(label, tokenColor('--accent-primary', tokens))).toBeGreaterThanOrEqual(4.5);
+    button.setAttribute('data-test-hover', '');
+    const hover = parseColor(resolveValue(winningStyle(button, ['background', 'background-color'], uiStylesheet)!, tokens));
+    expect(contrast(label, hover)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('uses neutral navigation selection with blue reserved for the active icon', () => {
+    const button = controlElement(theme, 'button', 'bx-nav-item', false);
+    const icon = document.createElement('span');
+    icon.className = 'bx-nav-item__icon';
+    button.append(icon);
+    expect(winningStyle(icon, ['color'], uiStylesheet)).toBe('var(--text-muted)');
+    button.setAttribute('aria-current', 'page');
+    expect(winningStyle(icon, ['color'], uiStylesheet)).toBe('var(--accent-primary)');
+    const background = composite(
+      parseColor(resolveValue(winningStyle(button, ['background'], uiStylesheet)!, tokens)),
+      tokenColor('--bg-glass', tokens),
+    );
+    expect(Math.max(...background.slice(0, 3)) - Math.min(...background.slice(0, 3))).toBeLessThanOrEqual(12);
+    const label = parseColor(resolveValue(winningStyle(button, ['color'], uiStylesheet)!, tokens));
+    expect(contrast(label, background)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it.each(textCases)('$textRole clears 4.5:1 on shared surfaces (minimum $minimum:1)', ({ textRole, measurements }) => {
     for (const { surfaceRole, ratio } of measurements) {
       expect.soft(ratio, `${theme}: ${textRole} on ${surfaceRole}`).toBeGreaterThanOrEqual(4.5);
@@ -451,7 +512,7 @@ describe('Studio theme typography and material rules', () => {
 
   it.each([
     ['--font-sans', 'Plus Jakarta Sans'],
-    ['--font-display', 'Space Grotesk'],
+    ['--font-display', 'Plus Jakarta Sans'],
     ['--font-mono', 'JetBrains Mono'],
   ])('leads %s with the existing self-hosted %s family', (token, family) => {
     expect(postcss.list.comma(tokens[token])[0].replace(/['"]/g, '')).toBe(family);
@@ -482,5 +543,38 @@ describe('Studio theme typography and material rules', () => {
 
   it('does not paint decorative radial washes behind the canvas', () => {
     expect(declarationValue('.bx-ambient', 'background')).not.toContain('radial-gradient(');
+  });
+
+  it('keeps shared cards stationary and free of stacked reflections', () => {
+    expect(declarationValue('.clean-card', 'box-shadow')).toBe('none');
+    expect(declarationValue('.clean-card', 'transition')).not.toMatch(/transform|width/);
+    expect(declarationValue('.bx-lift:hover', 'transform')).toBe('none');
+    expect(declarationValue('.bx-lift:hover', 'box-shadow')).toBe('none');
+  });
+
+  it('keeps honest live status indicators static without a decorative pulse', () => {
+    expect(declarationValue('.bx-dot--live::after', 'content', uiStylesheet)).toBe('none');
+  });
+
+  it('centers the launcher at an 800px measure with a 32px task heading and one composer surface', () => {
+    expect(declarationValue('.ns-inner', 'max-width', newStudyStylesheet)).toBe('50rem');
+    expect(declarationValue('.ns-inner', 'margin', newStudyStylesheet)).toBe('0 auto');
+    expect(declarationValue('.ns-title', 'font', newStudyStylesheet)).toBe('600 2rem/1.25 var(--font-display)');
+    expect(declarationValue('.ns-composer', 'background', newStudyStylesheet)).toBe('var(--bg-card)');
+    expect(declarationValue('.ns-composer', 'box-shadow', newStudyStylesheet)).toBe('none');
+  });
+
+  it('uses compact semibold page headings instead of dashboard hero typography', () => {
+    expect(declarationValue('.bx-title', 'font-weight', uiStylesheet)).toBe('600');
+    expect(declarationValue('.bx-title--display', 'font-size', uiStylesheet)).toBe('var(--fs-2xl)');
+    expect(declarationValue('.sd-display', 'font', studiesStylesheet)).toBe('600 1.75rem/1.3 var(--font-display)');
+  });
+
+  it('keeps summary figures and the example-study band unframed', () => {
+    expect(declarationValue('.bx-metric', 'background', uiStylesheet)).toBe('transparent');
+    expect(declarationValue('.bx-metric', 'box-shadow', uiStylesheet)).toBe('none');
+    expect(declarationValue('.bx-figure', 'border-left', uiStylesheet)).toBe('none');
+    expect(declarationValue('.sd-demo', 'background', studiesStylesheet)).toBe('transparent');
+    expect(declarationValue('.sd-demo', 'border-radius', studiesStylesheet)).toBe('0');
   });
 });

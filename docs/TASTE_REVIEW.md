@@ -1,6 +1,65 @@
 # BebshaX Taste Review
 
-## Studio Direction (2026-09-12)
+## Pitch-Black Direction (2026-09-13)
+
+The renewed brief is a full UI audit of the existing synthetic-research product,
+not another visual-world replacement. The user's explicit dark PAGE CANVAS
+`#000000` pin overrides the earlier graphite direction and generic taste advice
+against pure black. Porcelain light mode is unchanged; near-black component
+surfaces remain useful for controls and hierarchy.
+
+| Decision | Current treatment |
+| --- | --- |
+| Canvas and hierarchy | Black dark page roots, public section bands and interview canvas; no colored ambient page glow or decorative background gradients. Secondary `#080808`, cards `#101010`, hover `#191919` remain permitted. |
+| Readability | Defined, theme-paired `--border-control` and `--focus-ring` target at least 3:1; normal text at least 4.5:1. Contrast and focus take precedence over faint decorative chrome. |
+| Product identity | Preserve the coherent seven-section public page and dense operational UI, meaningful teal/mint/status accents, restrained gold, unframed sections and existing Lucide/GSAP conventions. |
+| Actual imagery | Responsive SAMPLE picture uses actual rendered mock-workspace assets, 1184x1000 desktop and 390x844 phone. No stock or invented people, testimonials, validated demand or live-service guarantees. |
+| Honest interaction | Clear save/retry state, complete supporting and contradicting evidence, safe links and accurate copy feedback matter more than additional animation or cosmetic novelty. |
+
+### Final Impeccable Review
+
+The final structured component scan covered dashboard, auth, interview, ui,
+common and landing together. It returned **only six `overused-font` warnings**
+in [studio.css](../apps/frontend/src/components/landing/studio.css):
+[18](../apps/frontend/src/components/landing/studio.css#L18),
+[56](../apps/frontend/src/components/landing/studio.css#L56),
+[78](../apps/frontend/src/components/landing/studio.css#L78),
+[111](../apps/frontend/src/components/landing/studio.css#L111),
+[139](../apps/frontend/src/components/landing/studio.css#L139) and
+[170](../apps/frontend/src/components/landing/studio.css#L170).
+Plus Jakarta Sans and Space Grotesk were deliberately retained: they are already
+self-hosted and coherent across public, auth and research screens. No added
+dependency, ignore rule or detector suppression.
+
+This is **not a zero-warning repository scan**. Earlier static warnings for
+legacy gradient-text utilities in the root stylesheet were outside the scoped
+component scan. Existing component paint is not a license to tint the dark page
+canvas, nor a reason to force light mode black.
+
+### Review Evidence And Limits
+
+After the prior cloud cancellation, the user explicitly renewed multi-agent
+authorization. Three independent code-audit groups, scoped TDD implementers,
+independent final code reviews, browser review and a verifier contributed to
+this pass. The parent visually reviewed the saved full-black desktop landing,
+porcelain mobile landing and actual phone workspace shot; no new visual
+inspection is claimed by this documentation update.
+
+The frozen frontend gate passed **1,100 tests in 65 files**, zero failures/skips.
+Browser confirmation remains **1,143 PASS / 25 FAIL assertions**, classified as
+3 app assertions (two issues), 7 harness errors and 15 environment/artifact
+errors. The report-heading contrast and 53px mobile-header findings were repaired
+after capture and covered by regressions, not a third broad browser round.
+No perfect score, exhaustive accessibility verdict or live-service certification
+is assigned. The exact gates, evidence gaps and retained failures are in
+[UX_QUALITY_REPORT.md](UX_QUALITY_REPORT.md); current tokens and interaction
+rules are in [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). No further visual-direction
+change was chosen.
+
+## Historical Studio Direction (2026-09-12/13)
+
+The following studio decisions, graphite palette, cancellation note and 76-check
+replay belong to the prior stage, not the renewed pitch-black audit above.
 
 Reading: a synthetic-research product for founders and research teams. The
 public site helps visitors understand and choose; the workspace helps users
@@ -13,7 +72,7 @@ fast controls and both themes. The resulting world is neutral graphite and
 porcelain, with restrained teal/mint actions, a small gold accent on the public
 site, and meaningful status colors. Space Grotesk provides display hierarchy.
 
-## Shipped Decisions
+### Studio Shipped Decisions
 
 - Replace the fourteen-section public story with seven purposeful sections,
 	a literal brand/product headline and an actual rendered workspace image.
@@ -28,7 +87,7 @@ site, and meaningful status colors. Space Grotesk provides display hierarchy.
 - Keep the current React, Lucide, GSAP and self-hosted font stack. The design
 	pass did not install another component system, animation library or font.
 
-## Impeccable Confirmation
+### Studio Impeccable Confirmation
 
 The installed detector scanned the shipped component tree. It reported twelve
 warnings: four width animations, two thick side borders and six font advisories.
