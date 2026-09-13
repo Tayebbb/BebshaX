@@ -23,3 +23,23 @@ def test_env_override(monkeypatch) -> None:
     s = Settings(_env_file=None)
     assert s.demo_mode is True
     assert s.environment == "test"
+
+
+def test_blank_remote_processing_policy_reads_as_unset(monkeypatch) -> None:
+    """Hosting dashboards and env templates ship empty values; a blank policy
+    must derive the default at startup, never crash boot or deny everything."""
+    monkeypatch.setenv("BEBSHAX_REMOTE_PROCESSING_POLICY", "   ")
+    s = Settings(_env_file=None)
+    assert "remote_processing_policy" not in s.model_fields_set
+    assert s.remote_processing_policy == Settings(_env_file=None).remote_processing_policy
+
+
+def test_explicit_remote_processing_policy_json_is_parsed(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "BEBSHAX_REMOTE_PROCESSING_POLICY",
+        '{"policy_id": "pinned", "private_providers": ["freellmpool"], "synthetic_providers": ["freellmpool"]}',
+    )
+    s = Settings(_env_file=None)
+    assert "remote_processing_policy" in s.model_fields_set
+    assert s.remote_processing_policy.policy_id == "pinned"
+    assert set(s.remote_processing_policy.private_providers) == {"freellmpool"}

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 from functools import lru_cache
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from bebshax.llm.governance import RemoteProcessingPolicy
 
@@ -32,8 +33,26 @@ class Settings(BaseSettings):
     demo_mode: bool = False
     log_level: str = "INFO"
     provider_config_path: Path = _PROJECT_ROOT / "providers.toml"
-    remote_processing_policy: RemoteProcessingPolicy = Field(default_factory=RemoteProcessingPolicy)
+    # NoDecode: a blank variable (env templates, hosting dashboards) must read as
+    # "unset" rather than a JSON decode failure that refuses to boot.
+    remote_processing_policy: Annotated[RemoteProcessingPolicy, NoDecode] = Field(
+        default_factory=RemoteProcessingPolicy
+    )
     runtime_shutdown_timeout_s: float = Field(default=15.0, gt=0, le=120)
+
+    @model_validator(mode="before")
+    @classmethod
+    def blank_processing_policy_is_unset(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            raw = data.get("remote_processing_policy")
+            if isinstance(raw, str) and not raw.strip():
+                return {key: value for key, value in data.items() if key != "remote_processing_policy"}
+        return data
+
+    @field_validator("remote_processing_policy", mode="before")
+    @classmethod
+    def parse_processing_policy_json(cls, value: Any) -> Any:
+        return json.loads(value) if isinstance(value, str) else value
 
     # Filesystem roots for uploaded/processed datasets. Relative paths resolve
     # against the process CWD (dev: repo root -> data/). Containers set
