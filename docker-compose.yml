@@ -57,6 +57,10 @@ services:
       BEBSHAX_REMOTE_PROCESSING_POLICY:
       BEBSHAX_NEON_AUTH_URL: ${VITE_NEON_AUTH_URL:-}
       BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR: "true"
+      # Only the nginx service can reach this container, so its forwarded
+      # scheme/client headers are trusted; the CIDRs cover Docker's bridge pools.
+      FORWARDED_ALLOW_IPS: "*"
+      BEBSHAX_TRUSTED_PROXY_CIDRS: ${BEBSHAX_TRUSTED_PROXY_CIDRS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       BEBSHAX_DATA_DIR: /app/data
       BEBSHAX_UPLOAD_DIR: /app/data/uploads
       BEBSHAX_PROCESSED_DIR: /app/data/processed

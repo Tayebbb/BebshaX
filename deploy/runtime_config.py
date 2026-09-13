@@ -29,6 +29,13 @@ def validate(environment: Mapping[str, str]) -> None:
         raise ValueError("Credentialed CORS must match the exact frontend origin, with no regex")
     if environment.get("BEBSHAX_DEMO_MODE", "false").lower() not in {"false", "0"}:
         raise ValueError("Demo seeding is forbidden in release containers")
+    # uvicorn only serves plain HTTP; without trusting the TLS proxy's forwarded
+    # headers every request looks like http and cookie sessions are refused.
+    if not environment.get("FORWARDED_ALLOW_IPS", "").strip():
+        raise ValueError("Release containers sit behind a TLS proxy and must trust its forwarded headers")
+    if environment.get("BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR", "").lower() == "true" \
+            and not environment.get("BEBSHAX_TRUSTED_PROXY_CIDRS", "").strip():
+        raise ValueError("Forwarded-for rate limiting requires the proxy networks it may trust")
     if environment.get("BEBSHAX_ML_PERSONA_REQUIRED", "").lower() != "true":
         raise ValueError("The release requires explicit model readiness")
     if not re.fullmatch(r"[0-9a-f]{64}", environment.get("BEBSHAX_ML_PERSONA_MANIFEST_SHA256", "")):
