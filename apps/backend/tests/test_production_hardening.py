@@ -166,6 +166,56 @@ def test_upload_dir_resolved_from_settings_at_call_time(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Hosted environments serve the API only: no interactive docs, no schema
+# ---------------------------------------------------------------------------
+
+
+def _route_paths(router, prefix: str = "") -> set[str]:
+    """Full paths, descending into included routers the way FastAPI 0.141 nests them."""
+    paths: set[str] = set()
+    for item in router.routes:
+        inner = getattr(item, "original_router", None)
+        if inner is not None:
+            paths |= _route_paths(inner, prefix + item.include_context.prefix)
+        elif getattr(item, "path", None) is not None:
+            paths.add(prefix + item.path)
+    return paths
+
+
+@pytest.mark.parametrize("environment", ["production", "staging"])
+def test_hosted_environments_do_not_serve_docs_or_openapi(monkeypatch, environment):
+    """/docs, /redoc and /openapi.json enumerate every route for anonymous
+    callers; the release image must not expose them."""
+    from bebshax.main import create_app
+
+    _hosted_env(monkeypatch, BEBSHAX_ENVIRONMENT=environment)
+    monkeypatch.setattr(config, "_PROJECT_ROOT", Path("/nonexistent-bebshax-root"))
+    config.get_settings.cache_clear()
+    try:
+        app = create_app()
+    finally:
+        config.get_settings.cache_clear()
+    assert (app.docs_url, app.redoc_url, app.openapi_url) == (None, None, None)
+    paths = _route_paths(app.router)
+    assert paths.isdisjoint({"/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"})
+    assert "/api/health" in paths
+
+
+def test_development_keeps_docs_and_openapi(monkeypatch):
+    from bebshax.main import create_app
+
+    monkeypatch.setenv("BEBSHAX_JWT_SECRET", _JWT)
+    monkeypatch.setenv("BEBSHAX_ENVIRONMENT", "development")
+    monkeypatch.setattr(config, "_PROJECT_ROOT", Path("/nonexistent-bebshax-root"))
+    config.get_settings.cache_clear()
+    try:
+        app = create_app()
+    finally:
+        config.get_settings.cache_clear()
+    assert (app.docs_url, app.openapi_url) == ("/docs", "/openapi.json")
+
+
+# ---------------------------------------------------------------------------
 # Neon federated sign-in: 503 when unconfigured (S1)
 # ---------------------------------------------------------------------------
 

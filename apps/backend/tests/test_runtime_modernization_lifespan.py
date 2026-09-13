@@ -11,6 +11,7 @@ from bebshax import main
 from bebshax.api import jobs as job_api
 from bebshax.config import Settings
 from bebshax.db import capacity_state
+from bebshax.db.engine import SchemaValidationError
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.provenance import ProvenanceRecord
@@ -156,6 +157,28 @@ async def test_database_failure_stops_consumers_and_disposes_engine(monkeypatch,
     runtime.build.assert_not_called()
     runtime.sink.start.assert_not_awaited()
     assert "private-database-detail" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("failure", "logged", "withheld"),
+    [
+        (SchemaValidationError("Database schema is not at the Alembic head."), "not at the Alembic head", None),
+        (OSError("connect to db-host.internal:5432 failed"), "OSError", "db-host.internal"),
+    ],
+)
+async def test_database_failure_log_names_schema_state_or_only_the_error_class(
+    monkeypatch, caplog, failure, logged, withheld,
+):
+    runtime = _setup(monkeypatch)
+    monkeypatch.setattr(main, "init_database", AsyncMock(side_effect=failure))
+    with caplog.at_level(logging.ERROR, logger="bebshax.main"), pytest.raises(RuntimeError):
+        async with main._lifespan(FastAPI()):
+            pytest.fail("Startup must not yield after failed database validation")
+    assert f"Database startup validation failed: " in caplog.text
+    assert logged in caplog.text
+    if withheld is not None:
+        assert withheld not in caplog.text
+    runtime.engine.dispose.assert_awaited_once()
 
 
 async def test_partial_startup_failure_closes_every_acquired_resource(monkeypatch):

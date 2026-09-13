@@ -17,6 +17,10 @@ from bebshax.config import Settings
 logger = logging.getLogger(__name__)
 
 
+class SchemaValidationError(RuntimeError):
+    """Startup revision/schema mismatch; messages name schema state, never connection details."""
+
+
 def get_metadata() -> MetaData:
     """Register every owning feature's mappings without importing the application."""
     from bebshax.db.models import Base
@@ -35,17 +39,30 @@ def get_metadata() -> MetaData:
     return Base.metadata
 
 
+def _alembic_ini_path() -> Path:
+    """alembic.ini beside the checked-out package (editable install) or in the
+    working directory (the release image installs the wheel and copies the
+    scripts to WORKDIR)."""
+    candidates = (Path(__file__).resolve().parents[2] / "alembic.ini", Path.cwd() / "alembic.ini")
+    for candidate in candidates:
+        if candidate.is_file() and (candidate.parent / "alembic").is_dir():
+            return candidate
+    raise SchemaValidationError(
+        "alembic.ini and its scripts were found neither beside the package nor in the working directory."
+    )
+
+
 def _alembic_script_head() -> str:
     """Resolve the migration head from the checked-in scripts (no DB access)."""
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
-    ini = Path(__file__).resolve().parents[2] / "alembic.ini"
+    ini = _alembic_ini_path()
     cfg = Config(str(ini))
     cfg.set_main_option("script_location", str(ini.parent / "alembic"))
     head = ScriptDirectory.from_config(cfg).get_current_head()
     if not head:
-        raise RuntimeError("Alembic migration scripts have no head; schema cannot be validated.")
+        raise SchemaValidationError("Alembic migration scripts have no head; schema cannot be validated.")
     return head
 
 
@@ -59,7 +76,7 @@ def _validate_schema(connection: Connection, metadata: MetaData) -> None:
     context = MigrationContext.configure(connection, opts={"compare_type": True})
     message = "Database schema differs from the Alembic-managed metadata; reconcile before startup."
     if compare_metadata(context, metadata):
-        raise RuntimeError(message)
+        raise SchemaValidationError(message)
     inspector = inspect(connection)
     for table in metadata.tables.values():
         expected_checks = {
@@ -69,7 +86,7 @@ def _validate_schema(connection: Connection, metadata: MetaData) -> None:
         if expected_checks and not expected_checks <= {
             constraint["name"] for constraint in inspector.get_check_constraints(table.name, schema=table.schema)
         }:
-            raise RuntimeError(message)
+            raise SchemaValidationError(message)
         vector_indexes = [
             index for index in table.indexes
             if index.dialect_options["postgresql"].get("using") == "hnsw"
@@ -84,7 +101,7 @@ def _validate_schema(connection: Connection, metadata: MetaData) -> None:
                     actual.get("postgresql_using") != "hnsw"
                     or actual.get("postgresql_ops") != index.dialect_options["postgresql"]["ops"]
                 ):
-                    raise RuntimeError(message)
+                    raise SchemaValidationError(message)
 
 
 def normalize_async_database_url(url: str) -> str:
@@ -200,7 +217,7 @@ async def init_database(
                 lambda sync_conn: MigrationContext.configure(sync_conn).get_current_heads()
             )
             if tuple(current_heads) != (head,):
-                raise RuntimeError(
+                raise SchemaValidationError(
                     "Database schema is not at the Alembic head. Run `alembic upgrade head` "
                     "before starting the application; unversioned legacy schemas require "
                     "reconciliation first."

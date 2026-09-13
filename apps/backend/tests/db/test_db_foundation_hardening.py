@@ -2,6 +2,7 @@
 
 import logging
 import ssl
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import parse_qs, urlsplit
@@ -260,6 +261,19 @@ def test_invalid_script_graph_is_not_silently_accepted(monkeypatch) -> None:
     )
 
     with pytest.raises(CommandError, match="multiple heads"):
+        engine_module._alembic_script_head()
+
+
+def test_script_head_resolves_from_working_directory_when_installed_as_wheel(monkeypatch, tmp_path) -> None:
+    """The release image installs the package into site-packages and copies
+    alembic.ini + alembic/ to WORKDIR; the head must resolve from there."""
+    backend_root = Path(engine_module.__file__).resolve().parents[2]
+    expected_head = engine_module._alembic_script_head()
+    monkeypatch.setattr(engine_module, "__file__", str(tmp_path / "site-packages" / "bebshax" / "db" / "engine.py"))
+    monkeypatch.chdir(backend_root)
+    assert engine_module._alembic_script_head() == expected_head
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(engine_module.SchemaValidationError, match="neither beside the package nor in the working directory"):
         engine_module._alembic_script_head()
 
 

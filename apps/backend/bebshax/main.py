@@ -38,7 +38,7 @@ from bebshax.api.personas import router as personas_router
 from bebshax.api.routes import router as routes_router
 from bebshax.api.studies import router as studies_router
 from bebshax.config import Settings, export_provider_credentials, fail_fast_on_invalid_settings, get_settings
-from bebshax.db.engine import create_async_sessionmaker, create_engine, init_database
+from bebshax.db.engine import SchemaValidationError, create_async_sessionmaker, create_engine, init_database
 from bebshax.db.models import Base, Businesses, LLMRequests, ModelRegistry, Personas, SavedAudiences, Studies  # noqa: F401
 from bebshax.db.sink import ProvenanceSink
 from bebshax.interview.engine import InterviewEngine
@@ -302,8 +302,15 @@ async def _lifespan(app: FastAPI):
             sessionmaker_ = create_async_sessionmaker(db_engine)
             try:
                 await init_database(db_engine, sessionmaker_, seed=settings.demo_mode)
-            except Exception:
-                logger.error("Database startup validation failed")
+            except SchemaValidationError as exc:
+                # Revision/schema messages name schema state, never credentials.
+                logger.error("Database startup validation failed: %s", exc)
+                raise RuntimeError(
+                    "Database initialization failed; verify connectivity and apply the current Alembic head"
+                ) from None
+            except Exception as exc:
+                # Driver errors can echo the DSN; the class alone tells connectivity from auth.
+                logger.error("Database startup validation failed: %s", type(exc).__name__)
                 raise RuntimeError(
                     "Database initialization failed; verify connectivity and apply the current Alembic head"
                 ) from None
@@ -434,7 +441,14 @@ def create_app() -> FastAPI:
     # log-config, pytest, or an embedding process win when they installed handlers).
     if not logging.getLogger().handlers:
         logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
-    app = FastAPI(title=settings.app_name, version=__version__, lifespan=_lifespan)
+    # The interactive docs and schema enumerate every route for anonymous callers;
+    # hosted environments serve the API only.
+    hosted = settings.environment in ("production", "staging")
+    app = FastAPI(
+        title=settings.app_name, version=__version__, lifespan=_lifespan,
+        docs_url=None if hosted else "/docs", redoc_url=None if hosted else "/redoc",
+        openapi_url=None if hosted else "/openapi.json",
+    )
     app.state.settings = settings
 
     app.state.limiter = limiter
