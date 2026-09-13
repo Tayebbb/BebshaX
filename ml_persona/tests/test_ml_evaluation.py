@@ -15,12 +15,15 @@ from bebshax_persona_ml.model import BusinessContext, ModelConfig, PersonaModel,
 def evaluation_case() -> tuple[PersonaModel, list[TrainingRecord]]:
     domains = ["bread recipes cooking", "electrical wiring circuits", "flowers garden seeds",
                "music piano concerts", "pottery clay ceramics", "photography cameras portraits"]
+    # Training and held-out query views share the "enjoys ... at home" phrasing so
+    # every query has several lexically relevant candidates; relevance (score > 0)
+    # must not hinge on NMF rounding, which differs between BLAS builds.
     training = [TrainingRecord(
         record_id=f"training-{index}", source="invented", revision="one", name=f"Trainer {index}",
         age=20 + 10 * index, occupation=f"worker {index}",
         description=f"Training profile practices {domain} professionally.",
         goals=[f"Improve {domain}."], pain_points=[f"Limited {domain} supplies."],
-        documents={"skills_and_expertise": domain},
+        documents={"skills_and_expertise": domain, "culinary_persona": f"Enjoys {domain} at home."},
     ) for index, domain in enumerate(domains)]
     heldout = [TrainingRecord(
         record_id=f"heldout-{index}", source="invented", revision="two", name=f"Heldout {index}",
@@ -74,8 +77,8 @@ def test_lexical_evaluation_never_calls_nmf_and_has_no_topic_coverage(
     assert report["retrieval"]["model"]["mrr"] == 1.0
     assert report["generation"]["coverage"]["topic_fraction"] is None
     assert report["generation"]["coverage"]["topic_counts"] == {}
-    assert report["generation"]["failed_batches"] == len(heldout)
-    assert report["generation"]["sample_count"] == 0
+    assert report["generation"]["successful_batches"] == len(heldout)
+    assert report["generation"]["sample_count"] == 5 * len(heldout)
     json.dumps(report, allow_nan=False)
 
 
@@ -83,7 +86,7 @@ def test_evaluation_does_not_fit_or_modify_the_training_index(
     evaluation_case: tuple[PersonaModel, list[TrainingRecord]], tmp_path: Path,
 ) -> None:
     model, heldout = evaluation_case
-    context = BusinessContext(description="bread recipes cooking")
+    context = BusinessContext(description="Enjoys bread recipes cooking at home.")
     before = model.generate(context, 3, seed=19)
     model.save(tmp_path / "before")
 

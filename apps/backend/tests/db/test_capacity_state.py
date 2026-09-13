@@ -163,8 +163,10 @@ async def test_router_persists_cooldowns_via_callback() -> None:
         LLMRequest(task=TaskType.PERSONA_GENERATION, messages=[ChatMessage(role="user", content="hi")])
     )
     # RATE_LIMITED is an account-level signal: its policy cools the whole
-    # provider, persisted with the provider-wide model marker "*".
-    assert persisted == [("freellmpool", "*", 60.0)]
+    # provider, persisted with the provider-wide model marker "*". The seconds
+    # value is (now + 60) - now on a monotonic clock, so compare with tolerance.
+    assert [(p, m) for p, m, _ in persisted] == [("freellmpool", "*")]
+    assert persisted[0][2] == pytest.approx(60.0, abs=1e-6)
 
 
 @pytest.mark.asyncio

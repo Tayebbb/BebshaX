@@ -459,7 +459,14 @@ async def test_total_deadline_keeps_active_inner_observation_without_latency(tmp
             await SingleAdapterLLMService(adapter, on_provenance=records.append, processing_policy=approved_primary_policy).complete(request(), deadline_at=deadline)
         [attempt] = records[0].attempts
         assert attempt.observations[0].provider == "catalog-primary"
-        assert attempt.observations[0].outcome == "aborted"
+        # The deadline cancels the in-flight attempt; a task that outlives the
+        # 20 ms cancel grace is retained and records its outcome as soon as the
+        # loop runs it again, so settle before asserting (bounded, no fixed sleep).
+        for _ in range(200):
+            if attempt.observations[0].outcome != "unknown":
+                break
+            await asyncio.sleep(0.005)
+        assert attempt.observations[0].outcome == "aborted", attempt.model_dump(mode="json")
         assert attempt.latency_ms is None
         assert attempt.elapsed_ms is not None
     finally:
