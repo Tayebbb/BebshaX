@@ -72,8 +72,22 @@ class OpsConfigTests(unittest.TestCase):
 
     def test_existing_coverage_migration_and_secret_gates_are_preserved(self) -> None:
         source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        for gate in ("--cov-fail-under=68", "alembic upgrade head", "test_pg_integration.py", "gitleaks", "pip_audit", "scripts/ops/typecheck.py"):
+        for gate in ("coverage combine", "--fail-under=68", "alembic upgrade head", "test_pg_integration.py", "gitleaks", "pip_audit", "scripts/ops/typecheck.py"):
             self.assertIn(gate, source)
+
+    def test_backend_shards_cover_every_test_directory_exactly_once(self) -> None:
+        config = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+        shards = {entry["shard"]: entry["paths"] for entry in config["jobs"]["backend"]["strategy"]["matrix"]["include"]}
+        self.assertEqual(config["jobs"]["coverage-gate"]["needs"], "backend")
+        self.assertIn("--cov=bebshax", config["jobs"]["backend"]["steps"][-2]["run"])
+        # The catch-all shard excludes exactly what the named shards run, so a new
+        # test directory is collected by CI without editing the matrix.
+        named = {"apps/backend/tests/api", "apps/backend/tests/auth", "apps/backend/tests/test_*.py"}
+        excluded = set(re.findall(r"--ignore(?:-glob)?='?([^\s']+)'?", shards["services"]))
+        self.assertEqual(excluded, named)
+        self.assertEqual(shards["core"].split(), ["apps/backend/tests/test_*.py", "apps/backend/tests/auth"])
+        api_ignores = {re.search(r"test_\[([a-z])-([a-z])\]", shards[name])[0] for name in ("api-a", "api-m")}
+        self.assertEqual(api_ignores, {"test_[m-z]", "test_[a-l]"})
 
     def test_web_build_uses_root_workspace_lock_and_reviewed_images(self) -> None:
         source = (ROOT / "deploy/web.Dockerfile").read_text(encoding="utf-8")

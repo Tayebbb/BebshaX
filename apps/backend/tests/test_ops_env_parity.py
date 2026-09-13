@@ -156,8 +156,8 @@ def test_ci_keeps_hardening_steps() -> None:
     image_node_version = re.search(r"^FROM node:(\d+\.\d+\.\d+)-", web_dockerfile, re.MULTILINE)
     assert image_node_version is not None
     assert str(node_version) == image_node_version.group(1), "CI and image Node pins must match"
-    backend_runs = " ".join(step.get("run", "") for step in jobs["backend"]["steps"])
-    assert "pip_audit" in backend_runs
+    aux_runs = " ".join(step.get("run", "") for step in jobs["backend-aux"]["steps"])
+    assert "pip_audit" in aux_runs
     drift_runs = " ".join(step.get("run", "") for step in jobs["migration-drift"]["steps"])
     assert 'test "$head_count" = "1"' in drift_runs, "multi-head alembic chains must fail CI"
     compose_runs = " ".join(step.get("run", "") for step in jobs["compose-config"]["steps"])
@@ -187,7 +187,7 @@ def test_ci_python_jobs_use_reviewed_locked_installer(job_name: str, install_com
 
 
 def test_ci_backend_runs_ml_tests_in_isolation() -> None:
-    assert ["python", "-m", "pytest", "ml_persona/tests", "-q"] in _ci_commands("backend")
+    assert ["python", "-m", "pytest", "ml_persona/tests", "-q"] in _ci_commands("backend-aux")
 
 
 def test_ci_lints_ml_source_and_tests_with_shared_bug_tier_config() -> None:
@@ -201,10 +201,14 @@ def test_ci_lints_ml_source_and_tests_with_shared_bug_tier_config() -> None:
 
 
 def test_ci_backend_preserves_coverage_floor() -> None:
-    assert [
-        "python", "-m", "pytest", "apps/backend/tests", "-q",
-        "--cov=bebshax", "--cov-fail-under=68",
-    ] in _ci_commands("backend")
+    # Shards measure; the gate combines their data files and enforces the floor.
+    shard_test_command = next(
+        command for command in _ci_commands("backend") if command[:3] == ["python", "-m", "pytest"]
+    )
+    assert {"--cov=bebshax", "--cov-report="} <= set(shard_test_command)
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    assert workflow["jobs"]["coverage-gate"]["needs"] == "backend"
+    assert ["python", "-m", "coverage", "report", "--fail-under=68"] in _ci_commands("coverage-gate")
 
 
 def test_ci_typecheck_uses_locked_pyright_in_isolated_environment() -> None:

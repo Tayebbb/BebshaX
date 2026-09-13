@@ -1,0 +1,5 @@
+# Reviewed false positives (gitleaks fingerprint = commit:path:rule:line).
+# Both lines are documentation text that mentions "api" next to a module path
+# or a table cell; neither contains a credential.
+3c7bfd4e2a88ff217c6f9ac1d54a3f5d612b3c76:docs/ROUTING.md:generic-api-key:372
+3c7bfd4e2a88ff217c6f9ac1d54a3f5d612b3c76:docs/POST_PRESENTATION_ROADMAP.md:generic-api-key:358

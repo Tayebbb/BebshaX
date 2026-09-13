@@ -1,0 +1,6 @@
+{
+  "max_errors": 104,
+  "recorded": "2026-09-13",
+  "source": "CI run 34720921622 on main 3c7bfd4 (pyright from deploy/python/runtime.lock)",
+  "rule": "scripts/ops/typecheck.py fails when the error count exceeds max_errors; lower this number as type debt is repaid, never raise it"
+}

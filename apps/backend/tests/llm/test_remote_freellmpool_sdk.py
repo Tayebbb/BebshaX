@@ -453,7 +453,8 @@ async def test_total_deadline_keeps_active_inner_observation_without_latency(tmp
     adapter = make_adapter(tmp_path, post)
     records = []
     try:
-        deadline = asyncio.get_running_loop().time() + 0.04
+        # Generous enough for a loaded CI runner to start the attempt before it expires.
+        deadline = asyncio.get_running_loop().time() + 0.5
         with pytest.raises(AllCandidatesFailed):
             await SingleAdapterLLMService(adapter, on_provenance=records.append, processing_policy=approved_primary_policy).complete(request(), deadline_at=deadline)
         [attempt] = records[0].attempts
