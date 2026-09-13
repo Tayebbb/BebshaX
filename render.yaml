@@ -1,0 +1,84 @@
+# Render Blueprint for the BebshaX API (FastAPI + persona ML bundle baked into the image).
+# Dashboard -> New -> Blueprint -> this repo. Secrets marked `sync: false` are prompted once.
+# The SPA is served by Vercel (root vercel.json proxies /api to this service); Postgres is Neon.
+# Docs: docs/SETUP.md "Cloud release runbook".
+services:
+  - type: web
+    name: bebshax-api
+    runtime: docker
+    dockerfilePath: ./apps/backend/Dockerfile
+    dockerContext: .
+    region: singapore # keep next to the Neon project (ap-southeast-1)
+    plan: 1c-2g # numpy/scipy/sklearn + the loaded bundle need > 512 MB
+    healthCheckPath: /api/health/ready
+    autoDeployTrigger: checksPass
+    maxShutdownDelaySeconds: 45
+    # Runs inside the new image before it takes traffic; a failed migration aborts
+    # the deploy while the previous version keeps serving. Neon recommends the
+    # direct (non `-pooler`) endpoint for migrations, so an optional override is
+    # honoured and the pooled runtime URL is the fallback.
+    preDeployCommand: sh -c 'BEBSHAX_DATABASE_URL="${BEBSHAX_MIGRATION_DATABASE_URL:-$BEBSHAX_DATABASE_URL}" exec python -m alembic upgrade head'
+    buildFilter:
+      paths:
+        - apps/backend/**
+        - ml_persona/**
+        - deploy/**
+        - providers.toml
+        - render.yaml
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: BEBSHAX_ENVIRONMENT
+        value: production
+      - key: BEBSHAX_DEMO_MODE
+        value: "false"
+      - key: BEBSHAX_LOG_LEVEL
+        value: INFO
+      # Exact public SPA origin (no trailing slash); CORS must equal it and no regex is allowed.
+      - key: BEBSHAX_FRONTEND_BASE_URL
+        value: https://bebshax-frontend.vercel.app
+      - key: BEBSHAX_CORS_ORIGINS
+        value: https://bebshax-frontend.vercel.app
+      - key: BEBSHAX_CORS_ORIGIN_REGEX
+        value: ""
+      # Render's edge terminates TLS: trust its forwarded scheme/client headers.
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: BEBSHAX_RATE_LIMIT_TRUST_FORWARDED_FOR
+        value: "true"
+      - key: BEBSHAX_TRUSTED_PROXY_CIDRS
+        value: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fd00::/8
+      # Persona ML bundle shipped in the image (deploy/models/ml_persona); pin = sha256(metadata.json).
+      - key: BEBSHAX_ML_PERSONA_ARTIFACT_DIR
+        value: /app/artifacts/ml_persona/model
+      - key: BEBSHAX_ML_PERSONA_REQUIRED
+        value: "true"
+      - key: BEBSHAX_ML_PERSONA_MANIFEST_SHA256
+        value: 21e7c8848215ae203913e8d0e9dcb240c8cac370279f89c7fedada5c30d2a440
+      - key: BEBSHAX_DATA_DIR
+        value: /app/data
+      - key: BEBSHAX_EMBEDDING_BACKEND
+        value: local
+      - key: BEBSHAX_DB_POOL_SIZE
+        value: "5"
+      - key: BEBSHAX_DB_MAX_OVERFLOW
+        value: "2"
+      - key: BEBSHAX_RUNTIME_SHUTDOWN_TIMEOUT_S
+        value: "15"
+      # Optional: BEBSHAX_REMOTE_PROCESSING_POLICY (JSON) pins the approved remote
+      # providers; unset derives the reviewed catalog default (docs/SETUP.md).
+      # --- secrets: prompted in the dashboard, never stored in git ---
+      - key: BEBSHAX_DATABASE_URL # Neon pooled URL, postgresql+asyncpg://...?sslmode=require
+        sync: false
+      - key: BEBSHAX_MIGRATION_DATABASE_URL # Neon DIRECT URL (same host without `-pooler`) used only by the pre-deploy migration
+        sync: false
+      - key: BEBSHAX_JWT_SECRET # python -c "import secrets; print(secrets.token_urlsafe(48))"
+        generateValue: true
+      - key: BEBSHAX_RESEND_API_KEY
+        sync: false
+      - key: BEBSHAX_EMAIL_FROM_ADDRESS # sender on a domain verified in Resend
+        sync: false
+      - key: BEBSHAX_NEON_AUTH_URL # same value as the Vercel VITE_NEON_AUTH_URL, or empty to disable Google sign-in
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false

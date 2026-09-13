@@ -4,13 +4,49 @@
   "buildCommand": "node scripts/ops/web-config.mjs build-vercel vercel.json",
   "outputDirectory": "apps/frontend/dist",
   "headers": [
-    {"source": "/(.*)", "headers": [
-      {"key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"},
-      {"key": "X-Content-Type-Options", "value": "nosniff"},
-      {"key": "X-Frame-Options", "value": "DENY"}
-    ]}
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://lh3.googleusercontent.com; connect-src 'self' https://ep-cold-star-azazjakq.neonauth.c-3.ap-southeast-1.aws.neon.tech; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' https://ep-cold-star-azazjakq.neonauth.c-3.ap-southeast-1.aws.neon.tech"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
+    }
   ],
   "rewrites": [
-    { "source": "/((?!api(?:/|$)).*)", "destination": "/index.html" }
+    {
+      "source": "/api/:path*",
+      "destination": "https://bebshax-api.onrender.com/api/:path*"
+    },
+    {
+      "source": "/((?!api(?:/|$)).*)",
+      "destination": "/index.html"
+    }
   ]
 }

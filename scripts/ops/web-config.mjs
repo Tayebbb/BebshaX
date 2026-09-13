@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,21 +24,25 @@ export function contentSecurityPolicy(neonAuthUrl = '') {
   return `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:${avatars}; connect-src 'self'${origin}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'${origin}`;
 }
 
-export function vercelConfig(apiOrigin, neonAuthUrl = '') {
+export function vercelConfig(apiOrigin, neonAuthUrl = '', configPath = 'vercel.json') {
   const origin = publicOrigin(apiOrigin);
   if (new URL(apiOrigin).pathname !== '/') throw new Error('API origin must not contain a path');
   return {
     framework: 'vite',
     installCommand: 'npm ci --workspaces --include-workspace-root',
-    buildCommand: 'node scripts/ops/web-config.mjs build-vercel deploy/vercel.generated.json',
+    buildCommand: `node scripts/ops/web-config.mjs build-vercel ${configPath}`,
     outputDirectory: 'apps/frontend/dist',
-    headers: [{ source: '/(.*)', headers: [
-      { key: 'Content-Security-Policy', value: contentSecurityPolicy(neonAuthUrl) },
-      { key: 'X-Content-Type-Options', value: 'nosniff' },
-      { key: 'X-Frame-Options', value: 'DENY' },
-      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
-    ] }],
+    headers: [
+      { source: '/(.*)', headers: [
+        { key: 'Content-Security-Policy', value: contentSecurityPolicy(neonAuthUrl) },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'X-Frame-Options', value: 'DENY' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
+      ] },
+      // Proxied API responses are per-user and never CDN-cacheable.
+      { source: '/api/(.*)', headers: [{ key: 'x-vercel-enable-rewrite-caching', value: '0' }] },
+    ],
     rewrites: [
       { source: '/api/:path*', destination: `${origin}/api/:path*` },
       { source: '/((?!api(?:/|$)).*)', destination: '/index.html' },
@@ -50,6 +54,7 @@ export function validateVercel(config, neonAuthUrl = '') {
   const route = config.rewrites?.find((entry) => entry.source === '/api/:path*');
   if (!route?.destination.endsWith('/api/:path*')) throw new Error('Hosted API routing is not configured');
   publicOrigin(route.destination.slice(0, -'/api/:path*'.length));
+  if (config.rewrites.indexOf(route) !== 0) throw new Error('The hosted API rewrite must precede the SPA fallback');
   const csp = config.headers?.flatMap((entry) => entry.headers).find((header) => header.key === 'Content-Security-Policy');
   if (csp?.value !== contentSecurityPolicy(neonAuthUrl)) throw new Error('Build-time Neon configuration and CSP differ');
 }
@@ -64,15 +69,15 @@ function main() {
     writeFileSync(output, template.replaceAll('__BEBSHAX_CSP__', contentSecurityPolicy(neonAuthUrl)));
   } else if (operation === 'vercel') {
     const config = vercelConfig(argument, neonAuthUrl);
-    mkdirSync(path.join(root, 'deploy'), { recursive: true });
-    writeFileSync(path.join(root, 'deploy/vercel.generated.json'), `${JSON.stringify(config, null, 2)}\n`);
-    process.stdout.write('Generated deploy/vercel.generated.json with an exact-origin policy. No deployment performed.\n');
+    writeFileSync(path.join(root, 'vercel.json'), `${JSON.stringify(config, null, 2)}\n`);
+    process.stdout.write('Wrote vercel.json with an exact-origin API proxy and CSP. Commit it; no deployment performed.\n');
   } else if (operation === 'build-vercel') {
     const config = JSON.parse(readFileSync(path.resolve(root, argument ?? 'vercel.json'), 'utf8'));
     validateVercel(config, neonAuthUrl);
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     const result = spawnSync(npm, ['run', 'build', '--workspace', 'apps/frontend'], {
-      cwd: root, stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, VITE_API_BASE: '/api' },
+      // Hosted builds are always live: same-origin API, sample data impossible.
+      cwd: root, stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, VITE_API_BASE: '/api', VITE_MOCK: '0' },
     });
     process.exitCode = result.status ?? 1;
   } else {

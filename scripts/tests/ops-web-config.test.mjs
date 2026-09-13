@@ -25,10 +25,16 @@ test('Vercel proxies API before the SPA fallback using the root workspace instal
   const config = vercelConfig('https://api.example.test', 'https://tenant.example.test/auth');
   assert.equal(config.rewrites[0].destination, 'https://api.example.test/api/:path*');
   assert.equal(config.installCommand, 'npm ci --workspaces --include-workspace-root');
+  assert.equal(config.buildCommand, 'node scripts/ops/web-config.mjs build-vercel vercel.json');
+  const apiHeaders = config.headers.find((entry) => entry.source === '/api/(.*)').headers;
+  assert.deepEqual(apiHeaders, [{ key: 'x-vercel-enable-rewrite-caching', value: '0' }]);
   validateVercel(config, 'https://tenant.example.test/auth');
 });
 
-test('Vercel refuses an unconfigured hosted API or a mismatched auth build', () => {
+test('Vercel refuses an unconfigured hosted API, a mismatched auth build or a shadowed API route', () => {
   assert.throws(() => validateVercel({ rewrites: [{ source: '/(.*)', destination: '/index.html' }] }));
   assert.throws(() => validateVercel(vercelConfig('https://api.example.test'), 'https://tenant.example.test/auth'));
+  const shadowed = vercelConfig('https://api.example.test');
+  shadowed.rewrites.reverse();
+  assert.throws(() => validateVercel(shadowed), /precede/);
 });

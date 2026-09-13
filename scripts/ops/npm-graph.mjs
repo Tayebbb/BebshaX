@@ -23,7 +23,7 @@ export function checkManifests(rootManifest, frontendManifest, lock) {
   const engines = Number((versionOf('vite') ?? '').split('.')[0]) >= 8
     ? ['rolldown', 'lightningcss']
     : ['esbuild', 'rollup'];
-  return Object.fromEntries(['vite', 'vitest', '@vitejs/plugin-react', 'typescript', ...engines, 'neonctl']
+  return Object.fromEntries(['vite', 'vitest', '@vitejs/plugin-react', 'typescript', ...engines]
     .map((name) => [name, versionOf(name)]));
 }
 
