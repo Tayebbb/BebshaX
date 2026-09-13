@@ -74,6 +74,7 @@ class RecoverySafetyTests(unittest.TestCase):
             lineage = root / "lineage.json"
             lineage.write_text(json.dumps({
                 "schema_version": 1, "coverage": {"datasets": True, "persona_versions": True, "transcripts": True},
+                "database_inventory": {"datasets": 0, "persona_versions": 0, "transcripts": 1},
                 "unresolved_legacy_paths": [], "references": [{"kind": "transcript", "id": "fixture-v1",
                     "storage_key": "data/transcript.json", "sha256": sha256(transcript)}],
             }), encoding="utf-8")

@@ -18,13 +18,17 @@ class ArtifactTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
 
-    def bundle(self) -> tuple[Path, str]:
+    def bundle(self, *, database_inventory: bool = True) -> tuple[Path, str]:
         bundle = self.root / "bundle"
         model = bundle / "artifacts/ml_persona/model/metadata.json"
         model.parent.mkdir(parents=True)
         model.write_text('{"synthetic_test_fixture": true}', encoding="utf-8")
         dump = bundle / "database.dump"
         dump.write_bytes(b"synthetic pg dump fixture")
+        lineage = {"schema_version": 1, "coverage": {"datasets": True, "persona_versions": True, "transcripts": True},
+                   "unresolved_legacy_paths": [], "references": []}
+        if database_inventory:
+            lineage["database_inventory"] = {"datasets": 0, "persona_versions": 0, "transcripts": 0}
         manifest = {
             "schema_version": 1, "consistency": "writers-paused",
             "model_manifest_key": "artifacts/ml_persona/model/metadata.json", "model_manifest_sha256": sha256(model),
@@ -32,8 +36,7 @@ class ArtifactTests(unittest.TestCase):
                 {"key": "database.dump", "size": dump.stat().st_size, "sha256": sha256(dump)},
                 *inventory(bundle / "artifacts", "artifacts", 1024),
             ],
-            "lineage": {"schema_version": 1, "coverage": {"datasets": True, "persona_versions": True, "transcripts": True},
-                        "unresolved_legacy_paths": [], "references": []},
+            "lineage": lineage,
         }
         manifest_path = bundle / "manifest.json"
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -44,7 +47,7 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(verify_bundle(bundle, digest)["schema_version"], 1)
 
     def test_claimed_empty_coverage_without_database_inventory_is_rejected(self) -> None:
-        bundle, digest = self.bundle()
+        bundle, digest = self.bundle(database_inventory=False)
         with self.assertRaisesRegex(ArtifactError, "database inventory"):
             verify_bundle(bundle, digest)
 
