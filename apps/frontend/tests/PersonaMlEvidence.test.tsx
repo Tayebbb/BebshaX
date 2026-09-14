@@ -141,7 +141,7 @@ describe('Step 2 synthetic source copy', () => {
     );
     expect(screen.getByText(/1 synthetic source profiles, not observed customers/)).toBeInTheDocument();
     expect(screen.getByText(/Synthetic profile claims remain hypotheses/)).toHaveTextContent(
-      'Collect real research in the Evidence Laboratory to validate your study; regenerating does not turn synthetic profiles into observed customer evidence.',
+      'source profiles never cite study evidence — regenerating does not change that. Evidence collected in the Evidence Laboratory is used by the interviews and the report, where it is cited per claim.',
     );
     expect(screen.queryByText(/Written by|regenerate and they will differ|inferred from your description|No research evidence has been gathered|then regenerate/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open Evidence Laboratory' }));

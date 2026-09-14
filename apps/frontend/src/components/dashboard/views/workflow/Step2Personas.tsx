@@ -156,7 +156,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                         : `• ${syntheticSourceCount} synthetic source profiles; ${evidenceBackedCount} of ${personas.length} backed by retrieved evidence`
                       : personas.length > 0
                       ? `• ${evidenceBackedCount} of ${personas.length} backed by retrieved evidence — each card says which`
-                      : '• Built from your description; any evidence we retrieve is labelled per persona'}
+                      : '• Source profiles are selected from a synthetic corpus; they never cite study evidence'}
                   </span>
                 </div>
               </div>
@@ -280,7 +280,7 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                   </div>
                   <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                     {hasSyntheticSources
-                      ? 'Synthetic profile claims remain hypotheses. Collect real research in the Evidence Laboratory to validate your study; regenerating does not turn synthetic profiles into observed customer evidence.'
+                      ? 'Synthetic profile claims remain hypotheses and source profiles never cite study evidence — regenerating does not change that. Evidence collected in the Evidence Laboratory is used by the interviews and the report, where it is cited per claim.'
                       : evidenceBackedCount === 0
                       ? 'Every persona above is inferred from your description alone. Run research in the Evidence Laboratory to collect claims, then regenerate personas to have them cite that evidence.'
                       : 'The rest are inferred from your description. Collect more claims in the Evidence Laboratory, then regenerate to widen the coverage.'}
