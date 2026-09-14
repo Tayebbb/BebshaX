@@ -3,10 +3,31 @@
 from __future__ import annotations
 
 import json
+import re
 
 from bebshax.llm.failures import AttemptFailed, FailureKind
 from bebshax.llm.json_utils import parse_llm_json, strip_md_fences
 from bebshax.llm.types import LLMRequest, TokenUsage
+
+# Some free providers answer HTTP 200 with an account notice in place of model
+# output (seen live: Pollinations "API key ... reached its budget"). Matched only
+# against the opening of the reply so a persona discussing billing is untouched.
+_PROVIDER_NOTICE_SIGNATURES: tuple[tuple[re.Pattern[str], FailureKind], ...] = (
+    (re.compile(r"\bAPI key\b.{0,80}\b(reached its budget|budget has been reached|out of credits?|insufficient (credits?|balance|funds))", re.I | re.S), FailureKind.QUOTA_EXHAUSTED),
+    (re.compile(r"\b(raise the key budget|insufficient_quota|exceeded your current quota|billing hard limit|quota exceeded for)\b", re.I), FailureKind.QUOTA_EXHAUSTED),
+    (re.compile(r"\b(incorrect API key provided|invalid_api_key|invalid api key|api key (is )?(invalid|revoked|expired)|authentication (error|failed):)", re.I), FailureKind.AUTH_INVALID),
+    (re.compile(r"\b(rate limit (reached|exceeded) for|too many requests, please try again)", re.I), FailureKind.RATE_LIMITED),
+)
+_NOTICE_WINDOW = 320
+
+
+def provider_notice_kind(text: str) -> FailureKind | None:
+    """Failure kind when the reply is a provider account notice, else None."""
+    head = text.lstrip()[:_NOTICE_WINDOW]
+    for pattern, kind in _PROVIDER_NOTICE_SIGNATURES:
+        if pattern.search(head):
+            return kind
+    return None
 
 
 def validate_text(
@@ -29,6 +50,9 @@ def validate_text(
         raise AttemptFailed(FailureKind.CAPABILITY_UNSUPPORTED, provider, model, "tool execution contract is unavailable")
     if not isinstance(text, str) or not text.strip():
         raise AttemptFailed(FailureKind.MALFORMED_RESPONSE, provider, model, "empty response")
+    notice = provider_notice_kind(text)
+    if notice is not None:
+        raise AttemptFailed(notice, provider, model, "provider returned an account notice instead of a completion")
     if request.json_mode:
         try:
             cleaned = strip_md_fences(text)
