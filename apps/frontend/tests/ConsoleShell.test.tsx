@@ -100,7 +100,7 @@ describe('Console shell — navigation architecture', () => {
     expect(chip).toHaveTextContent(/Step 1/);
   });
 
-  it('opens evidence for the library-selected study when the shell has no active study', async () => {
+  it('opens evidence for the library-selected study and shares that scope with the shell', async () => {
     renderShell('/persona-library');
     const studyPicker = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Active study' });
     await waitFor(() => expect(studyPicker.value).not.toBe(''));
@@ -111,7 +111,10 @@ describe('Console shell — navigation architecture', () => {
     fireEvent.change(studyPicker, { target: { value: selectedStudy.value } });
     const openers = await screen.findAllByRole('button', { name: 'Open profile' });
     expect(studyPicker).toHaveValue(selectedStudy.value);
-    expect(screen.getByText('No study selected')).toBeInTheDocument();
+    // Live 2026-09-14: the library's picker was local state, so the Study group
+    // still read "No study selected" while the library showed another study.
+    await waitFor(() => expect(screen.queryByText('No study selected')).toBeNull());
+    expect(screen.getByTitle(/^Open “.*” workflow$/)).toBeInTheDocument();
     fireEvent.click(openers[0]);
     fireEvent.click(screen.getByRole('tab', { name: /Evidence/ }));
     fireEvent.click(screen.getByRole('button', { name: /View in Evidence Laboratory/ }));

@@ -160,6 +160,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
     isAuthenticated,
     user,
     authError,
+    sessionNotice,
   } = useAuth();
 
   // Determine current view
@@ -233,6 +234,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   const [isResending, setIsResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  /** Which field the current error is about, for aria-invalid/aria-describedby. */
+  const [invalidField, setInvalidField] = useState<'email' | 'password' | null>(null);
   useEffect(() => { if (authError) setErrorMessage(authError); }, [authError]);
 
   // One-shot flag set by AuthContext when the OAuth-return /auth/sync
@@ -247,7 +250,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
   const resetMessages = () => {
     setErrorMessage(null);
     setSuccessMessage(null);
+    setInvalidField(null);
   };
+
+  /** Point the alert at the field it is about; validation replies name it. */
+  const fieldError = (field: 'email' | 'password', message: string) => {
+    setInvalidField(field);
+    setErrorMessage(message);
+  };
+  const describedBy = (field: 'email' | 'password', hintId?: string) =>
+    [hintId, invalidField === field && errorMessage ? 'auth-error' : undefined].filter(Boolean).join(' ') || undefined;
 
   const completeSignIn = async () => {
     try {
@@ -292,13 +304,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
       return;
     }
     if (password.length < 8) {
-      setErrorMessage('Password must be at least 8 characters.');
+      fieldError('password', 'Password must be at least 8 characters.');
       return;
     }
     const hasLetter = /[a-zA-Z]/.test(password);
     const hasDigit = /[0-9]/.test(password);
     if (!hasLetter || !hasDigit) {
-      setErrorMessage('Password must contain at least one letter and one number.');
+      fieldError('password', 'Password must contain at least one letter and one number.');
       return;
     }
 
@@ -340,6 +352,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           setErrorMessage(`We could not send a verification code to ${email}. Use "Resend" to retry.`);
         }
         setView('verify-otp');
+      } else if (err.code === 'VALIDATION_ERROR' && /email/i.test(err.message ?? '')) {
+        fieldError('email', 'Enter a valid email address.');
+      } else if (err.code === 'VALIDATION_ERROR' && /password/i.test(err.message ?? '')) {
+        fieldError('password', err.message);
       } else {
         setErrorMessage(err.message || 'Registration failed. Please check your information.');
       }
@@ -607,6 +623,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         {/* Error / Success Banners */}
         {errorMessage && (
           <div
+            id="auth-error"
             role="alert"
             style={{
               padding: '12px 14px',
@@ -643,6 +660,29 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
           >
             <CheckCircle2 size={16} />
             <span>{successMessage}</span>
+          </div>
+        )}
+
+        {/* Why the form is here: a session that ended on its own (expired,
+            rejected, signed out elsewhere) used to land on a wordless form. */}
+        {view === 'signin' && sessionNotice && !errorMessage && !successMessage && (
+          <div
+            role="status"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              background: 'var(--fill-soft)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)',
+              fontSize: '0.82rem',
+              marginBottom: '18px',
+            }}
+          >
+            <AlertCircle size={16} style={{ marginTop: '1px', flexShrink: 0 }} />
+            <span>{sessionNotice}</span>
           </div>
         )}
 
@@ -706,7 +746,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSignIn}>
+            <form onSubmit={handleSignIn} onInvalidCapture={resetMessages}>
               <div style={{ marginBottom: '16px' }}>
                 <label htmlFor="signin-email" style={labelStyle}>
                   Email
@@ -717,6 +757,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   name="email"
                   autoComplete="email"
                   required
+                  aria-invalid={invalidField === 'email' || undefined}
+                  aria-describedby={describedBy('email')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -773,6 +815,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     name="password"
                     autoComplete="current-password"
                     required
+                    aria-invalid={invalidField === 'password' || undefined}
+                    aria-describedby={describedBy('password')}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
@@ -784,6 +828,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
                     style={eyeButtonStyle}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -979,7 +1024,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               </p>
             </div>
 
-            <form onSubmit={handleSignUp}>
+            <form onSubmit={handleSignUp} onInvalidCapture={resetMessages}>
               <div style={{ marginBottom: '14px' }}>
                 <label htmlFor="signup-name" style={labelStyle}>
                   Full name
@@ -1009,6 +1054,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                   name="email"
                   autoComplete="email"
                   required
+                  aria-invalid={invalidField === 'email' || undefined}
+                  aria-describedby={describedBy('email')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -1030,6 +1077,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     autoComplete="new-password"
                     minLength={8}
                     required
+                    aria-invalid={invalidField === 'password' || undefined}
+                    aria-describedby={describedBy('password', 'signup-password-hint')}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Create a password"
@@ -1041,12 +1090,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
                     style={eyeButtonStyle}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                <div id="signup-password-hint" style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '6px' }}>
                   At least 8 characters, including a letter and a number.
                 </div>
               </div>
@@ -1127,7 +1177,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               </p>
             </div>
 
-            <form onSubmit={handleVerifyOtp}>
+            <form onSubmit={handleVerifyOtp} onInvalidCapture={resetMessages}>
               {(!email || isVerificationEmailDraft) && (
                 <div style={{ marginBottom: '20px' }}>
                   <label htmlFor="verify-email" style={labelStyle}>
@@ -1220,7 +1270,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               </p>
             </div>
 
-            <form onSubmit={handleForgotPassword}>
+            <form onSubmit={handleForgotPassword} onInvalidCapture={resetMessages}>
               <div style={{ marginBottom: '20px' }}>
                 <label htmlFor="forgot-email" style={labelStyle}>
                   Email address
@@ -1292,7 +1342,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
               </p>
             </div>
 
-            <form onSubmit={handleResetPasswordWithOtp}>
+            <form onSubmit={handleResetPasswordWithOtp} onInvalidCapture={resetMessages}>
               {(!email || isResetEmailDraft) && (
                 <div style={{ marginBottom: '20px' }}>
                   <label htmlFor="reset-email" style={labelStyle}>Email address</label>
@@ -1345,6 +1395,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? 'Hide new password' : 'Show new password'}
+                    aria-pressed={showPassword}
                     style={eyeButtonStyle}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1375,6 +1426,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     aria-label={showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'}
+                    aria-pressed={showConfirmPassword}
                     style={eyeButtonStyle}
                   >
                     {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}

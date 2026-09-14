@@ -27,7 +27,7 @@ const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
 
   const { isAuthenticated, isLoading, sessionEpoch } = useAuth();
-  const { currentPath, navigate } = useNavigation();
+  const { currentPath, currentSearch, navigate } = useNavigation();
 
   const isAuthRoute =
     /^\/auth(?:\/|$)/.test(currentPath) ||
@@ -36,6 +36,17 @@ const AppContent: React.FC = () => {
     currentPath === '/login' ||
     currentPath === '/register';
   const isAppRoute = isDashboardPath(currentPath);
+  const needsSignIn = isAppRoute && !isLoading && !isAuthenticated;
+
+  // A signed-out visit to an app URL lands on the sign-in route (replacing the
+  // entry, so Back does not bounce) with the destination kept for afterwards.
+  // Live 2026-09-14: the form rendered under /persona-library etc., so
+  // bookmarks and the back button carried an app URL that showed a login.
+  useEffect(() => {
+    if (!needsSignIn) return;
+    const next = `${currentPath}${currentSearch}`;
+    navigate(`/auth/signin${next && next !== '/app' ? `?next=${encodeURIComponent(next)}` : ''}`, { replace: true });
+  }, [needsSignIn, currentPath, currentSearch, navigate]);
 
   useEffect(() => {
     const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;

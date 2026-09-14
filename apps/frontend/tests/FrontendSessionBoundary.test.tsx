@@ -12,8 +12,14 @@ const currentUser: User = {
 };
 const otherUser = { ...currentUser, id: 'session-other', full_name: 'Other researcher' };
 function SessionProbe() {
-  const { user, isLoading } = useAuth();
-  return <output>{isLoading ? 'Checking' : user?.full_name ?? 'Signed out'}</output>;
+  const { user, isLoading, sessionNotice, logout } = useAuth();
+  return (
+    <>
+      <output>{isLoading ? 'Checking' : user?.full_name ?? 'Signed out'}</output>
+      <p data-testid="session-notice">{sessionNotice ?? ''}</p>
+      <button type="button" onClick={() => void logout()}>Sign out</button>
+    </>
+  );
 }
 
 describe('Frontend authoritative session boundary', () => {
@@ -211,6 +217,33 @@ describe('Frontend authoritative session boundary', () => {
     });
     await screen.findByText('Signed out');
     expect(api.getAuthToken()).toBeNull();
+    // Live 2026-09-14: the sign-in form appeared with no word about why.
+    expect(screen.getByTestId('session-notice')).toHaveTextContent('You were signed out in another tab.');
+  });
+
+  it('explains a session that the server no longer accepts on reload', async () => {
+    api.setAuthToken('rejected-fixture-token');
+    api.setStoredUser(currentUser);
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ detail: 'Invalid or expired authentication token' }), { status: 401 }));
+    render(<AuthProvider><SessionProbe /></AuthProvider>);
+
+    await screen.findByText('Signed out');
+    expect(screen.getByTestId('session-notice')).toHaveTextContent('Your session has ended.');
+  });
+
+  it('says nothing after a deliberate sign-out', async () => {
+    api.setAuthToken('current-fixture-token');
+    api.setStoredUser(currentUser);
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(currentUser)));
+    render(<AuthProvider><SessionProbe /></AuthProvider>);
+    await screen.findByText('Current researcher');
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+
+    act(() => { screen.getByRole('button', { name: 'Sign out' }).click(); });
+
+    await screen.findByText('Signed out');
+    await act(async () => {});
+    expect(screen.getByTestId('session-notice')).toHaveTextContent('');
   });
 
   it('invalidates old tab credentials on another tab account switch without erasing the new shared identity', async () => {

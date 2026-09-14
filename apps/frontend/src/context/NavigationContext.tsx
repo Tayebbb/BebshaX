@@ -4,7 +4,7 @@ import { startRouteTiming } from '../performance/routeTiming';
 interface NavigationContextType {
   currentPath: string;
   currentSearch: string;
-  navigate: (path: string) => void;
+  navigate: (path: string, options?: { replace?: boolean }) => void;
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
@@ -22,13 +22,16 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const navigate = useCallback((path: string) => {
+  const navigate = useCallback((path: string, options?: { replace?: boolean }) => {
     const target = new URL(path, window.location.origin);
     if (target.origin !== window.location.origin) throw new Error('Navigation must stay on this site');
     const destination = `${target.pathname}${target.search}${target.hash}`;
     if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== destination) {
       startRouteTiming(destination);
-      window.history.pushState({}, '', destination);
+      // `replace` swaps the current entry (redirects), so Back never returns to
+      // a URL that only ever redirected away.
+      if (options?.replace) window.history.replaceState({}, '', destination);
+      else window.history.pushState({}, '', destination);
       setLocation({ pathname: target.pathname, search: target.search });
       if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
         try {
@@ -53,9 +56,10 @@ export const useNavigation = (): NavigationContextType => {
     return {
       currentPath: typeof window !== 'undefined' ? window.location.pathname || '/' : '/',
       currentSearch: typeof window !== 'undefined' ? window.location.search : '',
-      navigate: (path: string) => {
+      navigate: (path: string, options?: { replace?: boolean }) => {
         if (typeof window !== 'undefined') {
-          window.history.pushState({}, '', path);
+          if (options?.replace) window.history.replaceState({}, '', path);
+          else window.history.pushState({}, '', path);
         }
       },
     };

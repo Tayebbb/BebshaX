@@ -178,6 +178,37 @@ describe('AuthPage OTP Verification & Reset Flows', () => {
     expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
   });
 
+  it('marks the offending field invalid, links it to the alert and hint, and exposes the eye toggle state', () => {
+    // Live 2026-09-14 (a11y sweep): a rejected password carried no aria-invalid
+    // or aria-describedby; "Show password" had no pressed state.
+    renderAuthPage('signup-email');
+    const password = screen.getByLabelText('Password');
+    expect(password).toHaveAttribute('aria-describedby', 'signup-password-hint');
+    expect(password).not.toHaveAttribute('aria-invalid');
+
+    fireEvent.change(screen.getByPlaceholderText('John Doe'), { target: { value: 'Alex Founder' } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'alex@bebshax.io' } });
+    fireEvent.change(password, { target: { value: 'abcdefghij' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Password must contain at least one letter and one number.');
+    expect(alert).toHaveAttribute('id', 'auth-error');
+    expect(password).toHaveAttribute('aria-invalid', 'true');
+    expect(password).toHaveAttribute('aria-describedby', 'signup-password-hint auth-error');
+
+    const toggle = screen.getByRole('button', { name: 'Show password' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Hide password' })).toHaveAttribute('aria-pressed', 'true');
+
+    // A later submit blocked by native validation drops the stale, now-wrong alert.
+    fireEvent.change(password, { target: { value: 'Valid1234' } });
+    fireEvent.invalid(screen.getByPlaceholderText('you@example.com'));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(password).not.toHaveAttribute('aria-invalid');
+  });
+
   it('lets a user the backend already authenticated continue into the app after signup', async () => {
     renderAuthPage('signup-email');
 

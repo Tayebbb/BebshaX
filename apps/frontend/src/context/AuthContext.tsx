@@ -18,9 +18,15 @@ interface AuthContextType {
   resetPasswordWithOtp: (email: string, otp: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   authError: string | null;
+  /** Why the last session ended without the user asking (expired, rejected,
+   * signed out from another tab). Cleared by the next sign-in. */
+  sessionNotice: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const SESSION_ENDED_NOTICE = 'Your session has ended. Sign in again to continue where you left off.';
+export const SIGNED_OUT_ELSEWHERE_NOTICE = 'You were signed out in another tab. Sign in again to continue.';
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(() => api.getAuthToken());
@@ -43,10 +49,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [sessionEpoch, setSessionEpoch] = useState(getSessionEpoch);
   const currentUserIdRef = useRef<string | null>(user?.id ?? null);
+  const signingOutRef = useRef(false);
   useEffect(() => {
     currentUserIdRef.current = user?.id ?? null;
+    if (user) setSessionNotice(null);
   }, [user?.id]);
 
   useEffect(() => {
@@ -84,6 +93,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (heldCredentials) {
               api.setStoredUser(null);
               api.setAuthToken(null);
+              // Live 2026-09-14: the sign-in form appeared with no explanation.
+              setSessionNotice(SESSION_ENDED_NOTICE);
             }
           }
         }
@@ -105,12 +116,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       initialization += 1;
       setSessionEpoch(getSessionEpoch());
       setToken(api.getAuthToken());
-      setUser(api.getAuthToken() || hasCookieSession() ? api.getStoredUser() : null);
+      const next = api.getAuthToken() || hasCookieSession() ? api.getStoredUser() : null;
+      // A session that vanished while this tab was signed in — and not through
+      // its own sign-out button — gets said out loud on the sign-in form. A more
+      // specific reason already recorded (another tab signed out) wins.
+      if (!next && currentUserIdRef.current !== null && !signingOutRef.current) {
+        setSessionNotice((current) => current ?? SESSION_ENDED_NOTICE);
+      }
+      setUser(next);
       setIsLoading(false);
     };
     const onStorage = (event: StorageEvent) => {
       if (event.key === null || event.key === 'bebshax_auth_token' || event.key === 'bebshax_auth_user' || event.key === 'bebshax_cookie_session'
           || event.key === 'bebshax_session_generation' || event.key === SIGNOUT_BROADCAST_KEY) {
+        if (event.key === SIGNOUT_BROADCAST_KEY && currentUserIdRef.current !== null) setSessionNotice(SIGNED_OUT_ELSEWHERE_NOTICE);
         // The same account signing in from another tab is not a switch: this
         // tab's credentials stay valid. (Dropping them here used to sign out the
         // first tab, whose cleanup then broadcast a sign-out to the second.)
@@ -204,12 +223,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     setAuthError(null);
+    setSessionNotice(null);
+    signingOutRef.current = true;
     setToken(null);
     setUser(null);
     try {
       await api.signout();
     } catch {
       setAuthError('Signed out on this device. Server session revocation could not be confirmed.');
+    } finally {
+      signingOutRef.current = false;
     }
   };
 
@@ -230,6 +253,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         resetPasswordWithOtp,
         logout,
         authError,
+        sessionNotice,
       }}
     >
       {children}
