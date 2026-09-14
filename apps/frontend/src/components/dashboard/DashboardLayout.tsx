@@ -1658,6 +1658,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               navigate(`/research/${activeStudyId}/behavioral-tests/compare?run_ids=${runIds.join(',')}`);
             }}
             onNavigateToPersona={() => navigate('/persona-library')}
+            onRunChange={(runId) => {
+              // A reload must show the run the user is looking at (live 2026-09-14).
+              navigate(`/research/${activeStudyId}/behavioral-tests/${activeTestId}/runs/${runId}`, { replace: true });
+            }}
           />
         )}
 

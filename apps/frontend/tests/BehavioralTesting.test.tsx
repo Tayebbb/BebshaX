@@ -27,6 +27,7 @@ vi.mock('../src/services/api', () => ({
     getStudyPersonas: vi.fn(),
     listStudySegments: vi.fn(),
     retryFailedBehavioralRun: vi.fn(),
+    cancelBehavioralRun: vi.fn(),
     startPersonaInterview: vi.fn(),
   },
 }));
@@ -256,10 +257,10 @@ async function configurePricingSimulation(population: 'all' | 'selected_personas
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 }
 
-function mockBehavioralDetail(run: BehavioralTestRun = mockRun): void {
+function mockBehavioralDetail(run: BehavioralTestRun = mockRun, runs: BehavioralTestRun[] = [run]): void {
   vi.mocked(api.getBehavioralTestDetail).mockResolvedValue(mockTest);
-  vi.mocked(api.getBehavioralTestRuns).mockResolvedValue([run]);
-  vi.mocked(api.getBehavioralRunResults).mockResolvedValue(run);
+  vi.mocked(api.getBehavioralTestRuns).mockResolvedValue(runs);
+  vi.mocked(api.getBehavioralRunResults).mockImplementation(async (_studyId, runId) => runs.find((r) => r.id === runId) ?? run);
 }
 
 describe('Part 7: Behavioral Testing & Simulation Frontend Tests', () => {
@@ -1139,6 +1140,55 @@ describe('Part 7: Behavioral Testing & Simulation Frontend Tests', () => {
     render(<BehavioralTestDetailView studyId="std_test_1" testId={mockTest.id} onBack={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Retry Failed Simulations' }));
     await waitFor(() => expect(api.retryFailedBehavioralRun).toHaveBeenCalledTimes(1));
+  });
+
+  it('says a cancelled run stopped early instead of rendering empty metrics', async () => {
+    // Live 2026-09-14: a cancelled run showed "%", "( of positive)" and
+    // "Positive: undefined%" with no word about the cancellation.
+    mockBehavioralDetail({
+      ...mockRun, status: 'cancelled', completed_count: 1, persona_count: 3, failed_count: 0,
+      error_message: 'Job cancelled.', aggregate_metrics: {} as unknown as BehavioralTestRun['aggregate_metrics'],
+    });
+    render(<BehavioralTestDetailView studyId="std_test_1" testId={mockTest.id} onBack={vi.fn()} />);
+
+    expect(await screen.findByText(/Run cancelled — 1 of 3 personas evaluated/)).toBeInTheDocument();
+    expect(screen.queryByText('Average Acceptance Likelihood')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/undefined%|\( of /);
+    expect(screen.getByRole('button', { name: 'Re-Run Simulation' })).toBeEnabled();
+  });
+
+  it('lets the researcher cancel a running simulation from the progress banner', async () => {
+    const running = { ...mockRun, status: 'running' as const, completed_count: 1, persona_count: 3 };
+    mockBehavioralDetail(running);
+    vi.mocked(api.getBehavioralRunResults).mockResolvedValue(running);
+    const cancelled = { ...running, status: 'cancelled' as const, error_message: 'Job cancelled.', aggregate_metrics: {} as unknown as BehavioralTestRun['aggregate_metrics'] };
+    vi.mocked(api.cancelBehavioralRun).mockImplementation(async () => {
+      vi.mocked(api.getBehavioralRunResults).mockResolvedValue(cancelled);
+      return cancelled;
+    });
+    render(<BehavioralTestDetailView studyId="std_test_1" testId={mockTest.id} onBack={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel simulation' }));
+
+    await waitFor(() => expect(api.cancelBehavioralRun).toHaveBeenCalledWith('std_test_1', running.id, expect.any(AbortSignal)));
+    expect(await screen.findByText(/Run cancelled — 1 of 3 personas evaluated/)).toBeInTheDocument();
+  });
+
+  it('tells the shell which run is shown so the URL follows re-runs and pill clicks', async () => {
+    const older = { ...mockRun, id: 'btr_older' };
+    mockBehavioralDetail(mockRun, [mockRun, older]);
+    const onRunChange = vi.fn();
+    vi.mocked(api.triggerBehavioralTestRun).mockResolvedValue({ ...mockRun, id: 'btr_new', status: 'running' });
+    render(<BehavioralTestDetailView studyId="std_test_1" testId={mockTest.id} onBack={vi.fn()} onRunChange={onRunChange} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Run #1/ }));
+    await waitFor(() => expect(onRunChange).toHaveBeenCalledWith('btr_older'));
+    fireEvent.click(screen.getByRole('button', { name: /Run #2/ }));
+    await waitFor(() => expect(onRunChange).toHaveBeenCalledWith(mockRun.id));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-Run Simulation' }));
+    // Live 2026-09-14: the URL stayed on the previous run, so a reload showed Run #1.
+    await waitFor(() => expect(onRunChange).toHaveBeenCalledWith('btr_new'));
   });
 
   it.each(['Enter', 'Space'])('opens a native reasoning button with %s and restores focus on dismissal', async (key) => {

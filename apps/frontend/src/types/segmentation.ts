@@ -115,6 +115,10 @@ export interface SegmentationRun {
   started_at: string;
   completed_at?: string;
   created_at: string;
+  /** Datasets the run clustered that no longer exist (server-computed). */
+  missing_datasets?: { dataset_id?: string; name?: string }[];
+  /** The study, datasets or claims changed since this run (server-computed). */
+  inputs_changed?: boolean;
 }
 
 export interface ComparedSegmentMatrixItem {

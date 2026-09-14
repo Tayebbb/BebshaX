@@ -56,7 +56,7 @@ const TEST_TYPE_OPTIONS: TestTypeOption[] = [
     description: 'Test willingness to pay across specific price tiers in BDT vs disposable budget.',
     icon: <DollarSign size={20} className="text-teal-400" />,
     tag: 'Willingness to Pay',
-    example: 'e.g. ৳299/month for unlimited meal prep automation',
+    example: 'e.g. ৳299/month for the full plan',
   },
   {
     type: 'purchase_decision',
@@ -64,7 +64,7 @@ const TEST_TYPE_OPTIONS: TestTypeOption[] = [
     description: 'Simulate immediate buying intent and evaluate urgency vs hesitation.',
     icon: <ShoppingCart size={20} className="text-cyan-400" />,
     tag: 'Buying Intent',
-    example: 'e.g. Would personas buy now to solve exam meal chaos?',
+    example: 'e.g. Would personas buy now, or wait and keep their current workaround?',
   },
   {
     type: 'feature_test',
@@ -72,7 +72,7 @@ const TEST_TYPE_OPTIONS: TestTypeOption[] = [
     description: 'Evaluate if a proposed feature solves pain points or feels unnecessary.',
     icon: <Layers size={20} className="text-emerald-400" />,
     tag: 'Feature Appeal',
-    example: 'e.g. Automated bKash-integrated grocery list generator',
+    example: 'e.g. One-tap reorder with saved payment details',
   },
   {
     type: 'concept_test',
@@ -80,7 +80,7 @@ const TEST_TYPE_OPTIONS: TestTypeOption[] = [
     description: 'Test overall value proposition resonance, clarity, and perceived novelty.',
     icon: <Lightbulb size={20} className="text-amber-400" />,
     tag: 'Concept Resonance',
-    example: 'e.g. AI-powered student hostel meal & diet planner',
+    example: 'e.g. A subscription that replaces a weekly errand',
   },
   {
     type: 'message_test',
@@ -88,7 +88,7 @@ const TEST_TYPE_OPTIONS: TestTypeOption[] = [
     description: 'Test headlines, value proposition clarity, emotional appeal, and CTA friction.',
     icon: <MessageSquare size={20} className="text-sky-400" />,
     tag: 'Copy Resonance',
-    example: 'e.g. "Plan your entire week of meals in 30 seconds"',
+    example: 'e.g. "Done in 30 seconds, every week"',
   },
   {
     type: 'offer_test',
@@ -104,7 +104,7 @@ const TEST_TYPE_OPTIONS: TestTypeOption[] = [
     description: 'Measure the friction of abandoning free manual tools or rival apps.',
     icon: <RefreshCw size={20} className="text-rose-400" />,
     tag: 'Migration Friction',
-    example: 'e.g. Switching from handwritten lists and YouTube recipes',
+    example: 'e.g. Switching from the free manual routine they use today',
   },
   {
     type: 'objection_test',
@@ -112,7 +112,7 @@ const TEST_TYPE_OPTIONS: TestTypeOption[] = [
     description: 'Surface the strongest friction points, trust hurdles, and hidden blockers.',
     icon: <AlertTriangle size={20} className="text-orange-400" />,
     tag: 'Friction & Risk',
-    example: 'e.g. Data privacy concerns or food taste mismatch fears',
+    example: 'e.g. Data privacy worries or doubts the service shows up on time',
   },
 ];
 
@@ -257,6 +257,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
   const scenarioMissing: string | null = (() => {
     if (!name.trim()) return 'a test name';
     if (selectedType === 'pricing_test' && !price.trim()) return 'a proposed price';
+    // "৳299" and "299/month" are fine; "abc" and "-50" were accepted end to end (live 2026-09-14).
+    if (price.trim() && !/\d/.test(price)) return 'a price that includes an amount (e.g. 299)';
+    if (price.trim() && /-\s*\d/.test(price)) return 'a price of zero or more';
     if (selectedType === 'feature_test' && !featureName.trim()) return 'a feature name';
     if (selectedType === 'message_test' && !headline.trim()) return 'a headline';
     if (!['pricing_test', 'feature_test', 'message_test'].includes(selectedType) && !customScenarioText.trim()) {
@@ -600,7 +603,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Student Meal App Monthly Pricing"
+                  placeholder="e.g. Monthly plan pricing"
                   style={{
                     width: '100%',
                     padding: '10px 14px',
@@ -661,7 +664,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                       <option value="monthly">Monthly Subscription</option>
                       <option value="yearly">Yearly (Annual)</option>
                       <option value="one_time">One-time Purchase</option>
-                      <option value="per_use">Pay per meal / per use</option>
+                      <option value="per_use">Pay per use</option>
                     </select>
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
@@ -797,7 +800,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   value={customScenarioText}
                   onChange={(e) => setCustomScenarioText(e.target.value)}
                   aria-required={scenarioContextRequired}
-                  placeholder="Describe specific conditions (e.g. During semester final exams, student receives a bKash prompt offering ৳299/mo for automated grocery ordering...)"
+                  placeholder="Describe specific conditions (e.g. At the end of the month, the persona sees a mobile-payment prompt offering the plan at ৳299/mo...)"
                   style={{
                     width: '100%',
                     padding: '10px 14px',

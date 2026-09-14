@@ -83,13 +83,14 @@ async def test_behavioral_compare_is_reachable_and_validates_run_ids(api_test_ap
     assert missing.json()["error_code"] == "bad_request"
     assert "compare" not in missing.json()["detail"]
 
-    ok = api_test_app.get(
+    unknown = api_test_app.get(
         "/api/studies/std_cmp/behavioral-tests/compare",
         params={"run_ids": "btr_nope_1, btr_nope_2"},
         headers=_owner_headers(),
     )
-    assert ok.status_code == 200
-    assert ok.json() == {"study_id": "std_cmp", "compared_run_count": 0, "runs": []}
+    # Live 2026-09-14: unknown ids compared as "0 runs" with a 200.
+    assert unknown.status_code == 404, unknown.text
+    assert "btr_nope_1, btr_nope_2" in unknown.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

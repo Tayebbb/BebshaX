@@ -6,6 +6,7 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   HelpCircle,
   Sliders,
   Download,
@@ -319,7 +320,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
       s.status,
       s.description,
     ]);
-    downloadText(serializeCsv([headers, ...rows]), `study_${studyId}_market_segments.csv`, 'text/csv;charset=utf-8');
+    downloadText(serializeCsv([headers, ...rows]), `${studyId}_market_segments.csv`, 'text/csv;charset=utf-8');
   };
 
   const filteredSegments = useMemo(() => {
@@ -337,12 +338,30 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
     run.id === selectedSegment.segmentation_run_id && run.study_id === selectedSegment.study_id,
   ) : undefined;
   const totalSurveyed = readiness?.total_records || segments.reduce((acc, s) => acc + s.population_count, 0);
+  // The run the cards on screen came from. Live 2026-09-14: its dataset had
+  // been deleted and three "Data Backed" cards stayed up with no warning.
+  const shownRun = segments.length > 0
+    ? runs.find((run) => run.id === segments[0].segmentation_run_id && run.study_id === segments[0].study_id)
+    : undefined;
+  const missingDatasets = shownRun?.missing_datasets ?? [];
+  const staleSegments = segments.length > 0 && !!shownRun && (missingDatasets.length > 0 || shownRun.inputs_changed === true);
 
   return (
     <div className="min-w-0 space-y-6 bg-[var(--bg-pure)] pb-16" data-testid="segmentation-view">
       {isLoading && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 24px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
           Loading segmentation data…
+        </div>
+      )}
+      {staleSegments && (
+        <div role="status" className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-[var(--text-primary)]">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" aria-hidden="true" />
+          <span>
+            {missingDatasets.length > 0
+              ? `These segments were built from ${missingDatasets.map((d) => d.name || d.dataset_id || 'a dataset').join(', ')}, which has since been deleted. `
+              : 'The study data behind these segments has changed since they were built. '}
+            They are kept for reference — run segmentation again to rebuild them from the current data.
+          </span>
         </div>
       )}
       {/* Top Banner / Metrics Header */}
@@ -536,7 +555,7 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
                     <span className="text-xs text-[var(--text-secondary)] font-medium mr-1">Candidate Variables:</span>
                     {readiness.usable_variables.map((v) => (
                       <span
-                        key={v.name}
+                        key={`${v.source_dataset_id}:${v.name}`}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--bg-card)] border border-[var(--border-subtle)] text-xs text-[var(--text-primary)]"
                         title={`${v.source_dataset_name} • ${v.coverage_percentage}% coverage`}
                       >
@@ -719,9 +738,13 @@ export const SegmentationView: React.FC<SegmentationViewProps> = ({
           data-testid="no-segments-placeholder"
         >
           <PieChart className="w-12 h-12 text-[var(--text-secondary)]/40 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-[var(--text-primary)]">No Market Segments Available</h3>
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">
+            {segments.length > 0 ? 'No segments match this filter' : 'No Market Segments Available'}
+          </h3>
           <p className="text-xs text-[var(--text-secondary)] max-w-md mx-auto mt-1 mb-5">
-            Run segmentation above or upload your own study data to discover meaningful customer clusters.
+            {segments.length > 0
+              ? `${segments.length} segment${segments.length === 1 ? '' : 's'} exist for this study — clear the search or status filter to see them.`
+              : 'Run segmentation above or upload your own study data to discover meaningful customer clusters.'}
           </p>
           <div className="flex items-center justify-center gap-3">
             {onNavigateToEvidence && (

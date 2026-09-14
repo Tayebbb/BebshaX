@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timezone
@@ -15,7 +16,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bebshax.api.auth import get_current_user, get_optional_current_user
-from bebshax.api.deps import get_session, user_can_write_study, user_owns_study
+from bebshax.api.deps import get_session, require_study_access
 from bebshax.api.errors import APIError
 from bebshax.api.jobs import cancel_job_async, get_job_async, start_job_async
 from bebshax.api.limiter import limiter
@@ -50,6 +51,36 @@ def _read_owner(column: Any, user: Optional[Users]) -> Any:
 # Request Models
 # ---------------------------------------------------------------------------
 
+# Configuration values the wizard collects that must carry a non-negative
+# amount. Users type "৳299", "299/month" or 299 — all fine; "abc" and "-50"
+# were accepted end to end (live 2026-09-14).
+_NUMERIC_CONFIG_FIELDS = ("price", "discount_percent", "discount", "trial_days", "quantity")
+_AMOUNT_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
+
+
+def _validate_configuration(configuration: Optional[dict]) -> Optional[dict]:
+    if not configuration:
+        return configuration
+    for field in _NUMERIC_CONFIG_FIELDS:
+        value = configuration.get(field)
+        if value is None or value == "":
+            continue
+        if isinstance(value, bool):
+            raise ValueError(f"configuration.{field} must be an amount.")
+        if isinstance(value, (int, float)):
+            number = float(value)
+        else:
+            match = _AMOUNT_RE.search(str(value))
+            if match is None:
+                raise ValueError(f"configuration.{field} must include an amount (e.g. 299).")
+            number = float(match.group(0).replace(",", "."))
+        if number != number or number < 0:  # NaN or negative
+            raise ValueError(f"configuration.{field} must be zero or more.")
+        if field == "discount_percent" and number > 100:
+            raise ValueError("configuration.discount_percent cannot exceed 100.")
+    return configuration
+
+
 class CreateBehavioralTestRequest(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=5000)
@@ -61,6 +92,11 @@ class CreateBehavioralTestRequest(BaseModel):
     scenario_title: Optional[str] = Field(default=None, max_length=256)
     scenario_text: Optional[str] = Field(default=None, max_length=10000)
 
+    @field_validator("configuration")
+    @classmethod
+    def _numeric_configuration(cls, value: dict) -> dict:
+        return _validate_configuration(value) or {}
+
 
 class UpdateBehavioralTestRequest(BaseModel):
     name: Optional[str] = Field(default=None, max_length=256)
@@ -70,6 +106,11 @@ class UpdateBehavioralTestRequest(BaseModel):
     status: Optional[str] = None
     scenario_title: Optional[str] = Field(default=None, max_length=256)
     scenario_text: Optional[str] = Field(default=None, max_length=10000)
+
+    @field_validator("configuration")
+    @classmethod
+    def _numeric_configuration(cls, value: Optional[dict]) -> Optional[dict]:
+        return _validate_configuration(value)
 
 
 class RunBehavioralTestRequest(BaseModel):
@@ -215,25 +256,16 @@ async def _get_study_and_verify_access(
     *,
     write: bool = False,
 ) -> Studies:
-    """Verify study existence and enforce strict multi-tenant ownership.
-
-    ``write=True`` selects the strict write predicate: the ``is_demo`` read
-    allowance must never let a non-owner mutate the shared demo.
-    """
+    """The shared study gate: 404 for a missing OR foreign study (a 403 here let
+    other users enumerate valid study ids — live 2026-09-14), 403 only when the
+    caller can read the study but ``write=True`` and may not mutate it (the
+    ``is_demo`` read allowance must never let a non-owner mutate the shared demo)."""
     res = await session.execute(select(Studies).where(Studies.id == study_id))
-    study = res.scalar_one_or_none()
-    if not study:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Study with id '{study_id}' not found.",
-        )
-    predicate = user_can_write_study if write else user_owns_study
-    if not predicate(study, user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden: You do not have access to this study's behavioral tests.",
-        )
-    return study
+    return require_study_access(
+        res.scalar_one_or_none(), user, write=write,
+        not_found_detail=f"Study with id '{study_id}' not found.",
+        read_only_detail="Forbidden: You do not have access to this study's behavioral tests.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +447,13 @@ async def compare_behavioral_runs(
         )
     )
     runs = res.scalars().all()
+    missing = sorted(set(ids) - {r.id for r in runs})
+    if missing:
+        # An unknown id used to compare as "0 runs" with a 200 (live 2026-09-14).
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run(s) not found in this study: {', '.join(missing)}.",
+        )
 
     compared_runs: list[dict[str, Any]] = []
     for r in runs:
@@ -912,6 +951,10 @@ async def retry_failed_simulations(
             raise APIError(404, "Behavioral test run not found.", error_code="not_found")
         if current.status in {"pending", "running", "retry_pending"}:
             raise APIError(409, "This behavioral run is already executing.", error_code="behavioral_run_active")
+        # Nothing failed = nothing to retry. A 202 here re-assigned the run's
+        # job_id and pretended work was queued (live 2026-09-14).
+        if int(current.failed_count or 0) == 0 and current.status not in {"failed", "cancelled", "completed_with_warnings"}:
+            raise APIError(409, "This run has no failed persona simulations to retry.", error_code="nothing_to_retry")
         current.status, current.job_id = "retry_pending", job["job_id"]
         current.execution_token = None
         return {"run_id": run_id}
@@ -945,6 +988,9 @@ async def cancel_behavioral_run(
     ))
     if run is None:
         raise APIError(404, "Behavioral test run not found.", error_code="not_found")
+    if run.status not in {"pending", "running", "retry_pending"}:
+        # Cancelling a finished run used to answer 200 as if something stopped.
+        raise APIError(409, f"This run is already {run.status}; there is nothing to cancel.", error_code="behavioral_run_finished")
     if not run.job_id:
         was_running = run.status in {"running", "retry_pending"}
         await session.execute(update(BehavioralTestRuns).where(

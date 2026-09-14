@@ -3989,6 +3989,26 @@ export const api = {
     throw new Error('Backend required for retrying simulations');
   },
 
+  /** Stop a running simulation. The server answers 409 once the run is over. */
+  async cancelBehavioralRun(studyId: string, runId: string, signal?: AbortSignal): Promise<import('../types').BehavioralTestRun> {
+    if (this.isMockMode()) throw new Error('Backend required for cancelling simulations');
+    try {
+      const res = await fetch(`${API_BASE}/studies/${studyId}/behavioral-tests/runs/${runId}/cancel`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        signal: signal ?? AbortSignal.timeout(TIMEOUT_MS.CRUD),
+      });
+      if (res.ok) {
+        lastKnownLive = true;
+        return await res.json();
+      }
+      throw await apiErrorFrom(res, 'Failed to cancel the simulation');
+    } catch (e) {
+      lastKnownLive = false;
+      throw e;
+    }
+  },
+
   async compareBehavioralRuns(studyId: string, runIds: string[]): Promise<any> {
     if (!this.isMockMode()) {
       try {

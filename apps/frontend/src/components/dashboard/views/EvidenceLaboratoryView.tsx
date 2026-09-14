@@ -424,7 +424,7 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
               {study?.title || study?.prompt || 'Study Research & Evidence'}
             </h1>
             <p style={{ fontSize: '0.82rem', lineHeight: 1.5, color: 'var(--text-secondary)', margin: '8px 0 0', maxWidth: '70ch' }}>
-              Collected sources, extracted claims, and per-claim support status — sample sources are labeled
+              Collected sources, extracted claims, and per-claim support status
             </p>
           </div>
         </div>

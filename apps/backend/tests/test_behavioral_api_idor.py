@@ -109,6 +109,34 @@ async def test_behavioral_api_crud_and_runs(tmp_path, monkeypatch):
         assert run_detail_resp.status_code == 200
         assert run_detail_resp.json()["id"] == run_id
 
+        # 7. Configuration amounts are validated (live 2026-09-14: "abc" and -50 were accepted)
+        for bad_price in ("abc", -50, "-50"):
+            bad = await client.post(
+                "/api/studies/std_owner/behavioral-tests",
+                json={"name": "Bad price", "test_type": "pricing_test", "configuration": {"price": bad_price}},
+                headers=headers,
+            )
+            assert bad.status_code == 422, (bad_price, bad.text)
+        for good_price in ("৳299", "299/month", 299, 0):
+            good = await client.post(
+                "/api/studies/std_owner/behavioral-tests",
+                json={"name": "Good price", "test_type": "pricing_test", "configuration": {"price": good_price}, "scenario_text": "Monthly plan"},
+                headers=headers,
+            )
+            assert good.status_code == 201, (good_price, good.text)
+
+        # 8. Finished runs refuse retry-failed (nothing failed) and cancel (nothing running)
+        async with maker() as session:
+            row = await session.get(BehavioralTestRuns, run_id)
+            row.status, row.failed_count, row.job_id = "completed", 0, None
+            await session.commit()
+        retry = await client.post(f"/api/studies/std_owner/behavioral-tests/runs/{run_id}/retry-failed", headers=headers)
+        assert retry.status_code == 409, retry.text
+        assert retry.json()["error_code"] == "nothing_to_retry"
+        cancel = await client.post(f"/api/studies/std_owner/behavioral-tests/runs/{run_id}/cancel", headers=headers)
+        assert cancel.status_code == 409, cancel.text
+        assert cancel.json()["error_code"] == "behavioral_run_finished"
+
 
 @pytest.mark.asyncio
 async def test_behavioral_api_idor_isolation(tmp_path, monkeypatch):
@@ -140,13 +168,16 @@ async def test_behavioral_api_idor_isolation(tmp_path, monkeypatch):
     headers_a = {"Authorization": f"Bearer {token_a}"}
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # User A tries to list User B's tests
+        # User A tries to list User B's tests. A 403 here confirmed the study
+        # existed while /studies/{id} answered 404 (live 2026-09-14): same oracle now.
         resp1 = await client.get("/api/studies/std_b/behavioral-tests", headers=headers_a)
-        assert resp1.status_code in (403, 404)
+        assert resp1.status_code == 404
+        bogus = await client.get("/api/studies/std_bogus/behavioral-tests", headers=headers_a)
+        assert bogus.status_code == 404
 
         # User A tries to view User B's test detail
         resp2 = await client.get("/api/studies/std_b/behavioral-tests/bt_b_1", headers=headers_a)
-        assert resp2.status_code in (403, 404)
+        assert resp2.status_code == 404
 
         # User A tries to run simulation on User B's test
         resp3 = await client.post(

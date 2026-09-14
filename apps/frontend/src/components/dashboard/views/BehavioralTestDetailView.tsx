@@ -37,6 +37,8 @@ interface BehavioralTestDetailViewProps {
   onBack: () => void;
   onCompareRuns?: (runIds: string[]) => void;
   onNavigateToPersona?: (personaId: string) => void;
+  /** The shown run changed (re-run or pill click): the parent keeps the URL in step. */
+  onRunChange?: (runId: string) => void;
 }
 
 export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> = ({
@@ -46,6 +48,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
   onBack,
   onCompareRuns,
   onNavigateToPersona: _onNavigateToPersona,
+  onRunChange,
 }) => {
   const [test, setTest] = useState<BehavioralTest | null>(null);
   const [runs, setRuns] = useState<BehavioralTestRun[]>([]);
@@ -57,6 +60,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
   const [isLoadingRun, setIsLoadingRun] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [isTriggeringRun, setIsTriggeringRun] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const scopeRef = useRequestScope([studyId, testId]);
   const selectionRef = useRef(initialRunId || '');
@@ -148,6 +152,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
     const request = ++requestRef.current;
     selectionRef.current = runId;
     setSelectedRunId(runId);
+    onRunChange?.(runId);
     setSelectedPersonaResult(null);
     setActiveRun(null);
     setLoadError(null);
@@ -198,11 +203,31 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
       selectionRef.current = newRun.id;
       setSelectedRunId(newRun.id);
       setActiveRun(newRun);
+      // The URL names the run: a reload used to show the previous one (live 2026-09-14).
+      onRunChange?.(newRun.id);
       await fetchDetailAndRuns(false);
     } catch (error) {
       if (scope.active) setActionError(toUserMessage(error));
     } finally {
       if (scope.active) { actionRef.current = false; setIsTriggeringRun(false); }
+    }
+  };
+
+  const handleCancelRun = async () => {
+    const scope = scopeRef.current;
+    if (!activeRun || !scope.active || actionRef.current || !['pending', 'running'].includes(activeRun.status)) return;
+    actionRef.current = true;
+    setIsCancelling(true);
+    setActionError(null);
+    try {
+      const cancelled = await api.cancelBehavioralRun(studyId, activeRun.id, scope.controller.signal);
+      if (!scope.active) return;
+      setActiveRun(cancelled);
+      setRuns((previous) => previous.map((candidate) => candidate.id === cancelled.id ? cancelled : candidate));
+    } catch (error) {
+      if (scope.active) setActionError(toUserMessage(error));
+    } finally {
+      if (scope.active) { actionRef.current = false; setIsCancelling(false); }
     }
   };
 
@@ -272,7 +297,14 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
 
   const metrics = activeRun?.aggregate_metrics;
   const isRunning = activeRun?.status === 'running' || activeRun?.status === 'pending';
-  const actionPending = isTriggeringRun || isRetrying;
+  // Aggregate metrics exist only for a run that produced them: a cancelled run
+  // rendered "%", "( of positive)" and "Positive: undefined%" (live 2026-09-14).
+  const hasMetrics = !!activeRun && !isRunning && !!metrics
+    && typeof metrics.total_personas === 'number' && metrics.total_personas > 0
+    && typeof metrics.average_likelihood_percentage === 'number';
+  const stoppedEarly = !!activeRun && !isRunning && !hasMetrics
+    && ['cancelled', 'failed', 'interrupted', 'timed_out'].includes(activeRun.status);
+  const actionPending = isTriggeringRun || isRetrying || isCancelling;
   const rerunDisabled = actionPending || isRunning || isLoadingRun || !activeRun;
 
   return (
@@ -506,6 +538,16 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               }}
             />
           </div>
+          <button
+            type="button"
+            onClick={handleCancelRun}
+            disabled={actionPending}
+            aria-busy={isCancelling}
+            className="bx-btn bx-btn--secondary bx-btn--sm"
+            style={{ marginTop: '14px' }}
+          >
+            {isCancelling ? 'Cancelling…' : 'Cancel simulation'}
+          </button>
         </div>
       )}
 
@@ -525,7 +567,20 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
       )}
 
       {/* Results Overview Metrics */}
-      {activeRun && !isRunning && metrics && (
+      {stoppedEarly && (
+        <div role="status" style={{ padding: '20px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-soft)', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--status-warn-text)', fontWeight: 600, marginBottom: '6px' }}>
+            <AlertTriangle size={18} />
+            <span>
+              Run {activeRun!.status.replace(/_/g, ' ')} — {activeRun!.completed_count} of {activeRun!.persona_count} personas evaluated
+            </span>
+          </div>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            {activeRun!.error_message || 'The simulation stopped before every persona answered.'} No aggregate metrics were computed; the individual answers that did complete are listed below.
+          </p>
+        </div>
+      )}
+      {hasMetrics && metrics && (
         <>
           <div
             style={{
@@ -594,7 +649,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                 </div>
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '10px' }}>
-                Grounding considers Part 6 interview transcripts and Part 2 market claims.
+                Grounding considers this study's interview transcripts and collected market claims.
               </div>
             </div>
 
@@ -1001,7 +1056,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               {selectedPersonaResult.interview_signals_used && selectedPersonaResult.interview_signals_used.length > 0 && (
                 <div>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Part 6 Interview Signals Used
+                    Interview Signals Used
                   </h4>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {selectedPersonaResult.interview_signals_used.map((sig, i) => (

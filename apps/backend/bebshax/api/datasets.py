@@ -21,7 +21,7 @@ from bebshax.api.jobs import cancel_job_async, get_job_async, replay_job_input, 
 from bebshax.auth.models import Users
 from bebshax.datasets.orm import DatasetVersions
 from bebshax.datasets.parser import DatasetParseError
-from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES
+from bebshax.datasets.security import MAX_DATASET_FILE_SIZE_BYTES, DatasetSecurityError
 from bebshax.datasets.service import DatasetService, dataset_refresh_input
 from bebshax.db.models import DatasetSources, Studies
 from bebshax.personas.ml_adapter import get_persona_ml
@@ -294,6 +294,11 @@ async def ingest_dataset_url(
         )
     except APIError:
         raise
+    except DatasetSecurityError as exc:
+        # A blocked URL is the guard doing its job, not a server fault: no
+        # traceback (which also printed local paths) — live 2026-09-14.
+        logger.info("dataset URL refused for %r: %s", payload.name, exc)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except ValueError as exc:
         # Our own validation/SSRF messages are user-facing by design.
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -555,6 +560,9 @@ async def ingest_study_dataset_url(
         )
     except APIError:
         raise
+    except DatasetSecurityError as exc:
+        logger.info("dataset URL refused for study %s: %s", study_id, exc)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:

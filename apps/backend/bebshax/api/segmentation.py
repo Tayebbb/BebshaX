@@ -44,8 +44,8 @@ class CompareSegmentsRequest(BaseModel):
     segment_ids: list[str] = Field(..., min_length=2, max_length=6)
 
 
-def _serialize_run(r: SegmentationRuns) -> dict[str, Any]:
-    return {
+def _serialize_run(r: SegmentationRuns, *, current_inputs: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = {
         "id": r.id,
         "study_id": r.study_id,
         "user_id": r.user_id,
@@ -60,6 +60,17 @@ def _serialize_run(r: SegmentationRuns) -> dict[str, Any]:
         "completed_at": r.completed_at.isoformat() if r.completed_at else None,
         "created_at": r.created_at.isoformat() if r.created_at else None,
     }
+    if current_inputs is not None:
+        # Segments outlive their inputs silently otherwise (live 2026-09-14: the
+        # dataset was deleted, three "Data Backed" cards stayed with no warning).
+        recorded = (r.configuration or {}).get("input_versions")
+        present = {item["id"] for item in current_inputs.get("datasets", [])}
+        payload["missing_datasets"] = [
+            {"dataset_id": item.get("dataset_id"), "name": item.get("name")}
+            for item in (r.dataset_versions or []) if item.get("dataset_id") not in present
+        ]
+        payload["inputs_changed"] = recorded is not None and recorded != current_inputs
+    return payload
 
 
 def _serialize_segment(s: MarketSegments) -> dict[str, Any]:
@@ -264,7 +275,8 @@ async def list_segmentation_runs(
 
     res = await session.execute(query)
     runs = list(res.scalars().all())
-    return [_serialize_run(r) for r in runs]
+    current_inputs = await capture_segmentation_input_versions(session, study_id, user_id) if runs else None
+    return [_serialize_run(r, current_inputs=current_inputs) for r in runs]
 
 
 @router.get("/{study_id}/segmentation/runs/{run_id}")

@@ -141,7 +141,9 @@ describe('Evidence laboratory presentation', () => {
     expect(header).toHaveStyle({ flexWrap: 'wrap' });
     expect(within(header).getByText('Evidence Laboratory').tagName).toBe('P');
     expect(within(header).getByRole('heading', { level: 1 })).toHaveStyle({ overflowWrap: 'anywhere' });
-    expect(header).toHaveTextContent('sample sources are labeled');
+    expect(header).toHaveTextContent('per-claim support status');
+    // Nothing is a sample here (demo mode is off), so the header must not say so.
+    expect(header).not.toHaveTextContent('sample sources');
   });
 
   it('uses compact shared actions and announces the guarded research request as busy', async () => {
