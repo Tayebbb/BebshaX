@@ -72,9 +72,24 @@ export function rememberStudyRevision(study: Study): void {
   }
 }
 
+/** Key-order-insensitive serialisation. A PATCH response echoes the dict the
+ * client sent (its key order); the next GET reads the same value back from
+ * JSONB, which stores keys in its own canonical order. Comparing the two with
+ * plain JSON.stringify called every rebase a conflict (live 2026-09-14: the
+ * evidence run bumped the revision and the user's next save was refused). */
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).filter((key) => record[key] !== undefined).sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
 const sameDraft = (left: StudyDraft | undefined, right: StudyDraft | undefined): boolean =>
   left !== undefined && right !== undefined
-  && JSON.stringify(studyDraft(left)) === JSON.stringify(studyDraft(right));
+  && canonicalJson(studyDraft(left)) === canonicalJson(studyDraft(right));
 
 /** A server-side operation this tab started (persona generation, script
  * generation) advanced the study revision. Adopt it so the next queued save

@@ -1482,6 +1482,17 @@ export const api = {
     return this.getStudyById(id);
   },
 
+  /** A server-side job this tab started (evidence research, report
+   * projection) advanced the study revision. Re-read the row so the next
+   * queued save targets it instead of bouncing off a 412 first. Safe with a
+   * pending draft: `rememberStudyRevision` refuses to move the base then. */
+  async syncStudyRevision(id: string): Promise<void> {
+    if (this.isMockMode()) return;
+    invalidateStudiesCache();
+    studyDetailCache.invalidate();
+    await this.getStudyById(id).catch(() => null);
+  },
+
   async createStudy(studyData: Partial<Study>): Promise<Study> {
     const user = this.getStoredUser();
     const payload = {

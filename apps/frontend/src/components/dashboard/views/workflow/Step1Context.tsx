@@ -93,7 +93,8 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
       : evidenceProbe.state === 'searching'
       ? 'Looking for supporting evidence…'
       : evidenceProbe.state === 'found'
-      ? `Found ${evidenceProbe.claims} supporting claim${evidenceProbe.claims === 1 ? '' : 's'}` +
+      ? `Found ${evidenceProbe.claims} claim${evidenceProbe.claims === 1 ? '' : 's'}` +
+        ` (${evidenceProbe.supported} supported)` +
         (evidenceProbe.sources > 0
           ? ` from ${evidenceProbe.sources} source${evidenceProbe.sources === 1 ? '' : 's'}`
           : '') +

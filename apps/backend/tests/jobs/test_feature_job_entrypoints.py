@@ -96,11 +96,23 @@ async def test_research_returns_durable_admission_before_slow_planning(feature_j
         repeat = await client.post("/api/studies/feature-study/research", headers={"Idempotency-Key": "research-one"})
         assert repeat.json()["job_id"] == accepted["job_id"]
         assert len(calls) == 1
+        # Without the key, a second request while the run is in flight is
+        # refused: three parallel LLM pipelines for one study were admitted
+        # live (2026-09-14) from a double click plus a reload.
+        concurrent = await client.post("/api/studies/feature-study/research")
+        assert concurrent.status_code == 409, concurrent.text
+        assert concurrent.json()["error_code"] == "research_run_in_progress"
+        assert len(calls) == 1
     finally:
         release.set()
         await asyncio.gather(request, return_exceptions=True)
         if getattr(app.state, "job_runtime", None) is not None:
             await app.state.job_runtime.drain()
+    # Once the run has finished, a new run is admitted again.
+    follow_up = await client.post("/api/studies/feature-study/research")
+    assert follow_up.status_code == 202, follow_up.text
+    if getattr(app.state, "job_runtime", None) is not None:
+        await app.state.job_runtime.drain()
 
 
 @pytest.mark.parametrize("newer_status", [None, "archived", "completed"])

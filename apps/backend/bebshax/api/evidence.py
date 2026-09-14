@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -34,6 +34,11 @@ router = APIRouter(prefix="/studies", tags=["evidence"])
 # ceiling keeps a single request from scanning/serializing whole corpora.
 DEFAULT_SEMANTIC_TOP_K = 6
 MAX_SEMANTIC_TOP_K = 50
+# ResearchRuns.status values that mean "this run is over" (mirrors the
+# reconciliation list in _reconcile_research_job). Anything else is in flight.
+_TERMINAL_RUN_STATES = frozenset({"completed", "failed", "cancelled", "interrupted", "timed_out"})
+# Longer than any legitimate run (the job budget is minutes, not hours).
+_RUN_STALE_AFTER = timedelta(minutes=30)
 
 
 class SemanticSearchRequest(BaseModel):
@@ -151,6 +156,20 @@ async def start_study_research(
             raise APIError(404, "Study not found.", error_code="not_found")
         if any(getattr(current, name) != value for name, value in study_input.items()):
             raise APIError(409, "The study changed before research admission.", error_code="research_input_changed")
+        # One run at a time per study: three parallel LLM pipelines for one
+        # study were admitted live (2026-09-14) by clicking Run twice and a
+        # reload; every one of them then exhausted the providers.
+        in_flight = await db_session.scalar(select(ResearchRuns.id).where(
+            ResearchRuns.study_id == study_id, ResearchRuns.user_id == owner_id,
+            ResearchRuns.status.notin_(tuple(_TERMINAL_RUN_STATES)),
+            # A row orphaned by a crash (never reconciled) must not lock the study forever.
+            ResearchRuns.created_at > datetime.now(timezone.utc) - _RUN_STALE_AFTER,
+        ).limit(1))
+        if in_flight is not None:
+            raise APIError(
+                409, "An evidence research run is already in progress for this study. Wait for it to finish or cancel it first.",
+                error_code="research_run_in_progress",
+            )
         db_session.add(ResearchRuns(
             id=run_id, study_id=study_id, user_id=owner_id, status="queued", current_step="queued",
             step_progress={"summary": {"job_id": job["job_id"]}},

@@ -90,12 +90,12 @@ describe('Step 1 evidence probe wiring', () => {
 
   it('does not promise observed persona claims when study evidence is found', async () => {
     vi.spyOn(api, 'getEvidenceSummary').mockResolvedValue(evidenceSummary({
-      research_status: 'completed', total_claims: 2, total_sources: 1,
+      research_status: 'completed', total_claims: 2, total_sources: 1, supported_count: 1,
     }));
 
     renderWorkflow();
 
-    expect(await screen.findByText(/Found 2 supporting claims from 1 source.*review them in the Evidence Laboratory/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Found 2 claims \(1 supported\) from 1 source.*review them in the Evidence Laboratory/i)).toBeInTheDocument();
     expect(screen.queryByText(/personas can cite them/i)).toBeNull();
   });
 });

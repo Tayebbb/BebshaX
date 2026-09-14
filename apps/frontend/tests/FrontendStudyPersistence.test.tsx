@@ -4,7 +4,7 @@ import { api } from '../src/services/api';
 import { StudyWorkflowView } from '../src/components/dashboard/views/StudyWorkflowView';
 import type { Study } from '../src/types';
 import { clearRouteTimings, readRouteTimings, setRouteTimingEnabled, startRouteTiming } from '../src/performance/routeTiming';
-import { adoptStudyRevision, getStudyDraftRetry, STUDY_SAVE_CHANGED } from '../src/services/studyPersistence';
+import { adoptStudyRevision, canonicalJson, getStudyDraftRetry, knownStudyRevision, STUDY_SAVE_CHANGED } from '../src/services/studyPersistence';
 
 const study = {
   id: 'study-revision', revision: 1, user_id: 'study-owner', title: 'Revision study', type: 'interviews',
@@ -365,6 +365,39 @@ describe('Frontend canonical study persistence', () => {
     expect(patches[0][1]?.headers).toMatchObject({ 'If-Match': '"1"' });
     expect(patches[1][1]?.headers).toMatchObject({ 'If-Match': '"2"' });
     expect(api.getPendingStudyDraft(study.id)).toBeUndefined();
+  });
+
+  it('still rebases when JSONB hands the same history back with its keys in another order', async () => {
+    // Live 2026-09-14: the evidence run bumped the revision; the PATCH response
+    // had echoed the client's key order, the reload came back from JSONB in
+    // canonical order, and the byte-wise comparison called that a conflict —
+    // the user's next save was refused and the approval + roles were lost.
+    const clientOrder = [{ id: 'm1', role: 'user', content: 'Idea', timestamp: '10:00 am', isGoalCard: false }];
+    const jsonbOrder = [{ id: 'm1', role: 'user', content: 'Idea', isGoalCard: false, timestamp: '10:00 am' }];
+    vi.mocked(fetch).mockResolvedValueOnce(response({ ...study, copilot_messages: clientOrder }));
+    await api.getStudy(study.id);
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response({ detail: 'Study changed; reload before saving.' }, 412))
+      .mockResolvedValueOnce(response({ ...study, revision: 2, status: 'in_progress', copilot_messages: jsonbOrder }))
+      .mockResolvedValueOnce(response({ ...study, revision: 3, copilot_messages: jsonbOrder, step: 2 }));
+
+    await expect(api.updateStudy(study.id, { step: 2 })).resolves.toMatchObject({ revision: 3 });
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(2);
+    expect(canonicalJson({ b: [{ y: 1, x: undefined }], a: 'z' })).toBe('{"a":"z","b":[{"y":1}]}');
+  });
+
+  it('adopts the revision a finished background job wrote so the next save needs no retry', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response(study));
+    await api.getStudy(study.id);
+    vi.mocked(fetch).mockResolvedValueOnce(response({ ...study, revision: 4, status: 'in_progress' }));
+    await api.syncStudyRevision(study.id);
+    expect(knownStudyRevision(study.id)).toBe(4);
+
+    vi.mocked(fetch).mockResolvedValueOnce(response({ ...study, revision: 5, step: 2 }));
+    await api.updateStudy(study.id, { step: 2 });
+    const patches = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'PATCH');
+    expect(patches).toHaveLength(1);
+    expect(patches[0][1]?.headers).toMatchObject({ 'If-Match': '"4"' });
   });
 
   it('gives up the rebase when the reload itself fails and keeps the draft', async () => {

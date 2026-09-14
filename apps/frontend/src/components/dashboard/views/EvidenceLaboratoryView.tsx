@@ -146,18 +146,33 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
     loadAllData();
   }, [studyId]);
 
-  const handleRunResearch = async () => {
+  // A run that was in flight when the page (re)loaded is followed exactly like
+  // one started here (live 2026-09-14: after a reload the button re-enabled and
+  // nothing showed the run executing, so users started more runs). A latest
+  // run that failed is said on the page, not only in Research History.
+  useEffect(() => {
+    const latest = summary?.latest_run;
+    if (!latest || researchPendingRef.current) return;
+    if (!isResearchRunSettled(latest)) {
+      void followRun(latest);
+    } else if (latest.status === 'failed' && !researchStatusText && !loadError) {
+      setLoadError(researchFailureText(latest));
+    }
+    // Only the summary's identity matters: following the same run twice is prevented by the ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary?.latest_run?.id, summary?.latest_run?.status]);
+
+  type FollowableRun = Pick<ResearchRun, 'id' | 'status' | 'current_step' | 'query_count' | 'source_count' | 'claim_count' | 'error_message'>;
+
+  /** Poll `accepted` to a terminal state, then reload and report the outcome. */
+  const followRun = async (accepted: FollowableRun) => {
     const scope = scopeRef.current;
     if (!scope.active || researchPendingRef.current) return;
     researchPendingRef.current = true;
     setIsRunningResearch(true);
     setLoadError(null);
-    setResearchStatusText('Researching — this usually takes 30–90 seconds on free providers…');
-
     try {
-      const accepted = await api.startResearch(studyId, scope.controller.signal);
-      if (!scope.active) return;
-      let run = accepted;
+      let run: FollowableRun = accepted;
       if (!isResearchRunSettled(run)) {
         setResearchStatusText(researchProgressText(run));
         run = await pollSerial(
@@ -200,6 +215,34 @@ export const EvidenceLaboratoryView: React.FC<EvidenceLaboratoryViewProps> = ({
     } finally {
       if (scope.active) { researchPendingRef.current = false; setIsRunningResearch(false); }
     }
+  };
+
+  const handleRunResearch = async () => {
+    const scope = scopeRef.current;
+    if (!scope.active || researchPendingRef.current) return;
+    setLoadError(null);
+    setResearchStatusText('Researching — this usually takes 30–90 seconds on free providers…');
+    setIsRunningResearch(true);
+    let accepted: ResearchRun;
+    try {
+      accepted = await api.startResearch(studyId, scope.controller.signal);
+    } catch (err: any) {
+      if (!scope.active) return;
+      setIsRunningResearch(false);
+      setResearchStatusText('');
+      // The server refuses a second concurrent run (409): show the one running.
+      if (err?.status === 409) {
+        await loadAllData();
+        if (!scope.active) return;
+        setLoadError(err?.message || 'An evidence research run is already in progress for this study.');
+        return;
+      }
+      setLoadError(`Research run failed: ${err?.message || 'the request did not complete.'} Nothing was added — you can retry.`);
+      return;
+    }
+    if (!scope.active) return;
+    setIsRunningResearch(false);
+    await followRun(accepted);
   };
 
   const handleInspectClaim = async (claimId: string) => {

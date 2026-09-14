@@ -436,6 +436,11 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           evidenceProbeTimerRef.current = setTimeout(() => {
             void probeEvidence(attemptsLeft - 1, epoch);
           }, EVIDENCE_PROBE_INTERVAL_MS);
+        } else if (attemptsLeft < EVIDENCE_PROBE_ATTEMPTS) {
+          // The run we were following has ended; its completion bumped the
+          // study revision server-side (live 2026-09-14: the user's very next
+          // save was refused with 412 and the approval + roles were lost).
+          void api.syncStudyRevision(studyId);
         }
       } catch {
         if (epoch.active) setEvidenceProbe({ state: 'unavailable' });
@@ -615,6 +620,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       if (!epoch.active) return;
       if (roles && roles.length > 0) {
         setSuggestedRoles(roles);
+        // Roles used to live only in this tab until "Generate Personas": a
+        // reload (or a discarded draft) lost them (live 2026-09-14).
+        if (studyId && !isReadOnly) api.updateStudy(studyId, { suggested_roles: roles }).catch(() => {});
       } else {
         setRoleError('No roles came back for this goal. Retry, or add your own detail in the chat above.');
       }
@@ -690,14 +698,23 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         // The save banner reports this; research still runs on the stored prompt.
       }
       if (!epoch.active) return;
-      if (evidenceProbeTimerRef.current) clearTimeout(evidenceProbeTimerRef.current);
-      setEvidenceProbe({ state: 'searching' });
-      api
-        .triggerStudyResearch(studyId)
-        .catch(() => {})
-        .finally(() => {
-          if (epoch.active) return probeEvidence(EVIDENCE_PROBE_ATTEMPTS, epoch);
-        });
+      // Re-approving the same goal must not spawn another research run: the
+      // claims (or the run in flight) already belong to this goal, and a new
+      // run was invisible on Step 1 (live 2026-09-14). A changed goal, a run
+      // that never happened or one that failed does start research.
+      const evidenceCurrent = !switchingGoal
+        && (evidenceProbe.state === 'found' || evidenceProbe.state === 'empty'
+          || evidenceProbe.state === 'searching' || evidenceProbe.state === 'checking');
+      if (!evidenceCurrent) {
+        if (evidenceProbeTimerRef.current) clearTimeout(evidenceProbeTimerRef.current);
+        setEvidenceProbe({ state: 'searching' });
+        api
+          .triggerStudyResearch(studyId)
+          .catch(() => {})
+          .finally(() => {
+            if (epoch.active) return probeEvidence(EVIDENCE_PROBE_ATTEMPTS, epoch);
+          });
+      }
     }
 
     await rolesLoading;

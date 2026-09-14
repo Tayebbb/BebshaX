@@ -7,7 +7,7 @@ import { EvidenceSummary, ResearchStatus } from '../../../../types';
 export type EvidenceProbe =
   | { state: 'checking' }
   | { state: 'searching' }
-  | { state: 'found'; claims: number; sources: number }
+  | { state: 'found'; claims: number; sources: number; supported: number }
   | { state: 'empty'; noLiveEvidence?: boolean; provider?: string }
   | { state: 'failed'; message?: string; errorCode?: string }
   | { state: 'timeout' }
@@ -37,8 +37,13 @@ export const nextEvidenceProbe = (
   // Provenance markers the run wrote (plan/queries source, evidence provider,
   // no_live_evidence, claims_status, error_code) — see research/service.py.
   const runSummary = (run?.step_progress as { summary?: Record<string, unknown> } | undefined)?.summary ?? {};
-  if ((summary.total_claims ?? 0) > 0) {
-    return { state: 'found', claims: summary.total_claims, sources: summary.total_sources ?? 0 };
+  // The newest run's state wins over claims older runs left behind: a re-run in
+  // flight, or one that just failed, was hidden behind "Found N claims" (live
+  // 2026-09-14 the line never moved while a 3-minute run ran and then failed).
+  if (isResearchInFlight(run?.status ?? summary.research_status)) {
+    // Polling is bounded, so the last attempt must resolve to something true
+    // instead of leaving the line on "Looking for…" forever.
+    return attemptsLeft > 0 ? { state: 'searching' } : { state: 'timeout' };
   }
   if (run?.status === 'failed') {
     const errorCode = typeof runSummary.error_code === 'string' ? runSummary.error_code : undefined;
@@ -48,10 +53,13 @@ export const nextEvidenceProbe = (
       ...(errorCode ? { errorCode } : {}),
     };
   }
-  if (isResearchInFlight(run?.status ?? summary.research_status)) {
-    // Polling is bounded, so the last attempt must resolve to something true
-    // instead of leaving the line on "Looking for…" forever.
-    return attemptsLeft > 0 ? { state: 'searching' } : { state: 'timeout' };
+  if ((summary.total_claims ?? 0) > 0) {
+    return {
+      state: 'found',
+      claims: summary.total_claims,
+      sources: summary.total_sources ?? 0,
+      supported: summary.supported_count ?? 0,
+    };
   }
   if (run) {
     const provider = typeof runSummary.evidence_provider === 'string' ? runSummary.evidence_provider : undefined;

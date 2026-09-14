@@ -115,13 +115,23 @@ describe('Blocker 1 — evidence probe speaks the backend status vocabulary', ()
     expect(nextEvidenceProbe(summary({ research_status: 'idle' }), 8)).toEqual({ state: 'not_run' });
   });
 
-  it('reports found claims regardless of run status', () => {
+  it('reports found claims with their supported count once the latest run is over', () => {
     expect(
       nextEvidenceProbe(
-        summary({ total_claims: 12, total_sources: 4, latest_run: { status: 'completed' } as any }),
+        summary({ total_claims: 12, total_sources: 4, supported_count: 5, latest_run: { status: 'completed' } as any }),
         8,
       ),
-    ).toEqual({ state: 'found', claims: 12, sources: 4 });
+    ).toEqual({ state: 'found', claims: 12, sources: 4, supported: 5 });
+  });
+
+  it('lets a newer in-flight or failed run win over claims older runs left behind', () => {
+    // Live 2026-09-14: "Found 6 supporting claims" never moved while a re-run
+    // ran for three minutes and then failed.
+    const older = { total_claims: 6, total_sources: 4, supported_count: 3 };
+    expect(nextEvidenceProbe(summary({ ...older, latest_run: { status: 'searching_evidence' } as any }), 8))
+      .toEqual({ state: 'searching' });
+    expect(nextEvidenceProbe(summary({ ...older, latest_run: { status: 'failed', error_message: 'llm_error' } as any }), 8))
+      .toEqual({ state: 'failed', message: 'llm_error' });
   });
 });
 

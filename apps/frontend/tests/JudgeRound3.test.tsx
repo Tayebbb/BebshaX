@@ -289,10 +289,11 @@ describe('Blocker 4 — step 1 reports the evidence attempt', () => {
     expect(screen.getByText(/Looking for supporting evidence/i)).toBeInTheDocument();
   });
 
-  it('reports the claim count once evidence is found', () => {
-    renderStep1({ state: 'found', claims: 12, sources: 4 });
+  it('reports the claim count and how many are supported once evidence is found', () => {
+    // Live 2026-09-14: "Found 6 supporting claims" while only 3 were supported.
+    renderStep1({ state: 'found', claims: 12, sources: 4, supported: 5 });
 
-    expect(screen.getByText(/Found 12 supporting claims from 4 sources/i)).toBeInTheDocument();
+    expect(screen.getByText(/Found 12 claims \(5 supported\) from 4 sources/i)).toBeInTheDocument();
   });
 
   it('keeps synthetic source profiles unvalidated when a run found nothing', () => {

@@ -191,4 +191,41 @@ describe('EvidenceLaboratoryView Component', () => {
     expect(await screen.findByText('Searching public sources for evidence… (5 queries)')).toBeInTheDocument();
     expect(screen.getByText('Provider quota exhausted')).toBeInTheDocument();
   });
+
+  const summaryWithRun = async (run: Partial<ResearchRun>) => {
+    const real = await api.getEvidenceSummary('study_test_1');
+    return { ...real, latest_run: { ...acceptedRun(run) } as never };
+  };
+
+  it('follows a run that was already in flight when the page loaded instead of offering a second one', async () => {
+    // Live 2026-09-14: after a reload mid-run the button re-enabled and nothing
+    // showed the run executing; three parallel runs were started for one study.
+    vi.spyOn(api, 'getEvidenceSummary').mockResolvedValue(await summaryWithRun({ id: 'run_live', status: 'searching_evidence', current_step: 'searching_evidence', query_count: 2 }));
+    const getRun = vi.spyOn(api, 'getResearchRun')
+      .mockResolvedValueOnce(acceptedRun({ id: 'run_live', status: 'completed', current_step: 'completed', query_count: 2, source_count: 1, claim_count: 2 }));
+    const start = vi.spyOn(api, 'startResearch');
+    render(<EvidenceLaboratoryView studyId="study_test_1" />);
+
+    expect(await screen.findByText(/Research complete — 2 claims extracted from 1 sources/)).toBeInTheDocument();
+    expect(getRun).toHaveBeenCalledWith('study_test_1', 'run_live', expect.any(AbortSignal));
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('announces a latest run that failed on the page, not only in the history tab', async () => {
+    vi.spyOn(api, 'getEvidenceSummary').mockResolvedValue(await summaryWithRun({ id: 'run_dead', status: 'failed', current_step: 'failed', error_message: 'AllCandidatesFailed' }));
+    render(<EvidenceLaboratoryView studyId="study_test_1" />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Research run failed: AllCandidatesFailed');
+    expect(screen.getByRole('button', { name: /Run Research/i })).toBeEnabled();
+  });
+
+  it('reports the server refusing a concurrent run instead of a generic failure', async () => {
+    vi.spyOn(api, 'startResearch').mockRejectedValue(Object.assign(new Error('An evidence research run is already in progress for this study. Wait for it to finish or cancel it first.'), { status: 409 }));
+    render(<EvidenceLaboratoryView studyId="study_test_1" />);
+    await screen.findByText(/Students experience significant fragmentation/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /Run Research/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('already in progress');
+  });
 });
