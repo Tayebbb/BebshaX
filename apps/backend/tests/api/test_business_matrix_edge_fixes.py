@@ -21,6 +21,7 @@ from starlette.testclient import TestClient
 from bebshax.auth.models import Users
 from bebshax.db.models import Base, Personas, Studies, StudyReports
 from bebshax.evaluation.ai_judge import JUDGE_NOTHING_TO_REVIEW, judge_study
+from bebshax.interview.orm import Conversations, ConversationTurns
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.router import PoolRouter
@@ -69,6 +70,22 @@ async def _add_persona(app, study_id: str) -> None:
             )
         )
         await session.commit()
+
+
+async def _add_interview_turn(app, study_id: str) -> str:
+    """One completed interview with a single persona answer: the smallest real finding."""
+    interview_id = f"conv_{study_id[-8:]}"
+    async with app.state.db_sessionmaker() as session:
+        session.add(
+            Conversations(
+                id=interview_id, study_id=study_id, user_id=_FIXTURE_USER, persona_id=f"per_{study_id[-8:]}",
+                objective="demand_validation", status="completed", turn_count=2, question_count=1,
+            )
+        )
+        session.add(ConversationTurns(id=f"turn_{study_id[-8:]}_1", conversation_id=interview_id, turn_number=1, role="interviewer", content="How do you arrange walks today?"))
+        session.add(ConversationTurns(id=f"turn_{study_id[-8:]}_2", conversation_id=interview_id, turn_number=2, role="persona", content="I text a neighbour the night before; it falls through about once a week."))
+        await session.commit()
+    return interview_id
 
 
 async def _add_report_row(app, study_id: str) -> None:
@@ -147,7 +164,7 @@ async def test_report_generation_refuses_a_study_with_no_data(api_test_app: Test
     res = api_test_app.post(f"/api/studies/{study['id']}/reports/generate", json={}, headers=auth_headers)
     assert res.status_code == 400, res.text
     assert res.json()["error_code"] == REPORT_REQUIRES_DATA
-    assert "run the pipeline" in res.json()["detail"]
+    assert "run interviews or research" in res.json()["detail"]
 
     # Nothing was spent and nothing was written: no row, study not "completed".
     assert len(_fake_adapter(api_test_app.app).requests) == calls_before
@@ -166,21 +183,48 @@ async def test_report_job_surfaces_missing_data_as_a_failed_job(api_test_app: Te
     )
     assert job["status"] == "failed"
     assert job["error_code"] == REPORT_REQUIRES_DATA
-    assert "run the pipeline" in job["error"]
+    assert "run interviews or research" in job["error"]
     assert job["result"] is None and job["finished_at"] is not None
 
 
-async def test_report_generation_proceeds_with_a_single_persona(api_test_app: TestClient, auth_headers):
-    """The guard must not be over-eager: one primary artefact is enough."""
+async def test_report_generation_refuses_personas_without_any_findings(api_test_app: TestClient, auth_headers):
+    """Live 2026-09-14: five personas, no interviews, no evidence produced a report
+    asserting a confirmed survey and a 78 % demand signal. The panel is not data."""
     study = _create_study(api_test_app, auth_headers, prompt="A dog-walking app for busy professionals in Berlin")
     await _add_persona(api_test_app.app, study["id"])
+    calls_before = len(_fake_adapter(api_test_app.app).requests)
+
+    res = api_test_app.post(f"/api/studies/{study['id']}/reports/generate", json={}, headers=auth_headers)
+    assert res.status_code == 400, res.text
+    assert res.json()["error_code"] == REPORT_REQUIRES_DATA
+    assert len(_fake_adapter(api_test_app.app).requests) == calls_before
+    assert api_test_app.get(f"/api/studies/{study['id']}/reports", headers=auth_headers).json() == []
+
+
+async def test_report_generation_proceeds_with_one_interview_turn_and_strips_ungrounded_sections(
+    api_test_app: TestClient, auth_headers,
+):
+    """One answered interview question admits a report; sections the captured
+    inputs cannot support (evidence, datasets, behavioral results, invented turn
+    citations) are removed and recorded, and scores stay measured or null."""
+    study = _create_study(api_test_app, auth_headers, prompt="A dog-walking app for busy professionals in Berlin")
+    await _add_persona(api_test_app.app, study["id"])
+    interview_id = await _add_interview_turn(api_test_app.app, study["id"])
     _install_router(
         api_test_app.app,
         json.dumps(
             {
-                "executive_summary": "One synthetic persona only; no interviews or evidence were available.",
-                "key_findings": ["Lena Vogel (persona) is time-poor and books services from her phone."],
-                "limitations": "No interviews, no evidence claims, no datasets.",
+                "executive_summary": "One synthetic interview; the persona relies on an informal neighbour arrangement.",
+                "key_findings": ["Lena Vogel (persona) reports her current arrangement fails weekly."],
+                "evidence_findings": [{"title": "Survey of 100 owners", "claim": "75% want an app", "status": "Confirmed"}],
+                "dataset_findings": [{"name": "owners.csv", "insight": "invented"}],
+                "behavioral_results": [{"test_type": "A/B", "scenario": "invented", "average_likelihood": 0.75}],
+                "interview_findings": [
+                    {"topic": "reliability", "finding": "Informal cover fails weekly.", "turn_citations": [f"{interview_id} per_x turn 2"], "is_synthetic": True},
+                    {"topic": "price", "finding": "Would pay 18 EUR.", "turn_citations": ["conv_doesnotexist turn 4"], "is_synthetic": False},
+                ],
+                "limitations": "Single synthetic interview; no evidence or datasets.",
+                "metrics": {"demand_score": 0.78, "confidence_score": 0.85},
             }
         ),
     )
@@ -188,7 +232,14 @@ async def test_report_generation_proceeds_with_a_single_persona(api_test_app: Te
     res = api_test_app.post(f"/api/studies/{study['id']}/reports/generate", json={}, headers=auth_headers)
     assert res.status_code == 201, res.text
     body = res.json()
-    assert body["metrics"]["synthesis_source"] == "llm" and body["metrics"]["total_personas"] == 1
+    assert body["metrics"]["synthesis_source"] == "llm" and body["metrics"]["total_interviews"] == 1
+    assert body["evidence_findings"] == [] and body["dataset_findings"] == [] and body["behavioral_results"] == []
+    assert [item["topic"] for item in body["interview_findings"]] == ["reliability"]
+    grounding = body["metrics"]["grounding"]
+    assert set(grounding["removed_sections"]) == {"evidence_findings", "dataset_findings", "behavioral_results", "interview_findings"}
+    assert "turns" in grounding["sources_present"] and "evidence_claims" not in grounding["sources_present"]
+    # Interview turns are a measurable input, so the model's scores are kept as labelled synthetic signals.
+    assert body["metrics"]["demand_score"] == 0.78 and grounding["scores_nulled"] == []
 
 
 # ---------------------------------------------------------------------------

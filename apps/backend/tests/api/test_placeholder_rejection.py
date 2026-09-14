@@ -12,6 +12,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from bebshax.db.models import Personas
+from bebshax.interview.orm import Conversations, ConversationTurns
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.router import PoolRouter
@@ -219,6 +220,9 @@ async def _study_with_persona(client: TestClient, headers) -> str:
     study_id = _study(client, headers)
     async with client.app.state.db_sessionmaker() as session:
         session.add(Personas(id=f"per_{study_id[-8:]}", study_id=study_id, user_id=_FIXTURE_USER, owner_id=_FIXTURE_USER, name="Lena Vogel", archetype="Time-poor dog owner"))
+        # Reports need a finding (personas alone are refused); one answered turn suffices.
+        session.add(Conversations(id=f"conv_{study_id[-8:]}", study_id=study_id, user_id=_FIXTURE_USER, persona_id=f"per_{study_id[-8:]}", objective="demand_validation", status="completed", turn_count=1))
+        session.add(ConversationTurns(id=f"turn_{study_id[-8:]}", conversation_id=f"conv_{study_id[-8:]}", turn_number=1, role="persona", content="I book everything from my phone between meetings."))
         await session.commit()
     return study_id
 

@@ -249,6 +249,70 @@ def _normalize_report_fields(report_data: dict[str, Any]) -> dict[str, Any]:
     return fields
 
 
+# Structured sections and the manifest keys whose records must exist for the
+# section to be admissible. A section is not "supported" by prose elsewhere.
+_SECTION_GROUNDING: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("evidence_findings", ("evidence_claims", "evidence_sources")),
+    ("dataset_findings", ("datasets",)),
+    ("market_segments_summary", ("segments",)),
+    ("strongest_segments", ("segments",)),
+    ("interview_findings", ("turns",)),
+    ("behavioral_results", ("behavioral_runs", "behavioral_result_ids")),
+    ("pricing_signals", ("turns", "behavioral_result_ids", "datasets", "evidence_claims")),
+)
+_MEASURED_SCORES = ("demand_score", "confidence_score")
+
+
+def ground_report_fields(fields: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
+    """Drop structured sections the captured inputs cannot support and null the
+    scores when nothing measurable was supplied.
+
+    Seen live (2026-09-14): a study with five personas, no interviews and no
+    evidence received a report asserting a "confirmed" survey of 100 students,
+    quoted interview turns and a 78 % demand signal. The model was asked to
+    leave such sections empty; this makes that a property of the record.
+    Removed sections and the reason are recorded under ``metrics.grounding`` so
+    the omission is visible in provenance rather than silent.
+    """
+    def present(key: str) -> bool:
+        value = manifest.get(key)
+        return bool(value) if isinstance(value, (list, dict)) else False
+
+    removed: dict[str, list[str]] = {}
+    for section, sources in _SECTION_GROUNDING:
+        if fields.get(section) and not any(present(source) for source in sources):
+            removed[section] = list(sources)
+            fields[section] = []
+    turn_ids = {turn.get("conversation_id") for turn in manifest.get("turns", []) if isinstance(turn, dict)}
+    cited_interviews = fields.get("interview_findings") or []
+    if cited_interviews and turn_ids:
+        kept = []
+        for item in cited_interviews:
+            citations = item.get("turn_citations") if isinstance(item, dict) else None
+            if isinstance(citations, list) and citations and not any(
+                isinstance(citation, str) and any(interview_id and interview_id in citation for interview_id in turn_ids)
+                for citation in citations
+            ):
+                removed.setdefault("interview_findings", []).append("turn_citations_not_in_manifest")
+                continue
+            kept.append(item)
+        fields["interview_findings"] = kept
+    measurable = any(present(key) for key in ("turns", "behavioral_result_ids", "evidence_claims", "datasets", "segments"))
+    metrics = dict(fields.get("metrics") or {})
+    nulled = [score for score in _MEASURED_SCORES if not measurable and metrics.get(score) is not None]
+    for score in nulled:
+        metrics[score] = None
+    metrics["grounding"] = {
+        "sources_present": sorted(key for key in (
+            "evidence_sources", "evidence_claims", "datasets", "segments", "personas", "turns", "behavioral_result_ids",
+        ) if present(key)),
+        "removed_sections": removed,
+        "scores_nulled": nulled,
+    }
+    fields["metrics"] = metrics
+    return fields
+
+
 REPORT_SYSTEM_PROMPT = """You are BebshaX Chief Research Intelligence Officer.
 Synthesize the provided research study data into a grounded 20-section research report.
 
@@ -416,11 +480,13 @@ class StudyReportService:
 
         # A report over nothing is a template by construction: the model can only
         # write "no data available", yet the row would mark the study completed.
-        if not any((personas, conversations, evidence_claims, segments, behavioral_results, datasets)):
+        # Personas are the panel, not findings: without interview turns, evidence,
+        # datasets, segments or behavioral results there is nothing to synthesize.
+        if not any((conversation_turns, evidence_claims, segments, behavioral_results, datasets)):
             raise InsufficientInput(
                 REPORT_REQUIRES_DATA,
-                "This study has no personas, interviews, evidence, segments or behavioral results yet — "
-                "run the pipeline before generating a report.",
+                "This study has no interviews, evidence, datasets, segments or behavioral results yet — "
+                "run interviews or research before generating a report.",
             )
 
         # 2. Generate report data before allocating its persisted version.
@@ -444,7 +510,7 @@ class StudyReportService:
         )
 
         # 3. Persist the normalized report and study findings under one short lock.
-        fields = _normalize_report_fields(report_data)
+        fields = ground_report_fields(_normalize_report_fields(report_data), report_data["metrics"]["input_manifest"])
         report_id = f"rep_{uuid.uuid4().hex[:16]}"
         async with self.session.begin():
             if job is not None:

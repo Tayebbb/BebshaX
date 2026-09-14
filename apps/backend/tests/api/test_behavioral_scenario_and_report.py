@@ -19,6 +19,7 @@ from starlette.testclient import TestClient
 
 from bebshax.behavioral.orm import BehavioralTestRuns, BehavioralTests, BehavioralTestScenarios
 from bebshax.db.models import Personas
+from bebshax.interview.orm import Conversations, ConversationTurns
 from bebshax.llm.adapters.base import RouteCandidate
 from bebshax.llm.adapters.fake import FakeAdapter, FakeRoute
 from bebshax.llm.router import PoolRouter
@@ -169,7 +170,12 @@ async def test_run_with_no_scenario_anywhere_is_refused_not_invented(api_test_ap
 
 async def test_report_generation_survives_a_behavioral_test(api_test_app: TestClient, auth_headers):
     study_id = _create_study(api_test_app, auth_headers)
-    await _add_persona(api_test_app.app, study_id)
+    persona_id = await _add_persona(api_test_app.app, study_id)
+    # Reports need a finding (personas alone are refused); one answered turn suffices.
+    async with api_test_app.app.state.db_sessionmaker() as session:
+        session.add(Conversations(id=f"conv_{study_id[-8:]}", study_id=study_id, user_id=_FIXTURE_USER, persona_id=persona_id, objective="demand_validation", status="completed", turn_count=1))
+        session.add(ConversationTurns(id=f"turn_{study_id[-8:]}", conversation_id=f"conv_{study_id[-8:]}", turn_number=1, role="persona", content="A ten-year guarantee would decide it for me."))
+        await session.commit()
     _create_test(api_test_app, auth_headers, study_id, scenario_text=_SCENARIO)
     adapter = _install_router(
         api_test_app.app,
