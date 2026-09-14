@@ -125,6 +125,38 @@ async def test_full_history_reaches_the_model_without_dropping_or_shortening_tur
     assert stored.status == "active"
 
 
+async def test_turn_cap_is_enforced_by_the_server_not_the_client(
+    session_maker: sessionmaker[AsyncSession],
+    stored_persona: PersonaProfile,
+    memory_service: MemoryService,
+    llm_factory: LLMFactory,
+) -> None:
+    """Live 2026-09-14: a reloaded tab kept asking after the cap and the row read
+    8 of 6 turns. The final in-cap exchange reports ``is_finished``; the next
+    question is refused before any model call or write, with the cap named."""
+    llm, adapter = await _roomy_llm(llm_factory, ["First answer.", "Second answer.", "Never reached."])
+    engine = InterviewEngine(llm, session_maker, memory=memory_service)
+    conversation = await engine.start(stored_persona.id, "Two exchanges only", user_id="test-interview-owner")
+    async with session_maker() as session:
+        stored = await session.get(Conversations, conversation.id)
+        assert stored is not None
+        stored.max_turns = 4
+        stored.configuration = {**stored.configuration, "max_turns": 4}
+        await session.commit()
+
+    first = await engine.ask(conversation.id, "How do you plan dinner?")
+    assert first["is_finished"] is False
+    second = await engine.ask(conversation.id, "And on weekends?")
+    assert second["is_finished"] is True and second["turn_count"] == 4
+
+    with pytest.raises(InterviewFinished, match="4-turn limit"):
+        await engine.ask(conversation.id, "One more?")
+    assert len(adapter.requests) == 2
+    state = await _persisted_state(session_maker, conversation)
+    assert state["conversation"]["turn_count"] == 4
+    assert [turn["turn_number"] for turn in state["turns"]] == [1, 2, 3, 4]
+
+
 async def test_identity_prompt_preserves_every_item_in_lists_longer_than_four(
     session_maker: sessionmaker[AsyncSession],
     stored_persona: PersonaProfile,

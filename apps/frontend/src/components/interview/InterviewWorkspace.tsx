@@ -81,6 +81,12 @@ const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+const DEPTH_LABELS: Record<string, string> = {
+  short: 'Short pulse (6 turns)',
+  standard: 'Standard (14 turns)',
+  deep: 'Deep dive (24 turns)',
+};
+
 const initialsOf = (name?: string) =>
   (name || 'P')
     .split(' ')
@@ -124,6 +130,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const railRef = useRef<HTMLElement>(null);
+  const autoSynthesizeRef = useRef(false);
   const railId = useId();
   useDialogA11y(railRef, compactRail && railOpen, () => setRailOpen(false));
   useLayoutEffect(() => {
@@ -247,6 +254,10 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
     interview?.persona_occupation ||
     'Customer persona';
   const isCompleted = interview?.status === 'completed';
+  // The cap is a persisted fact (turn_count/max_turns); the server refuses
+  // further questions past it, so the composer must close on reload too.
+  const capReached =
+    !isCompleted && !!interview && (interview.max_turns || 0) > 0 && (interview.turn_count ?? 0) >= (interview.max_turns || 0);
   const awaitingSynthesis = synthesisUnavailable(interview);
   const synthesisActionLabel = isCompleting
     ? 'Synthesizing interview'
@@ -254,7 +265,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
 
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
-    if (!text || isSending || isCompleting || isLoading || !interview || isCompleted || streamControllerRef.current) return;
+    if (!text || isSending || isCompleting || isLoading || !interview || isCompleted || capReached || streamControllerRef.current) return;
     const requestEpoch = requestEpochRef.current;
     const controller = new AbortController();
     const markTiming = beginOperationTiming();
@@ -306,12 +317,14 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
               ...prev,
               turn_count: res.turn_count ?? prev.turn_count,
               max_turns: res.max_turns ?? prev.max_turns,
-              status: res.is_finished ? 'completed' : prev.status,
               topics_explored: res.topics_explored || prev.topics_explored,
             }
           : prev
       );
       pendingQuestionRef.current = '';
+      // The final in-cap exchange: the server will refuse more questions, so
+      // write the synthesis now instead of showing a closed composer with no insights.
+      if (res.is_finished) autoSynthesizeRef.current = true;
     };
 
     try {
@@ -363,6 +376,10 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
         setStreamText(null);
         setIsSending(false);
         streamControllerRef.current = null;
+        if (autoSynthesizeRef.current) {
+          autoSynthesizeRef.current = false;
+          void completeInterview();
+        }
       }
     }
   };
@@ -530,7 +547,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
 
         <span className={`iv-sim-status${isCompleted ? ' iv-done' : ''}`}>
           <span className="iv-dot" aria-hidden="true" />
-          {isCompleted ? 'Simulation complete' : 'Simulation active'}
+          {isCompleted ? 'Simulation complete' : capReached ? 'Turn limit reached' : 'Simulation active'}
         </span>
 
         <div className="iv-header-actions">
@@ -772,7 +789,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
               </div>
             )}
 
-            {!isCompleted ? (
+            {!isCompleted && !capReached ? (
               <PromptInputBox
                 textareaRef={inputRef}
                 value={input}
@@ -793,9 +810,23 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                 }
                 footer="Every reply carries its real model route"
               />
+            ) : capReached ? (
+              <div className="iv-composer-note" role="status">
+                {isCompleting
+                  ? 'Turn limit reached — synthesizing the insights…'
+                  : `Turn limit reached (${turnCount} of ${maxTurns}). Complete the interview to synthesize its insights.`}
+                {!isCompleting && (
+                  <button type="button" className="iv-ghost-btn iv-primary" onClick={completeInterview} disabled={isSending} style={{ marginLeft: 12 }}>
+                    <Sparkles size={14} aria-hidden="true" />
+                    <span className="iv-label">Complete &amp; synthesize</span>
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="iv-composer-note">
-                Interview complete — the transcript is read-only. Insights are in the panel.
+                {awaitingSynthesis
+                  ? 'Interview complete — the transcript is read-only. The synthesis has not been written yet; retry it from the panel.'
+                  : 'Interview complete — the transcript is read-only. Insights are in the panel.'}
               </div>
             )}
           </div>
@@ -823,11 +854,11 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
             <div className="iv-kv">
               <div className="iv-kv-row">
                 <span className="iv-kv-k">Objective</span>
-                <span className="iv-kv-v">{interview.objective}</span>
+                <span className="iv-kv-v">{interview.custom_objective?.trim() || interview.objective}</span>
               </div>
               <div className="iv-kv-row">
                 <span className="iv-kv-k">Depth</span>
-                <span className="iv-kv-v iv-mono">{interview.length_tier}</span>
+                <span className="iv-kv-v">{DEPTH_LABELS[interview.length_tier] ?? interview.length_tier}</span>
               </div>
               <div className="iv-kv-row">
                 <span className="iv-kv-k">Turns</span>

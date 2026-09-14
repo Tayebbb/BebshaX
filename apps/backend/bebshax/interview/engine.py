@@ -1202,6 +1202,13 @@ class InterviewEngine:
 
             if conversation.status == "completed":
                 raise InterviewFinished("This interview has already been completed.")
+            # The cap is a persisted fact (turn_count/max_turns), not client state:
+            # live 2026-09-14 a reloaded tab kept asking and reached 8 of 6 turns.
+            if conversation.max_turns and (conversation.turn_count or 0) >= conversation.max_turns:
+                raise InterviewFinished(
+                    f"This interview has reached its {conversation.max_turns}-turn limit. "
+                    "Complete it to synthesize the insights."
+                )
 
             # Load Persona: check if rich Part 5 Persona or legacy PersonaProfile
             persona = await session.get(Personas, conversation.persona_id)

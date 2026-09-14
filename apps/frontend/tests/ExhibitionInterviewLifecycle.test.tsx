@@ -367,6 +367,39 @@ describe('Exhibition interview request lifecycles', () => {
     expect(api.completeStudyInterview).not.toHaveBeenCalled();
   });
 
+  it('synthesizes automatically when the final in-cap turn lands instead of faking completion', async () => {
+    // Live 2026-09-14: the client flipped status to "completed" at the cap without
+    // calling /complete; after a reload the row was still active and accepted turns.
+    vi.mocked(api.sendInterviewMessageStream).mockResolvedValueOnce({
+      ...replyFixture, turn_number: 14, turn_count: 14, max_turns: 14, is_finished: true,
+    });
+    vi.mocked(api.completeStudyInterview).mockResolvedValueOnce({
+      summary: 'Refill purchasing is a chore the persona delegates.',
+      key_findings: ['Delegates refills'],
+      structured_insights: [],
+      source: 'llm',
+    } as never);
+    render(workspace(detailA));
+    await screen.findByText('Saved A answer.');
+    sendQuestion('Last question within the cap.');
+
+    await waitFor(() => expect(api.completeStudyInterview).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Simulation complete')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /Interview question for/i })).not.toBeInTheDocument();
+  });
+
+  it('closes the composer for a reloaded interview at its cap and offers synthesis', async () => {
+    vi.mocked(api.getStudyInterviewDetail).mockResolvedValueOnce({ ...detailA, turn_count: 14, max_turns: 14, status: 'active' });
+    render(workspace(detailA));
+    await screen.findByText('Saved A answer.');
+
+    expect(screen.getByText('Turn limit reached')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /Interview question for/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Turn limit reached (14 of 14). Complete the interview to synthesize its insights.');
+    expect(screen.getAllByRole('button', { name: /Complete & synthesize/i }).length).toBeGreaterThan(0);
+    expect(api.completeStudyInterview).not.toHaveBeenCalled();
+  });
+
   it('ignores an abandoned detail response after interview A to B to A without fetching its persona', async () => {
     const abandoned = deferred<InterviewDetail>();
     vi.mocked(api.getStudyInterviewDetail).mockReturnValueOnce(abandoned.promise);
