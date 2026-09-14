@@ -408,6 +408,36 @@ class PersonaGenerationService:
             await self.session.rollback()
             raise
 
+    async def archive_persona(self, study_id: str, persona_id: str, *, user_id: str) -> Studies:
+        """Remove one persona from the study panel by archiving it.
+
+        Archiving (not deleting) keeps its interviews, memories and any report
+        that cited it intact and attributable; the study's derived persona
+        state and revision are refreshed in the same locked transaction. The
+        workflow used to PATCH ``personas_data`` for this, which the study
+        endpoint rightly ignores as server-derived — so removal never persisted.
+        """
+        try:
+            study = cast(Studies, await lock_persona_parent(self.session, owner_id=user_id, study_id=study_id))
+            persona = (await self.session.execute(
+                select(Personas).where(
+                    Personas.id == persona_id, Personas.study_id == study_id, Personas.owner_id == user_id,
+                    Personas.status != "archived",
+                ).with_for_update()
+            )).scalar_one_or_none()
+            if persona is None:
+                raise ValueError("Persona not found in this study.")
+            persona.status = "archived"
+            persona.updated_at = datetime.now(timezone.utc)
+            await refresh_study_persona_state(self.session, study=study, owner_id=user_id, removed_ids={persona.id})
+            study.updated_at = datetime.now(timezone.utc)
+            await self.session.commit()
+            await self.session.refresh(study)
+            return study
+        except BaseException:
+            await self.session.rollback()
+            raise
+
     async def create_generation_run(
         self,
         study_id: str,
@@ -753,6 +783,9 @@ class PersonaGenerationService:
             stmt = stmt.where(Personas.segment_id == segment_id)
         if status:
             stmt = stmt.where(Personas.status == status)
+        else:
+            # Archived personas left the panel; they stay readable by id for history.
+            stmt = stmt.where(Personas.status != "archived")
         if generation_run_id:
             stmt = stmt.where(Personas.generation_run_id == generation_run_id)
         if search:

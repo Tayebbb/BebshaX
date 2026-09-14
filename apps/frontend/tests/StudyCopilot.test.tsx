@@ -39,6 +39,25 @@ const seedStudyPrompt = (studyId: string, overrides: Partial<Study> = {}) =>
   } as unknown as Study);
 const awaitSeededStudy = () => screen.findByText('Seeded Study');
 
+/** A study whose one persona has already completed an interview: the smallest
+ * state from which a decision report may be generated (reports need findings,
+ * never personas alone — live 2026-09-14). */
+const seedInterviewedStudy = (studyId: string, overrides: Partial<Study> = {}) => {
+  const persona = {
+    id: `per_${studyId}`, name: 'Interviewed Persona', initials: 'IP', role_title: 'Primary User', description: 'Answered five questions.',
+  } as GeneratePersonasResult['personas'][number];
+  seedStudyPrompt(studyId, {
+    personas_data: [persona], persona_ids: [persona.id], persona_count: 1, step: 4,
+    script_questions: ['How do you plan your week today?'], ...overrides,
+  });
+  vi.spyOn(api, 'listStudyInterviews').mockResolvedValue({
+    interviews: [{ id: `iv_${studyId}`, study_id: studyId, persona_id: persona.id, status: 'completed', turn_count: 10, created_at: '2026-01-02T00:00:00.000Z' }],
+    total: 1,
+  });
+  vi.spyOn(api, 'getConversation').mockResolvedValue(null);
+  return persona;
+};
+
 describe('Step 3 mobile layout', () => {
   const renderStep3 = (overrides: Partial<ComponentProps<typeof Step3Script>> = {}) => {
     const props: ComponentProps<typeof Step3Script> = {
@@ -85,13 +104,28 @@ describe('Step 3 mobile layout', () => {
   });
 
   it('shows a compact interview action while retaining approval intent and navigation', () => {
-    const { props } = renderStep3();
+    const { props } = renderStep3({ questions: ['How do you solve this today?'] });
     const approvalButton = screen.getByRole('button', { name: 'Approve Script & Start Interviews' });
 
     expect(approvalButton).toHaveTextContent(/^Start interviews$/);
     expect(approvalButton).toHaveAttribute('aria-label', 'Approve Script & Start Interviews');
     fireEvent.click(approvalButton);
     expect(props.handleStepChange).toHaveBeenCalledWith(4);
+  });
+
+  it('keeps interviews unreachable until the script has at least one filled question', () => {
+    // Live 2026-09-14: an empty script could be "approved", marking step 3 done and
+    // leading to a batch the server refuses (script_required).
+    const empty = renderStep3();
+    const approval = screen.getByRole('button', { name: 'Approve Script & Start Interviews' });
+    expect(approval).toBeDisabled();
+    expect(approval).toHaveAttribute('title', 'Add at least one question first');
+    fireEvent.click(approval);
+    expect(empty.props.handleStepChange).not.toHaveBeenCalled();
+    empty.unmount();
+
+    renderStep3({ questions: ['How do you solve this today?', '   '] });
+    expect(screen.getByRole('button', { name: 'Approve Script & Start Interviews' })).toBeDisabled();
   });
 
   it('wraps a full generation error and keeps retry reachable', () => {
@@ -552,6 +586,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
   });
 
   it('displays the generated report while leaving completion status to the server', async () => {
+    seedInterviewedStudy('study_report_flow');
     const updateSpy = vi.spyOn(api, 'updateStudy').mockResolvedValue({} as any);
     vi.spyOn(api, 'generateStudyReport').mockResolvedValue({
       id: 'rep_1',
@@ -579,7 +614,9 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       expect.objectContaining({ status: 'completed' })
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Generate Decision Report/i }));
+    const generate = await screen.findByRole('button', { name: /Generate Decision Report/i });
+    await waitFor(() => expect(generate).toBeEnabled());
+    fireEvent.click(generate);
 
     await waitFor(() => {
       expect(updateSpy).toHaveBeenCalledWith(
@@ -592,6 +629,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
   });
 
   it('surfaces the report generation error on step 5 without claiming completion', async () => {
+    seedInterviewedStudy('study_report_fail');
     const updateSpy = vi.spyOn(api, 'updateStudy').mockResolvedValue({} as any);
     const generateReport = vi.spyOn(api, 'generateStudyReport')
       .mockRejectedValueOnce(new Error('LLM route exhausted'))
@@ -615,7 +653,9 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Generate Decision Report/i }));
+    const generate = await screen.findByRole('button', { name: /Generate Decision Report/i });
+    await waitFor(() => expect(generate).toBeEnabled());
+    fireEvent.click(generate);
 
     await waitFor(() => {
       expect(screen.getByText(/Report generation failed: LLM route exhausted/i)).toBeInTheDocument();
@@ -684,6 +724,9 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
     });
     render(<StudyWorkflowView studyId="tj6FY3cXDO8oxpuxeAMb" initialStep={2} onExit={vi.fn()} />);
     await awaitSeededStudy();
+    const archive = vi.spyOn(api, 'archiveStudyPersona').mockResolvedValue({
+      study_id: 'tj6FY3cXDO8oxpuxeAMb', study_revision: 7, persona_count: 0, persona_ids: [], personas_data: [],
+    });
 
     const remove = screen.getByRole('button', { name: `Remove persona ${persona.name}` });
     expect(remove.getAttribute('title')).toContain(`Remove persona ${persona.name}`);
@@ -692,13 +735,49 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       expect(remove.getAttribute('title')).toMatch(/read-only/i);
       fireEvent.click(remove);
       expect(screen.getByText(persona.name)).toBeInTheDocument();
+      expect(archive).not.toHaveBeenCalled();
     } else {
       expect(remove).toBeEnabled();
       remove.focus();
       expect(remove).toHaveFocus();
       fireEvent.click(remove);
+      // Removal is a server action (archive), never a local list edit that a reload would undo.
+      await waitFor(() => expect(archive).toHaveBeenCalledWith('tj6FY3cXDO8oxpuxeAMb', persona.id));
       await waitFor(() => expect(screen.queryByText(persona.name)).not.toBeInTheDocument());
     }
+  });
+
+  it('keeps the persona when the server refuses the removal', async () => {
+    const persona = {
+      id: 'persona_removal_refused', name: 'Kept Persona',
+      initials: 'KP', role_title: 'Office Manager', description: 'Synthetic fixture.',
+    } as GeneratePersonasResult['personas'][number];
+    seedStudyPrompt('tj6FY3cXDO8oxpuxeAMb', { personas_data: [persona], persona_ids: [persona.id], persona_count: 1 });
+    vi.spyOn(api, 'archiveStudyPersona').mockRejectedValue(new Error('Removing the persona failed'));
+    render(<StudyWorkflowView studyId="tj6FY3cXDO8oxpuxeAMb" initialStep={2} onExit={vi.fn()} />);
+    await awaitSeededStudy();
+
+    fireEvent.click(screen.getByRole('button', { name: `Remove persona ${persona.name}` }));
+    expect(await screen.findByText(/The persona is still part of the study/i)).toBeInTheDocument();
+    expect(screen.getByText(persona.name)).toBeInTheDocument();
+  });
+
+  it('asks before removing a persona that already has an interview', async () => {
+    const persona = seedInterviewedStudy('tj6FY3cXDO8oxpuxeAMb', { step: 2 });
+    const archive = vi.spyOn(api, 'archiveStudyPersona').mockResolvedValue({
+      study_id: 'tj6FY3cXDO8oxpuxeAMb', study_revision: 8, persona_count: 0, persona_ids: [], personas_data: [],
+    });
+    render(<StudyWorkflowView studyId="tj6FY3cXDO8oxpuxeAMb" initialStep={2} onExit={vi.fn()} />);
+    await awaitSeededStudy();
+    await waitFor(() => expect(api.listStudyInterviews).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: `Remove persona ${persona.name}` }));
+    const dialog = await screen.findByRole('dialog', { name: 'Remove this persona?' });
+    expect(archive).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove persona' }));
+    await waitFor(() => expect(archive).toHaveBeenCalledWith('tj6FY3cXDO8oxpuxeAMb', persona.id));
+    await waitFor(() => expect(screen.queryByText(persona.name)).not.toBeInTheDocument());
   });
 
   it('shows empty state on step 2 when no personas exist and not generating', async () => {
@@ -818,11 +897,14 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       />
     );
 
-    // Honest badge + empty state with a working generation CTA
+    // Honest badge + empty state: without a completed interview the report
+    // cannot be generated, and the CTA says so instead of inviting a failure.
     expect(await screen.findByText('No report generated yet')).toBeInTheDocument();
     expect(screen.getByText('No report yet')).toBeInTheDocument();
-    expect(screen.getByText(/Generate it from your study data/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Generate Decision Report/i })).toBeEnabled();
+    expect(screen.getByText(/Complete at least one interview in the Interviews step first/i)).toBeInTheDocument();
+    const generateButton = screen.getByRole('button', { name: /Generate Decision Report/i });
+    expect(generateButton).toBeDisabled();
+    expect(generateButton).toHaveAttribute('title', 'Complete at least one interview first');
 
     // The previously fabricated report content must never render
     expect(screen.queryByText(/Personas indicate high adoption willingness/i)).not.toBeInTheDocument();
@@ -840,6 +922,7 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
   });
 
   it('generates the report from the step-5 empty state and renders only real report content', async () => {
+    seedInterviewedStudy('study_empty_state_report', { step: 5 });
     vi.spyOn(api, 'generateStudyReport').mockResolvedValue({
       id: 'rep_es_1',
       study_id: 'study_empty_state_report',
@@ -861,7 +944,10 @@ describe('Study Design Copilot LLM Conversational Initiation & Persona Roles Gen
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Generate Decision Report/i }));
+    const generate = await screen.findByRole('button', { name: /Generate Decision Report/i });
+    expect(await screen.findByText(/Generate it from your study data/i)).toBeInTheDocument();
+    await waitFor(() => expect(generate).toBeEnabled());
+    fireEvent.click(generate);
 
     await waitFor(() => {
       expect(screen.getByText('Real summary from study data.')).toBeInTheDocument();

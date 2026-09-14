@@ -295,7 +295,13 @@ describe('Exhibition navigation through the real console shell', () => {
   });
 
   it('does not navigate or save when an old report finishes after study A to B to A navigation', async () => {
-    const studyA = emptyStudyFixture('study_report_a', 'Report Study A');
+    // Study A has one interviewed persona: the minimum from which a report may be generated.
+    const personaA = { id: 'per_report_a', name: 'Interviewed A', initials: 'IA', role_title: 'Primary User', description: 'fixture' };
+    const studyA: Study = {
+      ...emptyStudyFixture('study_report_a', 'Report Study A'),
+      personas_data: [personaA] as Study['personas_data'], persona_ids: [personaA.id], persona_count: 1,
+      script_questions: ['How do you plan your week?'],
+    };
     const studyB = emptyStudyFixture('study_report_b', 'Report Study B');
     const studies = [studyA, studyB];
     const pendingReport = deferred<StudyReport>();
@@ -307,6 +313,12 @@ describe('Exhibition navigation through the real console shell', () => {
       studies.find((study) => study.id === studyId) ?? null
     ));
     vi.spyOn(api, 'getStudyReports').mockResolvedValue([]);
+    vi.spyOn(api, 'listStudyInterviews').mockImplementation(async (studyId) => (
+      studyId === studyA.id
+        ? { interviews: [{ id: 'iv_report_a', study_id: studyA.id, persona_id: personaA.id, status: 'completed', turn_count: 8, created_at: '2026-09-09T11:00:00Z' }], total: 1 }
+        : { interviews: [], total: 0 }
+    ));
+    vi.spyOn(api, 'getConversation').mockResolvedValue(null);
     vi.spyOn(api, 'getEvidenceSummary').mockRejectedValue(new Error('Evidence unavailable in this fixture'));
     const updateStudy = vi.spyOn(api, 'updateStudy').mockResolvedValue(studyA);
     const generateReport = vi.spyOn(api, 'generateStudyReport').mockReturnValue(pendingReport.promise);
@@ -314,8 +326,10 @@ describe('Exhibition navigation through the real console shell', () => {
     await act(async () => { renderShell(`/research/${studyA.id}/step5`); });
     const main = screen.getByRole('main');
     expect(await within(main).findByTitle(studyA.title)).toBeInTheDocument();
+    const generate = within(main).getByRole('button', { name: /Generate Decision Report/i });
+    await waitFor(() => expect(generate).toBeEnabled());
     await act(async () => {
-      fireEvent.click(within(main).getByRole('button', { name: /Generate Decision Report/i }));
+      fireEvent.click(generate);
     });
     expect(generateReport).toHaveBeenCalledWith(studyA.id);
 
@@ -339,7 +353,10 @@ describe('Exhibition navigation through the real console shell', () => {
 
     expect(window.location.pathname).toBe(`/research/${studyA.id}/step1`);
     expect(updateStudy).toHaveBeenCalledTimes(writesBeforeCompletion);
-    expect(within(main).getByRole('button', { name: 'Step 5: Report' })).toHaveAttribute('aria-disabled', 'true');
+    // The abandoned report never lands: the Report step is reachable (the study
+    // has an interviewed panel) but not marked done, and nothing of it renders.
+    expect(within(main).getByRole('button', { name: 'Step 5: Report' })).not.toHaveAttribute('aria-label', expect.stringMatching(/done/));
+    expect(within(main).queryByText(/Decision Report Ready/i)).not.toBeInTheDocument();
     expect(within(main).queryByText('A report from the abandoned visit.')).not.toBeInTheDocument();
   });
 

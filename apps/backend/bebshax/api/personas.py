@@ -385,6 +385,33 @@ async def get_study_persona_endpoint(
     return _serialize_persona(persona, segment_name)
 
 
+@router.delete("/studies/{study_id}/personas/{persona_id}")
+async def archive_study_persona_endpoint(
+    study_id: str,
+    persona_id: str,
+    current_user: Users = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Remove a persona from the study panel (archived, not deleted: its interviews stay attributable).
+
+    Returns the study's refreshed persona state and revision so the client can
+    adopt them without a second round-trip.
+    """
+    await _verify_study_access(study_id, current_user, session, write=True)
+    service = PersonaGenerationService(session)
+    try:
+        study = await service.archive_persona(study_id, persona_id, user_id=current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return {
+        "study_id": study.id,
+        "study_revision": study.revision,
+        "persona_count": study.persona_count,
+        "persona_ids": list(study.persona_ids or []),
+        "personas_data": list(study.personas_data or []),
+    }
+
+
 @router.post("/studies/{study_id}/personas/{persona_id}/regenerate")
 @limiter.limit("10/minute")
 async def regenerate_study_persona_endpoint(

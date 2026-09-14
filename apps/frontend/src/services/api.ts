@@ -3328,6 +3328,29 @@ export const api = {
     };
   },
 
+  /** Remove a persona from the study panel. The server archives it (its
+   * interviews stay attributable) and returns the refreshed derived state plus
+   * the new study revision, which callers must adopt before their next PATCH. */
+  async archiveStudyPersona(
+    studyId: string,
+    personaId: string,
+    signal?: AbortSignal,
+  ): Promise<{ study_id: string; study_revision: number; persona_count: number; persona_ids: string[]; personas_data: unknown[] }> {
+    if (this.isMockMode()) throw new Error('Backend connection required to remove a persona');
+    await waitForStudyWrites(studyId);
+    const res = await fetch(`${API_BASE}/studies/${studyId}/personas/${encodeURIComponent(personaId)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+      signal,
+    });
+    if (!res.ok) throw await apiErrorFrom(res, 'Removing the persona failed');
+    lastKnownLive = true;
+    const body = await res.json();
+    adoptStudyRevision(studyId, body.study_revision);
+    invalidateStudiesCache();
+    return body;
+  },
+
   async deleteStudyPersonaRun(studyId: string, runId: string): Promise<void> {
     if (!this.isMockMode()) {
       try {

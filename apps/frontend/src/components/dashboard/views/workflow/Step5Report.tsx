@@ -14,6 +14,64 @@ export function formatScorePercent(value: unknown): string {
   return `${Math.round(value <= 1 ? value * 100 : value)}%`;
 }
 
+const RECORD_SECTIONS: Array<[keyof StudyReport, string]> = [
+  ['key_findings', 'Key findings'], ['evidence_findings', 'Evidence findings'], ['dataset_findings', 'Dataset findings'],
+  ['market_segments_summary', 'Market segments'], ['persona_overview', 'Persona overview'], ['interview_findings', 'Interview findings'],
+  ['major_pain_points', 'Pain points'], ['customer_needs', 'Customer needs'], ['behavioral_results', 'Behavioral results'],
+  ['pricing_signals', 'Pricing signals'], ['major_risks', 'Risks'], ['opportunities', 'Opportunities'],
+  ['strongest_segments', 'Strongest segments'], ['recommendations', 'Recommendations'],
+];
+
+/** Human-readable record of what the report contains and where it came from.
+ * Replaces a raw JSON dump that exposed internal ids and read as noise. */
+const ReportRecord: React.FC<{ report: StudyReport }> = ({ report }) => {
+  const metrics = report.metrics ?? {};
+  const grounding = (metrics.grounding ?? {}) as { sources_present?: string[]; removed_sections?: Record<string, unknown>; scores_nulled?: string[] };
+  const manifest = (metrics.input_manifest ?? {}) as { interviews?: unknown[]; turns?: unknown[]; evidence_claims?: unknown[]; evidence_sources?: unknown[]; datasets?: unknown[]; segments?: unknown[]; behavioral_result_ids?: unknown[]; personas?: unknown[]; captured_at?: string };
+  const count = (value: unknown) => (Array.isArray(value) ? value.length : 0);
+  const removed = Object.keys(grounding.removed_sections ?? {});
+  const rows: Array<[string, string]> = [
+    ['Version', String(report.version ?? 1)],
+    ['Written by', metrics.served_by ? String(metrics.served_by) : 'model route not recorded'],
+    ['Inputs captured', manifest.captured_at ? new Date(manifest.captured_at).toLocaleString() : 'not recorded'],
+    ['Panel size', String(count(manifest.personas) || metrics.total_personas || 0)],
+    ['Interviews / turns', `${count(manifest.interviews) || metrics.total_interviews || 0} / ${count(manifest.turns)}`],
+    ['Evidence sources / claims', `${count(manifest.evidence_sources)} / ${count(manifest.evidence_claims) || metrics.total_claims || 0}`],
+    ['Datasets / segments', `${count(manifest.datasets)} / ${count(manifest.segments)}`],
+    ['Behavioral results', String(count(manifest.behavioral_result_ids))],
+  ];
+  return (
+    <div style={{ display: 'grid', gap: '14px', fontSize: '0.84rem', paddingTop: '10px' }}>
+      <dl style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '6px 16px', margin: 0 }}>
+        {rows.map(([label, value]) => (
+          <React.Fragment key={label}>
+            <dt style={{ color: 'var(--text-secondary)' }}>{label}</dt>
+            <dd style={{ margin: 0, color: 'var(--text-main)', overflowWrap: 'anywhere' }}>{value}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+      <div>
+        <div style={{ color: 'var(--text-secondary)', marginBottom: '6px' }}>Sections in this version</div>
+        <ul style={{ margin: 0, paddingLeft: '18px', columns: 2, columnGap: '24px' }}>
+          {RECORD_SECTIONS.map(([key, label]) => {
+            const value = report[key];
+            const n = Array.isArray(value) ? value.length : 0;
+            return <li key={key} style={{ color: n ? 'var(--text-main)' : 'var(--text-muted)' }}>{label}: {n || 'none'}</li>;
+          })}
+        </ul>
+      </div>
+      {(removed.length > 0 || (grounding.scores_nulled?.length ?? 0) > 0) && (
+        <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+          Grounding check: {removed.length > 0 && <>removed {removed.join(', ')} because the captured inputs had no matching records</>}
+          {removed.length > 0 && (grounding.scores_nulled?.length ?? 0) > 0 && '; '}
+          {(grounding.scores_nulled?.length ?? 0) > 0 && <>{grounding.scores_nulled!.join(' and ')} left unmeasured</>}.
+        </p>
+      )}
+      {metrics.llm_request_id && <p style={{ margin: 0, color: 'var(--text-muted)' }}>Request {String(metrics.llm_request_id)}</p>}
+    </div>
+  );
+};
+
 /** Step 5 — final decision report. Pure JSX extraction from StudyWorkflowView;
  * `verificationAssumptions` is derived in the parent from persona provenance. */
 interface Step5ReportProps {
@@ -31,6 +89,8 @@ interface Step5ReportProps {
   exportReportMarkdown: () => void;
   onSelectReport?: (report: StudyReport) => void;
   handleGenerateFinalReport: () => Promise<void>;
+  /** Interviews completed so far; more than the report used means it is out of date. */
+  completedInterviewCount?: number;
   verificationAssumptions: { value: string; provenance: string; personaName: string }[];
   /** Example (demo) studies are viewable but never mutable from here. */
   isReadOnly?: boolean;
@@ -51,11 +111,15 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
   exportReportMarkdown,
   onSelectReport,
   handleGenerateFinalReport,
+  completedInterviewCount = 0,
   verificationAssumptions,
   isReadOnly = false,
 }) => {
   const evidenceBackedCount = countEvidenceBacked(personas);
   const claimCount = report?.metrics?.total_claims ?? report?.evidence_findings?.length ?? 0;
+  const reportInterviews = typeof report?.metrics?.total_interviews === 'number' ? report.metrics.total_interviews : null;
+  const interviewsSinceReport = report && reportInterviews !== null ? Math.max(0, completedInterviewCount - reportInterviews) : 0;
+  const canRegenerate = Boolean(report) && !isGeneratingReport && !isReadOnly && completedInterviewCount > 0;
   const reportRecovery = {
     loading: { title: 'Saved reports unavailable', label: 'Reload saved reports', action: onReloadReports },
     generation: { title: 'Report generation failed', label: 'Retry report generation', action: handleGenerateFinalReport },
@@ -136,6 +200,31 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                     {availableReports.map((saved, index) => <option key={saved.id ?? index} value={saved.id}>Version {saved.version ?? 'unknown'}</option>)}
                   </select>
                 )}
+                {report && (
+                  <button
+                    type="button"
+                    onClick={handleGenerateFinalReport}
+                    disabled={!canRegenerate}
+                    title={isReadOnly ? READ_ONLY_TITLE : completedInterviewCount === 0 ? 'Complete at least one interview first' : `Write version ${(report.version || 1) + 1} from the current study data`}
+                    style={{
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--accent-teal)',
+                      color: 'var(--accent-cyan)',
+                      borderRadius: '8px',
+                      padding: '8px 14px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: canRegenerate ? 'pointer' : 'not-allowed',
+                      opacity: canRegenerate ? 1 : 0.55,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <RefreshCw size={14} className={isGeneratingReport ? 'animate-spin' : ''} aria-hidden="true" />
+                    {isGeneratingReport ? 'Synthesizing…' : 'Regenerate report'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={copyReportMarkdown}
@@ -184,6 +273,20 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
             </div>
 
             {/* Metrics Cards */}
+            {report && isGeneratingReport && (
+              <div role="status" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--status-info-bg)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '12px 16px', fontSize: '0.86rem', color: 'var(--text-main)' }}>
+                <FileText size={16} aria-hidden="true" />
+                <span>Synthesizing version {(report.version || 1) + 1}… Version {report.version || 1} below stays available until the new one is saved.</span>
+              </div>
+            )}
+            {report && !isGeneratingReport && interviewsSinceReport > 0 && (
+              <div role="status" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--fill-soft)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '12px 16px', fontSize: '0.86rem', color: 'var(--text-main)' }}>
+                <RefreshCw size={15} aria-hidden="true" />
+                <span>
+                  {interviewsSinceReport} interview{interviewsSinceReport === 1 ? '' : 's'} completed since version {report.version || 1} was written — regenerate to include {interviewsSinceReport === 1 ? 'it' : 'them'}.
+                </span>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '16px' }}>
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '18px 20px' }}>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Demand Signal</div>
@@ -287,8 +390,8 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                   <p style={{ whiteSpace: 'pre-wrap' }}>{report.limitations || 'No limitations were recorded for this report version. Synthetic results are not observed customer evidence.'}</p>
                 </section>
                 <details>
-                  <summary>Evidence, source identities, and complete report record</summary>
-                  <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: '0.8rem' }}>{JSON.stringify(report, null, 2)}</pre>
+                  <summary>Report record: sections, sources and provenance</summary>
+                  <ReportRecord report={report} />
                 </details>
               </>
             ) : reportError ? null : (
@@ -309,13 +412,15 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                 <FileText size={28} className="text-teal-400" />
                 <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>No report yet</div>
                 <div style={{ fontSize: '0.85rem', maxWidth: '440px' }}>
-                  Generate it from your study data — your personas, interviews, and collected research claims feed the synthesis.
+                  {completedInterviewCount > 0
+                    ? 'Generate it from your study data — your personas, interviews, and collected research claims feed the synthesis.'
+                    : 'The report is synthesized from what your personas said. Complete at least one interview in the Interviews step first.'}
                 </div>
                 <button
                   type="button"
                   onClick={handleGenerateFinalReport}
-                  disabled={isGeneratingReport || isReadOnly}
-                  title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                  disabled={isGeneratingReport || isReadOnly || completedInterviewCount === 0}
+                  title={isReadOnly ? READ_ONLY_TITLE : completedInterviewCount === 0 ? 'Complete at least one interview first' : undefined}
                   style={{
                     marginTop: '6px',
                     background: 'var(--accent-gradient)',
@@ -325,8 +430,8 @@ export const Step5Report: React.FC<Step5ReportProps> = ({
                     color: 'var(--text-on-accent)',
                     fontWeight: 700,
                     fontSize: '0.85rem',
-                    cursor: isGeneratingReport || isReadOnly ? 'not-allowed' : 'pointer',
-                    opacity: isGeneratingReport || isReadOnly ? 0.6 : 1,
+                    cursor: isGeneratingReport || isReadOnly || completedInterviewCount === 0 ? 'not-allowed' : 'pointer',
+                    opacity: isGeneratingReport || isReadOnly || completedInterviewCount === 0 ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',

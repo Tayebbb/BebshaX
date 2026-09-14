@@ -22,6 +22,9 @@ interface Step4InterviewsProps {
   interviewFailureReasons?: Record<string, string>;
   /** Whole-batch failure (job never started / lost) with its request id. */
   batchError?: { message: string; requestId: string | null } | null;
+  /** Latest saved interview id per persona, from the server (survives reloads). */
+  interviewIdByPersona?: Record<string, string>;
+  completedInterviewCount?: number;
   activeInterviewPersonaId: string;
   setActiveInterviewPersonaId: React.Dispatch<React.SetStateAction<string>>;
   setChatMessages: React.Dispatch<React.SetStateAction<ConversationTurn[]>>;
@@ -51,6 +54,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
   interviewStatusMap,
   interviewFailureReasons = {},
   batchError = null,
+  interviewIdByPersona = {},
+  completedInterviewCount = 0,
   activeInterviewPersonaId,
   setActiveInterviewPersonaId,
   interviewChatRef,
@@ -65,6 +70,12 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
   isReadOnly = false,
 }) => {
   const batchRunDisabled = isBatchRunning || isReadOnly || Boolean(batchStartBlockedReason);
+  const reportBlockedReason = isReadOnly
+    ? READ_ONLY_TITLE
+    : completedInterviewCount === 0
+      ? 'Complete at least one interview first — the report is synthesized from what the personas said.'
+      : null;
+  const reportDisabled = isGeneratingReport || Boolean(reportBlockedReason);
   return (
     <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
@@ -124,8 +135,9 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   <button
                     type="button"
                     onClick={handleGenerateFinalReport}
-                    disabled={isGeneratingReport || isReadOnly}
-                    title={isReadOnly ? READ_ONLY_TITLE : undefined}
+                    disabled={reportDisabled}
+                    aria-describedby={reportBlockedReason && !isReadOnly ? 'report-requirements' : undefined}
+                    title={reportBlockedReason ?? undefined}
                     style={{
                       background: 'var(--bg-card)',
                       border: '1px solid var(--accent-teal)',
@@ -134,8 +146,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                       padding: '10px 20px',
                       fontSize: '0.88rem',
                       fontWeight: 700,
-                      cursor: isGeneratingReport || isReadOnly ? 'not-allowed' : 'pointer',
-                      opacity: isGeneratingReport || isReadOnly ? 0.6 : 1,
+                      cursor: reportDisabled ? 'not-allowed' : 'pointer',
+                      opacity: reportDisabled ? 0.6 : 1,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px',
@@ -152,6 +164,11 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                     style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'right', maxWidth: '100%', overflowWrap: 'anywhere' }}
                   >
                     {batchStartBlockedReason}
+                  </div>
+                )}
+                {reportBlockedReason && !isReadOnly && !batchStartBlockedReason && (
+                  <div id="report-requirements" role="status" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textAlign: 'right', maxWidth: '100%', overflowWrap: 'anywhere' }}>
+                    {reportBlockedReason}
                   </div>
                 )}
                 {isBatchRunning && (
@@ -232,7 +249,8 @@ export const Step4Interviews: React.FC<Step4InterviewsProps> = ({
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   <button
                     type="button"
-                    title={failureReason ? `Failed: ${failureReason}` : undefined}
+                    title={failureReason ? `Failed: ${failureReason}` : interviewIdByPersona[p.id] ? `Open ${p.name}'s saved transcript` : undefined}
+                    aria-pressed={isActive}
                     onClick={() => setActiveInterviewPersonaId(p.id)}
                     style={{
                       background: isActive ? 'var(--accent-subtle)' : 'var(--bg-card)',

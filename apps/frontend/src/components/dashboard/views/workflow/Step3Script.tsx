@@ -159,6 +159,8 @@ export const Step3Script: React.FC<Step3ScriptProps> = ({
                   variant="primary"
                   aria-label="Approve Script & Start Interviews"
                   onClick={() => handleStepChange(4)}
+                  disabled={questions.length === 0 || questions.some((q) => !q.trim())}
+                  title={questions.length === 0 ? 'Add at least one question first' : questions.some((q) => !q.trim()) ? 'Fill in or remove empty questions first' : undefined}
                   trailingIcon={<ArrowRight size={15} aria-hidden="true" />}
                   style={{
                     padding: '8px 20px',

@@ -26,11 +26,13 @@ import { Step3Script } from './workflow/Step3Script';
 import { Step4Interviews } from './workflow/Step4Interviews';
 import { Step5Report } from './workflow/Step5Report';
 import { PersonaDetailModal } from './workflow/PersonaDetailModal';
+import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { EvidenceProbe, nextEvidenceProbe } from './workflow/evidenceProbe';
 import { getStudyDraftRetry, STUDY_SAVE_CHANGED, type StudySaveState } from '../../../services/studyPersistence';
 import { getSessionEpoch } from '../../../services/session';
 import { pollSerial } from '../../../services/polling';
 import { reportMarkdown } from '../../../utils/exports';
+import { copyText } from '../../../utils/clipboard';
 import { useRouteReady } from '../../../performance/routeTiming';
 
 interface StudyWorkflowViewProps {
@@ -170,6 +172,18 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   // error (with its request id) when the job itself could not start.
   const [interviewFailureReasons, setInterviewFailureReasons] = useState<Record<string, string>>({});
   const [batchError, setBatchError] = useState<{ message: string; requestId: string | null } | null>(null);
+  // Saved interview ids per persona (from the server), so a reload can reopen
+  // transcripts without depending on this tab's localStorage.
+  const [interviewIdByPersona, setInterviewIdByPersona] = useState<Record<string, string>>({});
+  // Destructive panel actions ask first when interviews or a report already
+  // exist: they stay attributable to the old panel, not the new one.
+  const [pendingPanelAction, setPendingPanelAction] = useState<
+    | { kind: 'remove'; personaId: string; personaName: string }
+    | { kind: 'regenerate' }
+    | null
+  >(null);
+  const [panelActionBusy, setPanelActionBusy] = useState(false);
+  const [panelActionError, setPanelActionError] = useState<string | null>(null);
 
   // Step 5: Final Report
   const [report, setReport] = useState<StudyReport | null>(null);
@@ -829,17 +843,56 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   const handleRemovePersona = (personaId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!studyEpochRef.current.active) return;
-    const nextPersonas = personas.filter((p) => p.id !== personaId);
-    setPersonas(nextPersonas);
-    setSelectedPersonaIds((prev) => prev.filter((id) => id !== personaId));
-    if (studyId) {
-      api.updateStudy(studyId, {
-        personas_data: nextPersonas as any,
-        persona_count: nextPersonas.length,
-        persona_ids: nextPersonas.map((p) => p.id),
-      }).catch(() => {});
+    if (!studyEpochRef.current.active || isReadOnly) return;
+    const persona = personas.find((p) => p.id === personaId);
+    const status = interviewStatusMap[personaId];
+    const hasHistory = status === 'completed' || status === 'in_progress' || Boolean(interviewIdByPersona[personaId]);
+    if (hasHistory || hasReportArtifact) {
+      setPanelActionError(null);
+      setPendingPanelAction({ kind: 'remove', personaId, personaName: persona?.name || 'this persona' });
+      return;
     }
+    void removePersonaNow(personaId);
+  };
+
+  const removePersonaNow = async (personaId: string) => {
+    const epoch = studyEpochRef.current;
+    if (!epoch.active || !studyId) return;
+    setPanelActionBusy(true);
+    setPanelActionError(null);
+    try {
+      const result = await api.archiveStudyPersona(studyId, personaId);
+      if (!epoch.active) return;
+      const nextPersonas = personas.filter((p) => p.id !== personaId);
+      setPersonas(nextPersonas);
+      setSelectedPersonaIds((prev) => prev.filter((id) => id !== personaId));
+      setStudy((prev) => prev ? { ...prev, persona_count: result.persona_count, persona_ids: result.persona_ids, revision: result.study_revision } : prev);
+      if (activeInterviewPersonaId === personaId) setActiveInterviewPersonaId(nextPersonas[0]?.id ?? '');
+      setPendingPanelAction(null);
+    } catch (err: unknown) {
+      if (!epoch.active) return;
+      const refusal = readOnlyRefusal(err);
+      if (refusal) {
+        setReadOnlyNotice(refusal);
+        setPendingPanelAction(null);
+      } else {
+        // Never drop the card locally while the server still has it.
+        const message = `${toUserMessage(err)} The persona is still part of the study.`;
+        if (pendingPanelAction) setPanelActionError(message);
+        else setPersonaGenError(message);
+      }
+    } finally {
+      if (epoch.active) setPanelActionBusy(false);
+    }
+  };
+
+  const requestRegeneratePersonas = async () => {
+    if (hasInterviewActivity || hasReportArtifact) {
+      setPanelActionError(null);
+      setPendingPanelAction({ kind: 'regenerate' });
+      return;
+    }
+    await handleGeneratePersonas();
   };
 
   const handleGenerateScript = async () => {
@@ -900,6 +953,59 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const batchPollCancelledRef = useRef(false);
   const batchControllerRef = useRef<AbortController | null>(null);
   useEffect(() => () => { batchControllerRef.current?.abort(); }, [studyId]);
+
+  // Interview statuses live on the server. Hydrate them on load (and when the
+  // panel changes) so a reload never shows a finished batch as "Pending";
+  // also pick up a batch that was accepted before the reload.
+  const hydrateInterviews = React.useCallback(async (epoch = studyEpochRef.current) => {
+    if (!studyId || personas.length === 0) return;
+    try {
+      const { interviews } = await api.listStudyInterviews(studyId, { limit: 200 });
+      if (!epoch.active) return;
+      const map: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'> = {};
+      const ids: Record<string, string> = {};
+      let activeKeyWritten = false;
+      for (const p of personas) {
+        const mine = (interviews as Array<{ id: string; persona_id: string; status: string; turn_count?: number; created_at?: string }>)
+          .filter((iv) => iv.persona_id === p.id)
+          .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
+        const latest = mine[0];
+        if (!latest) continue;
+        ids[p.id] = latest.id;
+        map[p.id] = mine.some((iv) => iv.status === 'completed')
+          ? 'completed'
+          : (latest.turn_count ?? 0) > 0 ? 'in_progress' : 'pending';
+        // The transcript panel restores from this key; batch runs never wrote it.
+        const key = `bebshax_conv_${studyId}_${p.id}`;
+        try {
+          if (!localStorage.getItem(key)) {
+            localStorage.setItem(key, latest.id);
+            if (p.id === activeInterviewPersonaId) activeKeyWritten = true;
+          }
+        } catch { /* storage unavailable: the Interview Lab still lists the transcript */ }
+      }
+      setInterviewIdByPersona(ids);
+      // A live batch owns the map while it runs; otherwise the server is the truth.
+      if (!batchControllerRef.current) setInterviewStatusMap((prev) => ({ ...prev, ...map }));
+      if (activeKeyWritten) setRestoreAttempt((attempt) => attempt + 1);
+    } catch {
+      // The step still renders from whatever is known; the batch/list views report load errors.
+    }
+  }, [studyId, personas, activeInterviewPersonaId]);
+
+  useEffect(() => {
+    const epoch = studyEpochRef.current;
+    void hydrateInterviews(epoch);
+  }, [hydrateInterviews]);
+
+  useEffect(() => {
+    if (!studyId || isReadOnly || personas.length === 0) return;
+    const jobId = api.getPendingJobHandle(studyId, 'batch');
+    if (!jobId || batchControllerRef.current) return;
+    void handleRunBatchInterviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studyId, personas.length]);
+
   const handleRunBatchInterviews = async () => {
     const epoch = studyEpochRef.current;
     if (!epoch.active || !studyId || isReadOnly || isBatchRunning || batchControllerRef.current) return;
@@ -952,7 +1058,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       }
       if (!epoch.active || batchPollCancelledRef.current) return;
       api.forgetJobHandle(studyId, 'batch');
-      await api.listStudyInterviews(studyId).catch(() => []);
+      await hydrateInterviews(epoch);
     } catch (err: any) {
       if (!epoch.active) return;
       if (controller.signal.aborted || api.getPendingJobHandle(studyId, 'batch')) {
@@ -1065,6 +1171,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   const handleGenerateFinalReport = async () => {
     const epoch = studyEpochRef.current;
     if (!epoch.active || !studyId || isGeneratingReport) return;
+    if (completedInterviewCount === 0 && !hasReportArtifact) {
+      // The server refuses a report without findings; say so here instead of
+      // moving to an empty report step.
+      setBatchError({ message: 'Complete at least one interview before generating the decision report.', requestId: null });
+      return;
+    }
     setIsGeneratingReport(true);
     setReportError(null);
     // Move to the report step first: synthesis can take minutes, and waiting
@@ -1096,18 +1208,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     const epoch = studyEpochRef.current;
     if (!epoch.active || !report) return;
     const md = reportMarkdown(report);
-    try {
-      await navigator.clipboard.writeText(md);
-      if (!epoch.active) return;
+    const copied = await copyText(md);
+    if (!epoch.active) return;
+    if (copied) {
       setCopiedToast(true);
       setTimeout(() => {
         if (epoch.active) setCopiedToast(false);
       }, 2500);
-    } catch {
-      if (epoch.active) {
-        setReportErrorKind('copy');
-        setReportError('Could not copy the report. Please try again.');
-      }
+    } else {
+      setReportErrorKind('copy');
+      setReportError('Could not copy the report. Use Export Markdown to download it instead.');
     }
   };
 
@@ -1170,18 +1280,43 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   // Forward stepper navigation unlocks only when the prior step produced its
   // artifact; going backward (or staying) is always free.
   const goalApproved = showRoleSelection || personas.length > 0;
+  const completedInterviewCount = Object.values(interviewStatusMap).filter((s) => s === 'completed').length;
   const hasInterviewActivity =
     chatMessages.length > 0 ||
     conversationId !== null ||
+    Object.keys(interviewIdByPersona).length > 0 ||
     Object.values(interviewStatusMap).some((s) => s === 'completed' || s === 'in_progress');
   const hasReportArtifact = report !== null || availableReports.length > 0;
+  // "Done" is earned by the step's artifact, never by the URL or the step number.
+  const stepCompleted = (stepNum: number): boolean => {
+    switch (stepNum) {
+      case 1: return goalApproved;
+      case 2: return personas.length > 0;
+      case 3: return questions.length > 0 && questions.every((q) => q.trim());
+      case 4: return completedInterviewCount > 0;
+      case 5: return hasReportArtifact;
+      default: return false;
+    }
+  };
+  // The furthest step a deep link may open: one past the last completed step.
+  const highestReachableStep = (() => {
+    let reach = 1;
+    while (reach < 5 && stepCompleted(reach)) reach += 1;
+    return hasReportArtifact ? 5 : reach;
+  })();
+  // A URL past the study's progress (stale bookmark, typed step) still opens,
+  // but nothing is marked done or written for it; the step count says where the
+  // study really is.
+  const stepAheadOfProgress = Boolean(study && study.id === studyId && currentStep > highestReachableStep);
   const isStepUnlocked = (stepNum: number): boolean => {
     if (stepNum <= currentStep) return true;
     if (stepNum <= 3) return goalApproved;
     // Interviews need respondents AND questions: the backend refuses a batch
     // run without a script (script_required) rather than asking canned ones.
     if (stepNum === 4) return personas.length > 0 && questions.length > 0;
-    return hasReportArtifact || hasInterviewActivity || personas.length > 0;
+    // The report step is viewable once a panel exists (it explains what is
+    // still missing); generating is gated separately on completed interviews.
+    return hasReportArtifact || completedInterviewCount > 0 || personas.length > 0;
   };
   const stepLockReason = (stepNum: number): string =>
     stepNum <= 3
@@ -1190,7 +1325,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         ? personas.length > 0
           ? 'Generate or write interview questions first'
           : 'Generate personas first'
-        : 'Generate personas or run an interview first';
+        : 'Generate personas first';
 
   // Least-grounded claims across the persona panel — surfaced in the report as
   // "assumptions to verify with real customers". SYNTHETIC (no grounding at
@@ -1323,8 +1458,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           <span className="bx-step-count" aria-hidden="true">
             Step {currentStep} of {stepLabels.length}
           </span>
+          {stepAheadOfProgress && (
+            <span className="bx-step-ahead" role="status" style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+              Progress is at step {highestReachableStep}
+            </span>
+          )}
           {stepLabels.map((s, idx) => {
-            const isDone = s.num < currentStep;
+            const isDone = stepCompleted(s.num) && s.num !== currentStep;
             const isCurrent = s.num === currentStep;
             const unlocked = isStepUnlocked(s.num);
             return (
@@ -1500,7 +1640,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               personaServedBy={personaServedBy}
               isGeneratingPersonas={isGeneratingPersonas}
               suggestedRoles={suggestedRoles}
-              handleGeneratePersonas={handleGeneratePersonas}
+              handleGeneratePersonas={personas.length > 0 ? requestRegeneratePersonas : handleGeneratePersonas}
               handleStepChange={handleStepChange}
               handleRemovePersona={handleRemovePersona}
               personaModalTriggerRef={personaModalTriggerRef}
@@ -1550,6 +1690,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               handleStepChange={handleStepChange}
               interviewStatusMap={interviewStatusMap}
               interviewFailureReasons={interviewFailureReasons}
+              interviewIdByPersona={interviewIdByPersona}
+              completedInterviewCount={completedInterviewCount}
               batchError={batchError}
               activeInterviewPersonaId={activeInterviewPersonaId}
               setActiveInterviewPersonaId={setActiveInterviewPersonaId}
@@ -1589,12 +1731,43 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               exportReportMarkdown={exportReportMarkdown}
               onSelectReport={setReport}
               handleGenerateFinalReport={handleGenerateFinalReport}
+              completedInterviewCount={completedInterviewCount}
               verificationAssumptions={verificationAssumptions}
               isReadOnly={isReadOnly}
             />
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={pendingPanelAction !== null}
+        title={pendingPanelAction?.kind === 'remove' ? 'Remove this persona?' : 'Regenerate the persona panel?'}
+        description={
+          pendingPanelAction?.kind === 'remove' ? (
+            <>
+              <strong>{pendingPanelAction.personaName}</strong> leaves the panel. Its saved interview and any report that cites it stay in
+              the Interview Lab as history, but new interviews and reports will not include it.
+            </>
+          ) : (
+            <>
+              A new panel replaces the current personas.{' '}
+              {completedInterviewCount > 0 && <>The {completedInterviewCount} completed interview{completedInterviewCount === 1 ? '' : 's'} stay attached to the old personas in the Interview Lab. </>}
+              {hasReportArtifact && <>The existing report describes the old panel and will read as out of date until you generate a new version.</>}
+            </>
+          )
+        }
+        confirmLabel={pendingPanelAction?.kind === 'remove' ? 'Remove persona' : 'Regenerate panel'}
+        destructive
+        busy={panelActionBusy || isGeneratingPersonas}
+        error={panelActionError}
+        onCancel={() => { if (!panelActionBusy) { setPendingPanelAction(null); setPanelActionError(null); } }}
+        onConfirm={() => {
+          if (!pendingPanelAction) return;
+          if (pendingPanelAction.kind === 'remove') { void removePersonaNow(pendingPanelAction.personaId); return; }
+          setPendingPanelAction(null);
+          void handleGeneratePersonas();
+        }}
+      />
 
       {/* Viewing Full Persona Modal */}
       {viewingPersona && (
