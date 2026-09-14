@@ -338,9 +338,9 @@ async def test_business_route_persists_and_reloads_rich_synthetic_profile(
     assert reloaded["age"] == source.age
     assert reloaded["occupation"] == source.occupation
     assert reloaded["location"] == source.location
-    assert reloaded["education"] == (source.education or "Not available in training data")
+    assert reloaded["education"] == (source.education or "Not recorded")
     assert reloaded["description"] == source.description
-    assert reloaded["income_range"] == "Not available in training data"
+    assert reloaded["income_range"] == "Not recorded"
     assert reloaded["detailed_attributes"]["source_documents"] == source.documents
     assert reloaded["detailed_attributes"]["claim_provenance"] == {
         group: [{"value": value, "provenance": "SYNTHETIC", "evidence_ids": []} for value in values]
@@ -435,7 +435,7 @@ def test_reloaded_ml_persona_keeps_identity_in_unchanged_interview(
     prompt = "\n".join(message.content for message in interview_requests[0].messages)
     for identity in (
         before["name"], str(source.age), source.occupation, source.location,
-        source.education or "Not available in training data", source.description,
+        source.education or "Not recorded", source.description,
         *source.goals, *source.pain_points, *source.behaviors,
     ):
         assert identity in prompt
@@ -770,7 +770,7 @@ async def test_dataset_route_preserves_distribution_audit_and_rich_reload_withou
     assert all(model.startswith("bebshax-persona-ml/") for model in result["served_by"])
     for persona in result["personas"]:
         assert persona["location"] == "Austin, Texas, USA"
-        assert persona["income_range"] == "Not available in training data"
+        assert persona["income_range"] == "Not recorded"
         assert persona["personality"] is None
         assert all(claim["provenance"] == "SYNTHETIC" and claim["evidence_ids"] == [] for claim in persona["goals"])
     async with ml_api_app.app.state.db_sessionmaker() as session:

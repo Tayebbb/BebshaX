@@ -558,10 +558,45 @@ describe('Studio persona controls', () => {
     render(<PersonaLibraryView studyId={study.id} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Open profile' }));
     const dialog = screen.getByRole('dialog', { name: persona.name });
-    expect(within(dialog).getByText('Needs Review')).toBeVisible();
+    expect(within(dialog).getByText('Needs review')).toBeVisible();
     expect(within(dialog).getByRole('heading', { name: 'Validation warnings', level: 3 })).toBeVisible();
     for (const warning of warnings) expect(within(dialog).getByText(warning)).toBeVisible();
     expect(within(dialog).queryByText('Complete')).not.toBeInTheDocument();
+  });
+
+  it('agrees between the card badge, the status filter and the summary for stored active rows', async () => {
+    // Live 2026-09-14: rows are stored as `active`; every card read "Needs Review"
+    // while the "Needs Review" filter matched nothing. Both derive from one rule now.
+    const flagged: SyntheticPersona = { ...persona, id: 'per_flagged', name: 'Flagged Profile', status: 'active', validation_warnings: ['Income is unknown.'] };
+    const clean: SyntheticPersona = { ...persona, id: 'per_clean', name: 'Clean Profile', status: 'active', validation_warnings: [] };
+    vi.mocked(api.getStudyPersonas).mockResolvedValue({ personas: [flagged, clean], total: 2, represented_segments: 0, average_grounding_score: 0 });
+    render(<PersonaLibraryView studyId={study.id} />);
+    const flaggedCard = await screen.findByRole('article', { name: 'Flagged Profile persona' });
+    const cleanCard = screen.getByRole('article', { name: 'Clean Profile persona' });
+    expect(within(flaggedCard).getByText('Needs review')).toBeVisible();
+    expect(within(cleanCard).getByText('Complete')).toBeVisible();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by status' }), { target: { value: 'needs_review' } });
+    expect(screen.getByRole('article', { name: 'Flagged Profile persona' })).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Clean Profile persona' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by status' }), { target: { value: 'ready' } });
+    expect(screen.getByRole('article', { name: 'Clean Profile persona' })).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Flagged Profile persona' })).not.toBeInTheDocument();
+  });
+
+  it('groups a workflow panel by its roles when the study has no dataset segments', async () => {
+    const hostel: SyntheticPersona = { ...persona, id: 'per_role_a', name: 'Role A', status: 'active', validation_warnings: [], segment_id: undefined, role_title: 'Hostel student who hand-washes' };
+    const dhobi: SyntheticPersona = { ...persona, id: 'per_role_b', name: 'Role B', status: 'active', validation_warnings: [], segment_id: undefined, role_title: 'Current dhobi customer' };
+    vi.mocked(api.getStudyPersonas).mockResolvedValue({ personas: [hostel, dhobi], total: 2, represented_segments: 0, average_grounding_score: 0 });
+    vi.mocked(api.getMarketSegments).mockResolvedValue([]);
+    render(<PersonaLibraryView studyId={study.id} />);
+    await screen.findByRole('article', { name: 'Role A persona' });
+    expect(screen.getByText('Panel roles represented')).toBeInTheDocument();
+    const roleFilter = screen.getByRole('combobox', { name: 'Filter by panel role' });
+    expect(within(roleFilter).getByRole('option', { name: 'All roles (2)' })).toBeInTheDocument();
+    fireEvent.change(roleFilter, { target: { value: 'Current dhobi customer' } });
+    expect(screen.getByRole('article', { name: 'Role B persona' })).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Role A persona' })).not.toBeInTheDocument();
   });
 
   it('uses compact token-based surfaces throughout the library, inspector, and generation dialog', async () => {

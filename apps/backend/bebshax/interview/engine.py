@@ -464,6 +464,16 @@ def build_identity_card(profile: Any) -> str:
     return "\n".join(lines)
 
 
+def _selected_role_title(persona: Any) -> str | None:
+    """The workflow role a generated persona fills, if the generation recorded one."""
+    detailed = getattr(persona, "detailed_attributes", None)
+    if not isinstance(detailed, dict):
+        return None
+    projection = detailed.get("workflow_projection")
+    title = projection.get("role_title") if isinstance(projection, dict) else None
+    return title.strip() if isinstance(title, str) and title.strip() else None
+
+
 _GROUNDED_INSTRUCTIONS = """
 YOU ARE A SYNTHETIC PERSONA PARTICIPATING IN A USER RESEARCH INTERVIEW.
 Follow these behavioral rules strictly:
@@ -774,6 +784,15 @@ class InterviewEngine:
                 )
                 if study.pricing_hypothesis:
                     study_info += f"\n- Business Pricing Hypothesis: {study.pricing_hypothesis}"
+                # The panel role this profile was selected to stand in for. The
+                # profile keeps its own life (rule 2/9); it must not silently
+                # relocate itself into the audience, nor pretend the role away.
+                role_title = _selected_role_title(persona)
+                if role_title:
+                    study_info += (
+                        f"\n- Panel role you were selected for: {role_title}. Your own profile stands in for this "
+                        "role; answer from your own life and say plainly where it differs from the target audience."
+                    )
                 system_parts.append(
                     "STUDY CONTEXT:\n" + untrusted_block("STUDY", study_info, source="study")
                 )

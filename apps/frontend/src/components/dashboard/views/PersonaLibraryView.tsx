@@ -37,16 +37,32 @@ import { useRouteReady } from '../../../performance/routeTiming';
 import { CountUp } from '../../../motion/CountUp';
 import { EvidenceBadge, TemplateBadge, countEvidenceBacked } from '../../../utils/personaEvidence';
 import { useDialogA11y } from '../../../utils/useDialogA11y';
+import { humanizeToken } from '../../../utils/labels';
 import { PersonaMemoryPanel } from './persona/PersonaMemoryPanel';
 import { EvidenceClaimPeek } from './persona/EvidenceClaimPeek';
 import { Button } from '../../ui/Button';
 
 interface PersonaLibraryViewProps {
   studyId?: string;
+  /** Open this persona's profile drawer once the study's personas load. */
+  initialPersonaId?: string;
+  /** The library's study selector changes the shared workspace scope. */
+  onStudyChange?: (studyId: string) => void;
   onStartInterviewWithPersona?: (personaId: string, studyId?: string) => void;
   onTestBehaviorWithPersona?: (personaId: string, studyId?: string) => void;
   onNavigateToEvidence?: (studyId: string) => void;
   onNavigateToSegmentation?: () => void;
+}
+
+/** "Complete" is the generator's structural check: the row is live and carries
+ * no validation warnings. Rows are stored as `active`; the legacy `ready` /
+ * `needs_review` statuses map onto the same two states so the badge, the filter
+ * and the summary metric can never disagree (live 2026-09-14: every card read
+ * "Needs Review" while the filter for it matched nothing). */
+export function isCompleteProfile(persona: Pick<SyntheticPersona, 'status' | 'validation_warnings'>): boolean {
+  if (persona.status === 'ready') return true;
+  if (persona.status === 'needs_review' || persona.status === 'generating' || persona.status === 'draft') return false;
+  return (persona.validation_warnings?.length ?? 0) === 0;
 }
 
 /** Per-claim provenance entry persisted by the generator in detailed_attributes.claim_provenance */
@@ -126,6 +142,8 @@ function isMeasuredTraitScore(value: unknown): value is number {
 
 export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   studyId,
+  initialPersonaId,
+  onStudyChange,
   onStartInterviewWithPersona,
   onTestBehaviorWithPersona,
   onNavigateToEvidence,
@@ -174,6 +192,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   // Real unmount guard for post-await state writes (a `let mounted` inside a
   // click handler is never reset by React and guards nothing).
   const isMountedRef = useRef(true);
+  const initialPersonaConsumedRef = useRef(false);
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -268,6 +287,14 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       setSegments(segmentsRes.status === 'fulfilled' ? segmentsRes.value : []);
       if (personasRes.status === 'rejected') setError('Personas could not be loaded.');
       if (segmentsRes.status === 'rejected') setActionError('Segments could not be loaded.');
+      if (personasRes.status === 'fulfilled' && initialPersonaId && !initialPersonaConsumedRef.current) {
+        const target = personasRes.value.personas.find((p) => p.id === initialPersonaId);
+        if (target) {
+          initialPersonaConsumedRef.current = true;
+          setInspectorTab('profile');
+          setInspectingPersona(target);
+        }
+      }
     } catch {
       if (isCurrent()) setError('Personas could not be loaded.');
     } finally {
@@ -287,8 +314,9 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   // Filtered Personas
   const filteredPersonas = useMemo(() => {
     return personas.filter((p) => {
-      if (selectedSegmentFilter !== 'all' && p.segment_id !== selectedSegmentFilter) return false;
-      if (selectedStatusFilter !== 'all' && p.status !== selectedStatusFilter) return false;
+      if (selectedSegmentFilter !== 'all' && p.segment_id !== selectedSegmentFilter && (p.role_title ?? '') !== selectedSegmentFilter) return false;
+      if (selectedStatusFilter === 'ready' && !isCompleteProfile(p)) return false;
+      if (selectedStatusFilter === 'needs_review' && isCompleteProfile(p)) return false;
       if (selectedRunFilter !== 'all' && p.generation_run_id !== selectedRunFilter) return false;
       if (selectedGroundingFilter === 'high' && p.grounding_score < 0.5) return false;
       if (selectedGroundingFilter === 'medium' && (p.grounding_score <= 0 || p.grounding_score >= 0.5)) return false;
@@ -310,14 +338,25 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
     });
   }, [personas, selectedSegmentFilter, selectedStatusFilter, selectedGroundingFilter, selectedRunFilter, searchQuery]);
 
-  // Metrics
+  // Metrics. Workflow panels group personas by the role they were generated
+  // for; dataset-driven libraries group by market segment. Either counts as a
+  // represented group so a five-persona panel never reads "0 segments".
+  const roleGroups = useMemo(() => {
+    const titles = new Map<string, number>();
+    for (const p of personas) {
+      const title = (p.role_title ?? '').trim();
+      if (title) titles.set(title, (titles.get(title) ?? 0) + 1);
+    }
+    return [...titles.entries()].map(([title, count]) => ({ title, count }));
+  }, [personas]);
+  const groupsAreRoles = segments.length === 0 && roleGroups.length > 0;
   const metrics = useMemo(() => {
     const total = personas.length;
-    const repSegments = new Set(personas.map((p) => p.segment_id).filter(Boolean)).size;
+    const repSegments = groupsAreRoles ? roleGroups.length : new Set(personas.map((p) => p.segment_id).filter(Boolean)).size;
     const evidenceBacked = countEvidenceBacked(personas);
-    const readyCount = personas.filter((p) => p.status === 'ready').length;
+    const readyCount = personas.filter((p) => isCompleteProfile(p)).length;
     return { total, repSegments, evidenceBacked, readyCount };
-  }, [personas]);
+  }, [personas, groupsAreRoles, roleGroups]);
 
   // Generation Stepper Handler
   const handleTriggerGeneration = async () => {
@@ -432,7 +471,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             <select
               aria-label="Active study"
               value={activeStudyId}
-              onChange={(e) => setActiveStudyId(e.target.value)}
+              onChange={(e) => { setActiveStudyId(e.target.value); onStudyChange?.(e.target.value); }}
               style={{
                 background: 'var(--bg-card)',
                 border: '1px solid var(--border-subtle)',
@@ -485,7 +524,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         </div>
         <div className="bx-figure bx-stagger" style={{ ['--bx-i' as string]: 1 }}>
           <dd><CountUp value={metrics.repSegments} /></dd>
-          <dt>Represented Segments</dt>
+          <dt>{groupsAreRoles ? 'Panel roles represented' : 'Represented Segments'}</dt>
         </div>
         <div className="bx-figure bx-stagger" style={{ ['--bx-i' as string]: 2 }}>
           <dd style={{ color: metrics.evidenceBacked > 0 ? 'var(--status-success-text)' : undefined }}>
@@ -546,7 +585,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', minWidth: 0, maxWidth: '100%' }}>
           {/* Segment Filter */}
           <select
-            aria-label="Filter by segment"
+            aria-label={groupsAreRoles ? 'Filter by panel role' : 'Filter by segment'}
             value={selectedSegmentFilter}
             onChange={(e) => setSelectedSegmentFilter(e.target.value)}
             style={{
@@ -563,12 +602,25 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               cursor: 'pointer',
             }}
           >
-            <option value="all">All Segments ({segments.length})</option>
-            {segments.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
+            {groupsAreRoles ? (
+              <>
+                <option value="all">All roles ({roleGroups.length})</option>
+                {roleGroups.map((group) => (
+                  <option key={group.title} value={group.title}>
+                    {group.title} ({group.count})
+                  </option>
+                ))}
+              </>
+            ) : (
+              <>
+                <option value="all">All Segments ({segments.length})</option>
+                {segments.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </>
+            )}
           </select>
 
           {/* Status Filter */}
@@ -592,7 +644,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           >
             <option value="all">All Statuses</option>
             <option value="ready">Complete</option>
-            <option value="needs_review">Needs Review</option>
+            <option value="needs_review">Needs review</option>
           </select>
 
           {/* Grounding Filter */}
@@ -786,7 +838,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               .join('')
               .toUpperCase()
               .slice(0, 2);
-            const isReady = persona.status === 'ready';
+            const isReady = isCompleteProfile(persona);
 
             return (
               <article
@@ -851,7 +903,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         </div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                           {persona.demographics?.age ? `${persona.demographics.age} yo • ` : ''}
-                          {persona.demographics?.occupation || persona.archetype || 'Occupation not stated'}
+                          {humanizeToken(persona.demographics?.occupation || persona.archetype) || 'Occupation not stated'}
                         </div>
                         <TemplateBadge persona={persona} />
                       </div>
@@ -875,7 +927,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {isReady ? 'Complete' : 'Needs Review'}
+                      {isReady ? 'Complete' : 'Needs review'}
                     </span>
                   </div>
 
@@ -1075,7 +1127,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                   <span>Synthetic Persona</span>
                   <span>v{inspectingPersona.version}</span>
                   <span style={{ fontWeight: 600, padding: '2px 8px', borderRadius: '4px', background: inspectingPersona.status === 'ready' ? 'var(--status-success-bg)' : 'var(--status-warn-bg)', color: inspectingPersona.status === 'ready' ? 'var(--status-success-text)' : 'var(--status-warn-text)', border: `1px solid ${inspectingPersona.status === 'ready' ? 'var(--status-success-border)' : 'var(--status-warn-border)'}` }}>
-                    {inspectingPersona.status === 'ready' ? 'Complete' : 'Needs Review'}
+                    {isCompleteProfile(inspectingPersona) ? 'Complete' : 'Needs review'}
                   </span>
                   {inspectingPersona.data_source === 'cached' && (
                     <span title="Served from seeded/cached data - not generated live for this study" style={{ background: 'var(--bg-card-hover)', border: '1px solid var(--border-medium)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', letterSpacing: 0 }}>
@@ -1207,13 +1259,16 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
                     <h3 id="persona-identity-heading" style={{ fontSize: '1rem', color: 'var(--text-primary)', margin: '0 0 0.75rem' }}>Identity</h3>
                     <dl style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(12rem, 100%), 1fr))', gap: '0.75rem', margin: 0 }}>
                       {[
+                        ...(inspectingPersona.role_title ? [{ label: 'Panel role', value: inspectingPersona.role_title }] : []),
                         { label: 'Age', value: inspectingPersona.demographics?.age },
-                        { label: 'Gender', value: inspectingPersona.demographics?.gender },
-                        { label: 'Occupation', value: inspectingPersona.demographics?.occupation },
+                        { label: 'Gender', value: humanizeToken(inspectingPersona.demographics?.gender) || inspectingPersona.demographics?.gender },
+                        { label: 'Occupation', value: humanizeToken(inspectingPersona.demographics?.occupation) || inspectingPersona.demographics?.occupation },
                         { label: 'Location', value: inspectingPersona.demographics?.location },
-                        { label: 'Education', value: inspectingPersona.demographics?.education },
+                        { label: 'Education', value: humanizeToken(inspectingPersona.demographics?.education) || inspectingPersona.demographics?.education },
                         { label: 'Income or budget', value: inspectingPersona.demographics?.income_or_budget },
-                        { label: 'Archetype', value: inspectingPersona.archetype },
+                        // The archetype often just repeats the occupation token; only show it when it adds something.
+                        ...(inspectingPersona.archetype && inspectingPersona.archetype !== inspectingPersona.demographics?.occupation
+                          ? [{ label: 'Archetype', value: humanizeToken(inspectingPersona.archetype) }] : []),
                         { label: 'Origin country', value: inspectingPersona.origin_country },
                         { label: 'Country code', value: inspectingPersona.country_code },
                       ].map((field) => (

@@ -137,8 +137,14 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       return undefined;
     }
   });
+  // A study id the server rejected (404/403): typed URLs and deleted studies
+  // must not stay the scope of every Study tab (live 2026-09-14: a bogus id in
+  // one URL followed the user through Interviews until they picked another study).
+  const [invalidStudyId, setInvalidStudyId] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (!activeStudyId) return;
+    // Cleared here so a study that was rejected earlier can be re-validated if it reappears.
+    setInvalidStudyId((current) => (current === activeStudyId ? current : undefined));
     setRememberedStudyId(activeStudyId);
     if (!studyScopeKey) return;
     try {
@@ -155,7 +161,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
       // ignore
     }
   };
-  const scopedStudyId = activeStudyId ?? rememberedStudyId;
+  const candidateStudyId = activeStudyId ?? rememberedStudyId;
+  const scopedStudyId = candidateStudyId && candidateStudyId !== invalidStudyId ? candidateStudyId : undefined;
   const [activeInterviewId, setActiveInterviewId] = useState<string | undefined>(initialParsed.interviewId);
   const [activeStep, setActiveStep] = useState<number | undefined>(initialParsed.step);
 
@@ -494,11 +501,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   // deep links to older studies fetch once.
   const [activeStudyTitle, setActiveStudyTitle] = useState<string | undefined>(undefined);
   useEffect(() => {
-    if (!scopedStudyId) {
+    if (!candidateStudyId) {
       setActiveStudyTitle(undefined);
       return;
     }
-    const known = recentStudies.find((s) => s.id === scopedStudyId);
+    const known = recentStudies.find((s) => s.id === candidateStudyId);
     if (known) {
       setActiveStudyTitle(known.title);
       return;
@@ -506,24 +513,29 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     let cancelled = false;
     const epoch = routeEpochRef.current;
     const remembered = !activeStudyId;
+    const rejectScope = () => {
+      setInvalidStudyId(candidateStudyId);
+      if (remembered) forgetRememberedStudy();
+      else if (rememberedStudyId === candidateStudyId) forgetRememberedStudy();
+    };
     api
-      .getStudyById(scopedStudyId)
+      .getStudyById(candidateStudyId)
       .then((s) => {
         if (cancelled || !epoch.active) return;
         setActiveStudyTitle(s?.title ?? undefined);
-        // A remembered study that no longer exists must not keep scoping the tabs.
-        if (remembered && !s) forgetRememberedStudy();
+        // A study that no longer exists must not keep scoping the tabs.
+        if (!s) rejectScope();
       })
       .catch((error: unknown) => {
         if (cancelled || !epoch.active) return;
         setActiveStudyTitle(undefined);
         const status = fromUnknownError(error).status;
-        if (remembered && (status === 404 || status === 403)) forgetRememberedStudy();
+        if (status === 404 || status === 403) rejectScope();
       });
     return () => {
       cancelled = true;
     };
-  }, [activeStudyId, scopedStudyId, recentStudies, currentPath]);
+  }, [activeStudyId, candidateStudyId, recentStudies, currentPath]);
 
   // Ctrl/⌘ K jump menu
   useEffect(() => {
@@ -1530,7 +1542,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
         {activeTab === 'personas' && (
           <PersonaLibraryView
-            studyId={activeStudyId}
+            studyId={scopedStudyId}
+            initialPersonaId={new URLSearchParams(currentSearch).get('persona') ?? undefined}
+            onStudyChange={(sid) => { if (sid) setActiveStudyId(sid); }}
             onStartInterviewWithPersona={async (pId, fromStudyId) => {
               const epoch = routeEpochRef.current;
               if (!epoch.active) return;
@@ -1592,7 +1606,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               studyId={activeStudyId}
               interviewId={activeInterviewId}
               onBackToInterviews={() => navigate(`/research/${activeStudyId}/interviews`)}
-              onNavigateToPersona={() => navigate('/persona-library')}
+              onNavigateToPersona={(personaId) => navigate(personaId ? `/persona-library?persona=${encodeURIComponent(personaId)}` : '/persona-library')}
             />
           ) : (
             <NoStudySelected

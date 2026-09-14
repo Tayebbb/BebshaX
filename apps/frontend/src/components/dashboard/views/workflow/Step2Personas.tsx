@@ -5,6 +5,7 @@ import type { FailedPersonaRole } from '../../../../services/api';
 import { EvidenceBadge, TemplateBadge, countEvidenceBacked, isSyntheticSourcePersona } from '../../../../utils/personaEvidence';
 import { DEFAULT_PERSONA_COUNT, READ_ONLY_TITLE } from './types';
 import { RequestIdTag } from '../../../common/RequestIdTag';
+import { humanizeToken } from '../../../../utils/labels';
 
 /** Step 2 — persona library. Pure JSX extraction from
  * StudyWorkflowView: generation state/handlers stay in the parent; the modal
@@ -402,7 +403,14 @@ export const Step2Personas: React.FC<Step2PersonasProps> = ({
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--accent-cyan)' }}>{p.archetype || p.role_title}</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--accent-cyan)' }}>
+                          {p.role_title ? <>Role: {p.role_title}</> : humanizeToken(p.archetype)}
+                        </div>
+                        {(p.demographics?.occupation || p.demographics?.location) && (
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }} title="Source profile the model selected for this role; its demographics come from the training corpus, not from your audience.">
+                            Source profile: {[humanizeToken(p.demographics?.occupation), p.demographics?.location].filter(Boolean).join(' · ')}
+                          </div>
+                        )}
                         {p.tagline && <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>{p.tagline}</div>}
                         <TemplateBadge persona={p} />
                       </div>

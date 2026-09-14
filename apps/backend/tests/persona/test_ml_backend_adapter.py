@@ -100,7 +100,7 @@ def test_missing_source_attributes_are_preserved_and_explicitly_warned(ml_traini
     selection = Selection(record=record, score=0.5, topic=0, model_version="fixture")
     draft = to_persona_draft(selection)
     assert draft.behaviors == []
-    assert draft.demographics["education"] == draft.demographics["location"] == "Not available in training data"
+    assert draft.demographics["education"] == draft.demographics["location"] == "Not recorded"
     assert draft.detailed_attributes["source_documents"] == record.documents
     for field in ("education", "location", "behaviors"):
         assert any(field in warning.casefold() for warning in draft.validation_warnings)
@@ -252,8 +252,8 @@ def test_conversions_preserve_record_and_mark_every_claim_synthetic(
     assert generated.occupation == record.occupation
     assert generated.location == record.location
     assert generated.description == record.description
-    assert generated.education == (record.education or "Not available in training data")
-    assert generated.income_range == "Not available in training data"
+    assert generated.education == (record.education or "Not recorded")
+    assert generated.income_range == "Not recorded"
     assert generated.personality is None
     assert generated.purchase_behavior == []
     for group in CLAIM_GROUPS:

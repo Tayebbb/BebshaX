@@ -116,6 +116,9 @@ export interface SyntheticPersona {
   user_id?: string;
   segment_id?: string;
   segment_name?: string;
+  /** Workflow panel role the generation selected this profile for. */
+  role_id?: string;
+  role_title?: string;
   generation_run_id?: string;
   name: string;
   avatar_url?: string;

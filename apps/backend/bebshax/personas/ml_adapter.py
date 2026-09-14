@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from bebshax.personas.generator import GeneratedPersonaDraft
 
 
-_UNAVAILABLE_VALUE = "Not available in training data"
+_UNAVAILABLE_VALUE = "Not recorded"
 _PROXY_WARNING = (
     "Selected from USA synthetic training data as a proxy; selection scores are not "
     "observed customer evidence or customer demand."
