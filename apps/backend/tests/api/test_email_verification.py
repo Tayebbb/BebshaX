@@ -136,7 +136,7 @@ def test_verify_email_requires_matching_account(client):
     assert code
     resp = _verify(client, "bound_other@example.com", code)
     assert resp.status_code == 400
-    assert resp.json()["detail"] == "Invalid verification token."
+    assert resp.json()["detail"] == "Invalid or expired verification code."
 
 
 def test_verify_email_rejects_already_used_token(client):
@@ -145,7 +145,7 @@ def test_verify_email_rejects_already_used_token(client):
     assert _verify(client, "reuse_token@example.com", code).status_code == 200
     resp = _verify(client, "reuse_token@example.com", code)
     assert resp.status_code == 400
-    assert resp.json()["detail"] == "Invalid verification token."
+    assert resp.json()["detail"] == "Invalid or expired verification code."
 
 
 def test_verify_email_rejects_invalid_token(client):
@@ -156,7 +156,7 @@ def test_verify_email_rejects_invalid_token(client):
     assert malformed.status_code == 422
     resp = _verify(client, "nobody-here@example.com", "123456")
     assert resp.status_code == 400
-    assert "Invalid verification token" in resp.json()["detail"]
+    assert "Invalid or expired verification code" in resp.json()["detail"]
 
 
 def test_verify_email_locks_after_repeated_wrong_codes(client):
@@ -214,7 +214,7 @@ def test_verify_email_rejects_expired_token(client):
 
     resp = _verify(client, "expired_tok@example.com", code)
     assert resp.status_code == 400
-    assert "Invalid verification token" in resp.json()["detail"]
+    assert "Invalid or expired verification code" in resp.json()["detail"]
 
 
 def test_resend_verification_rate_limited(client):

@@ -332,7 +332,7 @@ class VerifyEmailRequest(EmailRequest):
 def _invalid_token() -> HTTPException:
     # One reply for unknown email, foreign token, wrong code: never confirm
     # which part was right.
-    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification token.")
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code.")
 
 
 @auth_router.post("/verify-email")

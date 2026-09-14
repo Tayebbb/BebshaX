@@ -150,6 +150,9 @@ describe('AuthPage OTP Verification & Reset Flows', () => {
   beforeEach(() => {
     api.setMockMode(true);
     vi.restoreAllMocks();
+    // AuthPage derives its view from the path; a flow that navigated in an
+    // earlier test must not pick the view for the next one.
+    window.history.replaceState({}, '', '/');
   });
 
   it('provides one named main landmark around authentication controls', () => {

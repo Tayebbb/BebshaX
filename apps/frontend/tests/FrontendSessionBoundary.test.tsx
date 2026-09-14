@@ -120,8 +120,8 @@ describe('Frontend authoritative session boundary', () => {
   });
 
   it('requires an acknowledged verification response instead of fabricating a verified user', async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ detail: 'Invalid verification token' }), { status: 400 }));
-    await expect(api.verifyEmailOtp('current@example.test', '123456')).rejects.toThrow(/Invalid verification token/);
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ detail: 'Invalid or expired verification code' }), { status: 400 }));
+    await expect(api.verifyEmailOtp('current@example.test', '123456')).rejects.toThrow(/Invalid or expired verification code/);
     expect(api.getStoredUser()).toBeNull();
   });
 

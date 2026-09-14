@@ -318,11 +318,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
       // No session: verification really is required to continue.
       const sent = await sendOtp(email, 'email-verification').catch(() => false);
       if (sent) {
-        setSuccessMessage(`Account created! We've sent a 6-digit verification code to ${email}.`);
+        // The server answers the same way whether the address was new or already
+        // registered (anti-enumeration), so the copy must not promise a code.
+        setSuccessMessage(`If ${email} is new to BebshaX, a 6-digit verification code is on its way. Already have an account with this address? Sign in or reset your password instead.`);
         setCountdown(30);
       } else {
         setErrorMessage(
-          `Account created, but we could not send a verification code to ${email}. Use "Resend" to retry — you cannot sign in until the email is verified.`
+          `We could not send a verification code to ${email}. Use "Resend" to retry — you cannot sign in until the email is verified.`
         );
       }
       setView('verify-otp');
@@ -434,7 +436,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
 
     setOtp('');
     setConfirmPassword('');
+    // Show the sign-in form under its own route (not /forgot-password) and sign
+    // in with the new password; the server clears any lock the old password
+    // left behind, so this normally succeeds. If it does not, the status keeps
+    // saying the reset worked and the alert explains the sign-in.
     setView('signin');
+    navigate('/auth/signin');
     setSuccessMessage('Password updated. Sign in with your new password.');
     await completeSignIn();
   };
@@ -1171,6 +1178,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
                 >
                   {countdown > 0 ? `Resend in ${countdown}s` : isResending ? 'Sending...' : 'Resend code'}
                 </button>
+              </p>
+              <p style={{ ...footerSwitchTextStyle, marginTop: '10px' }}>
+                Already have an account with this email?{' '}
+                <button type="button" onClick={() => { resetMessages(); navigate('/auth/signin'); }} style={linkStyle}>
+                  Sign in
+                </button>
+                {' '}or{' '}
+                <button type="button" onClick={() => { resetMessages(); navigate('/auth/forgot-password'); }} style={linkStyle}>
+                  reset your password
+                </button>
+                .
               </p>
             </div>
           </div>

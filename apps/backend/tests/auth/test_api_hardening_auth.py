@@ -105,7 +105,7 @@ async def test_token_issued_to_user_a_cannot_verify_user_b(api_test_app: TestCli
         "/api/auth/verify-email", json={"token": otp_a, "email": "bob-otp@example.com"}
     )
     assert cross.status_code == 400
-    assert cross.json()["detail"] == "Invalid verification token."
+    assert cross.json()["detail"] == "Invalid or expired verification code."
 
     async with api_test_app.app.state.db_sessionmaker() as session:
         bob = (await session.execute(select(Users).where(Users.email == "bob-otp@example.com"))).scalar_one()
@@ -129,7 +129,7 @@ async def test_unknown_email_gets_the_same_invalid_token_reply(api_test_app: Tes
         "/api/auth/verify-email", json={"token": "123456", "email": "ghost@example.com"}
     )
     assert resp.status_code == 400
-    assert resp.json()["detail"] == "Invalid verification token."
+    assert resp.json()["detail"] == "Invalid or expired verification code."
 
 
 async def test_sixth_wrong_attempt_is_rejected_even_with_the_right_code(api_test_app: TestClient):
@@ -182,7 +182,7 @@ async def test_resend_invalidates_outstanding_codes(api_test_app: TestClient):
 
     stale = api_test_app.post("/api/auth/verify-email", json={"token": first, "email": email})
     assert stale.status_code == 400
-    assert stale.json()["detail"] == "Invalid verification token."
+    assert stale.json()["detail"] == "Invalid or expired verification code."
 
     fresh = api_test_app.post("/api/auth/verify-email", json={"token": second, "email": email})
     assert fresh.status_code == 200, fresh.text

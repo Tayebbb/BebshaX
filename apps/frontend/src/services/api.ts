@@ -37,7 +37,7 @@ import {
   OpenRouterHealth,
 } from '../types/dataset';
 import { createResearchApi } from './researchApi';
-import { parseApiError, toApiErrorInstance, ApiErrorLike } from '../utils/apiError';
+import { parseApiError, summariseDetail, toApiErrorInstance, ApiErrorLike } from '../utils/apiError';
 import type { SendInterviewMessageResponse } from '../types/interview';
 import { decodeInterviewDelta, decodeInterviewDetail, decodeInterviewFrame, decodeInterviewReply, decodeInterviewSynthesis, decodeStudyReport, isRecord, MAX_INTERVIEW_FRAME_LENGTH } from './interviewProtocol';
 import type { InterviewDetailResponse, CompleteInterviewResponse } from '../types/interview';
@@ -1041,10 +1041,17 @@ export const api = {
     lastKnownLive = true;
     const errorData = await res.json().catch(() => ({}));
     if (res.status === 409) {
-      throw authError(errorData.detail || 'An account with this email address already exists.');
+      throw authError(summariseDetail(errorData.detail, 'An account with this email address already exists.'));
+    }
+    if (res.status === 422) {
+      // Validation envelopes carry a `message`; the `detail` array is per-field.
+      throw authError(
+        (typeof errorData.message === 'string' && errorData.message) || summariseDetail(errorData.detail, 'Please check the sign-up details and try again.'),
+        'VALIDATION_ERROR',
+      );
     }
     throw authError(
-      errorData.detail || `Registration failed (server error ${res.status}). Please try again.`
+      summariseDetail(errorData.detail, `Registration failed (server error ${res.status}). Please try again.`)
     );
   },
 
@@ -1093,7 +1100,7 @@ export const api = {
       lastKnownLive = true;
       const errorData = await res.json().catch(() => ({}));
       if (res.status === 401 || res.status === 403) {
-        const detail: string = errorData.detail || 'Invalid email or password.';
+        const detail: string = summariseDetail(errorData.detail, 'Invalid email or password.');
         if (detail.includes('EMAIL_NOT_VERIFIED')) {
           throw authError(
             'Your email address is not verified yet. Enter the 6-digit code we send you to finish signing in.',
@@ -1102,8 +1109,14 @@ export const api = {
         }
         throw authError(detail);
       }
+      if (res.status === 429) {
+        throw authError(
+          (typeof errorData.message === 'string' && errorData.message) || summariseDetail(errorData.detail, 'Too many sign-in attempts. Try again in a moment.'),
+          'RATE_LIMITED',
+        );
+      }
       throw authError(
-        errorData.detail || `Sign-in failed (server error ${res.status}). Please try again.`
+        (typeof errorData.message === 'string' && errorData.message) || summariseDetail(errorData.detail, `Sign-in failed (server error ${res.status}). Please try again.`)
       );
     } catch (backendErr: unknown) {
       throw backendErr;
@@ -1174,8 +1187,21 @@ export const api = {
           this.scheduleProactiveRefresh({ access_token: token });
           return user;
         } else if (res.status === 401 || res.status === 403) {
-          // Token is rejected or invalid
+          // The access token is rejected (expired while the tab slept, rotated
+          // elsewhere). The refresh credential is the session; use it exactly
+          // as the in-app 401 replay path does before giving up.
           lastKnownLive = true;
+          if (res.status === 401 && getRefreshCredential()) {
+            try {
+              const refreshed = await this.refreshToken();
+              if (refreshed?.user) {
+                assertSession(expected);
+                return refreshed.user;
+              }
+            } catch {
+              // fall through: the refresh itself was refused
+            }
+          }
           this.clearSession();
           return null;
         }

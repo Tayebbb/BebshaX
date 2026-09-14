@@ -130,6 +130,34 @@ describe('Session refresh replay', () => {
     expect(api.getAuthToken()).toBe('renewed-fixture-token');
   });
 
+  it('rotates on reload when a token that still looks live is rejected by the server', async () => {
+    // Live 2026-09-14: a tab that slept past expiry (or whose token was rotated
+    // elsewhere) reloaded into the sign-in form although its refresh credential
+    // was intact; /auth/me answered 401 and the client just cleared the session.
+    api.acceptAuthResponse({ access_token: liveToken(600), refresh_token: refresh, token_type: 'bearer', expires_in: 600, expires_in_days: 0.01, user });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Invalid or expired authentication token' }), { status: 401 }))
+      .mockResolvedValueOnce(renewed());
+
+    await expect(api.getMe()).resolves.toEqual(user);
+
+    expect(vi.mocked(fetch).mock.calls.map(requestUrl)).toEqual([
+      expect.stringMatching(/\/auth\/me$/), expect.stringMatching(/\/auth\/refresh$/),
+    ]);
+    expect(api.getAuthToken()).toBe('renewed-fixture-token');
+    expect(api.hasSession()).toBe(true);
+  });
+
+  it('signs out on reload only when the refresh credential itself is refused', async () => {
+    api.acceptAuthResponse({ access_token: liveToken(600), refresh_token: refresh, token_type: 'bearer', expires_in: 600, expires_in_days: 0.01, user });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Invalid or expired authentication token' }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Invalid or expired refresh token' }), { status: 401 }));
+
+    await expect(api.getMe()).resolves.toBeNull();
+    expect(api.hasSession()).toBe(false);
+  });
+
   it('rotates proactively one minute before the access credential expires', async () => {
     vi.useFakeTimers();
     api.acceptAuthResponse({ access_token: liveToken(120), refresh_token: refresh, token_type: 'bearer', expires_in: 120, expires_in_days: 0.01, user });
