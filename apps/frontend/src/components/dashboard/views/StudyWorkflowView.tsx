@@ -17,6 +17,7 @@ import {
   DEFAULT_PERSONA_COUNT,
   MAX_PERSONAS_PER_ROLE,
   READ_ONLY_TITLE,
+  ResearchGoalCardData,
   isTemplateReply,
 } from './workflow/types';
 import { fromUnknownError, toUserMessage } from '../../../utils/apiError';
@@ -28,6 +29,11 @@ import { Step5Report } from './workflow/Step5Report';
 import { PersonaDetailModal } from './workflow/PersonaDetailModal';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { EvidenceProbe, nextEvidenceProbe } from './workflow/evidenceProbe';
+
+const EVIDENCE_PROBE_ATTEMPTS = 40;
+const EVIDENCE_PROBE_INTERVAL_MS = 9000;
+/** Probe states from which Step 1 may start or retry the evidence run. */
+const EVIDENCE_RUNNABLE_STATES: EvidenceProbe['state'][] = ['not_run', 'failed', 'timeout'];
 import { getStudyDraftRetry, STUDY_SAVE_CHANGED, type StudySaveState } from '../../../services/studyPersistence';
 import { getSessionEpoch } from '../../../services/session';
 import { pollSerial } from '../../../services/polling';
@@ -204,6 +210,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
   // endpoint, and it never blocks the copilot path.
   const [evidenceProbe, setEvidenceProbe] = useState<EvidenceProbe>({ state: 'checking' });
   const evidenceProbeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scriptGenerationPendingRef = useRef(false);
+  /** Summary of the goal card the user approved; drives which card reads as approved. */
+  const [approvedGoalSummary, setApprovedGoalSummary] = useState<string | null>(null);
 
   const copilotMessagesRef = useRef<CopilotMessage[]>([]);
   const isFetchingCopilotRef = useRef<boolean>(false);
@@ -304,10 +313,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     // Read-only example studies never PATCH — the write gate would refuse.
     if (studyId && !isReadOnly && epoch.active) {
       // 'completed' is earned by a generated report — never by visiting step 5.
+      // The prompt is not resent here: after approval it holds the approved goal,
+      // and the copy in local state can be older (live 2026-09-14: a step change
+      // reverted the goal to the first chat message, which every interview then
+      // received as its objective).
       api
         .updateStudy(studyId, {
           step: clamped,
-          prompt: promptInput || study?.prompt,
           copilot_messages: copilotMessagesRef.current as any,
           suggested_roles: suggestedRoles,
           script_questions: questions,
@@ -362,6 +374,8 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           // Reopen the role drawer when the goal was already approved pre-refresh.
           if ((s.copilot_messages || []).some((m: any) => m.isGoalCard)) {
             setShowRoleSelection(true);
+            // Approval stores the card summary as the prompt.
+            if (s.prompt) setApprovedGoalSummary(s.prompt);
           }
         }
         if (s.script_questions && s.script_questions.length > 0) {
@@ -402,9 +416,12 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   // Report on the evidence attempt itself so step 2 never arrives unexplained.
   // A single GET; while a run is in flight it re-checks a bounded number of
-  // times so "Looking for…" can actually resolve without a page reload.
+  // times so "Looking for…" can actually resolve without a page reload. Runs
+  // take minutes on free providers: 40 polls at 9 s follows one to its end
+  // (live 2026-09-14 the probe gave up after ~30 s and reported "still
+  // searching" for a run that had already failed).
   const probeEvidence = React.useCallback(
-    async (attemptsLeft = 8, epoch = studyEpochRef.current) => {
+    async (attemptsLeft = EVIDENCE_PROBE_ATTEMPTS, epoch = studyEpochRef.current) => {
       if (!epoch.active) return;
       if (!studyId) {
         setEvidenceProbe({ state: 'not_run' });
@@ -418,7 +435,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         if (next.state === 'searching') {
           evidenceProbeTimerRef.current = setTimeout(() => {
             void probeEvidence(attemptsLeft - 1, epoch);
-          }, 6000);
+          }, EVIDENCE_PROBE_INTERVAL_MS);
         }
       } catch {
         if (epoch.active) setEvidenceProbe({ state: 'unavailable' });
@@ -435,18 +452,20 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     };
   }, [probeEvidence]);
 
-  /** Step 1's `not_run` state can start the evidence run directly — same
-   * trigger + probe plumbing handleApproveGoal already uses. */
+  /** Step 1's `not_run`, `failed` and `timeout` states can start (or retry) the
+   * evidence run directly — same trigger + probe plumbing handleApproveGoal
+   * already uses, so a failed run never forces a detour through the lab. */
   const handleRunEvidenceResearch = () => {
     const epoch = studyEpochRef.current;
     // Guard the one-frame window before re-render unmounts the button.
-    if (!epoch.active || !studyId || evidenceProbe.state !== 'not_run') return;
+    if (!epoch.active || !studyId || !EVIDENCE_RUNNABLE_STATES.includes(evidenceProbe.state)) return;
+    if (evidenceProbeTimerRef.current) clearTimeout(evidenceProbeTimerRef.current);
     setEvidenceProbe({ state: 'searching' });
     api
       .triggerStudyResearch(studyId)
       .catch(() => {})
       .finally(() => {
-        if (epoch.active) return probeEvidence(8, epoch);
+        if (epoch.active) return probeEvidence(EVIDENCE_PROBE_ATTEMPTS, epoch);
       });
   };
 
@@ -554,7 +573,13 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     setCopilotMessages(updated);
 
     if (studyId) {
-      api.updateStudy(studyId, { prompt: messageToSend, copilot_messages: updated as any }).catch(() => {});
+      // Before approval the latest idea text is the working prompt; once a goal
+      // is approved the prompt IS that goal and only re-approval changes it.
+      const goalApproved = approvedGoalSummary !== null || showRoleSelection;
+      api.updateStudy(studyId, {
+        ...(goalApproved ? {} : { prompt: messageToSend }),
+        copilot_messages: updated as any,
+      }).catch(() => {});
     }
 
     fetchCopilotTurn(updated.map((m) => ({ role: m.role, content: m.content })));
@@ -619,7 +644,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     void loadSuggestedRoles(activePrompt);
   };
 
-  const handleApproveGoal = async (summary?: string) => {
+  const handleApproveGoal = async (summary?: string, card?: ResearchGoalCardData) => {
     const epoch = studyEpochRef.current;
     if (!epoch.active) return;
     setShowRoleSelection(true);
@@ -638,31 +663,44 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       return;
     }
 
-    // 1. Trigger background autonomous research and dataset discovery
+    // Role discovery is the visible response to the click — start it at once.
+    // Re-approving the same goal never clobbers the user's count/selection
+    // tweaks; approving a different proposal asks for roles that fit it.
+    const switchingGoal = approvedGoalSummary !== null && approvedGoalSummary !== activePrompt;
+    setApprovedGoalSummary(activePrompt);
+    const rolesLoading = suggestedRoles.length === 0 || switchingGoal ? loadSuggestedRoles(activePrompt) : Promise.resolve();
+
+    // Persist the approved goal BEFORE starting research. Research admission
+    // snapshots the study (prompt, revision) and refuses with 409
+    // research_input_changed when a PATCH lands in between — which is exactly
+    // what firing both at once did (live 2026-09-14). The save is a pure DB write.
     if (studyId) {
+      const audience = card?.target_audience?.trim();
+      setStudy((current) => (current ? { ...current, prompt: activePrompt, ...(audience ? { target_audience: audience } : {}) } : current));
+      try {
+        await api.updateStudy(studyId, {
+          prompt: activePrompt,
+          step: 2,
+          copilot_messages: copilotMessagesRef.current as any,
+          // The card's audience feeds research, role suggestion and persona
+          // prompts; it used to stay NULL after approval (live 2026-09-14).
+          ...(audience ? { target_audience: audience } : {}),
+        });
+      } catch {
+        // The save banner reports this; research still runs on the stored prompt.
+      }
+      if (!epoch.active) return;
+      if (evidenceProbeTimerRef.current) clearTimeout(evidenceProbeTimerRef.current);
       setEvidenceProbe({ state: 'searching' });
       api
         .triggerStudyResearch(studyId)
         .catch(() => {})
         .finally(() => {
-          if (epoch.active) return probeEvidence(8, epoch);
+          if (epoch.active) return probeEvidence(EVIDENCE_PROBE_ATTEMPTS, epoch);
         });
     }
 
-    // 2. Fetch suggested roles only when the copilot didn't already supply them,
-    //    so re-approving never clobbers the user's count/selection tweaks.
-    if (suggestedRoles.length === 0) {
-      await loadSuggestedRoles(activePrompt);
-    }
-    if (!epoch.active) return;
-
-    if (studyId) {
-      api.updateStudy(studyId, {
-        prompt: activePrompt,
-        step: 2,
-        copilot_messages: copilotMessagesRef.current as any,
-      }).catch(() => {});
-    }
+    await rolesLoading;
   };
 
   const handleToggleRole = (roleId: string) => {
@@ -897,7 +935,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
 
   const handleGenerateScript = async () => {
     const epoch = studyEpochRef.current;
-    if (!epoch.active || !studyId || isGeneratingScript) return;
+    // State updates land after this tick; the ref refuses the second click of a double-click.
+    if (!epoch.active || !studyId || isGeneratingScript || scriptGenerationPendingRef.current) return;
+    scriptGenerationPendingRef.current = true;
     setIsGeneratingScript(true);
     setScriptError(null);
     try {
@@ -935,6 +975,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         );
       }
     } finally {
+      scriptGenerationPendingRef.current = false;
       if (epoch.active) setIsGeneratingScript(false);
     }
   };
@@ -1615,6 +1656,7 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
               handleIncrementRole={handleIncrementRole}
               handleDecrementRole={handleDecrementRole}
               evidenceProbe={evidenceProbe}
+              approvedGoalSummary={approvedGoalSummary}
               onNavigateToEvidence={studyId ? () => navigate(`/research/${studyId}/evidence`) : undefined}
               onRunEvidence={studyId && !isReadOnly ? handleRunEvidenceResearch : undefined}
               isReadOnly={isReadOnly}

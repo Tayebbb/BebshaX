@@ -2,7 +2,7 @@ import type { Study } from '../types/study';
 import { assertSession, getSessionEpoch } from './session';
 import { isRecord } from './interviewProtocol';
 
-const editable = ['title', 'type', 'goal', 'prompt', 'step', 'copilot_messages', 'suggested_roles', 'script_questions'] as const;
+const editable = ['title', 'type', 'goal', 'prompt', 'target_audience', 'step', 'copilot_messages', 'suggested_roles', 'script_questions'] as const;
 export type StudyDraft = Pick<Partial<Study>, typeof editable[number]>;
 export const STUDY_SAVE_CHANGED = 'bebshax:study-save';
 export interface StudySaveState {

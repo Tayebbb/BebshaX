@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from contextlib import nullcontext
 from copy import deepcopy
@@ -45,6 +46,14 @@ _MAX_MODEL_ATTEMPTS = 2
 # Personas generated per selected role: one LLM call writes them all, so this
 # bounds prompt/response size. A request outside 1..MAX is rejected, never clamped.
 MAX_PERSONAS_PER_ROLE = 3
+# The copilot's confirmation line. It belongs in the conversational reply, once;
+# the card summary becomes the study prompt (research input), so it must not
+# carry it (observed live: the sentence rendered twice, and was stored).
+_CONFIRMATION_RE = re.compile(r"\s*Does this capture what you[’']re looking for\?\s*", re.IGNORECASE)
+# A research goal needs an idea described in words: this many letter-words
+# across the user's messages. Emoji/punctuation-only conversations have none.
+_MIN_IDEA_WORDS = 3
+_WORD_RE = re.compile(r"[^\W\d_]{2,}")
 
 
 class CopilotMessage(BaseModel):
@@ -110,7 +119,9 @@ Behavior:
 3. Turn 3+ (Once enough details are present):
    - Output your final synthesis in JSON (see format below).
    - Create a clear, executive-level RESEARCH GOAL tailored to their exact business idea.
-   - Always end the summary with: "Does this capture what you're looking for?"
+   - End your reply (not the summary) with: "Does this capture what you're looking for?" — exactly once.
+   - The summary, target_audience and core_hypothesis must reflect the user's LATEST statements. When they changed or corrected a detail (audience, location, price, segment), use the new version and drop the superseded one.
+   - Never propose a research goal before the user has described their business idea in words. A message made only of emoji, punctuation or a greeting gets a short clarifying question instead.
    - Suggest 4-8 highly relevant persona roles that would be meaningful for their study. Make roles specific to their business context.
 
 Output Format:
@@ -127,12 +138,12 @@ For turns 1-2 (still gathering info):
 
 For turn 3+ (ready to synthesize):
 {
-  "reply": "I've synthesized your inputs into a focused research goal proposal below:",
+  "reply": "I've synthesized your inputs into a focused research goal proposal below. Does this capture what you're looking for?",
   "suggested_study_type": "interviews",
   "is_ready_for_approval": true,
   "research_goal_card": {
     "title": "RESEARCH GOAL",
-    "summary": "You want to research whether [specific hypothesis about their actual business]. [Key decision they need to make]. Does this capture what you're looking for?",
+    "summary": "You want to research whether [specific hypothesis about their actual business]. [Key decision they need to make].",
     "target_audience": "[Specific audience description based on their context]",
     "core_hypothesis": "[Core assumption to validate]"
   },
@@ -365,6 +376,21 @@ def _roles_from(raw_roles: Any) -> list[PersonaRoleSuggestion]:
     return roles
 
 
+def _idea_words(messages: list[CopilotMessage]) -> int:
+    """Letter-words the user has written so far (any script; emoji count for nothing)."""
+    return sum(len(_WORD_RE.findall(m.content)) for m in messages if m.role == "user")
+
+
+def _single_confirmation(reply: str) -> str:
+    """Keep the confirmation line once, at most — models repeat it (observed live)."""
+    hits = list(_CONFIRMATION_RE.finditer(reply))
+    if len(hits) <= 1:
+        return reply
+    last = hits[-1]
+    head = _CONFIRMATION_RE.sub(" ", reply[: last.start()])
+    return re.sub(r" {2,}", " ", head + reply[last.start():]).strip()
+
+
 @router.post("/study/copilot", response_model=CopilotResponse)
 @limiter.limit("30/minute")
 async def study_design_copilot(
@@ -416,24 +442,30 @@ async def study_design_copilot(
     card = None
     if ready and isinstance(raw_card, dict) and str(raw_card.get("summary") or "").strip():
         card_fields = (
-            str(raw_card["summary"]),
+            # The summary becomes the study prompt: no conversational tail in it.
+            _CONFIRMATION_RE.sub(" ", str(raw_card["summary"])).strip(),
             str(raw_card.get("target_audience") or ""),
             str(raw_card.get("core_hypothesis") or ""),
         )
         # A card still holding the template's slots ("[Core assumption to
         # validate]") is not a card: nothing to approve.
-        if not contains_placeholder(card_fields):
+        if card_fields[0] and not contains_placeholder(card_fields):
             card = ResearchGoalCard(
                 title=str(raw_card.get("title") or "RESEARCH GOAL"),
                 summary=card_fields[0],
                 target_audience=card_fields[1],
                 core_hypothesis=card_fields[2],
             )
-    # A "ready" flag without a real card is not approvable.
+    # A "ready" flag without a real card is not approvable, and no card is
+    # approvable until the user has actually described an idea in words
+    # (observed live: a goal synthesised from an emoji-only conversation).
+    if card is not None and _idea_words(body.messages) < _MIN_IDEA_WORDS:
+        logger.info("copilot: goal card withheld, conversation has no idea text yet")
+        card = None
     ready = ready and card is not None
 
     return CopilotResponse(
-        reply=str(parsed.get("reply", "")),
+        reply=_single_confirmation(str(parsed.get("reply", ""))),
         suggested_study_type=str(parsed.get("suggested_study_type") or "interviews"),
         is_ready_for_approval=ready,
         research_goal_card=card,

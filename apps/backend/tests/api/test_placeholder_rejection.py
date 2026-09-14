@@ -100,6 +100,48 @@ def test_placeholder_roles_are_dropped_from_the_copilot_card(api_test_app: TestC
     assert [r["role"] for r in body["suggested_roles"]] == ["FREELANCE DOG WALKER"]
 
 
+# --- goal card hygiene (live 2026-09-14) -------------------------------------
+
+_CARD = {
+    "title": "RESEARCH GOAL",
+    "summary": "You want to research whether Berlin professionals will pay 18 EUR per walk. Does this capture what you're looking for?",
+    "target_audience": "Professionals in Berlin who own a dog",
+    "core_hypothesis": "Owners pay for reliability",
+}
+_QUESTION = "Does this capture what you're looking for?"
+
+
+def test_confirmation_question_is_kept_out_of_the_summary_and_said_once(api_test_app: TestClient, auth_headers):
+    # Live: the sentence rendered twice (reply + card) and the copy stored as the
+    # study prompt — research input — carried the conversational tail.
+    reply = f"Here is the proposal. {_QUESTION} It is below. {_QUESTION}"
+    _install_router(api_test_app.app, [_copilot_reply(reply, is_ready_for_approval=True, research_goal_card=_CARD)])
+
+    res = api_test_app.post("/api/study/copilot", json={"messages": _MESSAGES * 3}, headers=auth_headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["is_ready_for_approval"] is True
+    assert body["research_goal_card"]["summary"] == "You want to research whether Berlin professionals will pay 18 EUR per walk."
+    assert body["reply"] == f"Here is the proposal. It is below. {_QUESTION}"
+    assert body["reply"].count(_QUESTION) == 1
+
+
+def test_goal_card_is_withheld_until_the_user_describes_an_idea_in_words(api_test_app: TestClient, auth_headers):
+    # Live: an emoji-only conversation was answered with a full, approvable goal.
+    _install_router(api_test_app.app, [_copilot_reply("Proposal below.", is_ready_for_approval=True, research_goal_card=_CARD)] * 2)
+
+    emoji_only = [{"role": "user", "content": "🧺🧼😀👕"}, {"role": "assistant", "content": "Tell me more?"}, {"role": "user", "content": "👍 !!!"}]
+    res = api_test_app.post("/api/study/copilot", json={"messages": emoji_only}, headers=auth_headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["is_ready_for_approval"] is False and res.json()["research_goal_card"] is None
+
+    # Words in any script count; emoji in the latest turn do not undo an earlier idea.
+    described = [{"role": "user", "content": "ঢাকার ছাত্রদের জন্য লন্ড্রি সার্ভিস"}, {"role": "assistant", "content": "Which campus?"}, {"role": "user", "content": "🧺🧼"}]
+    res = api_test_app.post("/api/study/copilot", json={"messages": described}, headers=auth_headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["is_ready_for_approval"] is True
+
+
 # --- suggest-roles -----------------------------------------------------------
 
 

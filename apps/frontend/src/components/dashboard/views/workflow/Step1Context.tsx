@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, FlaskConical, Loader2, Minus, Plus, Sparkles } from 'lucide-react';
 import { PersonaRoleSuggestion } from '../../../../types';
-import { CopilotMessage, MAX_PERSONAS_PER_ROLE, READ_ONLY_TITLE } from './types';
+import { CopilotMessage, MAX_PERSONAS_PER_ROLE, READ_ONLY_TITLE, ResearchGoalCardData } from './types';
 import { EvidenceProbe } from './evidenceProbe';
 import { RequestIdTag } from '../../../common/RequestIdTag';
 import { PromptInputBox } from '../../../ui/PromptInputBox';
@@ -18,7 +18,7 @@ interface Step1ContextProps {
   copilotMessages: CopilotMessage[];
   isCopilotTyping: boolean;
   showRoleSelection: boolean;
-  handleApproveGoal: (summary?: string) => Promise<void>;
+  handleApproveGoal: (summary?: string, card?: ResearchGoalCardData) => Promise<void>;
   handleSendCopilotMessage: (text?: string) => void;
   handleRetryCopilotMessage: (errorMessageId: string) => void;
   step1InputRef: React.MutableRefObject<HTMLTextAreaElement | null>;
@@ -35,9 +35,12 @@ interface Step1ContextProps {
   handleIncrementRole: (roleId: string, e: React.MouseEvent) => void;
   handleDecrementRole: (roleId: string, e: React.MouseEvent) => void;
   evidenceProbe: EvidenceProbe;
+  /** Summary of the goal card the user approved (the study's prompt). Only
+   * that card reads as approved; other proposals stay approvable. */
+  approvedGoalSummary?: string | null;
   onNavigateToEvidence?: () => void;
-  /** Starts the evidence research run from the `not_run` state. The parent
-   * withholds it for read-only studies. */
+  /** Starts or retries the evidence research run (`not_run`, `failed`,
+   * `timeout`). The parent withholds it for read-only studies. */
   onRunEvidence?: () => void;
   /** Example (demo) studies are viewable but never mutable from here. */
   isReadOnly?: boolean;
@@ -65,10 +68,24 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
   handleIncrementRole,
   handleDecrementRole,
   evidenceProbe,
+  approvedGoalSummary = null,
   onNavigateToEvidence,
   onRunEvidence,
   isReadOnly = false,
 }) => {
+  // Which proposal is the approved one. Live 2026-09-14: after approving one
+  // of two goal cards, both flipped to "Goal Approved". Match on the saved
+  // prompt; studies approved before the prompt was recorded fall back to the
+  // latest card.
+  const approvedCardId = React.useMemo(() => {
+    if (!showRoleSelection) return null;
+    const cards = copilotMessages.filter((m) => m.isGoalCard && m.goalCardData);
+    if (cards.length === 0) return null;
+    const match = approvedGoalSummary
+      ? cards.find((c) => c.goalCardData?.summary === approvedGoalSummary)
+      : undefined;
+    return (match ?? cards[cards.length - 1]).id;
+  }, [copilotMessages, showRoleSelection, approvedGoalSummary]);
   const busy = evidenceProbe.state === 'checking' || evidenceProbe.state === 'searching';
   const evidenceLine =
     evidenceProbe.state === 'checking'
@@ -84,9 +101,9 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
       : evidenceProbe.state === 'failed'
       ? `The evidence research run failed${
           evidenceProbe.message ? ` (${evidenceProbe.message})` : ''
-        }${evidenceProbe.errorCode ? ` [${evidenceProbe.errorCode}]` : ''} — nothing was collected and nothing was substituted. Retry it in the Evidence Laboratory.`
+        }${evidenceProbe.errorCode ? ` [${evidenceProbe.errorCode}]` : ''} — nothing was collected and nothing was substituted.`
       : evidenceProbe.state === 'timeout'
-      ? 'Still searching — this can take a few minutes. Check the Evidence Laboratory.'
+      ? 'The evidence run is taking longer than expected. It keeps going in the background — retry or follow it in the Evidence Laboratory.'
       : evidenceProbe.state === 'empty'
       ? evidenceProbe.noLiveEvidence
         ? `The live search${evidenceProbe.provider ? ` (${evidenceProbe.provider})` : ''} returned no sources for this idea — no claims were written in their place; synthetic source profiles remain unvalidated hypotheses.`
@@ -130,14 +147,17 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
                 <FlaskConical size={14} color="var(--accent-cyan)" />
               )}
               <span>{evidenceLine}</span>
-              {evidenceProbe.state === 'not_run' && onRunEvidence && (
+              {(evidenceProbe.state === 'not_run' ||
+                evidenceProbe.state === 'failed' ||
+                evidenceProbe.state === 'timeout') &&
+                onRunEvidence && (
                 <button
                   type="button"
                   onClick={onRunEvidence}
                   className="bx-btn bx-btn--tinted bx-btn--sm"
                 >
                   <FlaskConical size={13} aria-hidden="true" />
-                  Run evidence research
+                  {evidenceProbe.state === 'not_run' ? 'Run evidence research' : 'Retry evidence research'}
                 </button>
               )}
               {onNavigateToEvidence && !busy && (
@@ -279,15 +299,20 @@ export const Step1Context: React.FC<Step1ContextProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => handleApproveGoal(msg.goalCardData?.summary)}
+                        onClick={() => handleApproveGoal(msg.goalCardData?.summary, msg.goalCardData)}
                         disabled={isReadOnly || !!msg.isTemplate || isCopilotTyping || isLoadingRoles || isGeneratingPersonas}
                         aria-disabled={isReadOnly || !!msg.isTemplate || isCopilotTyping || isLoadingRoles || isGeneratingPersonas}
+                        aria-pressed={approvedCardId === msg.id}
                         title={isReadOnly ? READ_ONLY_TITLE : msg.isTemplate ? TEMPLATE_APPROVAL_BLOCKED : undefined}
-                        className={`bx-btn bx-btn--block ${showRoleSelection ? 'bx-btn--tinted' : 'bx-btn--primary'}`}
+                        className={`bx-btn bx-btn--block ${approvedCardId === msg.id ? 'bx-btn--tinted' : 'bx-btn--primary'}`}
                         style={{ marginTop: '14px' }}
                       >
                         <CheckCircle2 size={16} aria-hidden="true" />
-                        {showRoleSelection ? 'Goal Approved — View Suggested Roles ↓' : 'Approve Goal & Discover Personas'}
+                        {approvedCardId === msg.id
+                          ? 'Goal Approved — View Suggested Roles ↓'
+                          : approvedCardId
+                          ? 'Approve This Goal Instead'
+                          : 'Approve Goal & Discover Personas'}
                       </button>
                       {msg.isTemplate && (
                         <p style={{ margin: '8px 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>

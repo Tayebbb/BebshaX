@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { StudiesDashboardView } from '../src/components/dashboard/views/StudiesDashboardView';
 import { PersonaLibraryView } from '../src/components/dashboard/views/PersonaLibraryView';
@@ -182,11 +182,41 @@ describe('Step 1 status line', () => {
   });
 
   it('says it is still searching when the poll budget ran out', () => {
-    renderStep1({ state: 'timeout' });
+    const onRunEvidence = vi.fn();
+    render(
+      <Step1Context
+        copilotChatRef={{ current: null }}
+        copilotMessages={[]}
+        isCopilotTyping={false}
+        showRoleSelection={false}
+        handleApproveGoal={vi.fn()}
+        handleSendCopilotMessage={vi.fn()}
+        handleRetryCopilotMessage={vi.fn()}
+        step1InputRef={{ current: null }}
+        step1Prompt=""
+        setStep1Prompt={vi.fn()}
+        roleSelectionRef={{ current: null }}
+        suggestedRoles={[]}
+        isLoadingRoles={false}
+        roleError={null}
+        handleRetrySuggestedRoles={vi.fn()}
+        isGeneratingPersonas={false}
+        handleGeneratePersonas={vi.fn()}
+        handleToggleRole={vi.fn()}
+        handleIncrementRole={vi.fn()}
+        handleDecrementRole={vi.fn()}
+        evidenceProbe={{ state: 'timeout' }}
+        onNavigateToEvidence={vi.fn()}
+        onRunEvidence={onRunEvidence}
+      />,
+    );
 
-    expect(screen.getByText(/Still searching — this can take a few minutes/i)).toBeInTheDocument();
+    expect(screen.getByText(/taking longer than expected/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Open Evidence Laboratory/i })).toBeInTheDocument();
     expect(screen.queryByText(/No evidence found/i)).toBeNull();
+    // Live 2026-09-14: a failed/stalled run could only be retried from the lab.
+    fireEvent.click(screen.getByRole('button', { name: /Retry evidence research/i }));
+    expect(onRunEvidence).toHaveBeenCalledTimes(1);
   });
 });
 

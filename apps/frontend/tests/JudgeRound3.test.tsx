@@ -182,7 +182,7 @@ describe('Blocker 2 — structural completeness is never called verification', (
 
     await waitFor(() => expect(screen.getByText('Nadia Rahman')).toBeInTheDocument());
 
-    expect(screen.getAllByText('Needs Review').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
   });
 });
 

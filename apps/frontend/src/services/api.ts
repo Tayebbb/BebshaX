@@ -3160,6 +3160,12 @@ export const api = {
     if (saved.id !== report.id || saved.version !== report.version) throw new Error('Saved report version does not match completion');
     markTiming('saved-completion');
     invalidateStudiesCache();
+    // Publishing the report onto the study (findings, status) advanced its
+    // revision server-side; adopt it so the next queued save targets the
+    // current row instead of bouncing off a 412 first (live 2026-09-14).
+    if (saved.metrics?.study_projection_applied === true) {
+      adoptStudyRevision(studyId, saved.metrics.published_study_revision);
+    }
     if (this.getPendingJobHandle(studyId, 'report') === jobId) this.forgetJobHandle(studyId, 'report');
     return saved;
   },

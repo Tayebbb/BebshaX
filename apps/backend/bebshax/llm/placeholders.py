@@ -29,6 +29,10 @@ def normalise(text: str) -> str:
 _RAW_PLACEHOLDERS: tuple[str, ...] = (
     # api/copilot.py SYSTEM_PROMPT (study design copilot)
     "Conversational explanation and question to display to the user",
+    "I've synthesized your inputs into a focused research goal proposal below. "
+    "Does this capture what you're looking for?",
+    "You want to research whether [specific hypothesis about their actual business]. "
+    "[Key decision they need to make].",
     "You want to research whether [specific hypothesis about their actual business]. "
     "[Key decision they need to make]. Does this capture what you're looking for?",
     "[specific hypothesis about their actual business]",

@@ -118,6 +118,10 @@ export interface StudyReport {
     served_by?: string | null;
     llm_request_id?: string | null;
     attempts?: number;
+    /** True when this version was projected onto the study (findings, status). */
+    study_projection_applied?: boolean;
+    /** Study revision after that projection; null when it was skipped. */
+    published_study_revision?: number | null;
     [key: string]: any;
   };
   sentiment_score?: number;

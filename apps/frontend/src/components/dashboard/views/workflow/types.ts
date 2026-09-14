@@ -18,18 +18,20 @@ export const DEFAULT_PERSONA_COUNT = 6;
  * request with 422 rather than clamping, so the UI must never ask for more. */
 export const MAX_PERSONAS_PER_ROLE = 3;
 
+export interface ResearchGoalCardData {
+  title: string;
+  summary: string;
+  target_audience: string;
+  core_hypothesis: string;
+}
+
 export interface CopilotMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp?: string;
   isGoalCard?: boolean;
-  goalCardData?: {
-    title: string;
-    summary: string;
-    target_audience: string;
-    core_hypothesis: string;
-  };
+  goalCardData?: ResearchGoalCardData;
   isRetryPrompt?: boolean;
   retryContent?: string;
   /** Route that produced an assistant reply (`provider/model` or the template engine). */
