@@ -306,7 +306,8 @@ async def test_dataset_upload_route_is_exempt_from_the_global_body_cap(api_test_
 
 
 async def test_rate_limited_envelope_has_request_id_and_error_code(api_test_app: TestClient):
-    """The 429 handler keeps slowapi's `error` key and adds the envelope fields."""
+    """The 429 handler speaks to the user (not slowapi's "5 per 1 minute"), carries
+    Retry-After, and keeps the standard envelope keys."""
     from bebshax.api.limiter import limiter
 
     limiter._limiter.storage.reset()
@@ -319,8 +320,11 @@ async def test_rate_limited_envelope_has_request_id_and_error_code(api_test_app:
         assert last is not None and last.status_code == 429, last.text
         body = last.json()
         assert body["error_code"] == "rate_limited"
-        assert body["error"].startswith("Rate limit exceeded")
-        assert body["detail"] == body["error"]
+        assert body["detail"].startswith("Too many requests from your connection. Try again in ")
+        assert body["message"] == body["detail"]
+        assert body["limit"] == "5 per 1 minute"
+        assert 1 <= body["retry_after_seconds"] <= 60
+        assert last.headers["Retry-After"] == str(body["retry_after_seconds"])
         assert body["request_id"] == last.headers["X-Request-ID"]
     finally:
         limiter._limiter.storage.reset()

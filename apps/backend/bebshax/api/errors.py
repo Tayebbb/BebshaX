@@ -14,6 +14,7 @@ never reach the public error envelope or this module's logs.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import time
 import traceback
@@ -434,10 +435,27 @@ async def explicit_failure_handler(request: Request, exc: ExplicitFailure) -> Re
 def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
     """Sync on purpose: slowapi's middleware path falls back to its own default
     handler for coroutine handlers, and that default has no envelope fields."""
-    message = f"Rate limit exceeded: {exc.detail}"
-    response = _envelope(request, 429, message, "rate_limited", {"error": message})
+    retry_after: int | None = None
     view_limit = getattr(request.state, "view_rate_limit", None)
     limiter = getattr(request.app.state, "limiter", None)
+    if limiter is not None and view_limit is not None:
+        try:
+            reset_at, _remaining = limiter.limiter.get_window_stats(view_limit[0], *view_limit[1])
+            retry_after = max(1, math.ceil(reset_at - time.time()))
+        except Exception:  # storage hiccup: the 429 itself still stands
+            retry_after = None
+    # exc.detail is slowapi's internal limit string ("5 per 1 minute"); users get
+    # guidance, the header carries the machine-readable wait.
+    if retry_after is not None:
+        wait = f"{retry_after} second{'s' if retry_after != 1 else ''}" if retry_after < 120 else f"{math.ceil(retry_after / 60)} minutes"
+        message = f"Too many requests from your connection. Try again in {wait}."
+    else:
+        message = "Too many requests from your connection. Try again in a moment."
+    headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
+    response = _envelope(
+        request, 429, message, "rate_limited",
+        {"message": message, "limit": str(exc.detail), "retry_after_seconds": retry_after}, headers,
+    )
     if limiter is not None and view_limit is not None:
         response = limiter._inject_headers(response, view_limit)
     return response

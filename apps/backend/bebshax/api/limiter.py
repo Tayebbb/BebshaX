@@ -9,7 +9,7 @@ import os
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import case
+from sqlalchemy import case, delete
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
@@ -147,6 +147,25 @@ async def enforce_auth_limits(
             429, "Too many authentication attempts. Try again later.",
             error_code="too_many_attempts", headers={"Retry-After": str(retry_after)},
         )
+
+
+async def clear_account_auth_limit(session: AsyncSession, action: str, account: str) -> None:
+    """Forget the per-account budget once the caller proved they own the account.
+
+    The budget is charged before the credential is checked (a burst of wrong
+    passwords must block), so without this every correct sign-in would also
+    count and five legitimate logins in fifteen minutes locked the account
+    (live, 2026-09-14). The per-IP budget is untouched.
+    """
+    key = hmac.new(
+        get_settings().jwt_secret.encode(), f"auth:{action}:account:{account.strip().lower()}".encode(), hashlib.sha256,
+    ).hexdigest()
+    try:
+        await session.execute(delete(AuthRateLimits).where(AuthRateLimits.key == key))
+        await session.commit()
+    except SQLAlchemyError:
+        await session.rollback()
+        # A stale counter only shortens the window; never fail a proven sign-in over it.
 
 
 def _build_limiter() -> Limiter:

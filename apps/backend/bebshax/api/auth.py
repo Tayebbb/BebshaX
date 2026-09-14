@@ -28,7 +28,7 @@ from bebshax.auth.transport import (
     require_cookie_binding, require_cookie_csrf, require_cookie_origin, set_session_cookies,
 )
 from bebshax.api.errors import APIError
-from bebshax.api.limiter import enforce_auth_limits, limiter
+from bebshax.api.limiter import clear_account_auth_limit, enforce_auth_limits, limiter
 from bebshax.config import get_settings
 from bebshax.llm.governance import LLMRequestContext, llm_request_context
 from bebshax.tenancy_context import tenant_scope
@@ -454,6 +454,8 @@ async def reset_password(
     await enforce_auth_limits(request, session, "reset", payload.email)
     if not await reset_local_password(session, payload.email, payload.otp, payload.password):
         raise HTTPException(status_code=400, detail="Invalid or expired password reset code.")
+    # The code proved ownership; a lock left by the forgotten password must not outlive it.
+    await clear_account_auth_limit(session, "signin", payload.email)
     return {"detail": "Password reset successfully. Please sign in again."}
 
 
@@ -492,6 +494,7 @@ async def signin(
             ),
         )
 
+    await clear_account_auth_limit(session, "signin", payload.email)
     return await _issue_auth_response(session, user, request, response)
 
 

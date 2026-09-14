@@ -82,6 +82,73 @@ async def test_durable_budget_keys_do_not_store_raw_account_or_ip(identity_state
     assert all(row.attempts == 1 for row in rows)
 
 
+async def test_successful_signins_never_lock_the_account(identity_state, monkeypatch):
+    """Live 2026-09-14: five correct sign-ins in fifteen minutes (one per tab)
+    returned 429 on the sixth. Only failures may spend the account budget."""
+    from bebshax.api.limiter import AUTH_RATE_POLICIES, AuthRatePolicy
+
+    monkeypatch.setitem(AUTH_RATE_POLICIES, "signin", AuthRatePolicy(100, 60, 5, 900))
+    for _ in range(8):
+        result = await identity_state.client.post("/api/auth/signin", json={
+            "email": "owner@example.test", "password": "Identity123!",
+        })
+        assert result.status_code == 200, result.text
+
+
+async def test_a_correct_password_resets_the_failure_budget(identity_state, monkeypatch):
+    from bebshax.api.limiter import AUTH_RATE_POLICIES, AuthRatePolicy
+
+    monkeypatch.setitem(AUTH_RATE_POLICIES, "signin", AuthRatePolicy(100, 60, 5, 900))
+    for _ in range(4):
+        wrong = await identity_state.client.post("/api/auth/signin", json={
+            "email": "owner@example.test", "password": "WrongPassword123!",
+        })
+        assert wrong.status_code == 401
+    right = await identity_state.client.post("/api/auth/signin", json={
+        "email": "owner@example.test", "password": "Identity123!",
+    })
+    assert right.status_code == 200
+    # The full budget of five typos is available again before the lock engages.
+    for _ in range(5):
+        wrong = await identity_state.client.post("/api/auth/signin", json={
+            "email": "owner@example.test", "password": "WrongPassword123!",
+        })
+        assert wrong.status_code == 401
+    locked = await identity_state.client.post("/api/auth/signin", json={
+        "email": "owner@example.test", "password": "WrongPassword123!",
+    })
+    assert locked.status_code == 429
+
+
+async def test_password_reset_clears_the_signin_lock(identity_state, monkeypatch):
+    """The reset code proves ownership; the user must be able to sign in with
+    the new password immediately instead of waiting out the old lock."""
+    from bebshax.api.limiter import AUTH_RATE_POLICIES, AuthRatePolicy
+    from bebshax.auth import recovery as auth_recovery
+
+    monkeypatch.setitem(AUTH_RATE_POLICIES, "signin", AuthRatePolicy(100, 60, 5, 900))
+    for _ in range(6):
+        await identity_state.client.post("/api/auth/signin", json={
+            "email": "owner@example.test", "password": "WrongPassword123!",
+        })
+    locked = await identity_state.client.post("/api/auth/signin", json={
+        "email": "owner@example.test", "password": "Identity123!",
+    })
+    assert locked.status_code == 429
+
+    async with identity_state.sessions() as session:
+        code = await auth_recovery.request_password_reset(session, "owner@example.test")
+    assert code
+    reset = await identity_state.client.post("/api/auth/reset-password", json={
+        "email": "owner@example.test", "otp": code, "password": "Renewed123!",
+    })
+    assert reset.status_code == 200, reset.text
+    signed_in = await identity_state.client.post("/api/auth/signin", json={
+        "email": "owner@example.test", "password": "Renewed123!",
+    })
+    assert signed_in.status_code == 200, signed_in.text
+
+
 def _peer(peer: str, forwarded: str) -> Request:
     return Request({
         "type": "http", "client": (peer, 50000),
