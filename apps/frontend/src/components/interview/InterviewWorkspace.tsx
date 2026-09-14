@@ -123,6 +123,8 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
   const [flashTurn, setFlashTurn] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
+  /** Desktop only: the context rail hidden to give the transcript the width. */
+  const [railCollapsed, setRailCollapsed] = useState(false);
   const [compactRail, setCompactRail] = useState(() => window.matchMedia('(max-width: 1120px)').matches);
   const [streamText, setStreamText] = useState<string | null>(null);
 
@@ -235,6 +237,22 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
       streamBufferRef.current = '';
     };
   }, [load, cancelStreamFlush]);
+
+  // The composer is the point of the page: focus it once the interview is in
+  // and after each answer lands, unless the user is already typing somewhere
+  // (live 2026-09-14: activeElement stayed on <body> on entry and after replies).
+  const transcriptLength = turns.length;
+  useEffect(() => {
+    if (isLoading || isSending || isCompleting) return;
+    const composer = inputRef.current;
+    if (!composer || composer.disabled) return;
+    const active = document.activeElement;
+    const typingElsewhere = active instanceof HTMLElement && active !== document.body
+      && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable) && active !== composer;
+    if (!typingElsewhere && (active === document.body || active === null || active === composer)) {
+      composer.focus({ preventScroll: true });
+    }
+  }, [isLoading, isSending, isCompleting, transcriptLength]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
@@ -445,10 +463,14 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
   const jumpToTurn = (turnNumber: number) => {
     setRailOpen(false);
     setFlashTurn(turnNumber);
-    turnRefs.current[turnNumber]?.scrollIntoView({
+    const target = turnRefs.current[turnNumber];
+    target?.scrollIntoView({
       behavior: prefersReducedMotion() ? 'auto' : 'smooth',
       block: 'center',
     });
+    // Move focus with the highlight: keyboard and screen-reader users land on
+    // the cited turn instead of staying on the insight chip (live 2026-09-14).
+    target?.focus({ preventScroll: true });
     setTimeout(() => setFlashTurn(null), 2600);
   };
 
@@ -593,11 +615,11 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
           <button
             type="button"
             className="iv-ghost-btn iv-rail-toggle"
-            onClick={() => setRailOpen((v) => !v)}
+            onClick={() => (compactRail ? setRailOpen((v) => !v) : setRailCollapsed((v) => !v))}
             aria-label="Toggle persona context panel"
-            title="Toggle persona context panel"
+            title={compactRail || railCollapsed ? 'Show persona context panel' : 'Hide persona context panel'}
             aria-controls={railId}
-            aria-expanded={railOpen}
+            aria-expanded={compactRail ? railOpen : !railCollapsed}
           >
             <PanelRight size={18} aria-hidden="true" />
           </button>
@@ -635,7 +657,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
             </div>
           ) : (
             <div className="iv-scroll" ref={scrollRef}>
-              <div className="iv-thread" role="log" aria-label={`Interview with ${personaName}`}>
+              <div className="iv-thread" role="log" aria-label={`Interview with ${personaName}`} aria-live="polite" aria-relevant="additions">
                 {turns.map((turn) => {
                   const isPersona = turn.role === 'persona' || turn.role === 'assistant';
                   return (
@@ -644,6 +666,8 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
                       ref={(el) => {
                         turnRefs.current[turn.turn_number] = el;
                       }}
+                      tabIndex={-1}
+                      aria-label={`Turn ${turn.turn_number}, ${isPersona ? personaName : 'you'}`}
                       className={`iv-turn ${isPersona ? 'iv-persona' : 'iv-you'}${
                         flashTurn === turn.turn_number ? ' iv-flash' : ''
                       }`}
@@ -841,7 +865,7 @@ export const InterviewWorkspace: React.FC<InterviewWorkspaceProps> = ({
             onClick={() => setRailOpen(false)}
           />
         )}
-        <aside id={railId} ref={railRef} className={`iv-rail${railOpen ? ' iv-open' : ''}`} aria-label="Interview context"
+        <aside id={railId} ref={railRef} className={`iv-rail${railOpen ? ' iv-open' : ''}${!compactRail && railCollapsed ? ' iv-collapsed' : ''}`} aria-label="Interview context"
           role={compactRail ? 'dialog' : undefined} aria-modal={compactRail && railOpen ? true : undefined}
           aria-hidden={compactRail && !railOpen ? true : undefined} tabIndex={-1}>
           {compactRail && (

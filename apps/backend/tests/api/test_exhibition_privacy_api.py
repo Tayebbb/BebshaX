@@ -201,7 +201,11 @@ async def test_legacy_aliases_cannot_create_interviews_in_shared_studies(
         json={"persona_id": "exhibition_privacy_persona", "objective": "Unauthorized interview"},
     )
 
-    assert response.status_code == 403, response.text
+    # Anonymous callers are told to sign in; a shared demo is readable but
+    # read-only (403); a legacy shared-pool study that is not a demo is not
+    # readable by anyone, so — as for /studies/{id} — it does not exist (404).
+    expected = 403 if caller == "anonymous" or is_demo else 404
+    assert response.status_code == expected, response.text
     start.assert_not_awaited()
 
 

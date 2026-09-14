@@ -22,8 +22,7 @@ from bebshax.api.deps import (
     get_session,
     owner_accessible,
     owner_can_write,
-    user_can_write_study,
-    user_owns_study,
+    require_study_access,
 )
 from bebshax.api.errors import APIError, request_id_of
 from bebshax.api.jobs import get_job_async, start_job_async
@@ -218,17 +217,16 @@ def _serialize_interview(
 async def _get_study_and_verify_access(
     session: AsyncSession, study_id: str, current_user: Optional[Users], *, write: bool = False
 ) -> Studies:
-    """``write=True`` selects the strict write predicate: the ``is_demo`` read
-    allowance must never let a non-owner mutate the shared demo."""
+    """The shared study gate: 404 for a missing OR foreign study (existence never
+    leaks — live 2026-09-14 this route answered 403 where /studies/{id} and
+    /personas answered 404, confirming the study existed), 403 only when the
+    caller can read the study but ``write=True`` and may not mutate it (the
+    ``is_demo`` read allowance must never let a non-owner mutate the shared demo)."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Study not found")
-    predicate = user_can_write_study if write else user_owns_study
-    if not predicate(study, current_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this study"
-        )
-    return study
+    return require_study_access(
+        study, current_user, write=write, not_found_detail="Study not found",
+        read_only_detail="Not authorized to access this study",
+    )
 
 
 def _is_public_demo_child(study: Studies, owner_id: Optional[str]) -> bool:
@@ -349,17 +347,23 @@ async def list_study_interviews(
         for p in (await session.execute(p_stmt)).scalars():
             personas_map[p.id] = p
 
-    # Filter search query on persona name or objective/summary if provided
+    # Filter search query on persona name, role, objective/summary and the
+    # topics the interview explored (shown on every card, so users search them
+    # — live 2026-09-14 "pricing" matched nothing).
     items = []
     for c in conv_list:
         p = personas_map.get(c.persona_id)
         if search:
             q = search.lower()
-            match_name = p.name.lower() if p else ""
-            match_obj = c.objective.lower()
-            match_custom = (c.custom_objective or "").lower()
-            match_sum = (c.summary or "").lower()
-            if not (q in match_name or q in match_obj or q in match_custom or q in match_sum):
+            haystack = [
+                p.name.lower() if p else "",
+                (getattr(p, "role_title", None) or "").lower() if p else "",
+                c.objective.lower(),
+                (c.custom_objective or "").lower(),
+                (c.summary or "").lower(),
+                *(str(topic).replace("_", " ").lower() for topic in (c.topics_explored or {})),
+            ]
+            if not any(q in field or q.replace(" ", "_") in field for field in haystack):
                 continue
         items.append(_serialize_interview(c, p))
 

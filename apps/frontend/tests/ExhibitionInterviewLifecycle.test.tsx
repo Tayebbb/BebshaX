@@ -706,7 +706,51 @@ describe('Exhibition interview request lifecycles', () => {
     expect(screen.getByText('Simulation active')).toBeInTheDocument();
     expect(screen.queryByText('An abandoned synthesis.')).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /Interview question for/i })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Toggle persona context panel' })).toHaveAttribute('aria-expanded', 'false');
+    // Desktop: the rail is on screen, so the toggle truthfully reports it expanded.
+    expect(screen.getByRole('button', { name: 'Toggle persona context panel' })).toHaveAttribute('aria-expanded', 'true');
+    expect(document.querySelector('.iv-rail')).not.toHaveClass('iv-collapsed');
+  });
+
+  it('collapses and restores the desktop context rail from the header toggle', async () => {
+    // Live 2026-09-14 at 1440×900: the toggle rendered and did nothing.
+    render(workspace(detailA));
+    await screen.findByText('Saved A answer.');
+    const trigger = screen.getByRole('button', { name: 'Toggle persona context panel' });
+    const rail = document.querySelector('.iv-rail') as HTMLElement;
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(rail).toHaveClass('iv-collapsed');
+    expect(trigger).toHaveAttribute('title', 'Show persona context panel');
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(rail).not.toHaveClass('iv-collapsed');
+  });
+
+  it('focuses the composer on entry and moves focus to a cited turn from an insight chip', async () => {
+    vi.mocked(api.getStudyInterviewDetail).mockResolvedValueOnce({
+      ...detailA, status: 'completed', summary: 'Done.',
+      structured_insights: [{
+        id: 'ins_1', type: 'pain_point', title: 'Refill lag', description: 'Waits a week for refills.',
+        supporting_turn_numbers: [2],
+      } as unknown as InterviewInsight],
+    });
+    render(workspace(detailA));
+    await screen.findByText('Saved A answer.');
+    // Completed interviews have no composer; the transcript is a polite live region.
+    expect(screen.getByRole('log', { name: /Interview with/ })).toHaveAttribute('aria-live', 'polite');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jump to turn 2' }));
+    const turn = screen.getByText('Saved A answer.').closest('.iv-turn') as HTMLElement;
+    expect(turn).toHaveFocus();
+    expect(turn).toHaveAttribute('aria-label', 'Turn 2, Synthetic A');
+
+    cleanup();
+    render(workspace(detailB));
+    await screen.findByText('Saved B answer.');
+    await waitFor(() => expect(screen.getByRole('textbox', { name: /Interview question for/i })).toHaveFocus());
   });
 
   it.each(['success', 'failure'] as const)(
@@ -807,7 +851,7 @@ describe('Exhibition interview request lifecycles', () => {
       expect(screen.getByRole('textbox', { name: /Interview question for/i })).toBeDisabled();
       expect(screen.getByRole('button', { name: /Synthesizing/ })).toBeDisabled();
       expect(screen.getByText('Simulation active')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Toggle persona context panel' })).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.getByRole('button', { name: 'Toggle persona context panel' })).toHaveAttribute('aria-expanded', 'true');
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
       await act(async () => { current.resolve({ summary: 'Current synthesis.' }); });

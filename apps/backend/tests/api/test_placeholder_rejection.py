@@ -142,6 +142,23 @@ def test_goal_card_is_withheld_until_the_user_describes_an_idea_in_words(api_tes
     assert res.json()["is_ready_for_approval"] is True
 
 
+def test_copilot_is_told_the_study_type_the_user_picked(api_test_app: TestClient, auth_headers):
+    # Live: a "Pricing & WTP" study (stored as the legacy code `ab_test`) was
+    # steered towards User Interviews because the type never reached the model.
+    adapter = _install_router(api_test_app.app, [_REAL_REPLY])
+
+    res = api_test_app.post("/api/study/copilot", json={"messages": _MESSAGES, "study_type": "ab_test"}, headers=auth_headers)
+    assert res.status_code == 200, res.text
+    system_messages = [m.content for m in adapter.requests[0].messages if m.role == "system"]
+    assert any("Pricing & Willingness-to-Pay" in content and "`ab_test`" in content for content in system_messages)
+
+    # An unknown or absent type adds nothing (no guessing from the code).
+    adapter = _install_router(api_test_app.app, [_REAL_REPLY])
+    res = api_test_app.post("/api/study/copilot", json={"messages": _MESSAGES, "study_type": "mystery"}, headers=auth_headers)
+    assert res.status_code == 200, res.text
+    assert not any("created this study as" in m.content for m in adapter.requests[0].messages)
+
+
 # --- suggest-roles -----------------------------------------------------------
 
 

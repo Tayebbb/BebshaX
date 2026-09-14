@@ -3464,7 +3464,8 @@ export const api = {
         if (params?.limit) q.set('limit', String(params.limit));
         if (params?.offset) q.set('offset', String(params.offset));
 
-        const res = await fetch(`${API_BASE}/studies/${studyId}/interviews?${q.toString()}`, {
+        const query = q.toString();
+        const res = await fetch(`${API_BASE}/studies/${studyId}/interviews${query ? `?${query}` : ''}`, {
           headers: this.getAuthHeaders(),
         });
         if (res.ok) {

@@ -146,63 +146,17 @@ const AppContent: React.FC = () => {
       );
     }
     return (
-      <>
-        {/* Screen-reader accessible identity. Not a heading: every view supplies
-            its own h1, and two h1s per page confused the outline. */}
-        <div
-          style={{
-            position: 'absolute',
-            width: '1px',
-            height: '1px',
-            padding: 0,
-            margin: '-1px',
-            overflow: 'hidden',
-            clip: 'rect(0, 0, 0, 0)',
-            whiteSpace: 'nowrap',
-            borderWidth: 0,
-          }}
-        >
-          <p>BebshaX</p>
-          <p>Synthetic Persona Research Platform</p>
-          <div>Backend Status: {health?.status || 'Connecting...'}</div>
-        </div>
-
-        {/* Dashboard Shell Application */}
-        <Suspense fallback={<RouteFallback />}>
-          <DashboardLayout key={sessionEpoch} onOpenLandingPage={() => navigate('/')} health={health} />
-        </Suspense>
-      </>
+      <Suspense fallback={<RouteFallback />}>
+        <DashboardLayout key={sessionEpoch} onOpenLandingPage={() => navigate('/')} health={health} />
+      </Suspense>
     );
   }
 
   return (
-    <>
-      {/* Screen-reader / programmatic platform identity. Not a heading — the
-          landing hero owns the page's single h1. */}
-      <div
-        style={{
-          position: 'absolute',
-          width: '1px',
-          height: '1px',
-          padding: 0,
-          margin: '-1px',
-          overflow: 'hidden',
-          clip: 'rect(0, 0, 0, 0)',
-          whiteSpace: 'nowrap',
-          borderWidth: 0,
-        }}
-      >
-        <p>BebshaX</p>
-        <p>Synthetic Persona Research Platform</p>
-        <div>Backend Status: {health?.status || 'Connecting...'}</div>
-      </div>
-
-      {/* Main SaaS Decision Intelligence Landing Page */}
-      <LandingPage
-        onOpenApp={handleOpenApp}
-        onOpenAuth={handleOpenAuth}
-      />
-    </>
+    <LandingPage
+      onOpenApp={handleOpenApp}
+      onOpenAuth={handleOpenAuth}
+    />
   );
 };
 

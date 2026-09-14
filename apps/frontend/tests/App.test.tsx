@@ -15,21 +15,17 @@ describe('App Minimal Shell', () => {
     window.history.replaceState({}, '', '/');
   });
 
-  it('renders BebshaX app identity and health info without a duplicate h1', async () => {
+  it('renders the landing with a single h1 and no hidden status chatter', async () => {
     render(<App />);
 
-    // Auth initialisation may show a loading spinner first; wait for it to clear.
     await waitFor(() => {
       expect(screen.getAllByText(/BebshaX/i).length).toBeGreaterThan(0);
     });
-    expect(screen.getByText(/Synthetic Persona Research Platform/i)).toBeInTheDocument();
-    // The visually-hidden identity block is plain text — the landing hero owns
-    // the page's single h1 (two h1s confused the document outline).
+    // The landing hero owns the page's single h1 (two h1s confused the outline).
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Backend Status:/i)).toBeInTheDocument();
-    });
+    // Live 2026-09-14: a visually-hidden "BebshaX / Synthetic Persona Research
+    // Platform / Backend Status: ok" block was read out on every page.
+    expect(screen.queryByText(/Backend Status:/i)).toBeNull();
   });
 
   it('sends a signed-out visit to an app URL to the sign-in route and keeps the destination', async () => {

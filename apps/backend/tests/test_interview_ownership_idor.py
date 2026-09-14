@@ -70,14 +70,27 @@ async def test_user_a_cannot_access_user_b_interviews(tmp_path, monkeypatch):
         headers_a = {"Authorization": f"Bearer {token_a}"}
         headers_b = {"Authorization": f"Bearer {token_b}"}
 
-        # 1. User A listing User B's study interviews -> 404 or 403
+        # 1. User A listing User B's study interviews -> 404: a 403 here confirmed
+        # the study existed while /studies/{id} and /personas said 404 (live 2026-09-14).
         res = await client.get("/api/studies/std_b/interviews", headers=headers_a)
-        assert res.status_code in (403, 404)
+        assert res.status_code == 404
+        assert res.json()["detail"] == "Study not found"
 
         # 2. User B listing User B's study interviews -> 200
         res_ok = await client.get("/api/studies/std_b/interviews", headers=headers_b)
         assert res_ok.status_code == 200
         assert res_ok.json()["total"] == 1
+
+        # 2b. Search covers the explored topics printed on every card
+        # (live 2026-09-14: "pricing" matched nothing although pricing_budget was explored).
+        async with maker() as session:
+            row = await session.get(Conversations, "conv_b")
+            row.topics_explored = {"pricing_budget": "explored", "current_alternatives": "explored"}
+            await session.commit()
+        for term, expected in (("pricing", 1), ("current alternatives", 1), ("persona b", 1), ("objections", 0)):
+            res_search = await client.get("/api/studies/std_b/interviews", params={"search": term}, headers=headers_b)
+            assert res_search.status_code == 200
+            assert res_search.json()["total"] == expected, term
 
         # 3. User A getting metrics for User B's study -> 404 or 403
         res_m = await client.get("/api/studies/std_b/interviews/metrics", headers=headers_a)

@@ -18,6 +18,9 @@ interface StartInterviewModalProps {
   persona: SyntheticPersona;
   studyId: string;
   onInterviewStarted: (interviewId: string) => void;
+  /** The control that opened the dialog, captured at click time: the opener
+   * loads the persona first, and that reload can re-render the trigger. */
+  returnFocusTo?: React.RefObject<HTMLElement | null>;
 }
 
 const OBJECTIVE_PRESETS = [
@@ -59,6 +62,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
   persona,
   studyId,
   onInterviewStarted,
+  returnFocusTo,
 }) => {
   const [selectedObjective, setSelectedObjective] = useState<string>('problem_discovery');
   const [customObjectiveText, setCustomObjectiveText] = useState<string>('');
@@ -86,7 +90,7 @@ export const StartInterviewModal: React.FC<StartInterviewModalProps> = ({
     setIsStarting(false);
     onClose();
   };
-  useDialogA11y(dialogRef, isOpen, handleClose);
+  useDialogA11y(dialogRef, isOpen, handleClose, { returnFocusTo });
 
   // The grounding claim is only made when the persona actually carries one.
   const evidenceBacked = isEvidenceBacked(persona);

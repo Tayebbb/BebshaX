@@ -54,6 +54,15 @@ _CONFIRMATION_RE = re.compile(r"\s*Does this capture what you[’']re looking fo
 # across the user's messages. Emoji/punctuation-only conversations have none.
 _MIN_IDEA_WORDS = 3
 _WORD_RE = re.compile(r"[^\W\d_]{2,}")
+# Study type codes (Studies.type) and what the user picked them as. The codes
+# predate the labels (`ab_test` is the Pricing & WTP card); the copilot must
+# reason from the label, not guess from the code.
+STUDY_TYPE_LABELS: dict[str, str] = {
+    "interviews": "User Interviews (demand, willingness to pay, friction)",
+    "landing_page_test": "Concept & Demand exploration",
+    "message_testing": "Message Testing",
+    "ab_test": "Pricing & Willingness-to-Pay exploration",
+}
 
 
 class CopilotMessage(BaseModel):
@@ -416,6 +425,18 @@ async def study_design_copilot(
         raise LLMUnavailable("The study copilot")
 
     chat_messages: list[ChatMessage] = [ChatMessage(role="system", content=SYSTEM_PROMPT + "\n" + UNTRUSTED_RULE)]
+    # Live 2026-09-14: a study created as "Pricing & WTP" was still steered
+    # towards User Interviews because the copilot never heard the choice.
+    chosen_type = STUDY_TYPE_LABELS.get(body.study_type or "")
+    if chosen_type:
+        chat_messages.append(ChatMessage(
+            role="system",
+            content=(
+                f"The user created this study as: {chosen_type} (code `{body.study_type}`). "
+                f"Design the research goal, hypothesis and roles for that kind of study and set "
+                f"suggested_study_type to `{body.study_type}` unless the user explicitly asks for a different kind."
+            ),
+        ))
     for m in body.messages:
         chat_messages.append(ChatMessage(role=m.role, content=m.content))
     llm_req = LLMRequest(

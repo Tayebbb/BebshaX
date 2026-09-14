@@ -16,6 +16,16 @@ function isFocusable(element: HTMLElement): boolean {
   return true;
 }
 
+/** The re-rendered twin of a control that unmounted while a dialog was open
+ * (a list that reloaded, a card that re-keyed): same id, else same tag +
+ * aria-label. Focus has somewhere sensible to return to either way. */
+function equivalentOf(element: HTMLElement): HTMLElement | null {
+  if (element.id) return document.getElementById(element.id);
+  const label = element.getAttribute('aria-label');
+  if (!label || typeof CSS === 'undefined' || typeof CSS.escape !== 'function') return null;
+  return document.querySelector<HTMLElement>(`${element.tagName.toLowerCase()}[aria-label="${CSS.escape(label)}"]`);
+}
+
 /**
  * Shared dialog behaviour for the app's modals (the PersonaDetailModal /
  * AuthModal protocol): on open, move focus to the first control inside the
@@ -24,15 +34,22 @@ function isFocusable(element: HTMLElement): boolean {
  * Escape stacking: the listener runs in the capture phase and consumes the
  * key with preventDefault, and every handler in the app first checks
  * `e.defaultPrevented` — so exactly one surface (the topmost) closes per press.
- * Focus is returned to the element that was focused before the dialog opened.
+ * Focus is returned to the element that was focused before the dialog opened
+ * — or to `returnFocusTo`, for openers that do async work (and may re-render
+ * the trigger) before the dialog mounts.
  */
 export function useDialogA11y(
   ref: RefObject<HTMLElement | null>,
   isOpen: boolean,
   onClose: () => void,
-  opts: { initialFocus?: RefObject<HTMLElement | null>; returnFocus?: boolean; suspended?: boolean } = {},
+  opts: {
+    initialFocus?: RefObject<HTMLElement | null>;
+    returnFocus?: boolean;
+    returnFocusTo?: RefObject<HTMLElement | null>;
+    suspended?: boolean;
+  } = {},
 ): void {
-  const { initialFocus, returnFocus = true, suspended = false } = opts;
+  const { initialFocus, returnFocus = true, returnFocusTo, suspended = false } = opts;
   const suspendedRef = useRef(suspended);
   suspendedRef.current = suspended;
   // Always invoke the latest onClose — callers pass fresh closures every render.
@@ -41,7 +58,8 @@ export function useDialogA11y(
   useEffect(() => {
     const container = ref.current;
     if (!isOpen || !container) return;
-    const previouslyFocused = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+    const previouslyFocused = returnFocusTo?.current
+      ?? (typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null);
     const addedTabIndex = !container.hasAttribute('tabindex');
     if (addedTabIndex) container.setAttribute('tabindex', '-1');
 
@@ -110,9 +128,12 @@ export function useDialogA11y(
       observer.disconnect();
       document.removeEventListener('keydown', onKeyDown, true);
       if (addedTabIndex && container.getAttribute('tabindex') === '-1') container.removeAttribute('tabindex');
-      if (returnFocus && previouslyFocused && document.contains(previouslyFocused)) {
-        previouslyFocused.focus();
+      if (returnFocus && previouslyFocused && previouslyFocused !== document.body) {
+        // Live 2026-09-14: the Start Interview dialog's opener re-rendered while
+        // it was open, so Escape dropped focus on <body>.
+        const target = document.contains(previouslyFocused) ? previouslyFocused : equivalentOf(previouslyFocused);
+        target?.focus();
       }
     };
-  }, [isOpen, ref, initialFocus, returnFocus]);
+  }, [isOpen, ref, initialFocus, returnFocus, returnFocusTo]);
 }

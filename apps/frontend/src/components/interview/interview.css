@@ -588,8 +588,10 @@
 @keyframes iv-spin { to { transform: rotate(360deg); } }
 .iv-loading-text { font: 500 0.8rem var(--font-sans); color: var(--iv-text-dim); }
 
-/* Rail toggle (tablet/mobile) */
-.iv-rail-toggle { display: none; }
+/* Rail toggle: opens the drawer on tablet/mobile, collapses the rail on desktop
+   (live 2026-09-14 the button rendered at desktop width and did nothing). */
+.iv-rail-toggle { display: inline-flex; }
+.iv-rail.iv-collapsed { display: none; }
 
 /* --------------------------------------------------------------------------
    Responsive
@@ -609,7 +611,6 @@
     box-shadow: -24px 0 60px rgba(0, 0, 0, 0.5);
   }
   .iv-rail.iv-open { transform: translateX(0); }
-  .iv-rail-toggle { display: inline-flex; }
   .iv-scrim {
     position: absolute;
     inset: 0;

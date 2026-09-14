@@ -205,6 +205,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
 
   // Interview & Behavioral Modal State
   const [modalPersona, setModalPersona] = useState<SyntheticPersona | null>(null);
+  /** Control that opened the Start Interview dialog (focus returns there on close). */
+  const interviewOpenerRef = useRef<HTMLElement | null>(null);
   const [showStartInterviewModal, setShowStartInterviewModal] = useState<boolean>(false);
   const [showCreateBehavioralModal, setShowCreateBehavioralModal] = useState<boolean>(false);
   const [initialBehavioralPersonaId, setInitialBehavioralPersonaId] = useState<string | undefined>(undefined);
@@ -1549,6 +1551,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
               const epoch = routeEpochRef.current;
               if (!epoch.active) return;
               const requestId = ++epoch.personaRequest;
+              // Remember the opener now: the persona load below re-renders the library.
+              interviewOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
               const sid = fromStudyId || activeStudyId;
               if (!sid) {
                 navigate('/dashboard');
@@ -1741,6 +1745,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
           }}
           persona={modalPersona}
           studyId={activeStudyId}
+          returnFocusTo={interviewOpenerRef}
           onInterviewStarted={(newInterviewId) => {
             if (!renderedRouteEpoch.active) return;
             setActiveInterviewId(newInterviewId);

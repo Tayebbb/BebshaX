@@ -115,10 +115,15 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
   const filteredInterviews = interviews.filter((item) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
+    // Topics are printed on every card, so they must be searchable too
+    // (live 2026-09-14: "pricing" found nothing).
+    const topics = Object.keys(item.topics_explored ?? {}).map((topic) => topic.replace(/_/g, ' ').toLowerCase());
     return (
       item.persona_name?.toLowerCase().includes(query) ||
+      item.persona_occupation?.toLowerCase().includes(query) ||
       item.objective?.toLowerCase().includes(query) ||
-      item.custom_objective?.toLowerCase().includes(query)
+      item.custom_objective?.toLowerCase().includes(query) ||
+      topics.some((topic) => topic.includes(query))
     );
   });
 
