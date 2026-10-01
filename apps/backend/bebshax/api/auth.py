@@ -295,6 +295,10 @@ async def signup(
         hashed = await to_thread(hash_password, payload.password)
         existing = await get_user_by_email(session, payload.email)
         if existing:
+            if _verification_required(existing):
+                otp_code = await issue_otp(session, existing, VERIFY_PURPOSE)
+                if otp_code is not None:
+                    background_tasks.add_task(_deliver_verification, existing.email, otp_code)
             return pending
 
         user = await create_user(

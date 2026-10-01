@@ -112,6 +112,24 @@ def test_signup_still_succeeds_if_email_send_fails(client):
         assert signin.json()["verification_required"] is True
 
 
+def test_signup_issues_one_fresh_code_for_an_existing_unverified_account(client):
+    first, first_code = _signup(client, "pending-again@example.com")
+    assert first.status_code == 201 and first_code
+
+    with patch("bebshax.api.auth.send_verification_email", new_callable=AsyncMock) as mock_send:
+        mock_send.return_value = True
+        second = client.post(
+            "/api/auth/signup",
+            json={"email": "pending-again@example.com", "full_name": "Different Name", "password": "Password123!"},
+        )
+
+    assert second.status_code == 201
+    assert mock_send.call_count == 1
+    second_code = mock_send.call_args.kwargs["otp_code"]
+    assert second_code != first_code
+    assert _verify(client, "pending-again@example.com", second_code).status_code == 200
+
+
 def test_verify_email_with_valid_token_marks_user_verified(client):
     signup_resp, code = _signup(client, "verify_me@example.com")
     assert signup_resp.status_code == 201 and code

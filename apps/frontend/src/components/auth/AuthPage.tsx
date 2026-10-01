@@ -327,18 +327,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'signin' }) =>
         navigate(returnPath);
         return;
       }
-      // No session: verification really is required to continue.
-      const sent = await sendOtp(email, 'email-verification').catch(() => false);
-      if (sent) {
-        // The server answers the same way whether the address was new or already
-        // registered (anti-enumeration), so the copy must not promise a code.
-        setSuccessMessage(`If ${email} is new to BebshaX, a 6-digit verification code is on its way. Already have an account with this address? Sign in or reset your password instead.`);
-        setCountdown(30);
-      } else {
-        setErrorMessage(
-          `We could not send a verification code to ${email}. Use "Resend" to retry — you cannot sign in until the email is verified.`
-        );
-      }
+      // Signup owns the single OTP issuance. Calling sendOtp here used to
+      // invalidate the code created by /signup immediately.
+      setSuccessMessage(`If ${email} is new to BebshaX, a 6-digit verification code is on its way. Already have an account with this address? Sign in or reset your password instead.`);
+      setCountdown(30);
       setView('verify-otp');
     } catch (err: any) {
       if (err.message?.includes('already exists')) {

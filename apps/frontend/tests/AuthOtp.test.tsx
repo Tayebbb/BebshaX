@@ -234,6 +234,24 @@ describe('AuthPage OTP Verification & Reset Flows', () => {
     expect(screen.queryByRole('heading', { name: /Enter verification code/i })).toBeNull();
   });
 
+  it('does not request a second verification code after signup', async () => {
+    const sendOtp = vi.spyOn(api, 'sendOtp').mockResolvedValue(true);
+    vi.spyOn(api, 'signup').mockResolvedValue({
+      access_token: '',
+      verification_required: true,
+      user: null,
+    } as any);
+    renderAuthPage('signup-email');
+
+    fireEvent.change(screen.getByPlaceholderText('John Doe'), { target: { value: 'Alex Founder' } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'alex-single-code@example.com' } });
+    fireEvent.change(screen.getByPlaceholderText('Create a password'), { target: { value: 'SuperSecret123!' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create account/i }));
+
+    await screen.findByRole('heading', { name: /Enter verification code/i });
+    expect(sendOtp).not.toHaveBeenCalled();
+  });
+
   it('still offers the 6-digit OTP screen when verification is opened directly', async () => {
     renderAuthPage('verify-otp');
 
