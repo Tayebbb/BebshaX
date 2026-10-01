@@ -7,7 +7,7 @@ interface EmptyStateProps {
   description?: React.ReactNode;
   actions?: React.ReactNode;
   compact?: boolean;
-  as?: 'h2' | 'h3' | 'div';
+  as?: 'h1' | 'h2' | 'h3' | 'div';
   className?: string;
 }
 
