@@ -100,6 +100,16 @@ describe('Console shell — navigation architecture', () => {
     expect(chip).toHaveTextContent(/Step 1/);
   });
 
+  it('keeps the selected study when an unscoped Study tab is opened', async () => {
+    renderShell('/research/tj6FY3cXDO8oxpuxeAMb/step1');
+    await waitFor(() => expect(screen.queryByText('No study selected')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Interviews' }));
+
+    await waitFor(() => expect(screen.queryByText('No study selected for interviews')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Interviews' })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('opens evidence for the library-selected study and shares that scope with the shell', async () => {
     renderShell('/persona-library');
     const studyPicker = await screen.findByRole<HTMLSelectElement>('combobox', { name: 'Active study' });

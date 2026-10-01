@@ -219,7 +219,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
     setShowCreateBehavioralModal(false);
     setInitialBehavioralPersonaId(undefined);
     setActiveTab(parsed.tab);
-    setActiveStudyId(parsed.studyId);
+    // Unscoped Study tabs (/interviews, /evidence, /segmentation) should use
+    // the shell's selected study. Only an explicitly scoped route replaces it.
+    if (parsed.studyId) setActiveStudyId(parsed.studyId);
     setActiveInterviewId(parsed.interviewId);
     setActiveTestId(parsed.testId);
     setActiveRunId(parsed.runId);
