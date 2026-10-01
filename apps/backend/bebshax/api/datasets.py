@@ -639,6 +639,7 @@ async def list_study_dataset_candidates(
 
 
 @router.post("/studies/{study_id}/datasets/candidates/{candidate_id}/import")
+@limiter.limit("10/hour")
 async def import_study_dataset_candidate(
     study_id: str,
     candidate_id: str,

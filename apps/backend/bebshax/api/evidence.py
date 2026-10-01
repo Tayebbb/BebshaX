@@ -451,8 +451,10 @@ async def get_study_evidence_claim_detail(
 
 
 @router.post("/{study_id}/evidence/search")
+@limiter.limit("30/minute")
 async def semantic_search_evidence(
     study_id: str,
+    request: Request,
     payload: SemanticSearchRequest,
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),

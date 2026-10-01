@@ -793,10 +793,7 @@ async def list_study_reports(
 ) -> list[dict[str, Any]]:
     """List all report versions for a study."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not _user_owns_study(study, current_user):
-        raise HTTPException(status_code=403, detail="Not authorized for this study")
+    require_study_access(study, current_user, not_found_detail=f"Study '{study_id}' not found")
 
     stmt = select(StudyReports).where(StudyReports.study_id == study_id).order_by(StudyReports.version.desc())
     reports = list((await session.execute(stmt)).scalars().all())
@@ -811,10 +808,7 @@ async def get_latest_study_report(
 ) -> dict[str, Any]:
     """Get the latest report version for a study."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not _user_owns_study(study, current_user):
-        raise HTTPException(status_code=403, detail="Not authorized for this study")
+    require_study_access(study, current_user, not_found_detail=f"Study '{study_id}' not found")
 
     stmt = select(StudyReports).where(StudyReports.study_id == study_id).order_by(StudyReports.version.desc()).limit(1)
     report = (await session.execute(stmt)).scalar_one_or_none()
@@ -832,10 +826,7 @@ async def get_study_report_by_id(
 ) -> dict[str, Any]:
     """Get a specific report version by ID."""
     study = await session.get(Studies, study_id)
-    if not study:
-        raise HTTPException(status_code=404, detail=f"Study '{study_id}' not found")
-    if not _user_owns_study(study, current_user):
-        raise HTTPException(status_code=403, detail="Not authorized for this study")
+    require_study_access(study, current_user, not_found_detail=f"Study '{study_id}' not found")
 
     report = await session.get(StudyReports, report_id)
     if not report or report.study_id != study_id:

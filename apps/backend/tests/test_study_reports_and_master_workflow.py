@@ -285,15 +285,15 @@ async def test_study_reports_idor_security(workflow_app: FastAPI) -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # User B attempts to view User A's reports list
         res_list = await client.get("/api/studies/std_a/reports", headers=headers_b)
-        assert res_list.status_code == 403
+        assert res_list.status_code == 404
 
         # User B attempts to view User A's latest report
         res_latest = await client.get("/api/studies/std_a/reports/latest", headers=headers_b)
-        assert res_latest.status_code == 403
+        assert res_latest.status_code == 404
 
         # User B attempts to view User A's specific report by ID
         res_single = await client.get("/api/studies/std_a/reports/rep_a", headers=headers_b)
-        assert res_single.status_code == 403
+        assert res_single.status_code == 404
 
         # User B attempts to generate report for User A's study
         res_gen = await client.post(
@@ -305,7 +305,7 @@ async def test_study_reports_idor_security(workflow_app: FastAPI) -> None:
         res_async_gen = await client.post("/api/studies/std_a/reports/generate/jobs", headers=headers_b)
         assert res_async_gen.status_code == 404
         anonymous_list = await client.get("/api/studies/std_a/reports")
-        assert anonymous_list.status_code == 403
+        assert anonymous_list.status_code == 404
         anonymous_gen = await client.post("/api/studies/std_a/reports/generate")
         assert anonymous_gen.status_code == 404
         async with session_maker() as session:
