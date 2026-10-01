@@ -128,7 +128,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
   });
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in text-[var(--text-primary)]">
+    <div className="w-full min-w-0 p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in text-[var(--text-primary)]">
       {[error, metricsError].map((message, index) => message && (
         <div
           key={index}

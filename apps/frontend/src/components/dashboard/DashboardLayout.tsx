@@ -96,6 +96,7 @@ const NoStudySelected: React.FC<{
       icon={<FolderOpen size={22} />}
       title={title}
       description="Interviews, behavioral tests, evidence and segments all belong to a study. Pick one of your studies to work in, or start a new one."
+      as="h1"
       actions={
         <>
           <Button variant="secondary" onClick={onPickStudy}>
