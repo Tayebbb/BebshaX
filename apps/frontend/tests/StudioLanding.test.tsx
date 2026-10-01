@@ -274,7 +274,7 @@ describe('Studio landing contracts', () => {
       addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
         listeners.set(query, listener as (event: MediaQueryListEvent) => void);
       },
-      removeEventListener: () => {},
+      removeEventListener: () => { },
     }));
     renderLanding({ mobile: true });
     fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }));
@@ -289,7 +289,7 @@ describe('Studio landing contracts', () => {
   it('closes the previous account menu when the active session changes', async () => {
     api.setStoredUser({ ...billingUser, id: 'studio-original', full_name: 'Original Researcher' });
     renderLanding({ signedIn: true });
-    await act(async () => {});
+    await act(async () => { });
     fireEvent.click(screen.getByRole('button', { name: 'Account menu' }));
     expect(screen.getByRole('menu', { name: 'Account' })).toBeVisible();
 
@@ -430,7 +430,7 @@ describe('Studio landing contracts', () => {
   });
 
   it('loads the above-fold screenshot eagerly without an unsupported React DOM prop', () => {
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => { });
     renderLanding();
 
     expect(sampleScreenshot()).toHaveAttribute('loading', 'eager');

@@ -115,20 +115,15 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
   const filteredInterviews = interviews.filter((item) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
-    // Topics are printed on every card, so they must be searchable too
-    // (live 2026-09-14: "pricing" found nothing).
-    const topics = Object.keys(item.topics_explored ?? {}).map((topic) => topic.replace(/_/g, ' ').toLowerCase());
     return (
       item.persona_name?.toLowerCase().includes(query) ||
-      item.persona_occupation?.toLowerCase().includes(query) ||
       item.objective?.toLowerCase().includes(query) ||
-      item.custom_objective?.toLowerCase().includes(query) ||
-      topics.some((topic) => topic.includes(query))
+      item.custom_objective?.toLowerCase().includes(query)
     );
   });
 
   return (
-    <div className="w-full min-w-0 p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in text-[var(--text-primary)]">
+    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in text-[var(--text-primary)]">
       {[error, metricsError].map((message, index) => message && (
         <div
           key={index}
@@ -215,7 +210,7 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
         <form onSubmit={handleSearchSubmit} className="flex-1 relative">
           <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
-                        aria-label="Search interviews"
+            aria-label="Search interviews"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -351,13 +346,12 @@ export const InterviewsView: React.FC<InterviewsViewProps> = ({
                     </div>
 
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[0.72rem] font-bold border shrink-0 ${
-                        isCompleted
+                      className={`px-2 py-0.5 rounded-full text-[0.72rem] font-bold border shrink-0 ${isCompleted
                           ? awaitingSynthesis
                             ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
                             : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                           : 'bg-[var(--accent-subtle)] text-[var(--accent-primary)] border-[var(--border-subtle)] flex items-center gap-1'
-                      }`}
+                        }`}
                     >
                       {!isCompleted && !turnCapReached && (
                         <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)]" />

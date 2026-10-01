@@ -581,7 +581,7 @@
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  border: 2px solid rgba(45, 212, 191, 0.18);
+  border: 2px solid var(--accent-subtle);
   border-top-color: var(--accent-teal-bright);
   animation: iv-spin 0.9s linear infinite;
 }

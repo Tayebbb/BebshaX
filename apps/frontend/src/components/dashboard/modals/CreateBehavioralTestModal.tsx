@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Sparkles,
@@ -56,7 +56,7 @@ const TEST_TYPE_OPTIONS: TestTypeOption[] = [
     description: 'Test willingness to pay across specific price tiers in BDT vs disposable budget.',
     icon: <DollarSign size={20} className="text-teal-400" />,
     tag: 'Willingness to Pay',
-    example: 'e.g. ৳299/month for the full plan',
+    example: 'e.g. à§³299/month for the full plan',
   },
   {
     type: 'purchase_decision',
@@ -257,7 +257,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
   const scenarioMissing: string | null = (() => {
     if (!name.trim()) return 'a test name';
     if (selectedType === 'pricing_test' && !price.trim()) return 'a proposed price';
-    // "৳299" and "299/month" are fine; "abc" and "-50" were accepted end to end (live 2026-09-14).
+    // "à§³299" and "299/month" are fine; "abc" and "-50" were accepted end to end (live 2026-09-14).
     if (price.trim() && !/\d/.test(price)) return 'a price that includes an amount (e.g. 299)';
     if (price.trim() && /-\s*\d/.test(price)) return 'a price of zero or more';
     if (selectedType === 'feature_test' && !featureName.trim()) return 'a feature name';
@@ -434,7 +434,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 New Behavioral Simulation
               </h2>
               <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                Step {step} of 4 — {step === 1 ? 'Choose Test Type' : step === 2 ? 'Configure Scenario' : step === 3 ? 'Select Population' : 'Preview & Confirm'}
+                Step {step} of 4 â€” {step === 1 ? 'Choose Test Type' : step === 2 ? 'Configure Scenario' : step === 3 ? 'Select Population' : 'Preview & Confirm'}
               </p>
             </div>
           </div>
@@ -469,7 +469,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
               key={s}
               style={{
                 flex: 1,
-                backgroundColor: step >= s ? '#14B8A6' : 'transparent',
+                backgroundColor: step >= s ? 'var(--accent-primary)' : 'transparent',
                 transition: 'background-color 0.3s ease',
               }}
             />
@@ -622,14 +622,14 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '14px' }}>
                   <div>
                     <label htmlFor="bt-price" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
-                      Proposed Price (BDT ৳)
+                      Proposed Price (BDT à§³)
                     </label>
                     <input
                       id="bt-price"
                       type="text"
                       value={price}
                       onChange={(e) => setPrice(e.target.value)}
-                      placeholder="e.g. ৳299"
+                      placeholder="e.g. à§³299"
                       style={{
                         width: '100%',
                         padding: '10px 14px',
@@ -800,7 +800,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   value={customScenarioText}
                   onChange={(e) => setCustomScenarioText(e.target.value)}
                   aria-required={scenarioContextRequired}
-                  placeholder="Describe specific conditions (e.g. At the end of the month, the persona sees a mobile-payment prompt offering the plan at ৳299/mo...)"
+                  placeholder="Describe specific conditions (e.g. At the end of the month, the persona sees a mobile-payment prompt offering the plan at à§³299/mo...)"
                   style={{
                     width: '100%',
                     padding: '10px 14px',
@@ -856,7 +856,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     name="populationType"
                     checked={populationType === 'all'}
                     onChange={() => setPopulationType('all')}
-                    style={{ accentColor: '#14B8A6' }}
+                    style={{ accentColor: 'var(--accent-primary)' }}
                   />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>All Personas in Study</div>
@@ -883,7 +883,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     name="populationType"
                     checked={populationType === 'segment'}
                     onChange={() => setPopulationType('segment')}
-                    style={{ accentColor: '#14B8A6' }}
+                    style={{ accentColor: 'var(--accent-primary)' }}
                   />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Specific Market Segment</div>
@@ -912,7 +912,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                           name="selectedSegment"
                           checked={selectedSegmentId === seg.id}
                           onChange={() => setSelectedSegmentId(seg.id)}
-                          style={{ accentColor: '#14B8A6' }}
+                          style={{ accentColor: 'var(--accent-primary)' }}
                         />
                         <span>{seg.name} ({seg.population_percentage.toFixed(0)}% of market)</span>
                       </label>
@@ -937,7 +937,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                     name="populationType"
                     checked={populationType === 'selected_personas'}
                     onChange={() => setPopulationType('selected_personas')}
-                    style={{ accentColor: '#14B8A6' }}
+                    style={{ accentColor: 'var(--accent-primary)' }}
                   />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Selected Personas</div>
@@ -985,7 +985,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                           onChange={() => togglePersonaSelection(p.id)}
                           onClick={(e) => e.stopPropagation()}
                           aria-label={`Include ${p.name}`}
-                          style={{ accentColor: '#14B8A6' }}
+                          style={{ accentColor: 'var(--accent-primary)' }}
                         />
                         <span style={{ color: isChecked ? 'var(--text-main)' : 'var(--text-secondary)' }}>{p.name}</span>
                       </div>
@@ -1180,9 +1180,9 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   gap: '8px',
                   padding: '10px 20px',
                   borderRadius: '8px',
-                  backgroundColor: '#0D9488',
+                  backgroundColor: 'var(--accent-primary)',
                   border: 'none',
-                  color: 'var(--text-main)',
+                  color: 'var(--text-on-accent)',
                   fontSize: '0.85rem',
                   fontWeight: 600,
                   cursor: continueBlocked ? 'not-allowed' : 'pointer',
@@ -1205,7 +1205,7 @@ export const CreateBehavioralTestModal: React.FC<CreateBehavioralTestModalProps>
                   gap: '8px',
                   padding: '10px 22px',
                   borderRadius: '8px',
-                  backgroundColor: '#14B8A6',
+                  backgroundColor: 'var(--accent-primary)',
                   border: 'none',
                   color: 'var(--text-on-accent)',
                   fontSize: '0.88rem',

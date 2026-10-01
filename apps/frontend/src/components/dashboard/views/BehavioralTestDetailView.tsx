@@ -288,7 +288,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
         <h3>{loadError ? 'Test unavailable' : 'Test not found'}</h3>
         {loadError && <p role="alert">{loadError}</p>}
         {loadError && <button type="button" className="bx-btn bx-btn-secondary" onClick={() => void fetchDetailAndRuns(true, true)}>Retry</button>}
-        <button onClick={onBack} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: '8px', backgroundColor: '#14B8A6', color: 'var(--text-on-accent)', border: 'none', cursor: 'pointer' }}>
+        <button onClick={onBack} style={{ marginTop: '12px', padding: '8px 16px', borderRadius: '8px', backgroundColor: 'var(--accent-primary)', color: 'var(--text-on-accent)', border: 'none', cursor: 'pointer' }}>
           Back to Tests
         </button>
       </div>
@@ -384,7 +384,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
               gap: '8px',
               padding: '9px 18px',
               borderRadius: '8px',
-              backgroundColor: '#14B8A6',
+              backgroundColor: 'var(--accent-primary)',
               border: 'none',
               color: 'var(--text-on-accent)',
               fontSize: '0.85rem',
@@ -533,7 +533,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
             <div
               style={{
                 height: '100%',
-                backgroundColor: '#14B8A6',
+                backgroundColor: 'var(--accent-primary)',
                 width: `${activeRun ? (activeRun.completed_count / (activeRun.persona_count || 1)) * 100 : 0}%`,
               }}
             />
@@ -895,7 +895,7 @@ export const BehavioralTestDetailView: React.FC<BehavioralTestDetailViewProps> =
                           style={{
                             display: 'block',
                             height: '100%',
-                            backgroundColor: '#14B8A6',
+                            backgroundColor: 'var(--accent-primary)',
                             width: `${Math.round(res.probability * 100)}%`,
                           }}
                         />
