@@ -170,13 +170,16 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
   const [activeRunId, setActiveRunId] = useState<string | undefined>(initialParsed.runId);
   const [activeCompareRunIds, setActiveCompareRunIds] = useState<string[]>(initialParsed.compareRunIds || []);
 
-  const [isSidebarCollapsedState, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsedState, setIsSidebarCollapsed] = useState(() => localStorage.getItem('bebshax_sidebar_collapsed') === '1');
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 900px)').matches,
   );
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   // On mobile the sidebar is a full drawer — never the collapsed rail
   const isSidebarCollapsed = !isMobile && isSidebarCollapsedState;
+  useEffect(() => {
+    localStorage.setItem('bebshax_sidebar_collapsed', isSidebarCollapsedState ? '1' : '0');
+  }, [isSidebarCollapsedState]);
   const [isRecentStudiesOpen, setIsRecentStudiesOpen] = useState(true);
   const [recentStudies, setRecentStudies] = useState<Study[]>([]);
   const [demoStudy, setDemoStudy] = useState<Study | null>(null);
@@ -717,6 +720,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ onOpenLandingP
             <button
               type="button"
               aria-label="Toggle sidebar"
+              aria-expanded={!isSidebarCollapsed}
               onClick={() => (isMobile ? setIsMobileNavOpen(false) : setIsSidebarCollapsed(!isSidebarCollapsedState))}
               style={{
                 width: '28px',

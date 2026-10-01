@@ -47,4 +47,14 @@ describe('App Minimal Shell', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/auth/signin'));
     expect(window.location.search).toBe('');
   });
+
+  it('renders a 404 for unknown roots and malformed study routes', async () => {
+    window.history.pushState({}, '', '/research/nope/step9');
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
+
+    window.history.replaceState({}, '', '/whatever');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
+  });
 });

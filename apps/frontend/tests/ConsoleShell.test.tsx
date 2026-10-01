@@ -33,6 +33,7 @@ describe('Console shell — navigation architecture', () => {
   beforeEach(() => {
     api.setMockMode(true);
     localStorage.setItem('bebshax_tour_dismissed', '1');
+    localStorage.removeItem('bebshax_sidebar_collapsed');
   });
 
   it('opens a first visit directly on the study controls without a tour banner', () => {
@@ -46,11 +47,20 @@ describe('Console shell — navigation architecture', () => {
   });
 
   it('keeps the desktop sidebar at 240px and preserves its collapsed rail', () => {
-    renderShell();
+    localStorage.removeItem('bebshax_sidebar_collapsed');
+    const view = renderShell();
     const sidebar = screen.getByRole('navigation', { name: /primary/i }).closest('aside');
     expect(sidebar).toHaveStyle({ width: '240px' });
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle sidebar' }));
+    const toggle = screen.getByRole('button', { name: 'Toggle sidebar' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(toggle);
     expect(sidebar).toHaveStyle({ width: '72px' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(localStorage.getItem('bebshax_sidebar_collapsed')).toBe('1');
+    view.unmount();
+
+    renderShell('/dashboard');
+    expect(screen.getByRole('navigation', { name: /primary/i }).closest('aside')).toHaveStyle({ width: '72px' });
   });
 
   it('groups regular-user navigation into Workspace and Study with one current page', () => {

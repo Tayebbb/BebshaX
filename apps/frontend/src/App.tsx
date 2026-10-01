@@ -7,7 +7,7 @@ import { NavigationProvider, useNavigation } from './context/NavigationContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { initScrollReveal } from './utils/scrollReveal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
-import { isDashboardPath } from './utils/dashboardRoute';
+import { isDashboardPath, isKnownDashboardPath } from './utils/dashboardRoute';
 
 // Named exports are re-mapped because React.lazy resolves the module's `default`.
 const loadDashboard = () =>
@@ -23,6 +23,17 @@ const RouteFallback: React.FC = () => (
   <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-pure)' }} />
 );
 
+const NotFound: React.FC<{ onHome: () => void }> = ({ onHome }) => (
+  <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: 'var(--bg-pure)', color: 'var(--text-main)' }}>
+    <section style={{ maxWidth: 520, textAlign: 'center' }}>
+      <p style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>404</p>
+      <h1>Page not found</h1>
+      <p style={{ color: 'var(--text-secondary)' }}>That BebshaX address does not exist.</p>
+      <button type="button" onClick={onHome}>Return home</button>
+    </section>
+  </main>
+);
+
 const AppContent: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
 
@@ -35,7 +46,8 @@ const AppContent: React.FC = () => {
     currentPath === '/signup' ||
     currentPath === '/login' ||
     currentPath === '/register';
-  const isAppRoute = isDashboardPath(currentPath);
+  const isAppRoute = isDashboardPath(currentPath) && isKnownDashboardPath(`${currentPath}${currentSearch}`);
+  const isUnknownRoute = !isAuthRoute && currentPath !== '/' && !isAppRoute;
   const needsSignIn = isAppRoute && !isLoading && !isAuthenticated;
 
   // A signed-out visit to an app URL lands on the sign-in route (replacing the
@@ -99,6 +111,8 @@ const AppContent: React.FC = () => {
       </Suspense>
     );
   }
+
+  if (isUnknownRoute) return <NotFound onHome={() => navigate('/')} />;
 
   // Only the authenticated app waits on the session check — the landing and
   // auth pages must paint immediately, without blocking on a network call.

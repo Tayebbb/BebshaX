@@ -43,6 +43,22 @@ export function isDashboardPath(path: string): boolean {
   return root in aliases || root === 'research' || root === 'study';
 }
 
+export function isKnownDashboardPath(path: string): boolean {
+  const parts = new URL(path, 'https://navigation.invalid').pathname.split('/').filter(Boolean);
+  const [root, studyId, section, itemId, runSection, runId] = parts;
+  if (parts.length === 1) return root in aliases;
+  if (!['research', 'study'].includes(root) || !studyId) return false;
+  if (!section) return parts.length === 2;
+  if (/^step[1-5]$/.test(section)) return parts.length === 3;
+  if (section === 'interviews') return parts.length === 3 || parts.length === 4;
+  if (section === 'evidence' || section === 'segmentation') return parts.length === 3;
+  if (section !== 'behavioral-tests') return false;
+  if (!itemId) return parts.length === 3;
+  if (itemId === 'compare') return parts.length === 3;
+  if (parts.length === 4) return true;
+  return runSection === 'runs' && Boolean(runId) && parts.length === 6;
+}
+
 export function safeReturnPath(path: string | null | undefined): string {
   if (!path || !path.startsWith('/') || path.startsWith('//') || /[\\\u0000-\u001f]/.test(path)) return '/app';
   const url = new URL(path, 'https://navigation.invalid');
