@@ -9,7 +9,5 @@ export { CommandMenu } from './CommandMenu';
 export type { CommandItem } from './CommandMenu';
 export { PromptInputBox } from './PromptInputBox';
 export type { PromptInputBoxProps } from './PromptInputBox';
-export { PromptInputBox as AiPromptBox } from './ai-prompt-box';
-export type { PromptInputBoxProps as AiPromptBoxProps } from './ai-prompt-box';
 
 

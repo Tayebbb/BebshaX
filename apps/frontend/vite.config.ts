@@ -26,19 +26,18 @@ export default defineConfig({
     assetsInlineLimit: 0,
     rolldownOptions: {
       output: {
-        // Only vendors are split by hand. Route chunks come from the
+        // Only React is split by hand. Route chunks come from the
         // React.lazy() boundaries in App.tsx: naming them here as well would
         // force them back into the entry's static graph, which makes Vite
         // emit a modulepreload + a render-blocking <link> for the dashboard
         // on the landing page — exactly what the lazy boundary exists to stop.
+        // Icons stay with the route that renders them: one shared icon chunk
+        // was preloaded on the landing page for every dashboard route's icons.
         codeSplitting: {
           groups: [{
             name(id: string): string | null {
               if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
                 return 'vendor-react';
-              }
-              if (id.includes('node_modules/lucide-react')) {
-                return 'vendor-icons';
               }
               return null;
             },

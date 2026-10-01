@@ -485,6 +485,11 @@ Clients MUST NOT present `"cached"` content as system output. **Frontend obligat
 - Discovery rejects overlength candidate metadata with `selection_status: "import_failed"`, retaining the full candidate in `evaluation_details.raw_metadata` and per-field `metadata_errors` (`actual_length`, `max_length`). Valid candidates in the batch continue.
 - Manual import of a candidate with `metadata_errors` returns 422 `invalid_metadata` before download; the error identifies the retained raw metadata for correction.
 
+#### Bounded list reads (2026-10-01)
+
+- `GET /api/studies` returns study **summaries**: every field of the detail shape except `personas_data` and `copilot_messages`. `persona_count` and `persona_ids` are still the canonical active membership (same owner and archive rules as the detail route). Clients that need the persona rows or the chat history read `GET /api/studies/{study_id}`.
+- `GET /api/studies/{study_id}/interviews` pages: `limit` (1–200, default 200) and `offset` (≥0) select one newest-first page; `total` counts every interview matching the filters, not the page. Out-of-range values are 422.
+
 #### `GET /api/studies/{study_id}/interviews/{interview_id}`
 
 - Reads persisted transcript, insights, and `suggested_questions` without LLM calls. Suggestions come from the latest turn containing a saved list, otherwise the saved conversation configuration, otherwise `[]`. A saved empty list is authoritative.

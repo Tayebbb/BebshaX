@@ -16,12 +16,17 @@ W_IMPORTANCE = 0.15
 RECENCY_HALF_LIFE_HOURS = 48.0
 
 
-def cosine(a: list[float], b: list[float]) -> float:
+def norm(vector: list[float]) -> float:
+    return math.sqrt(sum(x * x for x in vector))
+
+
+def cosine(a: list[float], b: list[float], norm_a: float | None = None) -> float:
+    """``norm_a`` lets a caller scoring one query against many rows compute it once."""
     if len(a) != len(b) or not a:
         return 0.0
     dot = sum(x * y for x, y in zip(a, b))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(y * y for y in b))
+    norm_a = norm(a) if norm_a is None else norm_a
+    norm_b = norm(b)
     if not norm_a or not norm_b:
         return 0.0
     return dot / (norm_a * norm_b)

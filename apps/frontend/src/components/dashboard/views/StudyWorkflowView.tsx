@@ -433,9 +433,15 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
         const next = nextEvidenceProbe(summary, attemptsLeft);
         setEvidenceProbe(next);
         if (next.state === 'searching') {
-          evidenceProbeTimerRef.current = setTimeout(() => {
-            void probeEvidence(attemptsLeft - 1, epoch);
-          }, EVIDENCE_PROBE_INTERVAL_MS);
+          // A hidden tab keeps its place in the budget and resumes on the
+          // next tick after it is visible again, instead of polling unseen.
+          const scheduleNext = () => {
+            evidenceProbeTimerRef.current = setTimeout(() => {
+              if (document.hidden) scheduleNext();
+              else void probeEvidence(attemptsLeft - 1, epoch);
+            }, EVIDENCE_PROBE_INTERVAL_MS);
+          };
+          scheduleNext();
         } else if (attemptsLeft < EVIDENCE_PROBE_ATTEMPTS) {
           // The run we were following has ended; its completion bumped the
           // study revision server-side (live 2026-09-14: the user's very next
@@ -1023,9 +1029,16 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
       const map: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'> = {};
       const ids: Record<string, string> = {};
       let activeKeyWritten = false;
+      // One pass over the interviews; the list is newest-first already.
+      const byPersona = new Map<string, Array<{ id: string; persona_id: string; status: string; turn_count?: number; created_at?: string }>>();
+      for (const iv of interviews as Array<{ id: string; persona_id: string; status: string; turn_count?: number; created_at?: string }>) {
+        const bucket = byPersona.get(iv.persona_id);
+        if (bucket) bucket.push(iv);
+        else byPersona.set(iv.persona_id, [iv]);
+      }
       for (const p of personas) {
-        const mine = (interviews as Array<{ id: string; persona_id: string; status: string; turn_count?: number; created_at?: string }>)
-          .filter((iv) => iv.persona_id === p.id)
+        const mine = (byPersona.get(p.id) ?? [])
+          .slice()
           .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
         const latest = mine[0];
         if (!latest) continue;
@@ -1084,6 +1097,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
     setInterviewFailureReasons({});
     setBatchError(null);
 
+    // Polls arrive every 5 s whether or not anything moved; an identical
+    // snapshot must not re-render the whole workflow.
+    let lastJobSnapshot = JSON.stringify([initialMap, {}]);
     const applyJobStatuses = (job: any) => {
       if (!epoch.active) return;
       const map: Record<string, 'pending' | 'in_progress' | 'completed' | 'failed'> = {};
@@ -1095,6 +1111,9 @@ export const StudyWorkflowView: React.FC<StudyWorkflowViewProps> = ({
           reasons[p.id] = entry.error;
         }
       });
+      const snapshot = JSON.stringify([map, reasons]);
+      if (snapshot === lastJobSnapshot) return;
+      lastJobSnapshot = snapshot;
       setInterviewStatusMap(map);
       setInterviewFailureReasons(reasons);
     };

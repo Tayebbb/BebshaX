@@ -7,6 +7,7 @@ Verifies that:
 """
 
 import pytest
+from datetime import datetime, timedelta, timezone
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -133,6 +134,63 @@ async def test_user_a_cannot_access_user_b_interviews(tmp_path, monkeypatch):
             headers=headers_a,
         )
         assert res_start_foreign.status_code in (403, 404)
+
+
+@pytest.mark.asyncio
+async def test_study_interview_list_pages_newest_first_and_counts_every_match(tmp_path, monkeypatch):
+    """The list used to return every interview of a study; it now serves one
+    bounded page while ``total`` still counts everything the filters matched."""
+    db_url = f"sqlite+aiosqlite:///{tmp_path / 'interview_pages.db'}"
+    monkeypatch.setenv("BEBSHAX_DATABASE_URL", db_url)
+    get_settings.cache_clear()
+
+    engine = create_async_engine(db_url)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    base = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
+    async with maker() as session:
+        session.add_all([
+            Users(id="usr_p", email="pages@example.com", hashed_password="pw", full_name="Pages", is_verified=True),
+            Studies(id="std_p", user_id="usr_p", title="Paged Study", status="in_progress"),
+            Personas(id="per_p", study_id="std_p", user_id="usr_p", owner_id="usr_p", name="Paged Persona", version=1),
+            *[
+                Conversations(
+                    id=f"conv_{i}", study_id="std_p", user_id="usr_p", persona_id="per_p", objective="Obj",
+                    status="completed", created_at=base + timedelta(minutes=i),
+                    topics_explored={"pricing_budget": "explored"} if i % 2 else {},
+                )
+                for i in range(3)
+            ],
+        ])
+        await session.commit()
+    await engine.dispose()
+
+    from bebshax.main import create_app
+    app = create_app()
+    app.state.db_sessionmaker = maker
+    headers = {"Authorization": f"Bearer {create_access_token({'sub': 'usr_p', 'email': 'pages@example.com'})}"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        everything = (await client.get("/api/studies/std_p/interviews", headers=headers)).json()
+        assert everything["total"] == 3
+        assert [item["id"] for item in everything["interviews"]] == ["conv_2", "conv_1", "conv_0"]
+
+        first = (await client.get("/api/studies/std_p/interviews", params={"limit": 2}, headers=headers)).json()
+        assert first["total"] == 3 and [item["id"] for item in first["interviews"]] == ["conv_2", "conv_1"]
+
+        last = (await client.get("/api/studies/std_p/interviews", params={"limit": 2, "offset": 2}, headers=headers)).json()
+        assert last["total"] == 3 and [item["id"] for item in last["interviews"]] == ["conv_0"]
+
+        # The text search filters in Python; the page and the total still agree.
+        searched = (await client.get(
+            "/api/studies/std_p/interviews", params={"search": "pricing", "limit": 1}, headers=headers,
+        )).json()
+        assert searched["total"] == 1 and [item["id"] for item in searched["interviews"]] == ["conv_1"]
+
+        for bad in ({"limit": 0}, {"limit": 201}, {"offset": -1}):
+            assert (await client.get("/api/studies/std_p/interviews", params=bad, headers=headers)).status_code == 422
 
 
 @pytest.mark.asyncio

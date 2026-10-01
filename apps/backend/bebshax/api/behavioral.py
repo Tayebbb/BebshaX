@@ -355,28 +355,31 @@ async def list_behavioral_tests(
         q_lower = q.lower()
         tests = [t for t in tests if q_lower in t.name.lower() or (t.description and q_lower in t.description.lower())]
 
-    output: list[dict[str, Any]] = []
-    for t in tests:
-        # Load scenarios
+    # One query per child table for the whole page instead of two per test.
+    test_ids = [t.id for t in tests]
+    scenarios_by_test: dict[str, list[BehavioralTestScenarios]] = {tid: [] for tid in test_ids}
+    runs_by_test: dict[str, list[BehavioralTestRuns]] = {tid: [] for tid in test_ids}
+    if test_ids:
         res_scenarios = await session.execute(
             select(BehavioralTestScenarios)
-            .where(BehavioralTestScenarios.behavioral_test_id == t.id)
+            .where(BehavioralTestScenarios.behavioral_test_id.in_(test_ids))
             .order_by(BehavioralTestScenarios.created_at.asc())
         )
-        scenarios = res_scenarios.scalars().all()
-
-        # Load runs
+        for scenario in res_scenarios.scalars().all():
+            scenarios_by_test[scenario.behavioral_test_id].append(scenario)
         res_runs = await session.execute(
             select(BehavioralTestRuns)
-            .where(BehavioralTestRuns.behavioral_test_id == t.id)
+            .where(BehavioralTestRuns.behavioral_test_id.in_(test_ids))
             .where(_read_owner(BehavioralTestRuns.user_id, user))
             .order_by(BehavioralTestRuns.created_at.desc())
         )
-        runs = res_runs.scalars().all()
+        for run in res_runs.scalars().all():
+            runs_by_test[run.behavioral_test_id].append(run)
 
-        output.append(_serialize_test(t, scenarios=scenarios, runs=runs))
-
-    return output
+    return [
+        _serialize_test(t, scenarios=scenarios_by_test[t.id], runs=runs_by_test[t.id])
+        for t in tests
+    ]
 
 
 @router.get("/studies/{study_id}/behavioral-tests/metrics")
@@ -393,18 +396,20 @@ async def get_behavioral_metrics(
     )
     total_tests = res_tests.scalar_one() or 0
 
+    # Three columns per run; the result rows and config JSON are not needed here.
     res_runs = await session.execute(
-        select(BehavioralTestRuns).where(BehavioralTestRuns.study_id == study_id, _read_owner(BehavioralTestRuns.user_id, user))
+        select(BehavioralTestRuns.status, BehavioralTestRuns.completed_count, BehavioralTestRuns.aggregate_metrics)
+        .where(BehavioralTestRuns.study_id == study_id, _read_owner(BehavioralTestRuns.user_id, user))
     )
-    runs = res_runs.scalars().all()
+    runs = res_runs.all()
 
-    completed_runs = sum(1 for r in runs if r.status in ("completed", "completed_with_warnings"))
-    total_personas_simulated = sum(r.completed_count for r in runs)
+    completed_runs = sum(1 for status_, _, _ in runs if status_ in ("completed", "completed_with_warnings"))
+    total_personas_simulated = sum(completed_count for _, completed_count, _ in runs)
 
     probabilities = [
-        (r.aggregate_metrics or {}).get("average_likelihood", 0.5)
-        for r in runs
-        if (r.aggregate_metrics or {}).get("average_likelihood") is not None
+        (metrics or {}).get("average_likelihood", 0.5)
+        for _, _, metrics in runs
+        if (metrics or {}).get("average_likelihood") is not None
     ]
     avg_buy_likelihood = round(sum(probabilities) / len(probabilities), 2) if probabilities else 0.52
 
@@ -455,13 +460,13 @@ async def compare_behavioral_runs(
             detail=f"Run(s) not found in this study: {', '.join(missing)}.",
         )
 
-    compared_runs: list[dict[str, Any]] = []
-    for r in runs:
-        res_results = await session.execute(
-            select(BehavioralTestResults).where(BehavioralTestResults.test_run_id == r.id)
-        )
-        results = res_results.scalars().all()
-        compared_runs.append(_serialize_run(r, results=results))
+    results_by_run: dict[str, list[BehavioralTestResults]] = {r.id: [] for r in runs}
+    res_results = await session.execute(
+        select(BehavioralTestResults).where(BehavioralTestResults.test_run_id.in_(list(results_by_run)))
+    )
+    for result in res_results.scalars().all():
+        results_by_run[result.test_run_id].append(result)
+    compared_runs = [_serialize_run(r, results=results_by_run[r.id]) for r in runs]
 
     return {
         "study_id": study_id,

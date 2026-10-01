@@ -793,9 +793,12 @@ class ResearchEngineService:
         study_id: str,
     ) -> dict[str, Any]:
         """Calculate evidence coverage, candidates count, and research summary from database."""
-        claims_stmt = select(EvidenceClaims).where(EvidenceClaims.study_id == study_id)
-        claims_result = await session.execute(claims_stmt)
-        claims = list(claims_result.scalars().all())
+        claims_stmt = (
+            select(EvidenceClaims.status, func.count(EvidenceClaims.id))
+            .where(EvidenceClaims.study_id == study_id)
+            .group_by(EvidenceClaims.status)
+        )
+        claims_by_status = dict((await session.execute(claims_stmt)).all())
 
         sources_count_stmt = select(func.count(EvidenceSources.id)).where(EvidenceSources.study_id == study_id)
         sources_count_result = await session.execute(sources_count_stmt)
@@ -813,10 +816,10 @@ class ResearchEngineService:
         run_result = await session.execute(run_stmt)
         latest_run = run_result.scalar_one_or_none()
 
-        total_claims = len(claims)
-        supported_count = sum(1 for c in claims if c.status == "supported")
-        inferred_count = sum(1 for c in claims if c.status == "inference")
-        unsupported_count = sum(1 for c in claims if c.status == "unsupported")
+        total_claims = sum(claims_by_status.values())
+        supported_count = claims_by_status.get("supported", 0)
+        inferred_count = claims_by_status.get("inference", 0)
+        unsupported_count = claims_by_status.get("unsupported", 0)
 
         supported_pct = round((supported_count / total_claims) * 100) if total_claims > 0 else 0
         inferred_pct = round((inferred_count / total_claims) * 100) if total_claims > 0 else 0

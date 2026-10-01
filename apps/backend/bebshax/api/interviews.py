@@ -15,6 +15,7 @@ from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import case, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 from sqlalchemy.sql.elements import ColumnElement
 
 from bebshax.api.auth import get_optional_current_user
@@ -320,10 +321,15 @@ async def list_study_interviews(
     status: Optional[str] = Query(None),
     objective: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: Optional[Users] = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """List all interviews conducted in this study with filtering and search."""
+    """List interviews conducted in this study, newest first, one bounded page at a time.
+
+    ``total`` counts every interview matching the filters, not just the page.
+    """
     study = await _get_study_and_verify_access(session, study_id, current_user)
 
     stmt = select(Conversations).where(
@@ -337,20 +343,27 @@ async def list_study_interviews(
         stmt = stmt.where(Conversations.objective == objective)
 
     stmt = stmt.order_by(Conversations.created_at.desc())
+    if not search:
+        # Only the text search needs Python; every other filter pages in SQL.
+        total = await session.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
+        stmt = stmt.limit(limit).offset(offset)
     conv_list = list((await session.execute(stmt)).scalars())
 
-    # Bulk fetch personas
+    # Bulk fetch the persona columns the serializer and search read; the
+    # remaining ~20 JSON columns per persona stay on the server.
     persona_ids = list(set(c.persona_id for c in conv_list))
     personas_map: dict[str, Personas] = {}
     if persona_ids:
-        p_stmt = select(Personas).where(Personas.id.in_(persona_ids))
+        p_stmt = select(Personas).options(
+            load_only(Personas.id, Personas.name, Personas.demographics, Personas.segment_id),
+        ).where(Personas.id.in_(persona_ids))
         for p in (await session.execute(p_stmt)).scalars():
             personas_map[p.id] = p
 
     # Filter search query on persona name, role, objective/summary and the
     # topics the interview explored (shown on every card, so users search them
     # — live 2026-09-14 "pricing" matched nothing).
-    items = []
+    matched: list[tuple[Conversations, Optional[Personas]]] = []
     for c in conv_list:
         p = personas_map.get(c.persona_id)
         if search:
@@ -365,12 +378,15 @@ async def list_study_interviews(
             ]
             if not any(q in field or q.replace(" ", "_") in field for field in haystack):
                 continue
-        items.append(_serialize_interview(c, p))
+        matched.append((c, p))
+    if search:
+        total = len(matched)
+        matched = matched[offset:offset + limit]
 
     return {
         "study_id": study_id,
-        "total": len(items),
-        "interviews": items,
+        "total": total,
+        "interviews": [_serialize_interview(c, p) for c, p in matched],
     }
 
 

@@ -41,7 +41,7 @@ from bebshax.utils.title_generator import clean_client_title, generate_determini
 from bebshax.llm.types import ChatMessage, LLMRequest, TaskType
 from bebshax.research.report_service import StudyReportService, capture_report_input_versions
 from bebshax.persona.context import private_persona_context
-from bebshax.personas.service import canonical_study_persona_states
+from bebshax.personas.service import canonical_study_persona_states, canonical_study_persona_summaries
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +160,11 @@ def _study_summary_text(s: Studies) -> str:
     return f"In Progress • {stage} • {personas if count else 'No personas yet'}"
 
 
-def _serialize_study(s: Studies, persona_state: dict[str, Any] | None = None) -> dict[str, Any]:
+def _serialize_study(
+    s: Studies, persona_state: dict[str, Any] | None = None, *, summary: bool = False,
+) -> dict[str, Any]:
+    """``summary`` is the list shape: no chat history and no persona rows, which
+    the dashboard never reads there and which grow without bound otherwise."""
     result = {
         "id": s.id,
         "revision": s.revision,
@@ -188,6 +192,8 @@ def _serialize_study(s: Studies, persona_state: dict[str, Any] | None = None) ->
         "created_at": s.created_at.isoformat() if s.created_at else datetime.now(timezone.utc).isoformat(),
         "updated_at": s.updated_at.isoformat() if s.updated_at else datetime.now(timezone.utc).isoformat(),
     }
+    if summary:
+        del result["copilot_messages"], result["personas_data"]
     if persona_state is not None:
         result.update(persona_state)
     return result
@@ -292,8 +298,8 @@ async def list_studies(
         ).order_by(Studies.created_at.desc())
     result = await session.execute(stmt)
     studies = list(result.scalars().all())
-    states = await canonical_study_persona_states(session, studies)
-    return [_serialize_study(study, states[study.id]) for study in studies]
+    summaries = await canonical_study_persona_summaries(session, studies)
+    return [_serialize_study(study, summaries[study.id], summary=True) for study in studies]
 
 
 @router.post("/studies", status_code=status.HTTP_201_CREATED)

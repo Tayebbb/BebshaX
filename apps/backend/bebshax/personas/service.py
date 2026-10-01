@@ -182,6 +182,13 @@ def serialize_persona(persona: Personas, segment_name: str | None = None) -> dic
     return result
 
 
+def _active_owned_personas_filter(study_ids: Any):
+    return (
+        Studies.id.in_(study_ids), Personas.status != "archived",
+        Personas.owner_id == func.coalesce(Studies.user_id, "usr_system_holder"),
+    )
+
+
 async def canonical_study_persona_states(
     session: AsyncSession, studies: list[Studies],
 ) -> dict[str, dict[str, Any]]:
@@ -195,10 +202,7 @@ async def canonical_study_persona_states(
     statement = (
         select(Personas)
         .join(Studies, Studies.id == Personas.study_id)
-        .where(
-            Studies.id.in_(states), Personas.status != "archived",
-            Personas.owner_id == func.coalesce(Studies.user_id, "usr_system_holder"),
-        )
+        .where(*_active_owned_personas_filter(states))
         .order_by(Personas.created_at, Personas.id)
     )
     for persona in (await session.scalars(statement)).all():
@@ -209,6 +213,31 @@ async def canonical_study_persona_states(
         state["personas_data"].append(serialize_persona(persona))
         state["persona_count"] += 1
     return states
+
+
+async def canonical_study_persona_summaries(
+    session: AsyncSession, studies: list[Studies],
+) -> dict[str, dict[str, Any]]:
+    """Same canonical membership as ``canonical_study_persona_states`` without
+    loading or serialising the persona rows (two id columns per persona)."""
+    summaries: dict[str, dict[str, Any]] = {
+        study.id: {"persona_count": 0, "persona_ids": []} for study in studies
+    }
+    if not summaries:
+        return summaries
+    statement = (
+        select(Personas.study_id, Personas.id)
+        .join(Studies, Studies.id == Personas.study_id)
+        .where(*_active_owned_personas_filter(summaries))
+        .order_by(Personas.created_at, Personas.id)
+    )
+    for study_id, persona_id in (await session.execute(statement)).all():
+        if study_id is None:
+            continue
+        summary = summaries[study_id]
+        summary["persona_ids"].append(persona_id)
+        summary["persona_count"] += 1
+    return summaries
 
 
 def _run_age(run: PersonaGenerationRuns, now: datetime) -> timedelta:

@@ -53,6 +53,40 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-10-01): Performance review — hot reads, polling, bundle
+
+Read-only review (performance-reviewer) ranked findings; the readability-neutral
+ones were applied with tests, the rest are recorded below as recommendations.
+
+Applied: `GET /api/studies` is now a summary (no `personas_data` /
+`copilot_messages`; membership from a two-column query instead of serialising
+every persona row of every study); evidence summary counts claims with
+`GROUP BY`; evidence sources read only `supporting_source_ids`; behavioral list
+and compare use one `IN (...)` query per child table, metrics read three
+columns; interview list pages (`limit` ≤200, `offset`, true `total`) and loads
+only the persona columns it renders; memory retrieval computes the query norm
+once. Frontend: the unused `AiPromptBox` barrel re-export is gone — it pulled a
+170.5 KB framer-motion chunk into the Evidence Lab and Step 5 routes and
+injected a global `*:focus-visible` style at import (measured on a fresh build,
+0 framer markers in `dist/` after); the hand-made lucide chunk is gone, so the
+landing page preloads an 8.1 KB icon helper instead of 31.9 KB; batch polling
+skips identical snapshots; the evidence probe waits while the tab is hidden;
+interview hydration groups once. Guard: `tests/BundleHygiene.test.ts`.
+
+Recommended, not applied (behaviour or readability trade-offs): pgvector
+`cosine_distance` candidate pre-filter for memory retrieval (the HNSW index
+exists but is unused — the Python scan is O(memories) per turn); a distilled
+study brief instead of re-sending the full copilot history every interview turn
+(R2 forbids truncation, so this is a product decision); vectorising the ML
+eligibility mask in `ml_persona` `generate()`; a partial index for `is_demo`
+studies; dropping `currentPath` from the sidebar refetch effect (kept for now
+because server-side status changes have no other refresh path); the
+`framer-motion` dependency itself (still imported by one test).
+
+Measurement gaps: no Server-Timing / per-route latency or payload-size
+logging; no `EXPLAIN ANALYZE` against realistic row counts; no per-turn split
+between `_prepare_turn` and the LLM call.
+
 ### Maintenance (2026-10-01): End-to-end audit hardening
 
 Completed the persisted A-E user sweeps and the API-abuse pass. Fixed signup

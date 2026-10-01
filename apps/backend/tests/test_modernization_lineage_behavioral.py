@@ -336,7 +336,8 @@ async def test_private_behavioral_run_is_not_public_with_demo_study(behavioral_h
     runs = await client.get("/api/studies/behavior_study/behavioral-tests/behavior_test/runs")
     assert runs.json() == []
     compared = await client.get("/api/studies/behavior_study/behavioral-tests/compare?run_ids=behavior_run")
-    assert compared.json()["runs"] == []
+    # A run the caller cannot see is "not found", never a 200 with an empty list.
+    assert compared.status_code == 404
     metrics = await client.get("/api/studies/behavior_study/behavioral-tests/metrics")
     assert metrics.json()["total_runs"] == metrics.json()["total_tests"] == 0
 

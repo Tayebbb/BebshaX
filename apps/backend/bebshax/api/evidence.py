@@ -326,14 +326,11 @@ async def list_study_evidence_sources(
     result = await session.execute(stmt)
     sources = list(result.scalars().all())
 
-    # Get claims count for each source
-    claims_stmt = select(EvidenceClaims).where(EvidenceClaims.study_id == study_id)
-    claims_res = await session.execute(claims_stmt)
-    all_claims = list(claims_res.scalars().all())
-
+    # Claims per source: only the id lists are needed, never the claim rows.
+    claims_stmt = select(EvidenceClaims.supporting_source_ids).where(EvidenceClaims.study_id == study_id)
     source_claims_count: dict[str, int] = {}
-    for cl in all_claims:
-        for sid in (cl.supporting_source_ids or []):
+    for supporting_ids in (await session.scalars(claims_stmt)).all():
+        for sid in (supporting_ids or []):
             source_claims_count[sid] = source_claims_count.get(sid, 0) + 1
 
     if search and search.strip():

@@ -130,11 +130,17 @@ async def test_study_reads_and_legacy_updates_use_canonical_owned_personas(tenan
         "personas_data": [{"id": "foreign"}], "findings": {"invented": "replacement"},
     })
     assert updated.status_code == 200
-    for study in (detail.json(), listing.json()[0], updated.json()):
+    for study in (detail.json(), updated.json()):
         assert study["persona_count"] == 1
         assert study["persona_ids"] == ["active"]
         assert [persona["id"] for persona in study["personas_data"]] == ["active"]
         assert study["findings"] == {"generated": "retained"}
+    # The list carries the same canonical membership but neither the persona
+    # rows nor the chat history: the dashboard reads those from the detail route.
+    [listed] = listing.json()
+    assert (listed["persona_count"], listed["persona_ids"]) == (1, ["active"])
+    assert listed["findings"] == {"generated": "retained"}
+    assert "personas_data" not in listed and "copilot_messages" not in listed
     async with sessions() as session:
         study = await session.get(Studies, "canonical")
         assert study.persona_count == 1

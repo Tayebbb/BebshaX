@@ -38,6 +38,7 @@ from bebshax.memory.scoring import (
     W_RELEVANCE,
     combined_score,
     cosine,
+    norm,
 )
 from bebshax.tenancy import PUBLIC_OWNER_IDS
 
@@ -285,9 +286,10 @@ class MemoryService:
             if sources is not None:
                 stmt = stmt.where(MemoryItems.source.in_(tuple(sources)))
             rows = list((await session.execute(stmt)).scalars())
+            query_norm = norm(query_vec)
             scored: list[tuple[float, MemoryItems]] = []
             for row in rows:
-                relevance = cosine(query_vec, list(row.embedding))
+                relevance = cosine(query_vec, list(row.embedding), query_norm)
                 if relevance < min_relevance:
                     continue
                 created = row.created_at
