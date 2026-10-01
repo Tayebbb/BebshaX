@@ -53,6 +53,25 @@ Kubernetes, microservices, Redis clusters, message queues, ML-learned router in 
 
 ## Implementation log
 
+### Maintenance (2026-10-01): End-to-end audit hardening
+
+Completed the persisted A-E user sweeps and the API-abuse pass. Fixed signup
+double-OTP invalidation, approved-goal/research admission races, evidence probe
+failure/retry states, report revision adoption, copilot goal-card hygiene,
+interview search/topic coverage, foreign-study 404 oracles, strict unknown-route
+404s, unscoped study-tab retention, sidebar persistence and accessibility,
+mobile Interview Lab sizing, dialog/composer/turn focus, and expensive-route
+rate limits. Added regression coverage alongside each change.
+
+Verification: frontend typecheck passed; frontend Vitest passed 1,153/1,153;
+Sweep F focused backend tests passed 34/34; email-verification tests passed
+12/12; the complete backend suite was started but interrupted by the shared
+terminal before a final result was available. No new dependencies were added.
+
+Remaining audit work is intentionally separate: demo-mode/data retirement and
+repository cleanup require updating the historical documentation and its
+referenced scripts together, followed by a fresh full backend gate.
+
 ### Maintenance (2026-09-13): Minimal Apple-like public redesign
 
 User asked for a minimal, modern, high-value public site with full design
